@@ -16,15 +16,27 @@ class CampaignCreatorResource extends JsonResource
             'id' => $this->id,
             'campaign_id' => $this->campaign_id,
             'creator_id' => $this->creator_id,
-            'creator' => $this->whenLoaded('creator', fn () => [
-                'id' => $this->creator->id,
-                'full_name' => $this->creator->full_name,
-                'artistic_name' => $this->creator->artistic_name,
-                'photo_url' => $this->creator->photo_url,
-                'status' => $this->creator->status?->value,
-                'city' => $this->creator->city,
-                'state' => $this->creator->state,
-            ]),
+            'creator' => $this->whenLoaded('creator', function () use ($request) {
+                $creator = [
+                    'id' => $this->creator->id,
+                    'full_name' => $this->creator->full_name,
+                    'artistic_name' => $this->creator->artistic_name,
+                    'photo_url' => $this->creator->photo_url,
+                    'status' => $this->creator->status?->value,
+                    'city' => $this->creator->city,
+                    'state' => $this->creator->state,
+                ];
+
+                if (in_array($request->user()?->role?->value, ['admin', 'company'], true)) {
+                    $creator['whatsapp'] = $this->creator->whatsapp;
+                    $creator['categories'] = $this->creator->categories ?? [];
+                    $creator['metrics'] = $this->creator->metrics ?? [];
+                    $creator['pricing'] = $this->creator->pricing ?? [];
+                    $creator['socials'] = $this->creator->socials ?? [];
+                }
+
+                return $creator;
+            }),
             'campaign' => $this->whenLoaded('campaign', fn () => [
                 'id' => $this->campaign->id,
                 'name' => $this->campaign->name,

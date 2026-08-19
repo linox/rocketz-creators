@@ -20,6 +20,7 @@ class CampaignResource extends JsonResource
                 'name' => $this->company->name,
                 'logo_url' => $this->company->logo_url,
                 'status' => $this->company->status?->value,
+                'segment' => $this->company->segment,
             ]),
             'name' => $this->name,
             'objective' => $this->objective,

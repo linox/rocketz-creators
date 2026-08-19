@@ -14,7 +14,11 @@ import type { Campaign, Company, Creator, RecurringContract } from "@/lib/types"
 function CompanyInner() {
   const user = useAuth();
   const { t } = useTranslation("app");
-  const companyId = user.company?.id;
+  const [queryCompanyId, setQueryCompanyId] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(new URLSearchParams(window.location.search).get("companyId") || 0);
+  });
+  const companyId = user.role === "admin" && queryCompanyId ? queryCompanyId : user.company?.id;
   const [company, setCompany] = useState<Company | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [recurring, setRecurring] = useState<RecurringContract[]>([]);
@@ -22,10 +26,15 @@ function CompanyInner() {
   const [tab, setTab] = useState<"overview" | "campaigns" | "recurring" | "favorites">("overview");
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setQueryCompanyId(Number(params.get("companyId") || 0));
+  }, []);
+
+  useEffect(() => {
     if (!companyId) return;
     api.company(companyId).then((res) => setCompany(res.data)).catch(alertApiError);
-    api.campaigns().then((res) => setCampaigns(res.data)).catch(alertApiError);
-    api.recurring().then((res) => setRecurring(res.data)).catch(alertApiError);
+    api.campaigns().then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))).catch(alertApiError);
+    api.recurring().then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))).catch(alertApiError);
     api.creators("?status=active").then((res) => setCreators(res.data)).catch(alertApiError);
   }, [companyId]);
 

@@ -7,6 +7,8 @@ use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\PaymentStatus;
+use App\Enums\SignatureStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\StageApprovalStatus;
@@ -29,8 +31,13 @@ class CampaignController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = $this->scoped($request)->with(['company', 'briefing', 'deliverable'])
+        $query = $this->scoped($request)
+            ->with(['company', 'briefing', 'deliverable'])
             ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
+
+        if ($request->user()?->role !== UserRole::Creator) {
+            $query->with(['campaignCreators.creator', 'campaignCreators.content']);
+        }
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
@@ -112,12 +119,20 @@ class CampaignController extends Controller
         return response()->json(['message' => __('auth.campaign_removed')]);
     }
 
+    public function reset(): JsonResponse
+    {
+        $deleted = Campaign::query()->count();
+        Campaign::query()->delete();
+
+        return response()->json(['message' => __('auth.campaigns_reset'), 'deleted' => $deleted]);
+    }
+
     public function apply(Request $request, Campaign $campaign): JsonResponse
     {
         $user = $request->user();
         $creator = $user->creator;
         abort_unless($creator, 403, __('auth.creators_only_apply'));
-        abort_unless($creator->status === CreatorStatus::Active, 422, __('auth.creator_must_be_approved'));
+        abort_unless(in_array($creator->status, [CreatorStatus::Active, CreatorStatus::Review], true), 422, __('auth.creator_must_be_approved'));
 
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
@@ -160,6 +175,8 @@ class CampaignController extends Controller
             'video_feedback' => ['nullable', 'string'],
             'amount' => ['nullable', 'numeric'],
             'delivery_type' => ['nullable', 'string'],
+            'payment_status' => ['nullable', Rule::enum(PaymentStatus::class)],
+            'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
             'delivery_date' => ['nullable', 'date'],
             'script' => ['nullable', 'string'],
             'video_url' => ['nullable', 'string', 'max:2048'],
@@ -187,16 +204,19 @@ class CampaignController extends Controller
         }
 
         $creatorUserId = $campaignCreator->creator?->user_id;
-        if ($creatorUserId && isset($data['application_status'])) {
-            $approved = $data['application_status'] === ApplicationStatus::Approved;
+        $statusValue = isset($data['application_status'])
+            ? ($data['application_status'] instanceof ApplicationStatus ? $data['application_status']->value : $data['application_status'])
+            : null;
+        if ($creatorUserId && in_array($statusValue, [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], true)) {
+            $approved = $statusValue === ApplicationStatus::Approved->value;
             $this->notifications->send([
                 'user_id' => $creatorUserId,
                 'creator_id' => $campaignCreator->creator_id,
                 'campaign_id' => $campaignCreator->campaign_id,
-                'title' => $approved ? 'Candidatura aprovada' : 'Candidatura recusada',
+                'title' => $approved ? __('auth.application_approved_title') : __('auth.application_rejected_title'),
                 'message' => $approved
-                    ? 'Você foi selecionado para a campanha.'
-                    : ($data['rejection_reason'] ?? 'Sua candidatura não foi aprovada.'),
+                    ? __('auth.application_approved')
+                    : (($data['rejection_reason'] ?? '') ?: __('auth.application_rejected')),
                 'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
                 'target_role' => NotificationTargetRole::Creator,
                 'link' => '/creators/'.$campaignCreator->creator_id,
@@ -204,6 +224,13 @@ class CampaignController extends Controller
         }
 
         return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
+    }
+
+    public function destroyParticipation(CampaignCreator $campaignCreator): JsonResponse
+    {
+        $campaignCreator->delete();
+
+        return response()->json(['message' => __('auth.creator_removed')]);
     }
 
     public function assign(Request $request, Campaign $campaign): JsonResponse

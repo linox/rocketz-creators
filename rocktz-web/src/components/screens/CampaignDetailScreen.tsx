@@ -1,160 +1,1748 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowUpRight,
+  Calendar,
+  CalendarCheck,
+  Camera,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clapperboard,
+  Clock,
+  Copy,
+  DollarSign,
+  Edit3,
+  ExternalLink,
+  Eye,
+  FileText,
+  Gift,
+  Handshake,
+  Image as ImageIcon,
+  Instagram,
+  Layers,
+  Lock,
+  Megaphone,
+  MessageCircle,
+  Package,
+  Plus,
+  Search,
+  Sparkles,
+  ThumbsUp,
+  Trash2,
+  TrendingUp,
+  UserCheck,
+  Users,
+  Video,
+  X,
+} from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Select2Field } from "@/components/Select2Field";
-import { api, money } from "@/lib/api";
-import { alertApiError, alertSuccess } from "@/lib/alerts";
+import { UserAvatar } from "@/components/UserAvatar";
+import { api } from "@/lib/api";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { cn } from "@/lib/cn";
+import { usePrivacy } from "@/lib/privacy";
+import type { Campaign, CampaignCreator, Company, Creator } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
-import type { Campaign, CampaignCreator, Creator } from "@/lib/types";
+import { intlLocale, normalizeLocale } from "@/i18n/locales";
+
+const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
+type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro";
+type CreatorFilter = "all" | "owing" | "delivered" | "no_demand";
+type AppFilter = "all" | "pending" | "approved" | "rejected";
+
+const STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+  briefing: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+  selection: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+  approval: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+  production: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+  published: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  finished: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300" },
+};
+
+const STATUS_LABEL: Record<(typeof STATUSES)[number], string> = {
+  briefing: "deliveries.statusBriefing",
+  selection: "deliveries.statusSelection",
+  approval: "deliveries.statusApproval",
+  production: "deliveries.statusProduction",
+  published: "deliveries.statusPublished",
+  finished: "deliveries.statusFinished",
+};
+
+function isApproved(row: CampaignCreator) {
+  return !row.application_status || row.application_status === "approved";
+}
+
+function hasNoDemand(row: CampaignCreator) {
+  const type = (row.delivery_type ?? "").trim().toLowerCase();
+  return !type || type.includes("sem demanda") || type.includes("no demand");
+}
+
+function countValue(value?: string | number | null) {
+  return Number(value ?? 0) || 0;
+}
+
+function formatDeliverablesSummary(deliverables?: Campaign["deliverables"]) {
+  if (!deliverables) return "";
+  if (typeof deliverables.summary === "string" && deliverables.summary.trim()) return deliverables.summary.trim();
+  const parts: string[] = [];
+  const reels = countValue(deliverables.reels);
+  const stories = countValue(deliverables.stories);
+  const tiktok = countValue(deliverables.tiktok);
+  const ugc = countValue(deliverables.ugc);
+  const posts = countValue(deliverables.posts);
+  const youtube = countValue(deliverables.youtube);
+  if (reels) parts.push(`${reels}x Reel${reels > 1 ? "s" : ""}`);
+  if (stories) parts.push(`${stories}x Stories`);
+  if (tiktok) parts.push(`${tiktok}x TikTok`);
+  if (ugc) parts.push(`${ugc}x UGC`);
+  if (posts) parts.push(`${posts}x Post${posts > 1 ? "s" : ""}`);
+  if (youtube) parts.push(`${youtube}x YouTube`);
+  return parts.join(" + ");
+}
+
+function formatRange(start: string | null | undefined, end: string | null | undefined, locale: string, t: (key: string, opts?: Record<string, string>) => string) {
+  if (!start && !end) return t("campaigns.noDate");
+  const fmt = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString(locale);
+  if (start && end) return t("campaigns.dateRange", { start: fmt(start), end: fmt(end) });
+  return fmt(start || end || "");
+}
+
+function deliveryLabel(status: string | null | undefined, t: (key: string) => string, mode: "list" | "detail" = "list") {
+  if (status === "published") return t("campaignDetail.published");
+  if (status === "approved") return t("campaignDetail.approved");
+  if (status === "revision") return t("campaignDetail.adjustments");
+  if (status === "sent") return mode === "detail" ? t("campaignDetail.received") : t("campaignDetail.inReview");
+  return t("campaignDetail.waiting");
+}
+
+function deliveryClass(status: string | null | undefined) {
+  if (status === "published") return "text-emerald-700";
+  if (status === "approved") return "text-indigo-700";
+  if (status === "revision") return "text-rose-700";
+  if (status === "sent") return "text-amber-700";
+  return "text-slate-500";
+}
+
+function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
+  if (!metrics) return 0;
+  for (const key of keys) {
+    const value = Number(metrics[key] ?? 0);
+    if (value) return value;
+  }
+  return 0;
+}
+
+function suggestedFee(row: CampaignCreator, campaign: Campaign) {
+  const pricing = row.creator?.pricing;
+  return Number(row.amount) || Number(pricing?.combo) || Number(pricing?.reel) || Number(campaign.creator_cache) || 0;
+}
+
+function whatsappLink(phone: string | null | undefined, message: string) {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return null;
+  const withCountry = digits.startsWith("55") ? digits : `55${digits}`;
+  return `https://wa.me/${withCountry}?text=${encodeURIComponent(message)}`;
+}
+
+function CoverPicker({ value, onChange, label }: { value: string; onChange: (url: string) => void; label: string }) {
+  const { t } = useTranslation("app");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function onFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      await alertWarning(t("campaignDetail.invalidImage"));
+      return;
+    }
+    setUploading(true);
+    try {
+      const uploaded = await api.uploadMedia(file, file.name);
+      onChange(uploaded.data.url);
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{label}</label>
+      {value ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={value} alt="" className="h-32 w-full rounded-xl object-cover" />
+      ) : null}
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void onFile(file);
+            event.target.value = "";
+          }}
+        />
+        <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          {uploading ? t("campaignDetail.uploading") : t("campaignDetail.uploadCover")}
+        </button>
+        {value ? (
+          <button type="button" onClick={() => onChange("")} className="text-xs font-bold text-rose-600">
+            {t("companies.removeLogo")}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function DetailInner() {
   const user = useAuth();
-  const { t } = useTranslation("app");
+  const router = useRouter();
+  const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
+  const { formatCurrency, formatNumber } = usePrivacy();
+  const locale = intlLocale(normalizeLocale(i18n.language));
   const id = usePathname().split("/").filter(Boolean).pop() ?? "";
+  const isAdmin = user.role === "admin";
+  const canManage = user.role === "admin" || user.role === "company";
+
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [tab, setTab] = useState<"entregas" | "candidaturas" | "briefing">("entregas");
+  const [loading, setLoading] = useState(true);
   const [creators, setCreators] = useState<Creator[]>([]);
-  const [assignId, setAssignId] = useState("");
-  const [script, setScript] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [published, setPublished] = useState("");
-  const [selected, setSelected] = useState<CampaignCreator | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [tab, setTab] = useState<Tab>("entregas");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<number[]>([]);
+  const [creatorSearch, setCreatorSearch] = useState("");
+  const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>("all");
+  const [appFilter, setAppFilter] = useState<AppFilter>("all");
+  const [appSearch, setAppSearch] = useState("");
+  const [customAmounts, setCustomAmounts] = useState<Record<number, number>>({});
+  const [rejectModal, setRejectModal] = useState<{ row: CampaignCreator | null; reason: string }>({ row: null, reason: "" });
+  const [feedback, setFeedback] = useState<Record<number, string>>({});
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [imageOpen, setImageOpen] = useState(false);
+  const [editing, setEditing] = useState<CampaignCreator | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [editForm, setEditForm] = useState({
+    name: "",
+    company_id: "",
+    status: "briefing",
+    objective: "",
+    total_budget: "",
+    start_date: "",
+    end_date: "",
+    is_secret: false,
+    is_direct_contract: false,
+    is_barter: false,
+    barter_details: "",
+    product: "",
+    key_message: "",
+    must_have: "",
+    donts: "",
+    cta: "",
+    coupon: "",
+    hashtags: "",
+    reels: "0",
+    stories: "0",
+    tiktok: "0",
+    ugc: "0",
+    posts: "0",
+    youtube: "0",
+    deadline_days: "5",
+    summary: "",
+    guidelines: "",
+  });
+  const [creatorEdit, setCreatorEdit] = useState({ amount: "", delivery_type: "", video_url: "", published_link: "" });
 
   async function load() {
     if (!id || id === "_") return;
     try {
       const res = await api.campaign(id);
       setCampaign(res.data);
-      const first = res.data.applications?.[0] ?? null;
-      setSelected(first);
-      setScript(first?.content?.script ?? "");
-      setVideoUrl(first?.content?.video_url ?? "");
-      setPublished(first?.content?.published_link ?? "");
+      setImageUrl(res.data.image_url || "");
     } catch (err) {
       await alertApiError(err);
+      setCampaign(null);
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
-    if (user.role === "admin") {
+    if (isAdmin) {
       api.creators("?status=active").then((res) => setCreators(res.data)).catch(() => undefined);
+      api.companies().then((res) => setCompanies(res.data)).catch(() => undefined);
     }
-  }, [id, user.role]);
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "selection" || param === "candidaturas") setTab("candidaturas");
+    if (param === "briefing") setTab("briefing");
+    if (param === "financeiro") setTab("financeiro");
+  }, [id, isAdmin]);
 
-  if (!campaign) return <p className="text-sm text-slate-500">{tc("loadingCampaign")}</p>;
+  const applications = campaign?.applications ?? [];
+  const approvedCreators = useMemo(() => applications.filter(isApproved), [applications]);
+  const pendingApps = applications.filter((row) => row.application_status === "pending");
+  const approvedApps = applications.filter((row) => row.application_status === "approved");
+  const rejectedApps = applications.filter((row) => row.application_status === "rejected");
 
-  const applications = campaign.applications ?? [];
+  useEffect(() => {
+    if (approvedCreators.length > 0 && (selectedId == null || !approvedCreators.some((row) => row.id === selectedId))) {
+      setSelectedId(approvedCreators[0].id);
+    } else if (approvedCreators.length === 0) {
+      setSelectedId(null);
+    }
+  }, [approvedCreators, selectedId]);
 
-  async function patch(participation: CampaignCreator, body: Record<string, unknown>) {
+  const selected = approvedCreators.find((row) => row.id === selectedId) ?? null;
+  const selectedCreator = selected?.creator;
+
+  const statusCounts = useMemo(() => {
+    let owing = 0;
+    let delivered = 0;
+    let noDemand = 0;
+    approvedCreators.forEach((row) => {
+      if (hasNoDemand(row)) noDemand += 1;
+      else if (row.delivery_status === "approved" || row.delivery_status === "published") delivered += 1;
+      else owing += 1;
+    });
+    return { all: approvedCreators.length, owing, delivered, no_demand: noDemand };
+  }, [approvedCreators]);
+
+  const filteredCreators = useMemo(() => {
+    const term = creatorSearch.trim().toLowerCase();
+    return approvedCreators.filter((row) => {
+      const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${row.delivery_type ?? ""}`.toLowerCase();
+      if (term && !name.includes(term)) return false;
+      const none = hasNoDemand(row);
+      if (creatorFilter === "no_demand") return none;
+      if (creatorFilter === "delivered") return !none && (row.delivery_status === "approved" || row.delivery_status === "published");
+      if (creatorFilter === "owing") return !none && row.delivery_status !== "approved" && row.delivery_status !== "published";
+      return true;
+    });
+  }, [approvedCreators, creatorSearch, creatorFilter]);
+
+  const filteredApps = useMemo(() => {
+    const term = appSearch.trim().toLowerCase();
+    return applications.filter((row) => {
+      if (appFilter !== "all" && row.application_status !== appFilter) return false;
+      if (!term) return true;
+      const niches = (row.creator?.categories ?? []).join(" ");
+      const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
+      return blob.includes(term);
+    });
+  }, [applications, appFilter, appSearch]);
+
+  const totalBudget = Number(campaign?.total_budget) || 0;
+  const castingCost = approvedCreators.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
+  const agencyMargin = totalBudget - castingCost;
+  const marginPercent = totalBudget > 0 ? Math.round((agencyMargin / totalBudget) * 100) : 0;
+  const endDate = campaign?.end_date ? new Date(`${campaign.end_date}T00:00:00`) : null;
+  const daysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+  const specialMode = Boolean(campaign?.is_barter || campaign?.is_direct_contract);
+  const statusCfg = STATUS_STYLE[campaign?.status ?? "briefing"] || STATUS_STYLE.briefing;
+
+  function setActiveTab(next: Tab) {
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState({}, "", url);
+  }
+
+  async function patch(row: CampaignCreator, body: Record<string, unknown>) {
+    setUpdatingId(row.id);
     try {
-      await api.updateParticipation(participation.id, body);
+      await api.updateParticipation(row.id, body);
+      await load();
+      return true;
+    } catch (err) {
+      await alertApiError(err);
+      return false;
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function approveApplication(row: CampaignCreator, amount: number) {
+    if (!campaign) return;
+    const deliveryType = row.delivery_type || formatDeliverablesSummary(campaign.deliverables) || "ugc";
+    await patch(row, {
+      application_status: "approved",
+      amount,
+      delivery_status: row.delivery_status || "pending",
+      delivery_type: deliveryType,
+      rejection_reason: "",
+    });
+  }
+
+  async function rejectApplication(row: CampaignCreator, reason: string) {
+    const ok = await patch(row, { application_status: "rejected", rejection_reason: reason.trim() || null });
+    if (ok) setRejectModal({ row: null, reason: "" });
+  }
+
+  async function revertToPending(row: CampaignCreator) {
+    await patch(row, { application_status: "pending", rejection_reason: "" });
+  }
+
+  async function changeStatus(status: string) {
+    if (!campaign) return;
+    try {
+      await api.updateCampaign(campaign.id, { status });
+      await load();
+      await alertSuccess(t("campaignDetail.statusUpdated"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function removeCampaign() {
+    if (!campaign) return;
+    if (!(await alertConfirm(t("campaignDetail.deleteTitle"), t("campaignDetail.deleteText")))) return;
+    try {
+      await api.deleteCampaign(campaign.id);
+      await alertSuccess(t("campaignDetail.deleted"));
+      router.push("/campaign-deliveries");
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function removeCreator(row: CampaignCreator) {
+    if (!(await alertConfirm(t("campaignDetail.removeCreatorTitle"), t("campaignDetail.removeCreatorText")))) return;
+    try {
+      await api.deleteParticipation(row.id);
+      await alertSuccess(t("campaignDetail.removed"));
       await load();
     } catch (err) {
       await alertApiError(err);
     }
   }
 
+  function openEdit() {
+    if (!campaign) return;
+    setImageUrl(campaign.image_url || "");
+    setEditForm({
+      name: campaign.name,
+      company_id: String(campaign.company_id),
+      status: campaign.status,
+      objective: campaign.objective || "",
+      total_budget: campaign.total_budget != null ? String(campaign.total_budget) : "",
+      start_date: campaign.start_date || "",
+      end_date: campaign.end_date || "",
+      is_secret: campaign.is_secret,
+      is_direct_contract: campaign.is_direct_contract,
+      is_barter: campaign.is_barter,
+      barter_details: campaign.barter_details || "",
+      product: String(campaign.briefing?.product ?? ""),
+      key_message: String(campaign.briefing?.key_message ?? ""),
+      must_have: String(campaign.briefing?.must_have ?? ""),
+      donts: String(campaign.briefing?.donts ?? ""),
+      cta: String(campaign.briefing?.cta ?? ""),
+      coupon: String(campaign.briefing?.coupon ?? ""),
+      hashtags: String(campaign.briefing?.hashtags ?? ""),
+      reels: String(campaign.deliverables?.reels ?? 0),
+      stories: String(campaign.deliverables?.stories ?? 0),
+      tiktok: String(campaign.deliverables?.tiktok ?? 0),
+      ugc: String(campaign.deliverables?.ugc ?? 0),
+      posts: String(campaign.deliverables?.posts ?? 0),
+      youtube: String(campaign.deliverables?.youtube ?? 0),
+      deadline_days: String(campaign.deliverables?.deadline_days ?? 5),
+      summary: String(campaign.deliverables?.summary ?? ""),
+      guidelines: String(campaign.deliverables?.guidelines ?? ""),
+    });
+    setEditOpen(true);
+  }
+
+  async function saveCampaign(event: FormEvent) {
+    event.preventDefault();
+    if (!campaign) return;
+    try {
+      await api.updateCampaign(campaign.id, {
+        name: editForm.name,
+        company_id: isAdmin ? Number(editForm.company_id) : undefined,
+        status: editForm.status,
+        objective: editForm.objective,
+        total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
+        image_url: imageUrl || null,
+        is_secret: editForm.is_secret,
+        is_direct_contract: editForm.is_direct_contract,
+        is_barter: editForm.is_barter,
+        barter_details: editForm.is_barter ? editForm.barter_details : null,
+        briefing: {
+          product: editForm.product,
+          key_message: editForm.key_message,
+          must_have: editForm.must_have,
+          donts: editForm.donts,
+          cta: editForm.cta,
+          coupon: editForm.coupon,
+          hashtags: editForm.hashtags,
+        },
+        deliverables: {
+          reels: Number(editForm.reels) || 0,
+          stories: Number(editForm.stories) || 0,
+          tiktok: Number(editForm.tiktok) || 0,
+          ugc: Number(editForm.ugc) || 0,
+          posts: Number(editForm.posts) || 0,
+          youtube: Number(editForm.youtube) || 0,
+          deadline_days: Number(editForm.deadline_days) || 5,
+          summary: editForm.summary,
+          guidelines: editForm.guidelines,
+        },
+      });
+      setEditOpen(false);
+      await load();
+      await alertSuccess(t("campaignDetail.campaignSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function saveImage() {
+    if (!campaign) return;
+    try {
+      await api.updateCampaign(campaign.id, { image_url: imageUrl || null });
+      setImageOpen(false);
+      await load();
+      await alertSuccess(t("campaignDetail.imageSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function assign(creator: Creator) {
+    if (!campaign) return;
+    try {
+      await api.assignCreator(campaign.id, {
+        creator_id: creator.id,
+        delivery_type: formatDeliverablesSummary(campaign.deliverables) || "Reel",
+        amount: creator.pricing?.reel || creator.pricing?.combo || 0,
+      });
+      setAddOpen(false);
+      await load();
+      await alertSuccess(t("campaignDetail.added"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function saveCreatorEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+    try {
+      await api.updateParticipation(editing.id, {
+        amount: creatorEdit.amount ? Number(creatorEdit.amount) : 0,
+        delivery_type: creatorEdit.delivery_type,
+        video_url: creatorEdit.video_url || null,
+        published_link: creatorEdit.published_link || null,
+      });
+      setEditing(null);
+      await load();
+      await alertSuccess(t("campaignDetail.detailsSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function requestRevision(row: CampaignCreator) {
+    const note = (feedback[row.id] ?? "").trim();
+    if (!note) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.revisionRequired"));
+      return;
+    }
+    await patch(row, { delivery_status: "revision", revision_details: note, script_status: "revision" });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!campaign) {
+    return (
+      <div className="mx-auto my-12 max-w-lg rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+        <Megaphone size={40} className="mx-auto mb-3 text-slate-300" />
+        <h2 className="text-xl font-bold text-slate-800">{t("campaignDetail.notFoundTitle")}</h2>
+        <p className="mt-1 mb-6 text-xs text-slate-500">{t("campaignDetail.notFoundHint")}</p>
+        <Link href="/campaign-deliveries" className="rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-md">
+          {t("campaignDetail.backProjects")}
+        </Link>
+      </div>
+    );
+  }
+
+  const companyName = campaign.company?.name || t("campaigns.client");
+  const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value));
+
   return (
-    <>
-      <PageHeader
-        title={campaign.name}
-        subtitle={campaign.company?.name}
-        actions={<StatusBadge status={campaign.status} />}
-      />
-      <p className="mb-6 text-sm text-slate-600">{campaign.objective} · {money(campaign.total_budget)}</p>
-      <div className="mb-5 flex gap-2">
-        {(["entregas", "candidaturas", "briefing"] as const).map((item) => (
-          <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-full px-4 py-1.5 text-xs font-bold capitalize ${tab === item ? "bg-purple-600 text-white" : "bg-slate-100"}`}>{t(`campaignDetail.${item}`)}</button>
-        ))}
+    <div className="flex flex-col gap-6 pb-24">
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div className="flex items-start gap-3.5">
+            <Link href="/campaign-deliveries" title={t("campaignDetail.backTitle")} className="mt-0.5 shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-xs transition-all hover:bg-slate-50">
+              <ArrowLeft size={18} />
+            </Link>
+            <div className="flex items-center gap-3">
+              <UserAvatar src={campaign.company?.logo_url} name={companyName} size="custom" shape="rounded-2xl" className="h-12 w-12 border border-indigo-100 shadow-xs" textClassName="text-sm font-black" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-extrabold tracking-wider text-brand-primary uppercase">{companyName}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-slate-400">
+                    <Calendar size={12} /> {formatRange(campaign.start_date, campaign.end_date, locale, t)}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-xl font-black tracking-tight text-slate-900 lg:text-2xl">{campaign.name}</h1>
+                  {campaign.is_secret ? (
+                    <span className="flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[9px] font-bold text-rose-700">
+                      <Lock size={9} /> {t("campaigns.secret")}
+                    </span>
+                  ) : null}
+                  {campaign.is_direct_contract ? (
+                    <span className="flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
+                      <Handshake size={9} /> {t("campaigns.directContract")}
+                    </span>
+                  ) : null}
+                  {campaign.is_barter ? (
+                    <span className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">
+                      <Gift size={9} /> {t("campaigns.barter")}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+            {canManage ? (
+              <Select2Field
+                theme="light"
+                searchable={false}
+                className="w-44"
+                value={campaign.status}
+                options={STATUSES.map((status) => ({ value: status, label: t(STATUS_LABEL[status]) }))}
+                onChange={(value) => void changeStatus(value)}
+                triggerClassName={cn("h-auto min-h-0 py-2 text-xs font-extrabold shadow-xs", statusCfg.bg, statusCfg.text, statusCfg.border)}
+              />
+            ) : (
+              <span className={cn("rounded-xl border px-3 py-2 text-xs font-extrabold", statusCfg.bg, statusCfg.text, statusCfg.border)}>{t(STATUS_LABEL[campaign.status as (typeof STATUSES)[number]] ?? "deliveries.statusBriefing")}</span>
+            )}
+            {pendingApps.length > 0 ? (
+              <button type="button" onClick={() => setActiveTab("candidaturas")} className="flex animate-pulse items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-md">
+                <Users size={14} /> {pendingApps.length > 1 ? t("campaignDetail.pendingMany", { count: pendingApps.length }) : t("campaignDetail.pendingOne", { count: pendingApps.length })}
+              </button>
+            ) : null}
+            {canManage ? (
+              <button type="button" onClick={openEdit} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-xs hover:bg-slate-50">
+                <Edit3 size={14} /> {t("campaignDetail.edit")}
+              </button>
+            ) : null}
+            {isAdmin ? (
+              <button type="button" onClick={() => void removeCampaign()} title={t("campaignDetail.deleteTitle")} className="rounded-xl border border-transparent p-2 text-slate-400 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
+                <Trash2 size={16} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {campaign.objective ? (
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3.5 text-xs leading-relaxed font-medium text-slate-600">
+            <strong className="mr-1.5 font-bold text-slate-800">{t("campaignDetail.objective")}</strong>
+            {campaign.objective}
+          </div>
+        ) : null}
+
+        <div className="group relative aspect-[21/9] max-h-56 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm sm:aspect-[24/9] md:aspect-[3/1]">
+          {campaign.image_url ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
+                <span className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-slate-900/80 px-2.5 py-1 text-[10px] font-black tracking-wider text-white uppercase backdrop-blur-md">
+                  <ImageIcon size={11} className="text-brand-primary" /> {t("campaignDetail.coverFormat")}
+                </span>
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageUrl(campaign.image_url || "");
+                      setImageOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-white/90 px-3.5 py-1.5 text-xs font-black text-slate-900 shadow-lg backdrop-blur-md hover:bg-white"
+                  >
+                    <Edit3 size={13} className="text-brand-primary" /> {t("campaignDetail.changeCover")}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full w-full items-center justify-between bg-gradient-to-r from-indigo-950 via-slate-900 to-slate-950 p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/80 backdrop-blur-md">
+                  <ImageIcon size={24} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{t("campaignDetail.noCoverTitle")}</h3>
+                  <p className="text-xs text-slate-400">{t("campaignDetail.noCoverHint")}</p>
+                </div>
+              </div>
+              {canManage ? (
+                <button type="button" onClick={() => setImageOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-900 shadow-lg hover:bg-slate-100">
+                  <ImageIcon size={14} className="text-brand-primary" /> {t("campaignDetail.addCover")}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <DollarSign size={15} />
+                </div>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiInvestment")}</span>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{t("campaignDetail.kpiInvestmentBadge")}</span>
+            </div>
+            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(totalBudget)}</span>
+          </div>
+          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-brand-primary">
+                  <Users size={15} />
+                </div>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiCasting")}</span>
+              </div>
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-brand-primary">
+                {approvedCreators.length === 1 ? t("campaignDetail.kpiCastingOne", { count: approvedCreators.length }) : t("campaignDetail.kpiCastingMany", { count: approvedCreators.length })}
+              </span>
+            </div>
+            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{moneyOrMode(castingCost)}</span>
+          </div>
+          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                  <TrendingUp size={15} />
+                </div>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiMargin")}</span>
+              </div>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", agencyMargin >= 0 ? "bg-purple-50 text-purple-700" : "bg-rose-50 text-rose-700")}>
+                {specialMode ? t("campaignDetail.kpiPartnership") : t("campaignDetail.kpiFee", { percent: marginPercent })}
+              </span>
+            </div>
+            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{moneyOrMode(agencyMargin)}</span>
+          </div>
+          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                  <CalendarCheck size={15} />
+                </div>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiSchedule")}</span>
+              </div>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", daysRemaining > 5 ? "bg-emerald-50 text-emerald-700" : daysRemaining >= 0 ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700")}>
+                {daysRemaining >= 0 ? t("campaignDetail.daysLeft", { count: daysRemaining }) : t("campaignDetail.ended")}
+              </span>
+            </div>
+            <span className="pt-3 text-xs font-black text-slate-800 sm:text-sm">{t("campaignDetail.endsOn", { date: endDate ? endDate.toLocaleDateString(locale) : "—" })}</span>
+          </div>
+        </div>
+
+        {pendingApps.length > 0 && tab !== "candidaturas" ? (
+          <div className="mt-1 flex flex-col justify-between gap-3 rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 p-4 shadow-xs sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 animate-bounce items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                <Users size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-slate-900">{pendingApps.length === 1 ? t("campaignDetail.pendingBannerOne") : t("campaignDetail.pendingBannerMany")}</h4>
+                  <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white uppercase">{t("campaignDetail.actionNeeded")}</span>
+                </div>
+                <p className="text-xs text-slate-600">{t("campaignDetail.pendingHint")}</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setActiveTab("candidaturas")} className="flex items-center gap-1.5 self-end rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800 sm:self-center">
+              <UserCheck size={14} className="text-amber-400" /> {t("campaignDetail.reviewApps")}
+            </button>
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pt-3">
+          {(
+            [
+              ["entregas", Video, t("campaignDetail.tabDeliveries"), String(approvedCreators.length), "bg-indigo-600 text-white"],
+              ["candidaturas", Users, t("campaignDetail.tabCasting"), pendingApps.length > 0 ? (pendingApps.length > 1 ? t("campaignDetail.pendingBadgeMany", { count: pendingApps.length }) : t("campaignDetail.pendingBadge", { count: pendingApps.length })) : String(applications.length), pendingApps.length > 0 ? "bg-rose-500 text-white animate-pulse" : "bg-slate-100 text-slate-600"],
+              ["briefing", FileText, t("campaignDetail.tabBriefing"), "", ""],
+              ["financeiro", DollarSign, t("campaignDetail.tabFinance"), "", ""],
+            ] as const
+          ).map(([key, Icon, label, badge, badgeClass]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key)}
+              className={cn(
+                "-mb-[2px] flex cursor-pointer items-center gap-2 border-b-2 px-5 pb-3 text-xs font-extrabold whitespace-nowrap transition-all",
+                tab === key ? "rounded-t-xl border-brand-primary bg-indigo-50/70 text-brand-primary" : "rounded-t-xl border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+              )}
+            >
+              <Icon size={16} />
+              {label}
+              {badge ? <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-black", badgeClass)}>{badge}</span> : null}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {tab === "briefing" ? (
-        <div className="rounded-2xl border bg-white p-5 text-sm">
-          <p><b>{t("campaignDetail.product")}</b> {String(campaign.briefing?.product ?? "—")}</p>
-          <p className="mt-2"><b>{t("campaignDetail.message")}</b> {String(campaign.briefing?.key_message ?? "—")}</p>
-          <p className="mt-2"><b>{t("campaignDetail.cta")}</b> {String(campaign.briefing?.cta ?? "—")}</p>
-          <p className="mt-2"><b>{t("campaignDetail.hashtags")}</b> {String(campaign.briefing?.hashtags ?? "—")}</p>
+      {tab === "entregas" ? (
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+          <div className="flex flex-col gap-4 lg:col-span-4">
+            <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center gap-1.5 text-xs font-black tracking-wider text-slate-800 uppercase">
+                    <Users size={14} className="text-brand-primary" /> {t("campaignDetail.allocated")}
+                  </h3>
+                  <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.inCasting", { count: approvedCreators.length })}</span>
+                </div>
+                {isAdmin ? (
+                  <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-[11px] font-extrabold text-white shadow-xs hover:bg-indigo-600">
+                    <Plus size={13} /> {t("campaignDetail.addCreator")}
+                  </button>
+                ) : null}
+              </div>
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={14} />
+                <input value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} placeholder={t("campaignDetail.searchCreator")} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-3 pl-8 text-xs font-medium outline-none focus:border-brand-primary focus:bg-white" />
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                {(
+                  [
+                    ["all", t("campaignDetail.filterAll"), statusCounts.all, "bg-slate-900 text-white border-slate-900", "bg-white text-slate-600 border-slate-200"],
+                    ["owing", t("campaignDetail.filterOwing"), statusCounts.owing, "bg-rose-600 text-white border-rose-600", "bg-white text-rose-700 border-rose-200"],
+                    ["delivered", t("campaignDetail.filterDelivered"), statusCounts.delivered, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200"],
+                    ["no_demand", t("campaignDetail.filterNoDemand"), statusCounts.no_demand, "bg-slate-700 text-white border-slate-700", "bg-white text-slate-500 border-slate-200"],
+                  ] as const
+                ).map(([key, label, count, active, idle]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCreatorFilter(key)}
+                    className={cn("flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold whitespace-nowrap", creatorFilter === key ? active : idle)}
+                  >
+                    {key === "owing" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" /> : null}
+                    {key === "delivered" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
+                    <span>{label}</span>
+                    <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-black", creatorFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600")}>{count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex max-h-[580px] flex-col gap-2.5 overflow-y-auto pt-1">
+                {filteredCreators.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                    <Users size={24} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs font-bold text-slate-600">{t("campaignDetail.noCreatorFound")}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">{t("campaignDetail.noCreatorHint")}</p>
+                  </div>
+                ) : (
+                  filteredCreators.map((row) => {
+                    const expanded = expandedIds.includes(row.id);
+                    return (
+                      <div
+                        key={row.id}
+                        onClick={() => setSelectedId(row.id)}
+                        className={cn("flex cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all", selectedId === row.id ? "border-brand-primary/60 bg-indigo-50/50 ring-1 ring-brand-primary/20 shadow-xs" : "border-slate-200 bg-white hover:bg-slate-50")}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
+                            <div className="min-w-0">
+                              <span className="block truncate text-xs font-black text-slate-800">@{row.creator?.artistic_name || "criador"}</span>
+                              <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator?.full_name}</span>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setExpandedIds((prev) => (prev.includes(row.id) ? prev.filter((item) => item !== row.id) : [...prev, row.id]));
+                              }}
+                              className="rounded-md p-1 text-slate-400 hover:text-slate-700"
+                            >
+                              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[10px]">
+                          <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
+                            <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
+                            <span className="mt-0.5 truncate font-black text-slate-800">{moneyOrMode(Number(row.amount) || 0)}</span>
+                          </div>
+                          <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
+                            <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryStatus")}</span>
+                            <span className={cn("mt-0.5 truncate font-black", deliveryClass(row.delivery_status))}>{deliveryLabel(row.delivery_status, t)}</span>
+                          </div>
+                        </div>
+                        {expanded ? (
+                          <div className="space-y-2 border-t border-slate-100 pt-2 text-[10px]">
+                            <div className="flex items-center justify-between text-slate-500">
+                              <span>{t("campaignDetail.contract")}:</span>
+                              <span className={cn("font-bold uppercase", row.signature_status === "signed" ? "text-emerald-600" : "text-amber-600")}>{row.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-500">
+                              <span>{t("campaignDetail.payment")}:</span>
+                              <span className={cn("font-bold uppercase", row.payment_status === "paid" ? "text-emerald-600" : "text-rose-600")}>{row.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}</span>
+                            </div>
+                            {isAdmin ? (
+                              <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                    setEditing(row);
+                                  }}
+                                  className="text-[10px] font-extrabold text-brand-primary hover:underline"
+                                >
+                                  {t("campaignDetail.editDelivery")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void removeCreator(row);
+                                  }}
+                                  className="text-[10px] font-bold text-rose-600 hover:underline"
+                                >
+                                  {t("campaignDetail.removeCreator")}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-5 lg:col-span-8">
+            {selected && selectedCreator ? (
+              <>
+                <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-3.5">
+                    <UserAvatar src={selectedCreator.photo_url} name={selectedCreator.artistic_name || selectedCreator.full_name} size="custom" shape="rounded-2xl" className="h-12 w-12 border border-indigo-100 shadow-xs" textClassName="text-base" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-black text-slate-900">@{selectedCreator.artistic_name}</h2>
+                        <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-400">
+                        {selectedCreator.full_name} • {selectedCreator.city || t("campaignDetail.brazil")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/creators/${selected.creator_id}`} target="_blank" className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
+                      {t("campaignDetail.portfolio")} <ExternalLink size={12} />
+                    </Link>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreatorEdit({ amount: String(selected.amount ?? ""), delivery_type: selected.delivery_type || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
+                          setEditing(selected);
+                        }}
+                        className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-600"
+                      >
+                        <Edit3 size={12} /> {t("campaignDetail.editDetails")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-900">{moneyOrMode(Number(selected.amount) || 0)}</span>
+                  </div>
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryFormat")}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.delivery_type}</span>
+                  </div>
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.contract")}</span>
+                    <span className={cn("mt-1 truncate text-xs font-black uppercase", selected.signature_status === "signed" ? "text-emerald-600" : "text-amber-600")}>{selected.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}</span>
+                  </div>
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.contentStatus")}</span>
+                    <span className={cn("mt-1 truncate text-xs font-black uppercase", deliveryClass(selected.delivery_status))}>{deliveryLabel(selected.delivery_status, t, "detail")}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                  <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                          <FileText size={13} className="text-brand-primary" /> {t("campaignDetail.scriptTitle")}
+                        </span>
+                        {selected.content?.script ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(selected.content?.script || "");
+                              await alertSuccess(t("campaignDetail.copied"));
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-bold text-brand-primary hover:underline"
+                          >
+                            <Copy size={11} /> {t("campaignDetail.copy")}
+                          </button>
+                        ) : null}
+                      </div>
+                      {selected.content?.script ? (
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-700">{selected.content.script}</div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-400">{t("campaignDetail.noScript")}</div>
+                      )}
+                      {selected.notes ? (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
+                          <strong className="mb-0.5 block">{t("campaignDetail.creatorNotes")}</strong>
+                          {selected.notes}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                          <Video size={13} className="text-brand-primary" /> {t("campaignDetail.mediaTitle")}
+                        </span>
+                      </div>
+                      {selected.content?.video_url ? (
+                        <a href={selected.content.video_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50/50 p-3 text-xs font-bold text-slate-800">
+                          <span className="truncate">{selected.content.video_url}</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-400">
+                          <Video size={24} className="text-slate-300" />
+                          <span>{t("campaignDetail.waitingVideo")}</span>
+                        </div>
+                      )}
+                      {selected.content?.published_link ? (
+                        <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <Sparkles size={16} className="shrink-0 text-emerald-600" />
+                            <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
+                          </div>
+                          <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
+                            {t("campaignDetail.viewPost")} ↗
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {canManage ? (
+                    <div className="mt-2 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                          <Edit3 size={13} className="text-brand-primary" /> {t("campaignDetail.decisionTitle")}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
+                        <textarea
+                          rows={3}
+                          placeholder={t("campaignDetail.feedbackPh")}
+                          value={feedback[selected.id] ?? selected.revision_details ?? ""}
+                          onChange={(event) => setFeedback((prev) => ({ ...prev, [selected.id]: event.target.value }))}
+                          className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium outline-none focus:border-brand-primary"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <button
+                          type="button"
+                          disabled={updatingId !== null || !(feedback[selected.id] || "").trim()}
+                          onClick={async () => {
+                            if (await patch(selected, { revision_details: feedback[selected.id] })) {
+                              await alertSuccess(t("campaignDetail.feedbackSaved"));
+                            }
+                          }}
+                          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {t("campaignDetail.saveFeedback")}
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button type="button" disabled={updatingId !== null} onClick={() => void requestRevision(selected)} className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-rose-800 uppercase hover:bg-rose-100 disabled:opacity-50">
+                            {t("campaignDetail.requestRevision")}
+                          </button>
+                          <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "approved", script_status: "approved", video_status: "approved", revision_details: "" })} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
+                            <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveMaterial")}
+                          </button>
+                          <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "published" })} className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
+                            <Sparkles size={12} /> {t("campaignDetail.markPublished")}
+                          </button>
+                        </div>
+                      </div>
+                      {selected.delivery_status === "approved" ? (
+                        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
+                          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                          {t("campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
+                        </div>
+                      ) : null}
+                      {selected.delivery_status === "revision" ? (
+                        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-800">
+                          <AlertCircle size={16} className="shrink-0 text-rose-600" />
+                          {t("campaignDetail.revisionBanner")}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-16 text-center text-slate-400 shadow-xs">
+                <Users size={36} className="text-slate-300" />
+                <h3 className="text-base font-bold text-slate-800">{t("campaignDetail.selectCreator")}</h3>
+                <p className="max-w-sm text-xs text-slate-500">{t("campaignDetail.selectCreatorHint")}</p>
+                {approvedCreators.length === 0 && isAdmin ? (
+                  <button type="button" onClick={() => setAddOpen(true)} className="mt-2 flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600">
+                    <Plus size={14} /> {t("campaignDetail.addFirst")}
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
 
       {tab === "candidaturas" ? (
-        <div className="space-y-3">
-          {user.role === "admin" ? (
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <Select2Field theme="light" placeholder={t("campaignDetail.assign")} value={assignId} options={creators.map((c) => ({ value: String(c.id), label: `@${c.artistic_name}` }))} onChange={setAssignId} />
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs md:flex-row md:items-center">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="flex items-center gap-2 text-base font-black tracking-tight text-slate-900">
+                  <Users size={18} className="text-brand-primary" /> {t("campaignDetail.appsTitle")}
+                </h3>
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-xs font-black text-brand-primary">
+                  {applications.length === 1 ? t("campaignDetail.appsCount", { count: applications.length }) : t("campaignDetail.appsCountMany", { count: applications.length })}
+                </span>
               </div>
-              <button type="button" className="rounded-xl bg-purple-600 px-4 text-sm font-bold text-white" onClick={async () => {
-                if (!assignId) return;
-                await api.assignCreator(campaign.id, { creator_id: Number(assignId) }).catch(alertApiError);
-                setAssignId("");
-                load();
-              }}>{t("campaignDetail.allocate")}</button>
+              <p className="mt-1 text-xs text-slate-500">{t("campaignDetail.appsHint")}</p>
             </div>
-          ) : null}
-          {applications.map((row) => (
-            <div key={row.id} className="flex items-center justify-between rounded-2xl border bg-white p-4">
-              <div>
-                <p className="font-bold">@{row.creator?.artistic_name}</p>
-                <StatusBadge status={row.application_status} />
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <div className="relative">
+                <Search size={14} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <input value={appSearch} onChange={(event) => setAppSearch(event.target.value)} placeholder={t("campaignDetail.searchApps")} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-3.5 pl-9 text-xs font-medium focus:border-brand-primary focus:bg-white focus:outline-none sm:w-60" />
+                {appSearch ? (
+                  <button type="button" onClick={() => setAppSearch("")} className="absolute top-1/2 right-2.5 -translate-y-1/2 p-0.5 text-slate-400">
+                    <X size={12} />
+                  </button>
+                ) : null}
               </div>
-              {user.role === "admin" && row.application_status === "pending" ? (
-                <div className="flex gap-2">
-                  <button type="button" className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white" onClick={() => patch(row, { application_status: "approved" })}>{t("campaignDetail.approve")}</button>
-                  <button type="button" className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white" onClick={() => patch(row, { application_status: "rejected" })}>{t("campaignDetail.reject")}</button>
-                </div>
+              {isAdmin ? (
+                <button type="button" onClick={() => setAddOpen(true)} className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800">
+                  <Plus size={14} /> {t("campaignDetail.addManual")}
+                </button>
               ) : null}
             </div>
-          ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <button type="button" onClick={() => setAppFilter("all")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "all" ? "border-brand-primary bg-indigo-50/80 ring-2 ring-brand-primary/20" : "border-slate-200 bg-white hover:border-slate-300")}>
+              <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.appsTotal")}</div>
+              <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{applications.length}</div>
+            </button>
+            <button type="button" onClick={() => setAppFilter("pending")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "pending" ? "border-amber-400 bg-amber-50/80 ring-2 ring-amber-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
+              <div className="flex items-center justify-between text-[10px] font-black tracking-wider text-amber-600 uppercase">
+                <span>{t("campaignDetail.appsPending")}</span>
+                {pendingApps.length > 0 ? <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" /> : null}
+              </div>
+              <div className="mt-1 text-xl font-black text-amber-700 sm:text-2xl">{pendingApps.length}</div>
+            </button>
+            <button type="button" onClick={() => setAppFilter("approved")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "approved" ? "border-emerald-400 bg-emerald-50/80 ring-2 ring-emerald-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
+              <div className="text-[10px] font-black tracking-wider text-emerald-600 uppercase">{t("campaignDetail.appsApproved")}</div>
+              <div className="mt-1 text-xl font-black text-emerald-700 sm:text-2xl">{approvedApps.length}</div>
+            </button>
+            <button type="button" onClick={() => setAppFilter("rejected")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "rejected" ? "border-rose-400 bg-rose-50/80 ring-2 ring-rose-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
+              <div className="text-[10px] font-black tracking-wider text-rose-600 uppercase">{t("campaignDetail.appsRejected")}</div>
+              <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{rejectedApps.length}</div>
+            </button>
+          </div>
+          {filteredApps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
+                <Users size={28} />
+              </div>
+              <h4 className="text-base font-bold text-slate-800">
+                {appFilter === "pending" ? t("campaignDetail.emptyPending")
+                  : appFilter === "approved" ? t("campaignDetail.emptyApproved")
+                    : appFilter === "rejected" ? t("campaignDetail.emptyRejected")
+                      : t("campaignDetail.emptyAll")}
+              </h4>
+              <p className="max-w-md text-xs text-slate-500">
+                {appSearch ? t("campaignDetail.emptySearch", { query: appSearch }) : t("campaignDetail.emptyHint")}
+              </p>
+              {appSearch ? (
+                <button type="button" onClick={() => setAppSearch("")} className="cursor-pointer rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
+                  {t("campaignDetail.clearSearch")}
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {filteredApps.map((row) => {
+                const isPending = row.application_status === "pending";
+                const isAppApproved = row.application_status === "approved";
+                const isRejected = row.application_status === "rejected";
+                const isUpdating = updatingId === row.id;
+                const amountValue = customAmounts[row.id] !== undefined ? customAmounts[row.id] : suggestedFee(row, campaign);
+                const location = [row.creator?.city, row.creator?.state].filter(Boolean).join(", ");
+                const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+                const engagement = metricValue(row.creator?.metrics, ["engagementRate", "engagement_rate"]);
+                const waUrl = whatsappLink(row.creator?.whatsapp, t("campaignDetail.whatsappText", { handle: row.creator?.artistic_name || "", campaign: campaign.name }));
+                const niches = row.creator?.categories ?? [];
+
+                return (
+                  <div
+                    key={row.id}
+                    className={cn(
+                      "flex flex-col justify-between gap-5 rounded-2xl border bg-white p-5 shadow-xs transition-all lg:flex-row lg:items-center",
+                      isPending ? "border-amber-200/90 ring-1 ring-amber-100 hover:border-amber-400" : isAppApproved ? "border-emerald-200/90 bg-emerald-50/20 hover:border-emerald-400" : "border-slate-200 opacity-80",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-start gap-4 sm:items-center">
+                      <Link href={`/creators/${row.creator_id}`} className="group shrink-0">
+                        <UserAvatar
+                          src={row.creator?.photo_url}
+                          name={row.creator?.artistic_name || row.creator?.full_name}
+                          size="custom"
+                          shape="rounded-2xl"
+                          className="h-14 w-14 border-2 border-white shadow-sm transition-transform group-hover:scale-105"
+                          textClassName="text-base font-black"
+                        />
+                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link href={`/creators/${row.creator_id}`} className="flex items-center gap-1 text-sm font-black text-slate-900 transition hover:text-brand-primary">
+                            @{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}
+                            <ArrowUpRight size={13} className="text-slate-400" />
+                          </Link>
+                          <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black tracking-wider uppercase",
+                            isPending ? "border border-amber-300 bg-amber-100 text-amber-800" : isAppApproved ? "border border-emerald-300 bg-emerald-100 text-emerald-800" : "border border-rose-300 bg-rose-100 text-rose-800",
+                          )}>
+                            {isPending ? <Clock size={11} /> : isAppApproved ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                            {isPending ? t("campaignDetail.pendingApproval") : isAppApproved ? t("campaignDetail.approvedCasting") : t("campaignDetail.rejectedApp")}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+                          <span>{row.creator?.full_name || t("campaignDetail.nameUnknown")}</span>
+                          {location ? (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span>{location}</span>
+                            </>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {niches.slice(0, 3).map((niche) => (
+                            <span key={niche} className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                              {t(`available.niches.${niche}`, { defaultValue: niche })}
+                            </span>
+                          ))}
+                          {followers ? (
+                            <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</span>
+                          ) : null}
+                          {engagement ? (
+                            <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700">{t("campaignDetail.engagementRate", { rate: engagement })}</span>
+                          ) : null}
+                        </div>
+                        {row.notes ? (
+                          <div className="mt-2 max-w-xl rounded-xl border border-slate-200/80 bg-slate-50 p-2.5 text-xs text-slate-700">
+                            <strong className="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.creatorMessage")}</strong>
+                            &ldquo;{row.notes}&rdquo;
+                          </div>
+                        ) : null}
+                        {isRejected && row.rejection_reason ? (
+                          <div className="mt-2 max-w-xl rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">
+                            <strong className="mb-0.5 block text-[10px] font-bold tracking-wider text-rose-600 uppercase">{t("campaignDetail.rejectionReason")}</strong>
+                            &ldquo;{row.rejection_reason}&rdquo;
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-stretch gap-4 border-t border-slate-100 pt-3 sm:flex-row sm:items-center lg:flex-col lg:items-end lg:border-t-0 lg:pt-0 xl:flex-row xl:items-center">
+                      <div className="flex min-w-[140px] flex-col gap-1">
+                        <label className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.agreedFee")}</label>
+                        <div className="relative">
+                          <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={amountValue}
+                            disabled={!canManage || isAppApproved || campaign.is_barter}
+                            onChange={(event) => setCustomAmounts((prev) => ({ ...prev, [row.id]: Number(event.target.value) }))}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 pl-8 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
+                          />
+                        </div>
+                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable")}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {waUrl ? (
+                          <a href={waUrl} target="_blank" rel="noreferrer" title={t("campaignDetail.whatsappTitle")} className="flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
+                            <MessageCircle size={15} />
+                          </a>
+                        ) : null}
+                        <Link href={`/creators/${row.creator_id}`} title={t("campaignDetail.viewProfile")} className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-xs transition hover:bg-slate-50">
+                          <Eye size={13} />
+                          <span className="hidden sm:inline">{t("campaignDetail.profile")}</span>
+                        </Link>
+                        {canManage && isPending ? (
+                          <>
+                            <button type="button" disabled={isUpdating} onClick={() => setRejectModal({ row, reason: "" })} className="flex cursor-pointer items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50">
+                              <X size={13} /> {t("campaignDetail.reject")}
+                            </button>
+                            <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, amountValue)} className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50">
+                              {isUpdating ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Check size={14} />}
+                              {t("campaignDetail.approveCasting")}
+                            </button>
+                          </>
+                        ) : null}
+                        {canManage && isAppApproved ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(row.id);
+                                setActiveTab("entregas");
+                              }}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-brand-primary px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-600"
+                            >
+                              <Video size={13} /> {t("campaignDetail.seeDeliveries")}
+                            </button>
+                            <button type="button" disabled={isUpdating} title={t("campaignDetail.revertPending")} onClick={() => void revertToPending(row)} className="cursor-pointer rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50">
+                              <Edit3 size={14} />
+                            </button>
+                          </>
+                        ) : null}
+                        {canManage && isRejected ? (
+                          <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, amountValue)} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100 disabled:opacity-50">
+                            <CheckCircle2 size={13} /> {t("campaignDetail.reevaluate")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : null}
 
-      {tab === "entregas" ? (
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <div className="space-y-2">
-            {applications.filter((row) => row.application_status === "approved").map((row) => (
-              <button key={row.id} type="button" onClick={() => { setSelected(row); setScript(row.content?.script ?? ""); setVideoUrl(row.content?.video_url ?? ""); setPublished(row.content?.published_link ?? ""); }} className={`w-full rounded-xl border p-3 text-left ${selected?.id === row.id ? "border-purple-500" : "border-slate-200"}`}>
-                <p className="font-bold">@{row.creator?.artistic_name}</p>
-                <StatusBadge status={row.delivery_status} />
+      {tab === "briefing" ? (
+        <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">{t("campaignDetail.briefingTitle")}</h2>
+              <p className="text-xs text-slate-500">{t("campaignDetail.briefingHint")}</p>
+            </div>
+            {canManage ? (
+              <button type="button" onClick={openEdit} className="flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-indigo-600">
+                <Edit3 size={14} /> {t("campaignDetail.editBriefing")}
               </button>
-            ))}
+            ) : null}
           </div>
-          {selected ? (
-            <div className="space-y-3 rounded-2xl border bg-white p-5">
-              <h3 className="font-black">{t("campaignDetail.material", { name: selected.creator?.artistic_name })}</h3>
-              <textarea className="min-h-24 w-full rounded-xl border p-3 text-sm" placeholder={t("campaignDetail.script")} value={script} onChange={(e) => setScript(e.target.value)} />
-              <input className="h-11 w-full rounded-xl border px-4" placeholder={t("campaignDetail.videoUrl")} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
-              <input className="h-11 w-full rounded-xl border px-4" placeholder={t("campaignDetail.publishedLink")} value={published} onChange={(e) => setPublished(e.target.value)} />
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white" onClick={async () => {
-                  await patch(selected, { script, video_url: videoUrl, published_link: published, script_status: "submitted", video_status: videoUrl ? "submitted" : selected.video_status });
-                  await alertSuccess(t("campaignDetail.sent"));
-                }}>{t("campaignDetail.saveUrls")}</button>
-                {user.role !== "creator" ? (
-                  <>
-                    <button type="button" className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white" onClick={() => patch(selected, { script_status: "approved", video_status: "approved", delivery_status: "approved" })}>{t("campaignDetail.approve")}</button>
-                    <button type="button" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white" onClick={() => patch(selected, { delivery_status: "revision", script_status: "revision" })}>{t("campaignDetail.revision")}</button>
-                    <button type="button" className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white" onClick={() => patch(selected, { delivery_status: "published" })}>{t("campaignDetail.markPublished")}</button>
-                  </>
-                ) : null}
+          <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-indigo-600 p-2 text-white shadow-xs">
+                  <Package size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">{t("campaignDetail.perCreator")}</h3>
+                  <p className="text-xs text-slate-500">{t("campaignDetail.perCreatorHint")}</p>
+                </div>
+              </div>
+              {countValue(campaign.deliverables?.deadline_days) ? (
+                <div className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-1 text-xs font-bold text-indigo-900 shadow-xs">
+                  {t("campaignDetail.deadline", { count: countValue(campaign.deliverables?.deadline_days) })}
+                </div>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+              {(
+                [
+                  [t("campaignDetail.reels"), campaign.deliverables?.reels, Clapperboard, "text-indigo-600", "bg-indigo-50"],
+                  [t("campaignDetail.stories"), campaign.deliverables?.stories, Instagram, "text-amber-600", "bg-amber-50"],
+                  [t("campaignDetail.tiktok"), campaign.deliverables?.tiktok, Clapperboard, "text-rose-600", "bg-rose-50"],
+                  [t("campaignDetail.ugc"), campaign.deliverables?.ugc, Camera, "text-teal-600", "bg-teal-50"],
+                  [t("campaignDetail.posts"), campaign.deliverables?.posts, Layers, "text-emerald-600", "bg-emerald-50"],
+                  [t("campaignDetail.youtube"), campaign.deliverables?.youtube, Video, "text-red-600", "bg-red-50"],
+                ] as const
+              ).map(([label, value, Icon, color, badge]) => (
+                <div key={label} className="flex items-center justify-between rounded-xl border border-indigo-100 bg-white p-3 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <Icon size={16} className={color} />
+                    <span className="text-xs font-bold text-slate-700">{label}</span>
+                  </div>
+                  <span className={cn("rounded-md px-2 py-0.5 text-sm font-black text-slate-900", badge)}>{countValue(value)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 bg-white p-3.5">
+              <div className="text-xs text-slate-800">
+                <span className="font-bold text-slate-500">{t("campaignDetail.summary")} </span>
+                <span className="font-black text-brand-primary">{formatDeliverablesSummary(campaign.deliverables) || t("campaignDetail.summaryFallback")}</span>
+              </div>
+              {campaign.deliverables?.guidelines ? (
+                <div className="border-t border-slate-100 pt-2 text-xs text-slate-600">
+                  <span className="mb-0.5 block font-bold text-slate-500">{t("campaignDetail.guidelines")}</span>
+                  <p className="whitespace-pre-wrap">{String(campaign.deliverables.guidelines)}</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {(
+              [
+                [t("campaignDetail.product"), campaign.briefing?.product, "bg-slate-50 border-slate-200"],
+                [t("campaignDetail.message"), campaign.briefing?.key_message, "bg-slate-50 border-slate-200"],
+                [t("campaignDetail.mustHave"), campaign.briefing?.must_have, "bg-emerald-50/50 border-emerald-200"],
+                [t("campaignDetail.donts"), campaign.briefing?.donts, "bg-rose-50/50 border-rose-200"],
+                [t("campaignDetail.cta"), campaign.briefing?.cta, "bg-indigo-50/50 border-indigo-200"],
+              ] as const
+            ).map(([label, value, box]) => (
+              <div key={label} className={cn("space-y-1.5 rounded-xl border p-4", box)}>
+                <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{label}</span>
+                <p className="text-xs font-medium whitespace-pre-wrap text-slate-800">{String(value || t("campaignDetail.notInformed"))}</p>
+              </div>
+            ))}
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.coupon")}</span>
+                <span className="text-xs font-bold text-slate-800">{String(campaign.briefing?.coupon || t("campaignDetail.noneItem"))}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.hashtags")}</span>
+                <span className="text-xs font-bold text-brand-primary">{String(campaign.briefing?.hashtags || t("campaignDetail.noneItem"))}</span>
               </div>
             </div>
-          ) : <p className="text-sm text-slate-400">{t("campaignDetail.noneAllocated")}</p>}
+          </div>
         </div>
       ) : null}
-      <p className="mt-6"><Link href="/campaigns" className="text-sm font-bold text-purple-700">{t("campaignDetail.back")}</Link></p>
-    </>
+
+      {tab === "financeiro" ? (
+        <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-lg font-black text-slate-900">{t("campaignDetail.financeTitle")}</h2>
+            <p className="text-xs text-slate-500">{t("campaignDetail.financeHint")}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black tracking-wider text-slate-500 uppercase">
+                  <th className="px-4 py-3">{t("campaignDetail.colCreator")}</th>
+                  <th className="px-4 py-3">{t("campaignDetail.colFormat")}</th>
+                  <th className="px-4 py-3">{t("campaignDetail.colFee")}</th>
+                  <th className="px-4 py-3">{t("campaignDetail.colContract")}</th>
+                  <th className="px-4 py-3">{t("campaignDetail.colPayment")}</th>
+                  <th className="px-4 py-3 text-right">{t("campaignDetail.colActions")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {approvedCreators.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/70">
+                    <td className="px-4 py-3.5 font-bold text-slate-900">
+                      <div className="flex items-center gap-2">
+                        <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
+                        <span>@{row.creator?.artistic_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 font-medium text-slate-600">{row.delivery_type}</td>
+                    <td className="px-4 py-3.5 font-black text-slate-900">{moneyOrMode(Number(row.amount) || 0)}</td>
+                    <td className="px-4 py-3.5">
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.signature_status === "signed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                        {row.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.payment_status === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700")}>
+                        {row.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                            setEditing(row);
+                          }}
+                          className="font-bold text-brand-primary hover:underline"
+                        >
+                          {t("campaignDetail.editDelivery")}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      <AnimatePresence>
+        {addOpen ? (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setAddOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+              <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
+                <div>
+                  <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.addCreatorTitle")}</h2>
+                  <p className="text-xs text-slate-500">{t("campaignDetail.addCreatorHint")}</p>
+                </div>
+                <button type="button" onClick={() => setAddOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
+              </div>
+              <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5 sm:p-6">
+                {creators.map((creator) => {
+                  const already = approvedCreators.some((row) => row.creator_id === creator.id);
+                  return (
+                    <div key={creator.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar src={creator.photo_url} name={creator.artistic_name || creator.full_name} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
+                        <div>
+                          <p className="text-sm font-black text-slate-900">@{creator.artistic_name}</p>
+                          <p className="text-xs text-slate-500">{creator.full_name}</p>
+                        </div>
+                      </div>
+                      {already ? (
+                        <span className="text-[11px] font-bold text-slate-400">{t("campaignDetail.alreadyIn")}</span>
+                      ) : (
+                        <button type="button" onClick={() => void assign(creator)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
+                          {t("campaignDetail.add")}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {imageOpen ? (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setImageOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex w-full max-w-xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
+                <div>
+                  <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.changeCover")}</h2>
+                  <p className="text-xs text-slate-500">{t("campaignDetail.changeCoverHint")}</p>
+                </div>
+                <button type="button" onClick={() => setImageOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
+              </div>
+              <div className="flex flex-col gap-4 p-5 sm:p-6">
+                <CoverPicker value={imageUrl} onChange={setImageUrl} label={t("campaignDetail.coverLabel")} />
+                <div className="flex justify-end gap-3 border-t border-slate-100 pt-3">
+                  <button type="button" onClick={() => setImageOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+                  <button type="button" onClick={() => void saveImage()} className="flex items-center gap-1.5 rounded-xl bg-brand-primary px-5 py-2 text-xs font-extrabold text-white shadow-md hover:bg-indigo-600">
+                    <CheckCircle2 size={14} /> {t("campaignDetail.saveImage")}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editOpen ? (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+              <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
+                <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.editCampaignTitle")}</h2>
+                <button type="button" onClick={() => setEditOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
+              </div>
+              <form noValidate onSubmit={saveCampaign} className="flex flex-1 flex-col gap-4 overflow-y-auto p-5 sm:p-6">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.name")}</label>
+                  <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold" value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} />
+                </div>
+                <CoverPicker value={imageUrl} onChange={setImageUrl} label={t("campaignDetail.coverLabel")} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {isAdmin ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.company")}</label>
+                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value })} />
+                    </div>
+                  ) : null}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.colStatus")}</label>
+                    <Select2Field theme="light" searchable={false} value={editForm.status} options={STATUSES.map((status) => ({ value: status, label: t(STATUS_LABEL[status]) }))} onChange={(value) => setEditForm({ ...editForm, status: value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget")}</label>
+                    <input type="number" step="0.01" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.total_budget} onChange={(event) => setEditForm({ ...editForm, total_budget: event.target.value })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.startDate")}</label>
+                    <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm.start_date} onChange={(event) => setEditForm({ ...editForm, start_date: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.endDate")}</label>
+                    <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm.end_date} onChange={(event) => setEditForm({ ...editForm, end_date: event.target.value })} />
+                  </div>
+                </div>
+                <textarea rows={2} className="w-full resize-none rounded-xl border border-slate-200 p-2.5 text-xs font-medium" value={editForm.objective} onChange={(event) => setEditForm({ ...editForm, objective: event.target.value })} />
+                <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_secret} onChange={(event) => setEditForm({ ...editForm, is_secret: event.target.checked })} /> {t("deliveries.secretNda")}</label>
+                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_direct_contract} onChange={(event) => setEditForm({ ...editForm, is_direct_contract: event.target.checked })} /> {t("deliveries.directCompany")}</label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" checked={editForm.is_barter} onChange={(event) => setEditForm({ ...editForm, is_barter: event.target.checked })} /> {t("deliveries.barterProducts")}</label>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                  {(["reels", "stories", "tiktok", "ugc", "posts", "youtube"] as const).map((key) => (
+                    <div key={key} className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">{t(`campaignDetail.${key}`)}</label>
+                      <input type="number" min="0" className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold" value={editForm[key]} onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })} />
+                    </div>
+                  ))}
+                </div>
+                {(
+                  [
+                    ["product", t("campaignDetail.product")],
+                    ["key_message", t("campaignDetail.message")],
+                    ["must_have", t("campaignDetail.mustHave")],
+                    ["donts", t("campaignDetail.donts")],
+                    ["cta", t("campaignDetail.cta")],
+                    ["hashtags", t("campaignDetail.hashtags")],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{label}</label>
+                    <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm[key]} onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })} />
+                  </div>
+                ))}
+                <div className="flex justify-end gap-3 border-t border-slate-100 pt-3">
+                  <button type="button" onClick={() => setEditOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+                  <button className="rounded-xl bg-brand-primary px-5 py-2 text-xs font-extrabold text-white shadow-md hover:bg-indigo-600">{t("campaignDetail.saveChanges")}</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editing ? (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditing(null)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex w-full max-w-lg flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] p-5">
+                <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.editCreatorTitle")}</h2>
+                <button type="button" onClick={() => setEditing(null)} className="p-1 font-bold text-slate-400">✕</button>
+              </div>
+              <form noValidate onSubmit={saveCreatorEdit} className="flex flex-col gap-3 p-5">
+                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.agreedFee")} value={creatorEdit.amount} onChange={(event) => setCreatorEdit({ ...creatorEdit, amount: event.target.value })} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.deliveryFormat")} value={creatorEdit.delivery_type} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_type: event.target.value })} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.mediaTitle")} value={creatorEdit.video_url} onChange={(event) => setCreatorEdit({ ...creatorEdit, video_url: event.target.value })} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.publishedPost")} value={creatorEdit.published_link} onChange={(event) => setCreatorEdit({ ...creatorEdit, published_link: event.target.value })} />
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setEditing(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600">{tc("cancel")}</button>
+                  <button className="rounded-xl bg-brand-primary px-5 py-2 text-xs font-extrabold text-white">{t("campaignDetail.saveChanges")}</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {rejectModal.row ? (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setRejectModal({ row: null, reason: "" })} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 my-auto flex w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl bg-white p-6 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                    <AlertCircle size={18} />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900">{t("campaignDetail.rejectModalTitle")}</h3>
+                </div>
+                <button type="button" onClick={() => setRejectModal({ row: null, reason: "" })} className="cursor-pointer p-1 text-slate-400 hover:text-slate-700">✕</button>
+              </div>
+              <p className="text-xs text-slate-600">{t("campaignDetail.rejectModalText", { name: campaign.name })}</p>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaignDetail.rejectReasonLabel")}</label>
+                <textarea
+                  rows={3}
+                  value={rejectModal.reason}
+                  onChange={(event) => setRejectModal((prev) => ({ ...prev, reason: event.target.value }))}
+                  placeholder={t("campaignDetail.rejectReasonPh")}
+                  className="w-full resize-none rounded-xl border border-slate-200 p-3 text-xs font-medium focus:border-rose-400 focus:ring-2 focus:ring-rose-200 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
+                <button type="button" onClick={() => setRejectModal({ row: null, reason: "" })} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+                <button
+                  type="button"
+                  disabled={updatingId === rejectModal.row.id}
+                  onClick={() => void rejectApplication(rejectModal.row as CampaignCreator, rejectModal.reason)}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-rose-700 active:scale-95 disabled:opacity-50"
+                >
+                  <X size={14} /> {t("campaignDetail.confirmReject")}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+    </div>
   );
 }
 
 export function CampaignDetailScreen() {
-  return <AuthenticatedShell><DetailInner /></AuthenticatedShell>;
+  return (
+    <AuthenticatedShell>
+      <DetailInner />
+    </AuthenticatedShell>
+  );
 }

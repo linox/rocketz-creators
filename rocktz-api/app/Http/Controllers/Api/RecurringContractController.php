@@ -13,6 +13,7 @@ use App\Http\Resources\ContentPlanningItemResource;
 use App\Http\Resources\RecurringContractResource;
 use App\Models\ContentPlanningItem;
 use App\Models\RecurringContract;
+use App\Models\RecurringContractCreator;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class RecurringContractController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = RecurringContract::query()
-            ->with(['company', 'recurringContractCreators.creator', 'contentPlanningItems.creator']);
+            ->with(['company', 'recurringContractCreators.creator', 'contentPlanningItems.creator', 'contentPlanningItems.company']);
 
         $user = $request->user();
         if ($user->role === UserRole::Company) {
@@ -81,6 +82,14 @@ class RecurringContractController extends Controller
         return response()->json(['data' => new RecurringContractResource($contract->load(['company', 'recurringContractCreators.creator']))], 201);
     }
 
+    public function reset(): JsonResponse
+    {
+        $deleted = RecurringContract::query()->count();
+        RecurringContract::query()->delete();
+
+        return response()->json(['message' => __('auth.recurring_reset'), 'deleted' => $deleted]);
+    }
+
     public function update(Request $request, RecurringContract $recurringContract): JsonResponse
     {
         $data = $request->validate([
@@ -110,6 +119,7 @@ class RecurringContractController extends Controller
             'creator_id' => ['required', 'exists:creators,id'],
             'monthly_fee' => ['nullable', 'numeric'],
             'monthly_cache' => ['nullable', 'numeric'],
+            'monthly_deliverables' => ['nullable', 'array'],
             'notes' => ['nullable', 'string'],
         ]);
         $row = $recurringContract->recurringContractCreators()->updateOrCreate(
@@ -118,6 +128,14 @@ class RecurringContractController extends Controller
         );
 
         return response()->json(['data' => $row->load('creator')], 201);
+    }
+
+    public function detachCreator(RecurringContract $recurringContract, RecurringContractCreator $recurringContractCreator): JsonResponse
+    {
+        abort_unless($recurringContractCreator->recurring_contract_id === $recurringContract->id, 404);
+        $recurringContractCreator->delete();
+
+        return response()->json(['message' => __('auth.recurring_creator_removed')]);
     }
 
     public function storeItem(Request $request, RecurringContract $recurringContract): JsonResponse
@@ -164,6 +182,9 @@ class RecurringContractController extends Controller
             'briefing' => ['nullable', 'string'],
             'script' => ['nullable', 'string'],
             'caption' => ['nullable', 'string'],
+            'content_type' => ['sometimes', Rule::enum(ContentType::class)],
+            'creator_id' => ['sometimes', 'exists:creators,id'],
+            'month' => ['sometimes', 'string', 'max:7'],
             'planned_date' => ['nullable', 'date'],
             'status' => ['nullable', Rule::enum(ContentPlanningStatus::class)],
             'submission_url' => ['nullable', 'string', 'max:2048'],

@@ -332,9 +332,13 @@ function AudienceCards({
 export function LandingPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const tl = (key: string) => t(`landing:${key}`);
-  const ta = (key: string) => t(`auth:${key}`);
-  const tc = (key: string) => t(`common:${key}`);
+  const tl = (key: string, options?: Record<string, unknown>) => t(`landing:${key}`, options);
+  const ta = (key: string, options?: Record<string, unknown>) => t(`auth:${key}`, options);
+  const tc = (key: string, options?: Record<string, unknown>) => t(`common:${key}`, options);
+  const tList = (key: string) => {
+    const value = tl(key, { returnObjects: true });
+    return Array.isArray(value) ? (value as string[]) : [];
+  };
   const [modal, setModal] = useState<Modal>("none");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creatorStep, setCreatorStep] = useState(1);
@@ -805,7 +809,7 @@ export function LandingPage() {
                     {tl("how.oneOffText")}
                   </p>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {(tl("how.tagsOne", { returnObjects: true }) as string[]).map((tag) => (
+                    {tList("how.tagsOne").map((tag) => (
                       <span key={tag} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
                         {tag}
                       </span>
@@ -828,7 +832,7 @@ export function LandingPage() {
                     {tl("how.recurringText")}
                   </p>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {(tl("how.tagsRecurring", { returnObjects: true }) as string[]).map((tag) => (
+                    {tList("how.tagsRecurring").map((tag) => (
                       <span key={tag} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
                         {tag}
                       </span>
@@ -918,7 +922,7 @@ export function LandingPage() {
             {tl("channels.subtitle")}
           </p>
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-3">
-            {(tl("channels.items", { returnObjects: true }) as string[]).map((channel) => (
+            {tList("channels.items").map((channel) => (
               <span
                 key={channel}
                 className="cursor-default rounded-xl border border-slate-200/80 bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-800 shadow-2xs transition-all hover:border-purple-300 hover:text-purple-700 sm:text-sm"

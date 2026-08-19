@@ -69,6 +69,7 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
         Route::patch('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'update']);
         Route::post('recurring-contracts/{recurringContract}/creators', [RecurringContractController::class, 'attachCreator']);
+        Route::delete('recurring-contracts/{recurringContract}/creators/{recurringContractCreator}', [RecurringContractController::class, 'detachCreator']);
         Route::post('recurring-contracts/{recurringContract}/items', [RecurringContractController::class, 'storeItem']);
         Route::delete('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'destroyItem']);
     });
@@ -84,10 +85,14 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
         Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
         Route::post('companies/{company}/users', [CompanyController::class, 'storeUser']);
+        Route::delete('companies/{company}/users/{companyUser}', [CompanyController::class, 'destroyUser']);
 
+        Route::post('campaigns/reset', [CampaignController::class, 'reset']);
         Route::delete('campaigns/{campaign}', [CampaignController::class, 'destroy']);
         Route::post('campaigns/{campaign}/assign', [CampaignController::class, 'assign']);
+        Route::delete('campaign-creators/{campaignCreator}', [CampaignController::class, 'destroyParticipation']);
 
+        Route::post('recurring-contracts/reset', [RecurringContractController::class, 'reset']);
         Route::delete('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'destroy']);
 
         Route::get('admin-users', [AdminUserController::class, 'index']);

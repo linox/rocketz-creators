@@ -1,7 +1,6 @@
 "use client";
 
 import i18n from "i18next";
-import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
 import {
   DEFAULT_LOCALE,
@@ -32,48 +31,57 @@ import profilePt from "@/i18n/locales/pt-BR/profile.json";
 const NAMESPACES = ["common", "auth", "landing", "nav", "profile", "app"] as const;
 
 if (!i18n.isInitialized) {
-  i18n
-    .use(LanguageDetector)
-    .use(initReactI18next)
-    .init({
-      resources: {
-        "pt-BR": {
-          common: commonPt,
-          auth: authPt,
-          landing: landingPt,
-          nav: navPt,
-          profile: profilePt,
-          app: appPt,
-        },
-        en: {
-          common: commonEn,
-          auth: authEn,
-          landing: landingEn,
-          nav: navEn,
-          profile: profileEn,
-          app: appEn,
-        },
-        es: {
-          common: commonEs,
-          auth: authEs,
-          landing: landingEs,
-          nav: navEs,
-          profile: profileEs,
-          app: appEs,
-        },
+  i18n.use(initReactI18next).init({
+    resources: {
+      "pt-BR": {
+        common: commonPt,
+        auth: authPt,
+        landing: landingPt,
+        nav: navPt,
+        profile: profilePt,
+        app: appPt,
       },
-      fallbackLng: "en",
-      supportedLngs: [...LOCALES],
-      ns: [...NAMESPACES],
-      defaultNS: "common",
-      interpolation: { escapeValue: false },
-      detection: {
-        order: ["localStorage", "navigator"],
-        lookupLocalStorage: LOCALE_STORAGE_KEY,
-        caches: ["localStorage"],
-        convertDetectedLanguage: (lng) => normalizeLocale(lng),
+      en: {
+        common: commonEn,
+        auth: authEn,
+        landing: landingEn,
+        nav: navEn,
+        profile: profileEn,
+        app: appEn,
       },
-    });
+      es: {
+        common: commonEs,
+        auth: authEs,
+        landing: landingEs,
+        nav: navEs,
+        profile: profileEs,
+        app: appEs,
+      },
+    },
+    lng: DEFAULT_LOCALE,
+    fallbackLng: "en",
+    supportedLngs: [...LOCALES],
+    ns: [...NAMESPACES],
+    defaultNS: "common",
+    returnObjects: true,
+    interpolation: { escapeValue: false },
+    react: { useSuspense: false },
+  });
+}
+
+if (typeof window === "undefined") {
+  void i18n.changeLanguage(DEFAULT_LOCALE);
+}
+
+export function detectClientLocale(): AppLocale {
+  if (typeof window === "undefined") {
+    return DEFAULT_LOCALE;
+  }
+  const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+  if (stored) {
+    return normalizeLocale(stored);
+  }
+  return normalizeLocale(navigator.language);
 }
 
 export function getAppLocale(): AppLocale {

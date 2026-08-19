@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\CreatorStatus;
+use App\Models\CampaignCreator;
 use App\Models\Creator;
+use App\Models\RecurringContractCreator;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -109,6 +111,24 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.role', 'creator');
     }
 
+    public function test_admin_can_create_company_with_name_only(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/companies', [
+                'name' => 'Bia Ribeiro Beauty',
+                'segment' => 'Beleza',
+                'city' => 'Brasília',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Bia Ribeiro Beauty')
+            ->assertJsonPath('data.status', 'active');
+    }
+
     public function test_admin_can_update_creator_password(): void
     {
         $this->seed();
@@ -120,5 +140,96 @@ class DomainApiTest extends TestCase
         $this->withToken($token)
             ->postJson("/api/creators/{$creator->id}/password", ['password' => 'nova-senha'])
             ->assertOk();
+    }
+
+    public function test_admin_can_remove_creator_from_campaign(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $row = CampaignCreator::query()->firstOrFail();
+
+        $this->withToken($token)
+            ->deleteJson("/api/campaign-creators/{$row->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Criador removido do casting.');
+
+        $this->assertDatabaseMissing('campaign_creators', ['id' => $row->id]);
+    }
+
+    public function test_admin_can_approve_campaign_application_with_agreed_fee(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $row = CampaignCreator::query()->where('application_status', 'pending')->firstOrFail();
+
+        $this->withToken($token)
+            ->getJson("/api/campaigns/{$row->campaign_id}")
+            ->assertOk()
+            ->assertJsonPath('data.applications.0.creator.id', $row->creator_id)
+            ->assertJsonStructure(['data' => ['applications' => [['creator' => ['whatsapp', 'categories', 'metrics', 'pricing']]]]]);
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'approved',
+                'amount' => 3200,
+                'delivery_status' => 'pending',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.application_status', 'approved')
+            ->assertJsonPath('data.amount', 3200);
+    }
+
+    public function test_admin_can_reject_campaign_application_with_reason(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $row = CampaignCreator::query()->where('application_status', 'pending')->firstOrFail();
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'rejected',
+                'rejection_reason' => 'Perfil fora do nicho',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.application_status', 'rejected')
+            ->assertJsonPath('data.rejection_reason', 'Perfil fora do nicho');
+    }
+
+    public function test_admin_can_reset_recurring_contracts(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/recurring-contracts/reset')
+            ->assertOk()
+            ->assertJsonPath('message', 'Recorrência zerada.');
+
+        $this->assertDatabaseCount('recurring_contracts', 0);
+        $this->assertDatabaseCount('content_planning_items', 0);
+    }
+
+    public function test_admin_can_remove_creator_from_recurring_contract(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $row = RecurringContractCreator::query()->firstOrFail();
+
+        $this->withToken($token)
+            ->deleteJson("/api/recurring-contracts/{$row->recurring_contract_id}/creators/{$row->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Criador removido do contrato.');
+
+        $this->assertDatabaseMissing('recurring_contract_creators', ['id' => $row->id]);
     }
 }

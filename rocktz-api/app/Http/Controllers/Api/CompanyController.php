@@ -64,12 +64,13 @@ class CompanyController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'responsible_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email'],
+            'responsible_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email'],
             'whatsapp' => ['nullable', 'string', 'max:30'],
             'cnpj' => ['nullable', 'string', 'max:20'],
             'segment' => ['nullable', 'string', 'max:120'],
             'city' => ['nullable', 'string', 'max:120'],
+            'observations' => ['nullable', 'string'],
             'objective' => ['nullable', 'string'],
             'logo_url' => ['nullable', 'string', 'max:2048'],
             'status' => ['nullable', Rule::enum(CompanyStatus::class)],
@@ -77,7 +78,7 @@ class CompanyController extends Controller
 
         $company = Company::query()->create([
             ...$data,
-            'status' => $data['status'] ?? CompanyStatus::Pending,
+            'status' => $data['status'] ?? CompanyStatus::Active,
         ]);
 
         return response()->json(['data' => new CompanyResource($company)], 201);
@@ -193,5 +194,16 @@ class CompanyController extends Controller
         });
 
         return response()->json(['data' => $row->load('user')], 201);
+    }
+
+    public function destroyUser(Company $company, CompanyUser $companyUser): JsonResponse
+    {
+        if ($companyUser->company_id !== $company->id) {
+            return response()->json(['message' => __('auth.forbidden')], 404);
+        }
+
+        $companyUser->delete();
+
+        return response()->json(['message' => __('auth.company_user_removed')]);
     }
 }

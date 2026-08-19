@@ -49,7 +49,7 @@ export type Company = {
 export type Campaign = {
   id: number;
   company_id: number;
-  company?: { id: number; name: string; logo_url: string | null; status: string };
+  company?: { id: number; name: string; logo_url: string | null; status: string; segment?: string | null };
   name: string;
   objective: string | null;
   start_date: string | null;
@@ -57,9 +57,11 @@ export type Campaign = {
   total_budget: number | null;
   agency_fee: number | null;
   creators_budget: number | null;
+  creator_cache?: number | null;
   status: string;
   image_url: string | null;
   is_secret: boolean;
+  is_direct_contract: boolean;
   is_barter: boolean;
   barter_details: string | null;
   approval_flow: string | null;
@@ -73,18 +75,37 @@ export type CampaignCreator = {
   id: number;
   campaign_id: number;
   creator_id: number;
-  creator?: { id: number; full_name: string; artistic_name: string; photo_url: string | null; status: string; city?: string; state?: string };
+  creator?: {
+    id: number;
+    full_name: string;
+    artistic_name: string;
+    photo_url: string | null;
+    status: string;
+    city?: string | null;
+    state?: string | null;
+    whatsapp?: string | null;
+    categories?: string[];
+    metrics?: Record<string, number>;
+    pricing?: Record<string, number>;
+    socials?: Record<string, string>;
+  };
   campaign?: { id: number; name: string; status: string; image_url: string | null };
   delivery_type: string | null;
   amount: number | null;
   delivery_date: string | null;
   delivery_status: string | null;
+  payment_status?: string | null;
   application_status: string | null;
+  notes: string | null;
   rejection_reason: string | null;
+  revision_details: string | null;
   script_status: string | null;
   video_status: string | null;
   script_feedback: string | null;
   video_feedback: string | null;
+  signature_status?: string | null;
+  contract_url?: string | null;
+  post_date?: string | null;
   content?: { script: string | null; video_url: string | null; image_url: string | null; published_link: string | null } | null;
 };
 
@@ -102,8 +123,20 @@ export type RecurringContract = {
   creators?: {
     id: number;
     creator_id: number;
-    creator: { id: number; artistic_name: string; full_name: string; photo_url: string | null } | null;
+    creator: {
+      id: number;
+      artistic_name: string;
+      full_name: string;
+      photo_url: string | null;
+      city?: string | null;
+      state?: string | null;
+      categories?: string[];
+      socials?: Record<string, string>;
+    } | null;
     monthly_fee: number | null;
+    monthly_cache: number | null;
+    monthly_deliverables?: Record<string, number>;
+    notes?: string | null;
   }[];
   items?: PlanningItem[];
 };
@@ -111,6 +144,8 @@ export type RecurringContract = {
 export type PlanningItem = {
   id: number;
   recurring_contract_id: number;
+  company_id?: number;
+  company?: { id: number; name: string } | null;
   creator_id: number;
   creator?: { id: number; artistic_name: string; full_name: string; photo_url: string | null } | null;
   month: string;
@@ -118,6 +153,7 @@ export type PlanningItem = {
   title: string;
   description: string | null;
   briefing: string | null;
+  briefing_note?: string | null;
   planned_date: string | null;
   status: string;
   submission_url: string | null;
@@ -132,8 +168,12 @@ export type AppNotification = {
   title: string;
   message: string;
   type: string;
+  target_role?: string | null;
   link: string | null;
   read: boolean;
+  creator_id?: number | null;
+  campaign_id?: number | null;
+  recurring_contract_id?: number | null;
   created_at: string | null;
 };
 

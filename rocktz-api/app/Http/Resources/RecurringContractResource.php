@@ -37,6 +37,8 @@ class RecurringContractResource extends JsonResource
                     'photo_url' => $row->creator->photo_url,
                     'city' => $row->creator->city,
                     'state' => $row->creator->state,
+                    'categories' => $row->creator->categories ?? [],
+                    'socials' => $row->creator->socials ?? [],
                 ] : null,
                 'monthly_cache' => $row->monthly_cache !== null ? (float) $row->monthly_cache : null,
                 'monthly_fee' => $row->monthly_fee !== null ? (float) $row->monthly_fee : null,

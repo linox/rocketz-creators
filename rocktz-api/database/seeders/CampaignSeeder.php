@@ -53,6 +53,7 @@ class CampaignSeeder extends Seeder
             'creator_id' => $bruno->id,
             'delivery_type' => 'reel',
             'amount' => 1800,
+            'notes' => 'Quero participar desta campanha e conectar minha audiência à marca.',
         ]);
 
         $production = Campaign::factory()->production()->create([
