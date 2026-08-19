@@ -1,0 +1,6 @@
+{
+  "name": "rocketz creators",
+  "description": "Plataforma completa para gestão de casting de criadores, campanhas publicitárias e fluxos financeiros para agências.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

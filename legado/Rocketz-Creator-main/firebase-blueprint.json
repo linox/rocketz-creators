@@ -1,0 +1,242 @@
+{
+  "entities": {
+    "Creator": {
+      "title": "Creator",
+      "description": "A content creator in the casting database.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "artisticName": { "type": "string" },
+        "document": { "type": "string", "description": "CPF or CNPJ" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
+        "pixKey": { "type": "string" },
+        "bankDetails": { "type": "string" },
+        "socials": {
+          "type": "object",
+          "properties": {
+            "instagram": { "type": "string" },
+            "tiktok": { "type": "string" },
+            "youtube": { "type": "string" },
+            "kwai": { "type": "string" },
+            "blog": { "type": "string" }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "followers": { "type": "number" },
+            "avgViews": { "type": "number" },
+            "avgEngagement": { "type": "number" }
+          }
+        },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "pricing": {
+          "type": "object",
+          "properties": {
+            "story": { "type": "number" },
+            "reel": { "type": "number" },
+            "post": { "type": "number" },
+            "combo": { "type": "number" }
+          }
+        },
+        "acceptsExchange": { "type": "boolean" },
+        "acceptsPaidTraffic": { "type": "boolean" },
+        "acceptsExclusivity": { "type": "boolean" },
+        "internalNotes": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "review", "paused", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "email", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A system notification for administrative and creator events.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["title", "message", "type", "createdAt", "read"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "A client company of the agency.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "segment": { "type": "string" },
+        "responsibleName": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "city": { "type": "string" },
+        "observations": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "A marketing campaign with a client.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "companyId": { "type": "string" },
+        "objective": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "totalBudget": { "type": "number" },
+        "agencyFee": { "type": "number" },
+        "creatorsBudget": { "type": "number" },
+        "status": { "type": "string", "enum": ["briefing", "selection", "approval", "production", "published", "finished"] },
+        "deliverablesPerCreator": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "reels": { "type": "number" },
+            "stories": { "type": "number" },
+            "tiktok": { "type": "number" },
+            "ugc": { "type": "number" },
+            "posts": { "type": "number" },
+            "youtube": { "type": "number" },
+            "deadlineDays": { "type": "number" },
+            "guidelines": { "type": "string" }
+          }
+        },
+        "briefing": {
+          "type": "object",
+          "properties": {
+            "product": { "type": "string" },
+            "keyMessage": { "type": "string" },
+            "mustHave": { "type": "string" },
+            "donts": { "type": "string" },
+            "cta": { "type": "string" },
+            "hashtags": { "type": "string" },
+            "link": { "type": "string" },
+            "coupon": { "type": "string" },
+            "attachments": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "companyId", "status"]
+    },
+    "CampaignCreator": {
+      "title": "CampaignCreator",
+      "description": "Relationship between a campaign and a creator, including deliveries.",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "deliveryType": { "type": "string" },
+        "amount": { "type": "number" },
+        "deliveryDate": { "type": "string", "format": "date" },
+        "postDate": { "type": "string", "format": "date" },
+        "deliveryStatus": { "type": "string", "enum": ["pending", "sent", "revision", "approved", "published"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid"] },
+        "notes": { "type": "string" },
+        "signature": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "sent", "signed"] },
+            "sentAt": { "type": "string", "format": "date-time" },
+            "signedAt": { "type": "string", "format": "date-time" },
+            "contractUrl": { "type": "string" }
+          }
+        },
+        "content": {
+          "type": "object",
+          "properties": {
+            "script": { "type": "string" },
+            "videoUrl": { "type": "string" },
+            "imageUrl": { "type": "string" },
+            "publishedLink": { "type": "string" },
+            "storyPrints": { "type": "array", "items": { "type": "string" } },
+            "metrics": {
+              "type": "object",
+              "properties": {
+                "reach": { "type": "number" },
+                "impressions": { "type": "number" },
+                "clicks": { "type": "number" },
+                "views": { "type": "number" },
+                "engagement": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "CompanyUser": {
+      "title": "CompanyUser",
+      "description": "User with access to a company portal.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "companyId", "name", "email"]
+    },
+    "RecurringContract": {
+      "title": "RecurringContract",
+      "description": "Recurring contract for a company and creators.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["companyId", "title", "status"]
+    },
+    "ContentPlanning": {
+      "title": "ContentPlanning",
+      "description": "Monthly content planning item for recurring contracts.",
+      "type": "object",
+      "properties": {
+        "recurringContractId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "month": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["recurringContractId", "creatorId", "month", "status"]
+    },
+    "MediaFile": {
+      "title": "MediaFile",
+      "description": "Persisted media file metadata and chunks for videos and uploads.",
+      "type": "object",
+      "properties": {
+        "filename": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "totalChunks": { "type": "number" },
+        "size": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["filename"]
+    }
+  },
+  "firestore": {
+    "/creators": { "schema": "Creator", "description": "Collection of content creators." },
+    "/companies": { "schema": "Company", "description": "Collection of client companies." },
+    "/campaigns": { "schema": "Campaign", "description": "Collection of marketing campaigns." },
+    "/campaigns/{campaignId}/creators": { "schema": "CampaignCreator", "description": "Creators participating in a specific campaign." },
+    "/campaignCreators": { "schema": "CampaignCreator", "description": "Global collection of campaign creators." },
+    "/notifications": { "schema": "Notification", "description": "Collection of system notifications." },
+    "/companyUsers": { "schema": "CompanyUser", "description": "Collection of users mapped to client companies." },
+    "/recurringContracts": { "schema": "RecurringContract", "description": "Collection of recurring contracts." },
+    "/contentPlanning": { "schema": "ContentPlanning", "description": "Collection of monthly content planning items." },
+    "/settings/{settingId}": { "schema": "Setting", "description": "System settings documents." },
+    "/media_files/{mediaId}": { "schema": "MediaFile", "description": "Persisted video and media files metadata." },
+    "/media_files/{mediaId}/chunks/{chunkId}": { "schema": "object", "description": "Base64 chunks of persisted media." }
+  }
+}
