@@ -1,0 +1,33 @@
+---
+description: UI e API não recebem string hardcoded; usar i18n (pt-BR, en, es)
+alwaysApply: true
+---
+
+# i18n (pt-BR, en, es)
+
+Padrão permanente. Default `pt-BR`, fallback `en`, terceiro idioma `es`. Sem prefixo `/pt` `/en` na URL.
+
+## Front (`rocktz-web`)
+
+- Nenhuma string de UI nova entra hardcoded.
+- Use `t('chave')` de `react-i18next` e chaves em `src/i18n/locales/{pt-BR,en,es}/`.
+- Namespaces: `common`, `auth`, `landing`, `nav`, `profile`, `app`.
+- Seletor de idioma é o `LanguageSwitcher` (botões PT/EN/ES), não `<select>`.
+- `laravelFetch` já envia `Accept-Language`.
+
+```tsx
+// ❌ BAD
+<button>Salvar</button>
+
+// ✅ GOOD
+<button>{t("save")}</button>
+```
+
+## API (`rocktz-api`)
+
+- Mensagens JSON, validação e e-mail usam `__()` / `trans()` em `lang/{pt_BR,en,es}`.
+- Não traduzir nomes de campos JSON (`email`, `role`).
+
+## Não traduzir
+
+Marca Rocketz, códigos de UF, CNPJ, máscaras BR, o termo legal **LGPD**, e conteúdo gerado pelo usuário (bio, briefing, nome de campanha). Labels de categoria traduzem; o `value` gravado no banco permanece.

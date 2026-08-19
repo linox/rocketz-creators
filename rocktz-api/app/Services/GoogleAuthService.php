@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Support\AppLocale;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -20,7 +21,7 @@ class GoogleAuthService
     public function redirectUrl(string $intent = 'login'): string
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('Login com Google não está configurado.');
+            throw new RuntimeException(__('auth.google_not_configured'));
         }
 
         $params = http_build_query([
@@ -42,7 +43,7 @@ class GoogleAuthService
     public function userFromCode(string $code): array
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('Login com Google não está configurado.');
+            throw new RuntimeException(__('auth.google_not_configured'));
         }
 
         try {
@@ -54,13 +55,13 @@ class GoogleAuthService
                 'grant_type' => 'authorization_code',
             ])->throw()->json();
         } catch (RequestException $e) {
-            throw new RuntimeException('Não foi possível validar o código do Google.', 0, $e);
+            throw new RuntimeException(__('auth.google_code_invalid'), 0, $e);
         }
 
         $accessToken = $tokenResponse['access_token'] ?? null;
 
         if (! is_string($accessToken) || $accessToken === '') {
-            throw new RuntimeException('Token do Google inválido.');
+            throw new RuntimeException(__('auth.google_token_invalid'));
         }
 
         try {
@@ -69,7 +70,7 @@ class GoogleAuthService
                 ->throw()
                 ->json();
         } catch (RequestException $e) {
-            throw new RuntimeException('Não foi possível ler o perfil do Google.', 0, $e);
+            throw new RuntimeException(__('auth.google_profile_failed'), 0, $e);
         }
 
         $id = (string) ($profile['id'] ?? '');
@@ -77,7 +78,7 @@ class GoogleAuthService
         $name = (string) ($profile['name'] ?? $email);
 
         if ($id === '' || $email === '') {
-            throw new RuntimeException('O Google não retornou e-mail.');
+            throw new RuntimeException(__('auth.google_no_email'));
         }
 
         return [
@@ -107,6 +108,7 @@ class GoogleAuthService
             'google_id' => $googleUser['id'],
             'role' => UserRole::Creator,
             'email_verified_at' => now(),
+            'locale' => AppLocale::fromLaravel(app()->getLocale()),
         ]);
     }
 

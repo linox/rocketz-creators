@@ -28,6 +28,7 @@ class RegisterCompanyRequest extends FormRequest
             'segment' => ['nullable', 'string', 'max:120'],
             'objective' => ['nullable', 'string', 'max:2000'],
             'lgpd_accepted' => ['accepted'],
+            'locale' => ['nullable', 'string', 'in:pt-BR,en,es'],
         ];
     }
 
@@ -37,7 +38,7 @@ class RegisterCompanyRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'lgpd_accepted.accepted' => 'Você precisa autorizar o uso de dados de acordo com a LGPD.',
+            'lgpd_accepted.accepted' => __('auth.lgpd_required'),
         ];
     }
 }

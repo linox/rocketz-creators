@@ -1,27 +1,36 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LandingPage } from "@/components/LandingPage";
-import { AuthenticatedShell, ComingSoon } from "@/components/AuthenticatedShell";
-import { cookieOptions, fetchMe } from "@/lib/laravel";
+import { DashboardScreen } from "@/components/screens/DashboardScreen";
 import { homePathForUser } from "@/lib/auth";
+import { clearToken, fetchMe, getToken } from "@/lib/laravel";
 
-export default async function HomePage() {
-  const token = (await cookies()).get(cookieOptions().name)?.value;
+export default function HomePage() {
+  const router = useRouter();
+  const [view, setView] = useState<"landing" | "admin">("landing");
 
-  if (token) {
-    try {
-      const user = await fetchMe(token);
-      if (user.role === "admin") {
-        return (
-          <AuthenticatedShell>
-            <ComingSoon title="Dashboard" description="KPIs, gráficos e entregas da agência serão portados na próxima fase. Use o menu para navegar pelos placeholders." />
-          </AuthenticatedShell>
-        );
-      }
-      redirect(homePathForUser(user));
-    } catch {
-      // guest landing
+  useEffect(() => {
+    if (!getToken()) {
+      return;
     }
+
+    fetchMe()
+      .then((user) => {
+        if (user.role === "admin") {
+          setView("admin");
+          return;
+        }
+        router.replace(homePathForUser(user));
+      })
+      .catch(() => {
+        clearToken();
+      });
+  }, [router]);
+
+  if (view === "admin") {
+    return <DashboardScreen />;
   }
 
   return <LandingPage />;

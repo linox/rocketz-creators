@@ -1,0 +1,19 @@
+Options -MultiViews -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Arquivo ou pasta reais (JS, CSS, /login/, /creators/, /creators/_/, …)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Export estático: /creators/6 → /creators/_/index.html
+    RewriteRule ^creators/ /creators/_/index.html [L]
+    RewriteRule ^campaigns/ /campaigns/_/index.html [L]
+    RewriteRule ^recurring/ /recurring/_/index.html [L]
+</IfModule>
+
+ErrorDocument 404 /404.html

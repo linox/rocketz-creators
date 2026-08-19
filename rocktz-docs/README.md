@@ -18,3 +18,4 @@
 - `rocktz-api/` — API Laravel 13 + Sanctum + MySQL.
 - `rocktz-web/` — front Next.js (App Router).
 - `rocktz-docs/` — esta documentação.
+- `scripts/` — build do front estático para cPanel.

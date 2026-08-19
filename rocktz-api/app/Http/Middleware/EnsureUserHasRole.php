@@ -17,13 +17,13 @@ class EnsureUserHasRole
         $user = $request->user();
 
         if (! $user) {
-            return response()->json(['message' => 'Não autenticado.'], 401);
+            return response()->json(['message' => __('auth.unauthenticated')], 401);
         }
 
         $allowed = array_map(fn (string $role) => UserRole::from($role), $roles);
 
         if (! in_array($user->role, $allowed, true)) {
-            return response()->json(['message' => 'Acesso não autorizado para este papel.'], 403);
+            return response()->json(['message' => __('auth.forbidden_role')], 403);
         }
 
         return $next($request);

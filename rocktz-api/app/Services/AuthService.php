@@ -12,6 +12,7 @@ use App\Models\CompanyUser;
 use App\Models\Consent;
 use App\Models\Creator;
 use App\Models\User;
+use App\Support\AppLocale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -34,6 +35,9 @@ class AuthService
                 'email' => Str::lower($data['email']),
                 'password' => $data['password'],
                 'role' => UserRole::Creator,
+                'locale' => isset($data['locale'])
+                    ? AppLocale::normalize($data['locale'])
+                    : AppLocale::fromRequestHeader($request->header('Accept-Language')),
             ]);
 
             Creator::query()->create([
@@ -80,6 +84,9 @@ class AuthService
                 'email' => Str::lower($data['email']),
                 'password' => $data['password'],
                 'role' => UserRole::Company,
+                'locale' => isset($data['locale'])
+                    ? AppLocale::normalize($data['locale'])
+                    : AppLocale::fromRequestHeader($request->header('Accept-Language')),
             ]);
 
             $company = Company::query()->create([

@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { CampaignsScreen } from "@/components/screens/CampaignsScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Campanhas" />;
+  return <CampaignsScreen />;
 }

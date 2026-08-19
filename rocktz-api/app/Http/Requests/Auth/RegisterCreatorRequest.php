@@ -27,6 +27,7 @@ class RegisterCreatorRequest extends FormRequest
             'instagram' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],
             'lgpd_accepted' => ['accepted'],
+            'locale' => ['nullable', 'string', 'in:pt-BR,en,es'],
         ];
     }
 
@@ -36,7 +37,7 @@ class RegisterCreatorRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'lgpd_accepted.accepted' => 'Você precisa autorizar o uso de dados de acordo com a LGPD.',
+            'lgpd_accepted.accepted' => __('auth.lgpd_required'),
         ];
     }
 }

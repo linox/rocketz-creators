@@ -32,6 +32,17 @@ class CompleteGoogleProfileRequest extends FormRequest
             'objective' => ['nullable', 'string', 'max:2000'],
             'cnpj' => ['nullable', 'string', 'max:20'],
             'lgpd_accepted' => ['accepted'],
+            'locale' => ['nullable', 'string', 'in:pt-BR,en,es'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'lgpd_accepted.accepted' => __('auth.lgpd_required'),
         ];
     }
 }

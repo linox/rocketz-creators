@@ -1,0 +1,20 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # CGI/Apache no cPanel costuma apagar Authorization; o Sanctum precisa dele.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Favicon e pasta /favicon — servir de public/ sem bootstrap do Laravel
+    RewriteRule ^favicon\.ico$ public/favicon.ico [L]
+    RewriteRule ^favicon\.svg$ public/favicon.svg [L]
+    RewriteRule ^favicon/(.*)$ public/favicon/$1 [L]
+
+    RewriteBase /
+    RewriteRule ^$ public/index.php [L]
+    RewriteRule ^((?!public/).*)$ public/$1 [L,NC]
+</IfModule>
+
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>

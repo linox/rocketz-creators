@@ -1,0 +1,605 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
+import { CheckCircle2, Clock, KeyRound, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
+import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
+import { Select2Field } from "@/components/Select2Field";
+import { UserAvatar } from "@/components/UserAvatar";
+import { api } from "@/lib/api";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { cn } from "@/lib/cn";
+import { formatCPF, isValidCPF, isValidEmail } from "@/lib/masks";
+import { usePrivacy } from "@/lib/privacy";
+import type { Creator, RecurringContract } from "@/lib/types";
+import { useAuth } from "@/lib/use-auth";
+
+const CATEGORIES = [
+  "Beleza",
+  "Gastronomia",
+  "Lifestyle",
+  "Fitness",
+  "Maternidade",
+  "Pets",
+  "Automotivo",
+  "Tecnologia",
+  "Saúde",
+  "Humor",
+  "Moda",
+  "Educação",
+  "Casa e Decoração",
+  "UGC Content",
+];
+
+const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "Beleza", photo_url: "" };
+
+const FILTER_TRIGGER =
+  "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
+
+function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
+  if (!metrics) return 0;
+  for (const key of keys) {
+    const value = Number(metrics[key] ?? 0);
+    if (value) return value;
+  }
+  return 0;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation("app");
+  const styles: Record<string, string> = {
+    active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    review: "bg-amber-100 text-amber-900 border-amber-300 font-bold",
+    paused: "bg-[#F1F5F9] text-[#475569] border-slate-200",
+    rejected: "bg-[#FEE2E2] text-[#B91C1C] border-rose-200",
+  };
+
+  return (
+    <span className={cn("flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase", styles[status] ?? "border-slate-200 bg-slate-100 text-slate-600")}>
+      {status === "active" ? <CheckCircle2 size={10} /> : null}
+      {status === "review" ? <Clock size={10} /> : null}
+      {t(`status.${status}`, { defaultValue: status })}
+    </span>
+  );
+}
+
+function CreatorCard({
+  creator,
+  recurringContracts,
+  isAdmin,
+  onApprove,
+  onReject,
+  onChangePassword,
+}: {
+  creator: Creator;
+  recurringContracts: RecurringContract[];
+  isAdmin: boolean;
+  onApprove: (creator: Creator) => void;
+  onReject: (creator: Creator) => void;
+  onChangePassword: (creator: Creator) => void;
+}) {
+  const { t } = useTranslation("app");
+  const { formatCurrency, formatNumber } = usePrivacy();
+  const creatorContracts = recurringContracts.filter(
+    (contract) => contract.status === "active" && contract.creators?.some((row) => row.creator_id === creator.id),
+  );
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "group flex flex-col justify-between rounded-[16px] border bg-white p-5 transition-all hover:border-brand-primary",
+        creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
+      )}
+    >
+      <div>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <UserAvatar
+              src={creator.photo_url}
+              name={creator.artistic_name || creator.full_name}
+              size="lg"
+              shape="rounded-xl"
+              className="border border-slate-200"
+              textClassName="text-base"
+            />
+            <div className="min-w-0">
+              <h3 className="m-0 truncate font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                <StatusBadge status={creator.status} />
+                <span
+                  className={cn(
+                    "rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase",
+                    creator.role === "admin" ? "border-purple-200 bg-purple-100 text-purple-800" : "border-blue-200 bg-blue-100 text-blue-800",
+                  )}
+                >
+                  {creator.role === "admin" ? t("creators.admin") : t("creators.influencer")}
+                </span>
+              </div>
+            </div>
+          </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              title={t("creators.changePassword")}
+              onClick={() => onChangePassword(creator)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
+            >
+              <KeyRound size={14} />
+            </button>
+          ) : null}
+        </div>
+
+        {creator.status === "review" && isAdmin ? (
+          <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+              <Clock size={13} className="shrink-0 text-amber-600" />
+              <span>{t("creators.awaitingApproval")}</span>
+            </div>
+            <p className="m-0 text-[11px] leading-snug text-amber-800">{t("creators.awaitingHint")}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onApprove(creator)}
+                className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+              >
+                <CheckCircle2 size={13} />
+                {t("creators.approve")}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReject(creator)}
+                className="flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+              >
+                {t("creators.reject")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mb-4 grid grid-cols-2 gap-4 border-t border-b border-[#F1F5F9] py-3.5">
+          <div className="flex flex-col">
+            <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.followers")}</span>
+            <span className="text-[14px] font-bold text-[#0F172A]">{formatNumber(metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]))}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.avgViews")}</span>
+            <span className="text-[14px] font-bold text-[#0F172A]">{formatNumber(metricValue(creator.metrics, ["avgViews", "avg_views"]))}</span>
+          </div>
+        </div>
+
+        {creatorContracts.length > 0 ? (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-purple-100 bg-purple-50/80 p-2.5 text-xs font-bold text-purple-900">
+            <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-purple-800">
+              <Repeat size={13} className="shrink-0 text-purple-600" />
+              {creatorContracts.length} {creatorContracts.length === 1 ? t("creators.recurringCompany") : t("creators.recurringCompanies")}
+            </span>
+            <span className="max-w-[130px] truncate rounded-md border border-purple-200 bg-white/90 px-2 py-0.5 text-[10px] font-extrabold text-purple-900" title={creatorContracts.map((c) => c.company?.name ?? c.title).join(", ")}>
+              {creatorContracts.map((c) => c.company?.name ?? c.title).join(", ")}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(creator.categories || []).slice(0, 2).map((cat) => (
+            <span key={cat} className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#64748B] uppercase">
+              {cat}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between border-t border-[#F1F5F9] pt-4">
+        <div className="text-[13px] font-bold text-[#0F172A]">
+          {formatCurrency(creator.pricing?.reel || 0)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
+        </div>
+        <Link
+          href={`/creators/${creator.id}`}
+          className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
+        >
+          {t("creators.view")}
+        </Link>
+      </div>
+    </motion.article>
+  );
+}
+
+function CreatorsInner() {
+  const user = useAuth();
+  const { t } = useTranslation("app");
+  const { t: tc } = useTranslation("common");
+  const isAdmin = user.role === "admin";
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [recurringContracts, setRecurringContracts] = useState<RecurringContract[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [minFollowers, setMinFollowers] = useState("");
+  const [maxFollowers, setMaxFollowers] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
+
+  const categoryOptions = useMemo(
+    () => [{ value: "all", label: t("creators.allCategories").toUpperCase() }, ...CATEGORIES.map((cat) => ({ value: cat, label: cat.toUpperCase() }))],
+    [t],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: t("creators.allStatus").toUpperCase() },
+      { value: "active", label: t("status.active").toUpperCase() },
+      { value: "review", label: t("creators.statusReview").toUpperCase() },
+      { value: "paused", label: t("status.paused").toUpperCase() },
+      { value: "rejected", label: t("status.rejected").toUpperCase() },
+    ],
+    [t],
+  );
+
+  async function load() {
+    try {
+      const [creatorsRes, recurringRes] = await Promise.all([
+        api.creators(),
+        api.recurring().catch(() => ({ data: [] as RecurringContract[] })),
+      ]);
+      setCreators(creatorsRes.data);
+      setRecurringContracts(recurringRes.data);
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("filters") === "true") setShowAdvancedFilters(true);
+    if (params.get("status")) setStatusFilter(params.get("status") ?? "all");
+  }, []);
+
+  const pendingCount = creators.filter((c) => c.status === "review").length;
+  const activeCount = creators.filter((c) => c.status === "active").length;
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return creators.filter((creator) => {
+      const followers = metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+      const reel = Number(creator.pricing?.reel || 0);
+      const matchesSearch =
+        !term ||
+        (creator.full_name || "").toLowerCase().includes(term) ||
+        (creator.artistic_name || "").toLowerCase().includes(term);
+      const matchesStatus = statusFilter === "all" || creator.status === statusFilter;
+      const matchesCategory =
+        categoryFilter === "all" ||
+        (creator.categories || []).some((cat) => cat.toLowerCase() === categoryFilter.toLowerCase());
+      const matchesMinFollowers = !minFollowers || followers >= Number(minFollowers);
+      const matchesMaxFollowers = !maxFollowers || followers <= Number(maxFollowers);
+      const matchesMinPrice = !minPrice || reel >= Number(minPrice);
+      const matchesMaxPrice = !maxPrice || reel <= Number(maxPrice);
+      return matchesSearch && matchesStatus && matchesCategory && matchesMinFollowers && matchesMaxFollowers && matchesMinPrice && matchesMaxPrice;
+    });
+  }, [creators, search, statusFilter, categoryFilter, minFollowers, maxFollowers, minPrice, maxPrice]);
+
+  async function approve(creator: Creator) {
+    if (!(await alertConfirm(t("creators.approveTitle"), t("creators.approveText", { name: creator.artistic_name })))) return;
+    try {
+      await api.approveCreator(creator.id);
+      await alertSuccess(t("creators.approved"), t("creators.approvedBody", { name: creator.artistic_name }));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function reject(creator: Creator) {
+    if (!(await alertConfirm(t("creators.rejectTitle"), t("creators.rejectText", { name: creator.artistic_name }), t("creators.reject")))) return;
+    try {
+      await api.rejectCreator(creator.id);
+      await alertSuccess(t("creators.rejectSuccess"), t("creators.rejectSuccessBody", { name: creator.artistic_name }));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function resetCasting() {
+    if (!(await alertConfirm(t("creators.resetTitle"), t("creators.resetText"), t("creators.resetConfirm")))) return;
+    try {
+      await api.resetCasting();
+      await alertSuccess(t("creators.resetSuccess"), t("creators.resetSuccessBody"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function onCreate(event: FormEvent) {
+    event.preventDefault();
+    if (!form.full_name.trim() || !form.artistic_name.trim() || !form.email.trim()) {
+      await alertWarning(t("creators.incompleteTitle"), t("creators.incomplete"));
+      return;
+    }
+    if (!isValidEmail(form.email)) {
+      await alertWarning(t("creators.invalidEmailTitle"), t("creators.invalidEmail"));
+      return;
+    }
+    if (form.cpf && !isValidCPF(form.cpf)) {
+      await alertWarning(t("creators.invalidCpfTitle"), t("creators.invalidCpf"));
+      return;
+    }
+    try {
+      await api.createCreator({
+        full_name: form.full_name.trim(),
+        artistic_name: form.artistic_name.replace(/^@/, "").trim(),
+        email: form.email.trim(),
+        cpf: form.cpf || null,
+        photo_url: form.photo_url.trim() || null,
+        category: form.category,
+        instagram: form.artistic_name.replace(/^@/, "").trim(),
+      });
+      setModalOpen(false);
+      setForm(EMPTY_FORM);
+      await alertSuccess(t("creators.created"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="m-0 text-[28px] font-bold text-[#0F172A]">{t("creators.title")}</h1>
+          <p className="mt-1 text-[14px] text-[#64748B]">{t("creators.subtitle")}</p>
+        </div>
+        {isAdmin ? (
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={resetCasting}
+              title={t("creators.resetHint")}
+              className="flex h-11 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-700 shadow-xs transition-all hover:bg-rose-100"
+            >
+              <Trash2 size={15} className="text-rose-600" />
+              {t("creators.reset")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="flex h-11 items-center gap-2 rounded-lg bg-brand-primary px-6 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:bg-indigo-600 active:scale-95"
+            >
+              <Plus size={18} />
+              {t("creators.new")}
+            </button>
+          </div>
+        ) : null}
+      </header>
+
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setStatusFilter("all")}
+          className={cn(
+            "shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all",
+            statusFilter === "all" ? "bg-slate-900 text-white shadow-xs" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+          )}
+        >
+          {t("creators.all", { count: creators.length })}
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter("review")}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all",
+            statusFilter === "review" ? "bg-amber-500 text-white shadow-xs" : "border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100",
+          )}
+        >
+          <Clock size={13} />
+          {t("creators.awaitingCount", { count: pendingCount })}
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter("active")}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all",
+            statusFilter === "active" ? "bg-emerald-600 text-white shadow-xs" : "border border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+          )}
+        >
+          <CheckCircle2 size={13} />
+          {t("creators.activeCount", { count: activeCount })}
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter("paused")}
+          className={cn(
+            "shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all",
+            statusFilter === "paused" ? "bg-slate-700 text-white shadow-xs" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+          )}
+        >
+          {t("creators.paused")}
+        </button>
+      </div>
+
+      <div className="flex flex-col items-center gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-6 shadow-sm lg:flex-row">
+        <div className="relative w-full flex-1">
+          <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("creators.search")}
+            className="w-full rounded-lg border border-[#E2E8F0] py-2.5 pr-4 pl-10 text-sm outline-none transition-all focus:border-brand-primary"
+          />
+        </div>
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={categoryFilter}
+            options={categoryOptions}
+            onChange={setCategoryFilter}
+            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={statusFilter}
+            options={statusOptions}
+            onChange={setStatusFilter}
+            className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
+        </div>
+      </div>
+
+      {showAdvancedFilters ? (
+        <div className="-mt-4 overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-slate-50 p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+            <h3 className="text-xs font-bold tracking-wider text-[#475569] uppercase">{t("creators.advancedFilters")}</h3>
+            <button type="button" onClick={() => setShowAdvancedFilters(false)} className="text-xs font-bold tracking-wide text-slate-500 uppercase hover:text-slate-800">
+              {t("creators.closeFilters")}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+            {[
+              { label: t("creators.minFollowers"), value: minFollowers, set: setMinFollowers, placeholder: t("creators.minFollowersPh") },
+              { label: t("creators.maxFollowers"), value: maxFollowers, set: setMaxFollowers, placeholder: t("creators.maxFollowersPh") },
+              { label: t("creators.minPrice"), value: minPrice, set: setMinPrice, placeholder: t("creators.minPricePh") },
+              { label: t("creators.maxPrice"), value: maxPrice, set: setMaxPrice, placeholder: t("creators.maxPricePh") },
+            ].map((field) => (
+              <div key={field.label} className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold tracking-wide text-slate-600 uppercase">{field.label}</label>
+                <input
+                  type="number"
+                  value={field.value}
+                  placeholder={field.placeholder}
+                  onChange={(e) => field.set(e.target.value)}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-primary"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMinFollowers("");
+                setMaxFollowers("");
+                setMinPrice("");
+                setMaxPrice("");
+              }}
+              className="rounded-lg border border-slate-200 bg-transparent px-4 py-2 text-xs font-bold text-slate-600 hover:bg-white"
+            >
+              {t("creators.clearFilters")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {filtered.map((creator) => (
+          <CreatorCard
+            key={creator.id}
+            creator={creator}
+            recurringContracts={recurringContracts}
+            isAdmin={isAdmin}
+            onApprove={approve}
+            onReject={reject}
+            onChangePassword={setPasswordCreator}
+          />
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <Users size={32} />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">{t("creators.empty")}</h3>
+          <p className="max-w-xs text-slate-500">{t("creators.emptyHint")}</p>
+        </div>
+      ) : null}
+
+      {modalOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+          <button type="button" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalOpen(false)} aria-label={tc("close")} />
+          <div className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white p-5 sm:p-6">
+              <h2 className="text-xl font-bold text-[#0F172A]">{t("creators.modalTitle")}</h2>
+              <button type="button" onClick={() => setModalOpen(false)} className="p-1 font-bold text-slate-400 hover:text-slate-700">
+                ✕
+              </button>
+            </div>
+            <form noValidate className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" onSubmit={onCreate}>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.fullName")}</label>
+                  <input className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.artisticName")}</label>
+                  <input placeholder={t("creators.artisticPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.artistic_name} onChange={(e) => setForm({ ...form, artistic_name: e.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.cpf")}</label>
+                  <input
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                    className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary"
+                    value={form.cpf}
+                    onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.email")}</label>
+                  <input type="email" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5 md:col-span-2">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.mainCategory")}</label>
+                  <Select2Field
+                    theme="light"
+                    value={form.category}
+                    options={CATEGORIES.map((cat) => ({ value: cat, label: cat }))}
+                    onChange={(value) => setForm({ ...form, category: value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 md:col-span-2">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.photoUrl")}</label>
+                  <input placeholder={t("creators.photoUrlPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.photo_url} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end gap-3 border-t border-[#E2E8F0] pt-4">
+                <button type="button" onClick={() => setModalOpen(false)} className="px-6 py-2.5 text-sm font-bold text-[#64748B] transition-all hover:text-[#0F172A]">
+                  {tc("cancel")}
+                </button>
+                <button type="submit" className="rounded-lg bg-brand-primary px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:bg-indigo-600 active:scale-95">
+                  {t("creators.saveRegister")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {passwordCreator ? <ChangeCreatorPasswordModal creator={passwordCreator} onClose={() => setPasswordCreator(null)} /> : null}
+    </div>
+  );
+}
+
+export function CreatorsScreen() {
+  return (
+    <AuthenticatedShell>
+      <CreatorsInner />
+    </AuthenticatedShell>
+  );
+}

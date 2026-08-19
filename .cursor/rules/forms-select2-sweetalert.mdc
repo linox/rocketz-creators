@@ -1,0 +1,37 @@
+---
+description: Select2 obrigatório em todo select e SweetAlert obrigatório em todo alerta
+alwaysApply: true
+---
+
+# Formulários: Select2 e SweetAlert
+
+Padrão permanente do Rocketz Creators. Vale para landing, login e qualquer tela futura.
+
+## Select
+
+- Nunca use `<select>` nativo.
+- Todo dropdown usa o componente `Select2Field` em `rocktz-web/src/components/Select2Field.tsx`.
+- Tema `light` na landing/modais claros; tema `dark` no login e telas `#0F172A`.
+- Listas fechadas (UF, categoria, status, etc.) são Select2, não input de texto.
+
+```tsx
+// ❌ BAD
+<select value={uf} onChange={(e) => setUf(e.target.value)}>
+  <option>SP</option>
+</select>
+
+// ✅ GOOD
+<Select2Field
+  theme="light"
+  placeholder="UF"
+  value={uf}
+  options={UF_OPTIONS}
+  onChange={setUf}
+/>
+```
+
+## Alertas
+
+- Nunca use `alert()`, `confirm()`, `window.prompt()`, toast improvisado ou faixa de erro no form para validação/API.
+- Sempre `alertWarning`, `alertError`, `alertSuccess` ou `alertApiError` de `rocktz-web/src/lib/alerts.ts` (SweetAlert2).
+- Formulários usam `noValidate`; a mensagem de validação é SweetAlert.

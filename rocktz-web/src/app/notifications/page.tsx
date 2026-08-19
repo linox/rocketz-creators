@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { NotificationsScreen } from "@/components/screens/NotificationsScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Notificações" />;
+  return <NotificationsScreen />;
 }

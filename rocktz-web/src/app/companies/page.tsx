@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { CompaniesScreen } from "@/components/screens/CompaniesScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Empresas" />;
+  return <CompaniesScreen />;
 }

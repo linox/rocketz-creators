@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { CreatorsScreen } from "@/components/screens/CreatorsScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Criadores" />;
+  return <CreatorsScreen />;
 }

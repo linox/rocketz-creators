@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\AppLocale;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,10 +18,16 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'role' => $this->role?->value,
+            'locale' => $this->locale ?: AppLocale::DEFAULT,
+            'avatar_url' => $this->avatar_url,
             'creator' => $this->whenLoaded('creator', function () {
                 if (! $this->creator) {
                     return null;
                 }
+
+                $latestContract = $this->creator->relationLoaded('contractAcceptances')
+                    ? $this->creator->contractAcceptances->first()
+                    : $this->creator->contractAcceptances()->latest('id')->first();
 
                 return [
                     'id' => $this->creator->id,
@@ -28,6 +35,17 @@ class UserResource extends JsonResource
                     'artistic_name' => $this->creator->artistic_name,
                     'status' => $this->creator->status?->value,
                     'photo_url' => $this->creator->photo_url,
+                    'whatsapp' => $this->creator->whatsapp,
+                    'city' => $this->creator->city,
+                    'state' => $this->creator->state,
+                    'document' => $this->creator->document,
+                    'socials' => $this->creator->socials ?? [],
+                    'contract_acceptance' => $latestContract ? [
+                        'id' => $latestContract->id,
+                        'status' => $latestContract->status?->value,
+                        'accepted_at' => $latestContract->accepted_at?->toIso8601String(),
+                        'full_name' => $latestContract->full_name,
+                    ] : null,
                 ];
             }),
             'company' => $this->whenLoaded('company', function () {
@@ -40,6 +58,8 @@ class UserResource extends JsonResource
                     'name' => $this->company->name,
                     'status' => $this->company->status?->value,
                     'logo_url' => $this->company->logo_url,
+                    'whatsapp' => $this->company->whatsapp,
+                    'city' => $this->company->city,
                 ];
             }),
         ];

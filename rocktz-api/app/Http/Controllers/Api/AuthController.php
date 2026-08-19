@@ -12,6 +12,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterCompanyRequest;
 use App\Http\Requests\Auth\RegisterCreatorRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\UpdateLocaleRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
 use App\Models\CompanyUser;
@@ -55,7 +56,7 @@ class AuthController extends Controller
         $user = User::query()->where('email', Str::lower($credentials['email']))->first();
 
         if (! $user || ! $user->password || ! Hash::check($credentials['password'], $user->password)) {
-            return response()->json(['message' => 'E-mail ou senha incorretos.'], 422);
+            return response()->json(['message' => __('auth.invalid_credentials')], 422);
         }
 
         return response()->json($this->authService->issueToken($user));
@@ -65,7 +66,7 @@ class AuthController extends Controller
     {
         $request->user()?->currentAccessToken()?->delete();
 
-        return response()->json(['message' => 'Sessão encerrada.']);
+        return response()->json(['message' => __('auth.logged_out')]);
     }
 
     public function me(Request $request): JsonResponse
@@ -78,12 +79,66 @@ class AuthController extends Controller
         ]);
     }
 
-    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
+    public function updateLocale(UpdateLocaleRequest $request): JsonResponse
     {
-        Password::sendResetLink($request->validated());
+        $user = $request->user();
+        $user->forceFill(['locale' => $request->validated('locale')])->save();
+        $user->load(['creator', 'company']);
 
         return response()->json([
-            'message' => 'Se o e-mail existir, enviaremos o link de redefinição.',
+            'message' => __('auth.locale_updated'),
+            'user' => new UserResource($user),
+        ]);
+    }
+
+    public function updateMe(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'avatar_url' => ['nullable', 'string', 'max:2048'],
+        ]);
+
+        $user->fill($data)->save();
+
+        if (isset($data['name'])) {
+            $user->creator?->update(['full_name' => $data['name']]);
+        }
+
+        if (array_key_exists('avatar_url', $data)) {
+            $user->creator?->update(['photo_url' => $data['avatar_url']]);
+            $user->company?->update(['logo_url' => $data['avatar_url']]);
+        }
+
+        $user->load(['creator', 'company']);
+
+        return response()->json([
+            'user' => new UserResource($user),
+        ]);
+    }
+
+    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
+    {
+        if (config('mail.default') === 'resend' && blank(config('services.resend.key'))) {
+            return response()->json(['message' => __('auth.mail_not_configured')], 503);
+        }
+
+        $email = Str::lower($request->validated('email'));
+
+        try {
+            $status = Password::sendResetLink(['email' => $email]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => __('auth.mail_failed')], 503);
+        }
+
+        if ($status === Password::RESET_THROTTLED) {
+            return response()->json(['message' => __('auth.mail_throttled')], 429);
+        }
+
+        return response()->json([
+            'message' => __('auth.reset_sent'),
         ]);
     }
 
@@ -96,10 +151,10 @@ class AuthController extends Controller
         });
 
         if ($status !== Password::PASSWORD_RESET) {
-            return response()->json(['message' => 'Token de redefinição inválido ou expirado.'], 422);
+            return response()->json(['message' => __('auth.reset_invalid')], 422);
         }
 
-        return response()->json(['message' => 'Senha redefinida com sucesso.']);
+        return response()->json(['message' => __('auth.reset_success')]);
     }
 
     public function googleRedirect(Request $request): JsonResponse|RedirectResponse
@@ -143,7 +198,7 @@ class AuthController extends Controller
                 );
             }
 
-            return redirect()->away($frontend.'/api/auth/callback?token='.urlencode($payload['token']));
+            return redirect()->away($frontend.'/auth/callback?token='.urlencode($payload['token']));
         } catch (RuntimeException $e) {
             return redirect()->away($frontend.'/login?error=google_failed');
         }
@@ -159,6 +214,9 @@ class AuthController extends Controller
         }
 
         $this->attachGoogleProfile($user, $data['type'], $request);
+        if (! empty($data['locale'])) {
+            $user->forceFill(['locale' => $data['locale']])->save();
+        }
         $this->authService->recordLgpdConsent($user, $request);
 
         return response()->json($this->authService->issueToken($user->fresh()));

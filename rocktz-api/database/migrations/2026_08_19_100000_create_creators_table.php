@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('creators', function (Blueprint $table) {
@@ -38,42 +35,10 @@ return new class extends Migration
             $table->string('status')->default('review')->index();
             $table->timestamps();
         });
-
-        Schema::create('creator_portfolio_videos', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('creator_id')->constrained()->cascadeOnDelete();
-            $table->string('title');
-            $table->string('url');
-            $table->text('description')->nullable();
-            $table->timestamp('uploaded_at')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('creator_contract_acceptances', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('creator_id')->constrained()->cascadeOnDelete();
-            $table->string('term_id');
-            $table->string('version');
-            $table->string('full_name');
-            $table->string('document');
-            $table->string('email');
-            $table->timestamp('accepted_at');
-            $table->string('ip', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->json('declarations');
-            $table->boolean('all_accepted');
-            $table->string('status')->default('valid');
-            $table->timestamps();
-        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('creator_contract_acceptances');
-        Schema::dropIfExists('creator_portfolio_videos');
         Schema::dropIfExists('creators');
     }
 };

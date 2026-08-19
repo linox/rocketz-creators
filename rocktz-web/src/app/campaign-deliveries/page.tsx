@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { CampaignDeliveriesScreen } from "@/components/screens/CampaignDeliveriesScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Entregas & Vídeos" />;
+  return <CampaignDeliveriesScreen />;
 }

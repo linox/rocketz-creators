@@ -1,0 +1,144 @@
+{
+  "metaDescription": "Plataforma para gestão de casting de criadores, campanhas publicitárias e trabalhos recorrentes.",
+  "nav": {
+    "forCompanies": "Para empresas",
+    "forCreators": "Para criadores",
+    "howItWorks": "Como funciona",
+    "features": "Recursos",
+    "partnerBrands": "Marcas parceiras"
+  },
+  "hero": {
+    "titleBefore": "Conectamos marcas a quem",
+    "titleHighlight": "cria, influencia e gera resultados.",
+    "subtitle": "Encontre influenciadores, UGC Creators e atores para campanhas pontuais ou trabalhos recorrentes.",
+    "forCompanies": "Para empresas",
+    "imACompany": "Sou uma empresa",
+    "forCreators": "Para criadores",
+    "wantCreator": "Quero ser Creator",
+    "campaigns": "Campanhas",
+    "campaignsSub": "pontuais ou recorrentes",
+    "profiles": "Diversos perfis",
+    "profilesSub": "para cada objetivo e orçamento",
+    "moreContent": "Mais conteúdo",
+    "moreContentSub": "menos custo e melhores resultados",
+    "creatorAlt": "Criador de conteúdo",
+    "campaign": "Campanha",
+    "newLaunch": "Novo lançamento",
+    "inProgress": "Em andamento",
+    "briefing": "Briefing",
+    "creatorsFound": "32 creators encontrados",
+    "selected": "8 selecionados",
+    "delivered": "14 conteúdos entregues",
+    "approvedContent": "Conteúdo aprovado",
+    "approvedPreview": "Prévia do conteúdo aprovado",
+    "ready": "Pronto para uso"
+  },
+  "brandsTrust": "Marcas que confiam na Rocketz Creators",
+  "platform": {
+    "kicker": "Plataforma",
+    "title": "Benefícios de usar a plataforma",
+    "subtitle": "Mais eficiência para suas campanhas com creators.",
+    "onePlatform": "Uma plataforma. Diferentes formas de criar resultados.",
+    "onePlatformText": "Nem toda campanha precisa de um grande influenciador. Na Rocketz Creators, empresas encontram diferentes perfis de acordo com cada objetivo:"
+  },
+  "benefits": {
+    "investTitle": "Otimize investimentos",
+    "investText": "Reduza desperdícios e direcione o orçamento para o que realmente gera resultado.",
+    "contentTitle": "Mais conteúdo, menos custo",
+    "contentText": "Produza diferentes conteúdos sem depender de grandes estruturas de gravação.",
+    "resultsTitle": "Amplie seus resultados",
+    "resultsText": "Testes, dados e diferentes perfis para descobrir o que funciona com o seu público.",
+    "scaleTitle": "Escala inteligente",
+    "scaleText": "Transforme campanhas em parcerias recorrentes e tenha resultados consistentes."
+  },
+  "profiles": {
+    "influencers": "Influenciadores",
+    "influencersText": "Para gerar alcance, autoridade e conexão direta com comunidades engajadas.",
+    "ugc": "UGC Creators",
+    "ugcText": "Para produzir conteúdos naturais e autênticos para redes da marca e anúncios de alta conversão.",
+    "actors": "Atores e Apresentadores",
+    "actorsText": "Para vídeos institucionais, demonstrações, tutoriais de produto e campanhas comerciais."
+  },
+  "how": {
+    "kicker": "Como funciona",
+    "title": "Campanhas pontuais ou trabalhos recorrentes",
+    "subtitle": "Escolha o modelo que combina com o momento da sua marca — uma ação pontual ou uma parceria contínua.",
+    "oneOff": "Campanhas pontuais",
+    "oneOffSub": "Ações de começo, meio e fim",
+    "oneOffText": "Precisa divulgar um lançamento, promoção, evento ou produto específico? Encontre creators para ações sob medida com entregas pontuais.",
+    "recurring": "Trabalhos recorrentes",
+    "recurringSub": "Parcerias e produção mensal contínua",
+    "recurringText": "Crie uma rede de profissionais que passa a conhecer seus produtos, comunicação e público — reduzindo o tempo de produção e aumentando a consistência dos conteúdos.",
+    "tagsOne": ["Lançamentos", "Datas comemorativas", "Eventos", "Reviews", "Unboxing", "Demonstrações"],
+    "tagsRecurring": ["Conteúdo mensal", "UGC recorrente", "Embaixadores", "Apresentadores", "Reviews contínuos", "E muito mais"]
+  },
+  "impact": {
+    "kicker": "Resultados",
+    "title": "Impacto real para o seu negócio",
+    "subtitle": "Usando a Rocketz Creators, sua marca consegue:",
+    "reduce": "↓ Reduzir",
+    "costs": "custos",
+    "costsText": "Menor custo de produção e mais eficiência no uso do orçamento.",
+    "increase": "↑ Aumentar",
+    "content": "conteúdo",
+    "contentText": "Mais variações de criativos para testar em diferentes canais e formatos.",
+    "decrease": "↓ Diminuir",
+    "risks": "riscos",
+    "risksText": "Menor dependência de grandes influenciadores ou grandes produções.",
+    "expand": "↑ Ampliar",
+    "results": "resultados",
+    "resultsText": "Mais testes, mais dados e mais chances de encontrar o que realmente funciona.",
+    "statCreators": "Creators cadastrados",
+    "statContents": "Conteúdos produzidos",
+    "statCampaigns": "Campanhas realizadas",
+    "statSegments": "Segmentos atendidos",
+    "footnote": "*Rede de criadores ativos e validados em todo o Brasil."
+  },
+  "channels": {
+    "title": "Conteúdo bom é conteúdo que trabalha.",
+    "subtitle": "Um creator pode gerar muito mais do que uma publicação. O mesmo conteúdo pode alimentar múltiplos canais da sua marca:",
+    "items": ["Instagram", "TikTok", "YouTube", "Meta Ads", "Landing Pages", "Marketplace", "Campanhas de Performance"]
+  },
+  "audience": {
+    "forCompanies": "Para empresas",
+    "companiesTitle": "Encontre o creator certo para cada objetivo.",
+    "companiesItems": [
+      "Influenciadores, UGC Creators e atores",
+      "Campanhas pontuais ou recorrentes",
+      "Diversos perfis, nichos e estilos",
+      "Conteúdo para redes sociais e mídia paga",
+      "Uma plataforma completa para otimizar seus resultados"
+    ],
+    "campaignsAlt": "Gestão de campanhas na plataforma",
+    "campaignsCaption": "Gestão completa de campanhas e aprovações",
+    "registerCompany": "Cadastrar minha empresa",
+    "forCreators": "Para criadores",
+    "creatorsTitle": "Seu próximo trabalho pode começar aqui.",
+    "creatorsItems": [
+      "Oportunidades com marcas incríveis",
+      "Campanhas pontuais e recorrentes",
+      "Diversos segmentos e formatos",
+      "Liberdade para criar do seu jeito",
+      "Cadastre-se grátis e comece agora"
+    ],
+    "creatorAlt": "Criadora de conteúdo",
+    "noMillions": "Não é preciso ter milhões de seguidores",
+    "join": "Quero fazer parte"
+  },
+  "cta": {
+    "title": "Pronto para transformar criadores em resultados?",
+    "subtitle": "Conecte sua marca a quem cria conteúdo que vende.",
+    "company": "Sou uma empresa",
+    "creator": "Quero ser Creator"
+  },
+  "footer": {
+    "tagline": "Criadores certos. Conteúdos melhores. Mais possibilidades para sua marca.",
+    "platform": "Plataforma",
+    "follow": "Siga a Rocketz Creators",
+    "support": "Central de atendimento e suporte:",
+    "rights": "© 2026 Rocketz Creators. Todos os direitos reservados.",
+    "terms": "Termos de Uso",
+    "privacy": "Privacidade (LGPD)",
+    "security": "Segurança da Informação"
+  }
+}

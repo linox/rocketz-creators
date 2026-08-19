@@ -1,0 +1,46 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class CompanyResource extends JsonResource
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'cnpj' => $this->cnpj,
+            'segment' => $this->segment,
+            'responsible_name' => $this->responsible_name,
+            'whatsapp' => $this->whatsapp,
+            'email' => $this->email,
+            'city' => $this->city,
+            'observations' => $this->observations,
+            'logo_url' => $this->logo_url,
+            'objective' => $this->objective,
+            'status' => $this->status?->value,
+            'contacts' => $this->whenLoaded('contacts', fn () => $this->contacts->map(fn ($contact) => [
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'role' => $contact->role,
+                'email' => $contact->email,
+                'whatsapp' => $contact->whatsapp,
+            ])),
+            'favorite_creator_ids' => $this->whenLoaded('favoriteCreators', fn () => $this->favoriteCreators->pluck('id')->all()),
+            'users' => $this->whenLoaded('companyUsers', fn () => $this->companyUsers->map(fn ($companyUser) => [
+                'id' => $companyUser->id,
+                'user_id' => $companyUser->user_id,
+                'email' => $companyUser->user?->email,
+                'name' => $companyUser->user?->name,
+                'status' => $companyUser->status?->value,
+            ])),
+            'created_at' => $this->created_at?->toIso8601String(),
+        ];
+    }
+}

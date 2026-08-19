@@ -1,7 +1,15 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\CreatorController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\RecurringContractController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
@@ -18,6 +26,72 @@ Route::prefix('auth')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
+        Route::patch('me', [AuthController::class, 'updateMe']);
+        Route::patch('locale', [AuthController::class, 'updateLocale']);
         Route::post('google/complete', [AuthController::class, 'completeGoogleProfile']);
+    });
+});
+
+Route::middleware(['auth:sanctum', 'actor'])->group(function () {
+    Route::post('media', [MediaController::class, 'store']);
+    Route::get('dashboard', DashboardController::class);
+
+    Route::get('creators', [CreatorController::class, 'index']);
+    Route::get('creators/{creator}', [CreatorController::class, 'show']);
+    Route::patch('creators/{creator}', [CreatorController::class, 'update']);
+    Route::post('creators/{creator}/portfolio', [CreatorController::class, 'storePortfolio']);
+    Route::delete('creators/{creator}/portfolio/{video}', [CreatorController::class, 'destroyPortfolio']);
+    Route::post('creators/{creator}/contract', [CreatorController::class, 'acceptContract']);
+
+    Route::get('companies', [CompanyController::class, 'index']);
+    Route::get('companies/{company}', [CompanyController::class, 'show']);
+    Route::patch('companies/{company}', [CompanyController::class, 'update']);
+    Route::post('companies/{company}/favorites/{creator}', [CompanyController::class, 'toggleFavorite']);
+
+    Route::get('campaigns', [CampaignController::class, 'index']);
+    Route::get('campaigns/available', [CampaignController::class, 'available']);
+    Route::get('campaigns/{campaign}', [CampaignController::class, 'show']);
+    Route::post('campaigns/{campaign}/apply', [CampaignController::class, 'apply']);
+    Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
+
+    Route::get('recurring-contracts', [RecurringContractController::class, 'index']);
+    Route::get('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'show']);
+    Route::patch('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'updateItem']);
+
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::delete('notifications/{notification}', [NotificationController::class, 'destroy']);
+
+    Route::middleware('role:admin,company')->group(function () {
+        Route::post('campaigns', [CampaignController::class, 'store']);
+        Route::patch('campaigns/{campaign}', [CampaignController::class, 'update']);
+        Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
+        Route::patch('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'update']);
+        Route::post('recurring-contracts/{recurringContract}/creators', [RecurringContractController::class, 'attachCreator']);
+        Route::post('recurring-contracts/{recurringContract}/items', [RecurringContractController::class, 'storeItem']);
+        Route::delete('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'destroyItem']);
+    });
+
+    Route::middleware('role:admin')->group(function () {
+        Route::post('creators', [CreatorController::class, 'store']);
+        Route::post('creators/reset-casting', [CreatorController::class, 'resetCasting']);
+        Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
+        Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
+        Route::post('creators/{creator}/password', [CreatorController::class, 'updatePassword']);
+
+        Route::post('companies', [CompanyController::class, 'store']);
+        Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
+        Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
+        Route::post('companies/{company}/users', [CompanyController::class, 'storeUser']);
+
+        Route::delete('campaigns/{campaign}', [CampaignController::class, 'destroy']);
+        Route::post('campaigns/{campaign}/assign', [CampaignController::class, 'assign']);
+
+        Route::delete('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'destroy']);
+
+        Route::get('admin-users', [AdminUserController::class, 'index']);
+        Route::post('admin-users', [AdminUserController::class, 'store']);
+        Route::delete('admin-users/{adminUser}', [AdminUserController::class, 'destroy']);
     });
 });

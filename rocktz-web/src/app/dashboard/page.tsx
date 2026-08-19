@@ -1,9 +1,5 @@
-import { AuthenticatedShell, ComingSoon } from "@/components/AuthenticatedShell";
+import { DashboardScreen } from "@/components/screens/DashboardScreen";
 
 export default function DashboardPage() {
-  return (
-    <AuthenticatedShell>
-      <ComingSoon title="Dashboard" />
-    </AuthenticatedShell>
-  );
+  return <DashboardScreen />;
 }

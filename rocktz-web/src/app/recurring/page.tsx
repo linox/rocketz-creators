@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { RecurringScreen } from "@/components/screens/RecurringScreen";
 
 export default function Page() {
-  return <PlaceholderPage title="Trabalhos Recorrentes" />;
+  return <RecurringScreen />;
 }

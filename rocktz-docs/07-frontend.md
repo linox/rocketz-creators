@@ -4,23 +4,48 @@ Next.js App Router, React 19, Tailwind v4, Inter, tokens do legado (`#6366F1`, s
 
 ## Rotas
 
-- `/` e `/join` — landing (admin autenticado em `/` vê o placeholder do dashboard)
+- `/` e `/join` — landing (modal de login com “Esqueci minha senha”; admin autenticado em `/` vê o dashboard)
 - `/login` — login/signup criador ou empresa, Google, esqueci senha
 - `/reset-password` — link enviado por e-mail
-- `/dashboard` — placeholder admin
-- `/company-dashboard` — placeholder empresa
-- `/creators/[id]` — placeholder do portal do criador
-- Demais itens do menu (campanhas, entregas, etc.) — placeholders “em construção”
+- `/dashboard` — KPIs da agência
+- `/company-dashboard` — painel da empresa (campanhas, recorrentes, favoritos)
+- `/creator-dashboard` — início/central do criador
+- `/creators` — lista do casting (admin aprova/rejeita e cadastra)
+- `/creators/[id]` — perfil, mídia kit, portfólio por URL, termo de adesão
+- `/companies` — marcas (admin aprova/rejeita e cadastra)
+- `/campaigns` — lista; `/campaigns/[id]` — briefing, candidaturas, entregas (URL)
+- `/available-campaigns` — vitrine + candidatura do criador
+- `/campaign-deliveries` — atalho de entregas (campanhas e recorrentes)
+- `/recurring` — contratos; `/recurring/[id]` — criadores, pautas por mês, envio de URL
+- `/notifications` — inbox
+- `/admin-users` — usuários `role=admin`
 
-## Sessão
+Menus no `AppShell` seguem o legado (admin inclui Usuários Admin; criador tem Meu perfil).
 
-Route handlers em `src/app/api/auth/*` falam com o Laravel e gravam `rocktz_token` httpOnly.
+## Formulários
 
-- `POST /api/auth/session` — login
-- `GET /api/auth/session` — me
-- `DELETE /api/auth/session` — logout
-- `POST /api/auth/register/creator|company`
-- `GET /api/auth/callback?token=` — callback do Google
+Dropdown = `Select2Field` (nunca `<select>` nativo). Alertas = SweetAlert (`alertWarning`, `alertError`, `alertSuccess`, `alertApiError`, `alertConfirm`). Forms com `noValidate`.
+
+## Idioma
+
+`i18next` no cliente (sem prefixo na URL). Seletor `PT` / `EN` / `ES` na landing, no login e na sidebar. JSON em `src/i18n/locales/{pt-BR,en,es}/`. Toda chamada Laravel leva `Accept-Language`. Usuário logado sincroniza via `PATCH /auth/locale`.
+
+Strings de UI novas entram só via `t('chave')` — nunca hardcoded.
+
+## Sessão e dados
+
+Export estático (`output: "export"`, `trailingSlash`). Sem Node no cPanel.
+
+Rotas dinâmicas usam `generateStaticParams` com `{ id: "_" }`. O Apache em [`scripts/cpanel.htaccess`](../scripts/cpanel.htaccess) reescreve `/creators/{id}`, `/campaigns/{id}` e `/recurring/{id}` para o HTML `_`.
+
+O browser chama a API Laravel em `NEXT_PUBLIC_API_URL` e guarda o token Sanctum em `localStorage` (`rocktz_token`). Helpers em `src/lib/api.ts` (`api.creators()`, `api.campaign()` etc.).
+
+- Local: `http://localhost:8000/api`
+- Produção: `https://apicreators.rocketz.me/api`
+
+Callback do Google: `/auth/callback?token=`
+
+Contas seed (senha `password`): `admin@rocketz.test`, `ana.creator@rocketz.test`, `bruno.creator@rocketz.test` (em análise), `empresa@rocketz.test`.
 
 ## Marca
 
