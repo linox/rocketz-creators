@@ -498,7 +498,7 @@ function CompaniesInner() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="m-0 text-[28px] font-bold text-[#0F172A]">{t("companies.title")}</h1>
+          <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("companies.title")}</h1>
           <p className="mt-1 text-[14px] text-[#64748B]">{t("companies.subtitle")}</p>
         </div>
         {isAdmin ? (

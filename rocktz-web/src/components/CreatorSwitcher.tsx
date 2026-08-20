@@ -19,6 +19,7 @@ export function CreatorSwitcher({
 }) {
   const router = useRouter();
   const { t } = useTranslation("app");
+  const { t: tp } = useTranslation("profile");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creators, setCreators] = useState<Creator[]>([]);
@@ -59,23 +60,23 @@ export function CreatorSwitcher({
           className="flex items-center gap-2 rounded-xl border border-purple-500 bg-purple-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-purple-700 active:scale-95"
         >
           <Key size={14} className="animate-pulse text-purple-200" />
-          <span>Trocar de Criador {labelHandle ? `(@${labelHandle})` : ""}</span>
+          <span>{labelHandle ? tp("switcherSwapWith", { handle: labelHandle }) : tp("switcherSwap")}</span>
           <ChevronDown size={14} className={cn("transition-transform", open && "rotate-180")} />
         </button>
         {open ? (
           <div className="absolute right-0 z-50 mt-2 w-80 max-w-[90vw] rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-2xl sm:right-auto sm:left-0">
             <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="flex items-center gap-1.5 text-xs font-black tracking-wider text-purple-900 uppercase">
-                <Sparkles size={14} className="text-purple-600" /> Selecionar Criador para Visualizar
+                <Sparkles size={14} className="text-purple-600" /> {tp("switcherSelect")}
               </span>
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">{creators.length} Criadores</span>
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">{tp("switcherCount", { count: creators.length })}</span>
             </div>
             <div className="relative mb-2">
               <Search size={14} className="absolute top-2.5 left-3 text-slate-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por @nome ou nicho..."
+                placeholder={tp("switcherSearch")}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-3 pl-8 text-xs font-medium outline-none focus:border-purple-500"
               />
             </div>
@@ -102,14 +103,14 @@ export function CreatorSwitcher({
   }
 
   return (
-    <div className="relative shrink-0" ref={ref}>
+    <div className="relative min-w-0 max-w-full" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-10 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-extrabold tracking-wider text-indigo-700 uppercase"
+        className="flex h-10 max-w-full items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-extrabold tracking-wider text-indigo-700 uppercase"
       >
-        @{labelHandle || "CRIADOR"}
-        <ChevronDown size={14} />
+        <span className="truncate">@{labelHandle || tp("creatorFallback")}</span>
+        <ChevronDown size={14} className="shrink-0" />
       </button>
       {open ? (
         <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">

@@ -6,7 +6,7 @@
   "creators": "Criadores",
   "companies": "Empresas",
   "campaigns": "Campanhas",
-  "deliveries": "Entregas & Vídeos",
+  "deliveries": "Entregas & Aprovações",
   "recurring": "Trabalhos Recorrentes",
   "notifications": "Notificações",
   "adminUsers": "Usuários Admin",
@@ -45,5 +45,11 @@
   "adminBadge": "Admin",
   "contractTerm": "Termo de Adesão & Uso de Imagem",
   "official": "Oficial",
-  "lgpdProtection": "Privacidade e Proteção LGPD"
+  "lgpdProtection": "Privacidade e Proteção LGPD",
+  "tabMore": "Mais",
+  "tabHome": "Início",
+  "tabRecurring": "Recorrentes",
+  "tabDeliveries": "Entregas",
+  "tabAvailable": "Campanhas",
+  "tabPanel": "Painel"
 }

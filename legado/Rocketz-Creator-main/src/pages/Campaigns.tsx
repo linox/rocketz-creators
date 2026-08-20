@@ -1173,11 +1173,12 @@ export default function Campaigns() {
                     </div>
 
                     {/* Campaign Image Upload Standard Form Component */}
-                    <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
                       <CampaignImageUpload
                         value={modalImageUrl}
                         onChange={setModalImageUrl}
                         label="Imagem da Campanha (Formato Padrão 16:9)"
+                        compact
                       />
                     </div>
 

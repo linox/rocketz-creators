@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
 
 class CreatorResource extends JsonResource
 {
@@ -43,7 +44,10 @@ class CreatorResource extends JsonResource
                 'id' => $video->id,
                 'title' => $video->title,
                 'url' => $video->url,
+                'download_url' => $this->portfolioDownloadUrl($video->url),
                 'description' => $video->description,
+                'orientation' => $video->orientation,
+                'file_size' => (int) $video->file_size,
                 'uploaded_at' => $video->uploaded_at?->toIso8601String(),
             ])),
             'contract_acceptance' => $this->whenLoaded('contractAcceptances', function () {
@@ -58,5 +62,17 @@ class CreatorResource extends JsonResource
             }),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
+    }
+
+    private function portfolioDownloadUrl(?string $url): string
+    {
+        $path = parse_url((string) $url, PHP_URL_PATH) ?: '';
+        if (! is_string($path) || ! str_contains($path, '/uploads/')) {
+            return (string) $url;
+        }
+
+        $relative = ltrim(Str::after($path, '/uploads/'), '/');
+
+        return rtrim((string) config('app.url'), '/').'/downloads/'.$relative;
     }
 }

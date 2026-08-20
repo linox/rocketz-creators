@@ -278,8 +278,8 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full p-6">
-          <div className="mb-8 flex items-center justify-center w-full py-1">
-            <RocketzLogo variant="dark" size="md" to="/" className="items-center text-center mx-auto" />
+          <div className="mb-8 w-full px-3 py-1">
+            <RocketzLogo variant="dark" size="md" to="/" />
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto">
@@ -299,18 +299,18 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
                 ))}
 
                 <SidebarItem
-                  to="/campaign-deliveries?tab=campaigns"
-                  icon={Video}
-                  label="Entregas & Vídeos"
-                  active={location.pathname === '/campaign-deliveries' && (searchParams.get('tab') === 'campaigns' || !searchParams.get('tab'))}
-                  onClick={() => setIsSidebarOpen(false)}
-                />
-
-                <SidebarItem
                   to="/campaign-deliveries?tab=recurring"
                   icon={Repeat}
                   label="Trabalhos Recorrentes"
                   active={location.pathname === '/recurring' || (location.pathname === '/campaign-deliveries' && searchParams.get('tab') === 'recurring')}
+                  onClick={() => setIsSidebarOpen(false)}
+                />
+
+                <SidebarItem
+                  to="/campaign-deliveries?tab=campaigns"
+                  icon={Video}
+                  label="Entregas & Vídeos"
+                  active={location.pathname === '/campaign-deliveries' && (searchParams.get('tab') === 'campaigns' || !searchParams.get('tab'))}
                   onClick={() => setIsSidebarOpen(false)}
                 />
 

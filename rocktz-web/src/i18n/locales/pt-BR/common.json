@@ -31,6 +31,8 @@
   "hidePassword": "Ocultar senha",
   "showPassword": "Visualizar senha",
   "openMenu": "Abrir menu",
+  "closeMenu": "Fechar menu",
+  "moreMenu": "Mais opções",
   "comingSoon": "Em construção",
   "comingSoonBody": "Esta área será portada do legado nas próximas fases. O banco MySQL já está modelado e populado para testes.",
   "alerts": {

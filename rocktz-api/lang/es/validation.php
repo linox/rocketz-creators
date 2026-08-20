@@ -157,10 +157,12 @@ return [
     'ulid' => 'El campo :attribute debe ser un ULID válido.',
     'uuid' => 'El campo :attribute debe ser un UUID válido.',
     'custom' => [
-        'attribute-name' => [
-            'rule-name' => 'custom-message',
+        'file' => [
+            'uploaded' => 'No fue posible enviar el video. Revisa el archivo e inténtalo de nuevo.',
+            'max' => 'El video supera el tamaño máximo permitido.',
         ],
     ],
     'attributes' => [
+        'file' => 'video',
     ],
 ];

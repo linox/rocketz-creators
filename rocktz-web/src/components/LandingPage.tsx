@@ -88,6 +88,38 @@ const creatorCategoryValues = [
 const modalInput =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition-colors focus:border-purple-600";
 
+const sectionInner = "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8";
+const sectionY = "py-20 md:py-28";
+const kickerClass = "text-[11px] font-bold uppercase tracking-[0.22em] text-purple-600";
+const sectionTitleClass = "mt-4 text-balance text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl";
+const sectionLeadClass = "mt-4 max-w-lg text-pretty text-base leading-relaxed text-slate-600 sm:text-lg";
+const btnPrimary =
+  "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-colors hover:bg-purple-700";
+const btnSecondary =
+  "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-6 py-3 text-sm font-bold text-purple-700 shadow-xs transition-colors hover:bg-purple-50";
+const btnOnDark =
+  "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10 sm:w-auto";
+
+function SectionIntro({
+  kicker,
+  title,
+  subtitle,
+  className,
+}: {
+  kicker: string;
+  title: string;
+  subtitle: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className={kickerClass}>{kicker}</p>
+      <h2 className={sectionTitleClass}>{title}</h2>
+      <p className={sectionLeadClass}>{subtitle}</p>
+    </div>
+  );
+}
+
 function ModalField({
   label,
   required,
@@ -200,21 +232,21 @@ function StackedBenefitCard({
 
   return (
     <article
-      className="lg:sticky lg:pb-6"
+      className="mb-5 last:mb-0 lg:mb-0 lg:sticky lg:pb-6"
       style={{ top: `calc(7rem + ${index * 0.9}rem)`, zIndex: index + 1 }}
     >
       <motion.div
         style={reduce ? undefined : { scale, y, boxShadow, transformOrigin: "top center" }}
         className="origin-top rounded-3xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_2px_rgb(15_23_42/0.05),0_12px_28px_-10px_rgb(15_23_42/0.12),0_28px_50px_-18px_rgb(109_40_217/0.12)] max-lg:!transform-none sm:p-8"
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
             <Icon size={26} />
           </div>
           <span className="text-xs font-black tracking-widest text-slate-300">0{index + 1}</span>
         </div>
-        <h3 className="mb-2 text-lg font-bold text-slate-950 sm:text-xl">{title}</h3>
-        <p className="text-sm leading-relaxed text-slate-600">{text}</p>
+        <h3 className="mb-3 text-balance text-lg font-bold text-slate-950 sm:text-xl">{title}</h3>
+        <p className="text-pretty text-sm leading-relaxed text-slate-600">{text}</p>
       </motion.div>
     </article>
   );
@@ -241,45 +273,40 @@ function AudienceCards({
   const rightOpacity = useTransform(enter, [0.08, 0.4, 1], reduce ? [1, 1, 1] : [0, 1, 1]);
 
   return (
-    <div ref={ref} className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+    <div ref={ref} className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
       <motion.div
         id="para-empresas"
         style={{ x: leftX, opacity: leftOpacity }}
-        className="flex scroll-mt-24 flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-xs sm:p-10"
+        className="flex scroll-mt-24 flex-col rounded-3xl border border-slate-200 bg-white p-7 shadow-xs sm:p-10"
       >
-        <div>
-          <span className="rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-purple-600">
-            {t("audience.forCompanies")}
-          </span>
-          <h2 className="mt-4 mb-4 text-2xl font-extrabold text-slate-950 sm:text-3xl">
-            {t("audience.companiesTitle")}
-          </h2>
-          <ul className="mb-8 space-y-3">
-            {(t("audience.companiesItems", { returnObjects: true }) as string[]).map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm font-medium text-slate-700">
-                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-purple-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="relative mb-8 aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-md">
-            <ParallaxImage
-              src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80"
-              alt={t("audience.campaignsAlt")}
-              className="h-full w-full"
-            />
-            <div className="absolute inset-0 flex items-end bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-white">
-                <Building2 size={14} className="text-purple-400" />
-                {t("audience.campaignsCaption")}
-              </span>
-            </div>
+        <span className="inline-flex w-fit rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-purple-600">
+          {t("audience.forCompanies")}
+        </span>
+        <h2 className="mt-5 mb-5 text-balance text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
+          {t("audience.companiesTitle")}
+        </h2>
+        <ul className="space-y-3.5">
+          {(t("audience.companiesItems", { returnObjects: true }) as string[]).map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm font-medium leading-relaxed text-slate-700">
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-purple-600" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="relative mt-8 aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-md">
+          <ParallaxImage
+            src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80"
+            alt={t("audience.campaignsAlt")}
+            className="h-full w-full"
+          />
+          <div className="absolute inset-0 flex items-end bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <Building2 size={14} className="text-purple-400" />
+              {t("audience.campaignsCaption")}
+            </span>
           </div>
         </div>
-        <button
-          onClick={onCompany}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 py-4 text-sm font-bold text-white shadow-md shadow-purple-500/20 hover:bg-purple-700"
-        >
+        <button onClick={onCompany} className={`${btnPrimary} mt-8`}>
           {t("audience.registerCompany")} <ArrowRight size={16} />
         </button>
       </motion.div>
@@ -287,41 +314,36 @@ function AudienceCards({
       <motion.div
         id="para-criadores"
         style={{ x: rightX, opacity: rightOpacity }}
-        className="flex scroll-mt-24 flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-xs sm:p-10"
+        className="flex scroll-mt-24 flex-col rounded-3xl border border-slate-200 bg-white p-7 shadow-xs sm:p-10"
       >
-        <div>
-          <span className="rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-purple-600">
-            {t("audience.forCreators")}
-          </span>
-          <h2 className="mt-4 mb-4 text-2xl font-extrabold text-slate-950 sm:text-3xl">
-            {t("audience.creatorsTitle")}
-          </h2>
-          <ul className="mb-8 space-y-3">
-            {(t("audience.creatorsItems", { returnObjects: true }) as string[]).map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm font-medium text-slate-700">
-                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-purple-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="relative mb-8 aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-md">
-            <ParallaxImage
-              src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80"
-              alt={t("audience.creatorAlt")}
-              className="h-full w-full"
-            />
-            <div className="absolute inset-0 flex items-end bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-white">
-                <Sparkles size={14} className="text-purple-400" />
-                {t("audience.noMillions")}
-              </span>
-            </div>
+        <span className="inline-flex w-fit rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-purple-600">
+          {t("audience.forCreators")}
+        </span>
+        <h2 className="mt-5 mb-5 text-balance text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
+          {t("audience.creatorsTitle")}
+        </h2>
+        <ul className="space-y-3.5">
+          {(t("audience.creatorsItems", { returnObjects: true }) as string[]).map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm font-medium leading-relaxed text-slate-700">
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-purple-600" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="relative mt-8 aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-md">
+          <ParallaxImage
+            src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80"
+            alt={t("audience.creatorAlt")}
+            className="h-full w-full"
+          />
+          <div className="absolute inset-0 flex items-end bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <Sparkles size={14} className="text-purple-400" />
+              {t("audience.noMillions")}
+            </span>
           </div>
         </div>
-        <button
-          onClick={onCreator}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-6 py-4 text-sm font-bold text-purple-700 shadow-xs hover:bg-purple-50/60"
-        >
+        <button onClick={onCreator} className={`${btnSecondary} mt-8`}>
           {t("audience.join")} <ArrowRight size={16} />
         </button>
       </motion.div>
@@ -432,7 +454,7 @@ export function LandingPage() {
           body && typeof body === "object" ? { ...(body as object), locale: getAppLocale() } : body,
         ),
       });
-      router.push(persistAuth(payload));
+      router.push(persistAuth(payload, path === "/auth/register/creator"));
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -538,7 +560,7 @@ export function LandingPage() {
     <div className="relative flex min-h-screen w-full flex-col overflow-x-clip bg-[#FDFDFE] font-sans text-slate-900 antialiased selection:bg-purple-600 selection:text-white">
       <motion.header
         style={{ backgroundColor: headerBg }}
-        className="sticky top-0 z-40 backdrop-blur-md"
+        className="sticky top-0 z-40 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md"
       >
         <motion.div
           aria-hidden
@@ -550,27 +572,27 @@ export function LandingPage() {
           className="absolute inset-x-0 bottom-0 h-px bg-slate-100"
           style={{ opacity: headerBorder }}
         />
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6 lg:px-8">
           <RocketzLogo variant="light" size="md" href="/" />
-          <nav className="hidden items-center gap-6 text-[14px] font-medium text-slate-600 lg:flex xl:gap-8">
+          <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 lg:flex xl:gap-8">
             <button onClick={() => scrollTo("para-empresas")} className="hover:text-purple-600">{tl("nav.forCompanies")}</button>
             <button onClick={() => scrollTo("para-criadores")} className="hover:text-purple-600">{tl("nav.forCreators")}</button>
             <button onClick={() => scrollTo("como-funciona")} className="hover:text-purple-600">{tl("nav.howItWorks")}</button>
             <button onClick={() => scrollTo("recursos")} className="hover:text-purple-600">{tl("nav.features")}</button>
             <button onClick={() => scrollTo("marcas-parceiras")} className="hover:text-purple-600">{tl("nav.partnerBrands")}</button>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
             <LanguageSwitcher theme="light" />
-            <button onClick={() => setModal("login")} className="hidden px-4 py-2 text-sm font-semibold text-slate-700 hover:text-purple-600 sm:inline">
+            <button onClick={() => setModal("login")} className="hidden h-10 items-center px-3 text-sm font-semibold text-slate-700 hover:text-purple-600 sm:inline-flex">
               {ta("login")}
             </button>
             <button
               onClick={() => openCreator()}
-              className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-700"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-purple-600 px-3 text-xs font-bold text-white transition-colors hover:bg-purple-700 sm:px-4 sm:text-sm"
             >
-              {ta("signUp")} <ArrowRight size={14} />
+              {ta("signUp")} <ArrowRight size={14} className="hidden sm:inline" />
             </button>
-            <button className="rounded-xl p-2 lg:hidden" onClick={() => setMobileOpen((value) => !value)}>
+            <button className="rounded-xl p-2 text-slate-700 lg:hidden" onClick={() => setMobileOpen((value) => !value)}>
               {mobileOpen ? <X /> : <Menu />}
             </button>
           </div>
@@ -604,7 +626,7 @@ export function LandingPage() {
         ) : null}
       </motion.header>
 
-      <section ref={heroRef} className="relative overflow-hidden bg-gradient-to-b from-purple-50/40 via-white to-white px-4 pb-12 pt-12 sm:px-6 md:pb-16 md:pt-16 lg:px-8">
+      <section ref={heroRef} className="relative overflow-hidden bg-gradient-to-b from-purple-50/40 via-white to-white px-4 pb-16 pt-12 sm:px-6 md:pb-20 md:pt-16 lg:px-8 lg:pt-20">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <motion.div
             aria-hidden
@@ -617,41 +639,42 @@ export function LandingPage() {
             className="absolute -right-16 top-32 h-72 w-72 rounded-full bg-indigo-400/20 blur-3xl"
           />
         </div>
-        <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-12">
+        <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-6">
-            <h1 className="text-4xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-5xl lg:text-[54px]">
-              {tl("hero.titleBefore")} <span className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 bg-clip-text text-transparent">{tl("hero.titleHighlight")}</span>
+            <h1 className="text-balance text-4xl font-black leading-[1.18] tracking-tight text-slate-950 sm:text-5xl lg:text-[52px] lg:leading-[1.15]">
+              {tl("hero.titleBefore")}{" "}
+              <span className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 bg-clip-text text-transparent">{tl("hero.titleHighlight")}</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg text-slate-600">
+            <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-slate-600 sm:text-lg">
               {tl("hero.subtitle")}
             </p>
-            <div className="mt-8 flex max-w-md flex-col gap-3.5 sm:flex-row">
-              <div className="flex-1">
-                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{tl("hero.forCompanies")}</p>
-                <button onClick={() => setModal("company")} className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-3.5 font-bold text-white hover:bg-purple-700">
+            <div className="mt-9 flex max-w-lg flex-col gap-4 sm:flex-row">
+              <div className="min-w-0 flex-1">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{tl("hero.forCompanies")}</p>
+                <button onClick={() => setModal("company")} className={btnPrimary}>
                   {tl("hero.imACompany")} <ArrowRight size={16} />
                 </button>
               </div>
-              <div className="flex-1">
-                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{tl("hero.forCreators")}</p>
-                <button onClick={() => openCreator()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white py-3.5 font-bold text-purple-700 hover:bg-purple-50">
+              <div className="min-w-0 flex-1">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{tl("hero.forCreators")}</p>
+                <button onClick={() => openCreator()} className={btnSecondary}>
                   {tl("hero.wantCreator")} <ArrowRight size={16} />
                 </button>
               </div>
             </div>
-            <div className="mt-12 grid grid-cols-1 gap-4 border-t border-slate-100 pt-8 sm:grid-cols-3">
+            <div className="mt-12 grid grid-cols-1 gap-5 border-t border-slate-100 pt-8 sm:grid-cols-3 sm:gap-6">
               {[
                 { icon: Calendar, title: tl("hero.campaigns"), sub: tl("hero.campaignsSub") },
                 { icon: Users, title: tl("hero.profiles"), sub: tl("hero.profilesSub") },
                 { icon: BarChart3, title: tl("hero.moreContent"), sub: tl("hero.moreContentSub") },
               ].map((item) => (
-                <div key={item.title} className="flex items-start gap-2.5">
-                  <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border border-purple-100 bg-purple-50 text-purple-600">
+                <div key={item.title} className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-purple-100 bg-purple-50 text-purple-600">
                     <item.icon size={16} />
                   </div>
-                  <div>
-                    <h2 className="text-xs font-bold text-slate-900">{item.title}</h2>
-                    <p className="text-[11px] text-slate-500">{item.sub}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900">{item.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.sub}</p>
                   </div>
                 </div>
               ))}
@@ -675,25 +698,27 @@ export function LandingPage() {
                 />
                 <motion.div style={{ y: heroCardOneY }} className="absolute right-4 top-4 w-full max-w-[240px]">
                   <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-slate-100 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div>
+                    <div className="mb-3.5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tl("hero.campaign")}</p>
-                        <h2 className="text-xs font-black text-slate-900">{tl("hero.newLaunch")}</h2>
+                        <p className="mt-0.5 text-xs font-black text-slate-900">{tl("hero.newLaunch")}</p>
                       </div>
-                      <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[9px] font-bold text-purple-700">{tl("hero.inProgress")}</span>
+                      <span className="shrink-0 rounded-full bg-purple-50 px-2 py-0.5 text-[9px] font-bold text-purple-700">{tl("hero.inProgress")}</span>
                     </div>
-                    {[tl("hero.briefing"), tl("hero.creatorsFound"), tl("hero.selected"), tl("hero.delivered")].map((label) => (
-                      <div key={label} className="mb-2 flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px]">
-                        <span className="font-medium">{label}</span>
-                        <Check size={14} className="text-emerald-500" />
-                      </div>
-                    ))}
+                    <div className="space-y-1.5">
+                      {[tl("hero.briefing"), tl("hero.creatorsFound"), tl("hero.selected"), tl("hero.delivered")].map((label) => (
+                        <div key={label} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px]">
+                          <span className="font-medium">{label}</span>
+                          <Check size={14} className="shrink-0 text-emerald-500" />
+                        </div>
+                      ))}
+                    </div>
                   </motion.div>
                 </motion.div>
                 <motion.div style={{ y: heroCardTwoY }} className="absolute bottom-4 left-4 w-full max-w-[210px]">
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-slate-100 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{tl("hero.approvedContent")}</p>
-                    <div className="relative mb-2 aspect-video overflow-hidden rounded-xl bg-slate-900">
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-slate-100 bg-white/95 p-3.5 shadow-xl backdrop-blur-sm">
+                    <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">{tl("hero.approvedContent")}</p>
+                    <div className="relative mb-2.5 aspect-video overflow-hidden rounded-xl bg-slate-900">
                       <img
                         src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80"
                         alt={tl("hero.approvedPreview")}
@@ -705,7 +730,7 @@ export function LandingPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                    <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700">
                       <CheckCircle2 size={13} className="text-emerald-600" />
                       <span>{tl("hero.ready")}</span>
                     </div>
@@ -717,7 +742,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="marcas-parceiras" className="scroll-mt-24 bg-white px-4 pb-16 pt-4 sm:px-6 md:pb-20 lg:px-8">
+      <section id="marcas-parceiras" className="scroll-mt-24 bg-white px-4 py-12 sm:px-6 md:py-14 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <p className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             {tl("brandsTrust")}
@@ -739,41 +764,38 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="recursos" className="bg-[#FAFAFC] py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section id="recursos" className={`bg-[#FAFAFC] ${sectionY}`}>
+        <div className={sectionInner}>
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-16">
-            <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start lg:py-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-purple-600">{tl("platform.kicker")}</p>
-              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-                {tl("platform.title")}
-              </h2>
-              <p className="mt-3 max-w-md text-base text-slate-600 sm:text-lg">
-                {tl("platform.subtitle")}
-              </p>
-            </div>
+            <SectionIntro
+              kicker={tl("platform.kicker")}
+              title={tl("platform.title")}
+              subtitle={tl("platform.subtitle")}
+              className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start"
+            />
 
             <BenefitStack />
           </div>
 
-          <div className="mt-16 rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xs sm:p-10">
+          <div className="mt-16 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-xs sm:p-10">
             <div className="mb-8 max-w-2xl">
-              <h2 className="text-2xl font-bold text-slate-950">{tl("platform.onePlatform")}</h2>
-              <p className="mt-2 text-sm text-slate-600">
+              <h2 className="text-balance text-2xl font-bold tracking-tight text-slate-950 sm:text-[1.65rem]">{tl("platform.onePlatform")}</h2>
+              <p className="mt-3 text-pretty text-sm leading-relaxed text-slate-600 sm:text-base">
                 {tl("platform.onePlatformText")}
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-6">
               {[
                 { icon: Users, title: tl("profiles.influencers"), text: tl("profiles.influencersText") },
                 { icon: Smartphone, title: tl("profiles.ugc"), text: tl("profiles.ugcText") },
                 { icon: Tv, title: tl("profiles.actors"), text: tl("profiles.actorsText") },
               ].map((profile) => (
-                <div key={profile.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-                  <div className="mb-2 flex items-center gap-2 text-base font-bold text-purple-700">
-                    <profile.icon size={18} />
+                <div key={profile.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 sm:p-6">
+                  <div className="mb-3 flex items-center gap-2.5 text-base font-bold text-purple-700">
+                    <profile.icon size={18} className="shrink-0" />
                     <span>{profile.title}</span>
                   </div>
-                  <p className="text-xs leading-relaxed text-slate-600">{profile.text}</p>
+                  <p className="text-pretty text-sm leading-relaxed text-slate-600">{profile.text}</p>
                 </div>
               ))}
             </div>
@@ -781,34 +803,31 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="como-funciona" className="border-t border-slate-100 bg-white py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section id="como-funciona" className={`border-t border-slate-100 bg-white ${sectionY}`}>
+        <div className={sectionInner}>
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-16">
-            <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start lg:py-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-purple-600">{tl("how.kicker")}</p>
-              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-                {tl("how.title")}
-              </h2>
-              <p className="mt-3 max-w-md text-base text-slate-600">
-                {tl("how.subtitle")}
-              </p>
-            </div>
+            <SectionIntro
+              kicker={tl("how.kicker")}
+              title={tl("how.title")}
+              subtitle={tl("how.subtitle")}
+              className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start"
+            />
             <div className="lg:col-span-7">
-              <article className="lg:sticky lg:top-28">
-                <div className="mb-8 flex flex-col justify-between rounded-3xl border border-purple-100/80 bg-gradient-to-br from-purple-50/50 via-white to-slate-50 p-8 shadow-lg shadow-purple-950/5 sm:p-10">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md shadow-purple-200">
+              <article className="mb-6 last:mb-0 lg:mb-0 lg:sticky lg:top-28 lg:pb-6">
+                <div className="flex flex-col rounded-3xl border border-purple-100/80 bg-gradient-to-br from-purple-50/50 via-white to-slate-50 p-7 shadow-lg shadow-purple-950/5 sm:p-10">
+                  <div className="mb-5 flex items-center gap-3.5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md shadow-purple-200">
                       <Calendar size={22} />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-slate-950">{tl("how.oneOff")}</h3>
-                      <p className="text-xs font-semibold text-purple-600">{tl("how.oneOffSub")}</p>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-bold tracking-tight text-slate-950">{tl("how.oneOff")}</h3>
+                      <p className="mt-0.5 text-xs font-semibold text-purple-600">{tl("how.oneOffSub")}</p>
                     </div>
                   </div>
-                  <p className="mb-6 text-sm leading-relaxed text-slate-600">
+                  <p className="mb-6 text-pretty text-sm leading-relaxed text-slate-600">
                     {tl("how.oneOffText")}
                   </p>
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="flex flex-wrap gap-2">
                     {tList("how.tagsOne").map((tag) => (
                       <span key={tag} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
                         {tag}
@@ -818,20 +837,20 @@ export function LandingPage() {
                 </div>
               </article>
               <article className="lg:sticky lg:top-36">
-                <div className="flex flex-col justify-between rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/80 via-white to-slate-50 p-8 shadow-lg shadow-indigo-950/5 sm:p-10">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                <div className="flex flex-col rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/80 via-white to-slate-50 p-7 shadow-lg shadow-indigo-950/5 sm:p-10">
+                  <div className="mb-5 flex items-center gap-3.5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
                       <Layers size={22} />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-slate-950">{tl("how.recurring")}</h3>
-                      <p className="text-xs font-semibold text-indigo-600">{tl("how.recurringSub")}</p>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-bold tracking-tight text-slate-950">{tl("how.recurring")}</h3>
+                      <p className="mt-0.5 text-xs font-semibold text-indigo-600">{tl("how.recurringSub")}</p>
                     </div>
                   </div>
-                  <p className="mb-6 text-sm leading-relaxed text-slate-600">
+                  <p className="mb-6 text-pretty text-sm leading-relaxed text-slate-600">
                     {tl("how.recurringText")}
                   </p>
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="flex flex-wrap gap-2">
                     {tList("how.tagsRecurring").map((tag) => (
                       <span key={tag} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
                         {tag}
@@ -845,19 +864,16 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="border-t border-slate-100 bg-[#FAFAFC] py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
-            <div className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-purple-600">{tl("impact.kicker")}</p>
-              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-                {tl("impact.title")}
-              </h2>
-              <p className="mt-3 text-base text-slate-600 sm:text-lg">
-                {tl("impact.subtitle")}
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-7">
+      <section className={`border-t border-slate-100 bg-[#FAFAFC] ${sectionY}`}>
+        <div className={sectionInner}>
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-16">
+            <SectionIntro
+              kicker={tl("impact.kicker")}
+              title={tl("impact.title")}
+              subtitle={tl("impact.subtitle")}
+              className="lg:sticky lg:top-28 lg:col-span-5 lg:self-start"
+            />
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:col-span-7">
               {[
                 { label: tl("impact.reduce"), title: tl("impact.costs"), text: tl("impact.costsText") },
                 { label: tl("impact.increase"), title: tl("impact.content"), text: tl("impact.contentText") },
@@ -870,11 +886,11 @@ export function LandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
                   transition={{ duration: 0.5, delay: index * 0.08, ease: [0.22, 1, 0.36, 1] }}
-                  className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs"
+                  className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs sm:p-7"
                 >
-                  <div className="mb-2 text-sm font-extrabold text-purple-600">{item.label}</div>
-                  <h3 className="mb-2 text-2xl font-black text-slate-950">{item.title}</h3>
-                  <p className="text-xs leading-relaxed text-slate-600">{item.text}</p>
+                  <p className="mb-2 text-sm font-extrabold text-purple-600">{item.label}</p>
+                  <h3 className="mb-3 text-2xl font-black tracking-tight text-slate-950">{item.title}</h3>
+                  <p className="text-pretty text-sm leading-relaxed text-slate-600">{item.text}</p>
                 </motion.div>
               ))}
             </div>
@@ -885,47 +901,47 @@ export function LandingPage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-16 rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xs sm:p-10"
+            className="mt-16 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-xs sm:p-10"
           >
-            <div className="grid grid-cols-2 divide-y divide-slate-100 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
               {[
                 { icon: Users, value: "+12.000", label: tl("impact.statCreators") },
                 { icon: Video, value: "+35.000", label: tl("impact.statContents") },
                 { icon: Award, value: "+3.000", label: tl("impact.statCampaigns") },
                 { icon: Sparkles, value: "50+", label: tl("impact.statSegments") },
               ].map((stat) => (
-                <div key={stat.label} className="flex items-center gap-4 px-0 py-4 first:pt-0 lg:px-4 lg:py-0 lg:first:pl-0">
+                <div key={stat.label} className="flex items-center gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
                     <stat.icon size={24} />
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-950 sm:text-3xl">{stat.value}</h3>
-                    <p className="text-xs font-medium text-slate-500">{stat.label}</p>
+                  <div className="min-w-0">
+                    <p className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{stat.value}</p>
+                    <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-500">{stat.label}</p>
                   </div>
                 </div>
               ))}
             </div>
           </motion.div>
 
-          <p className="mt-4 text-center text-[11px] text-slate-400">
+          <p className="mt-5 text-center text-[11px] leading-relaxed text-slate-400">
             {tl("impact.footnote")}
           </p>
         </div>
       </section>
 
-      <section className="border-t border-slate-100 bg-white py-16">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <h2 className="mb-4 text-2xl font-extrabold text-slate-950 sm:text-3xl">
+      <section className="border-t border-slate-100 bg-white py-20 md:py-24">
+        <div className={`${sectionInner} text-center`}>
+          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
             {tl("channels.title")}
           </h2>
-          <p className="mx-auto mb-8 max-w-2xl text-sm text-slate-600">
+          <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-slate-600 sm:text-base">
             {tl("channels.subtitle")}
           </p>
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-3">
+          <div className="mx-auto mt-10 flex max-w-4xl flex-wrap items-center justify-center gap-2.5 sm:gap-3">
             {tList("channels.items").map((channel) => (
               <span
                 key={channel}
-                className="cursor-default rounded-xl border border-slate-200/80 bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-800 shadow-2xs transition-all hover:border-purple-300 hover:text-purple-700 sm:text-sm"
+                className="cursor-default rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-800 shadow-2xs transition-all hover:border-purple-300 hover:text-purple-700 sm:px-5 sm:text-sm"
               >
                 {channel}
               </span>
@@ -935,14 +951,14 @@ export function LandingPage() {
       </section>
 
       <section className="overflow-x-clip border-t border-slate-100 bg-[#FAFAFC] py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className={sectionInner}>
           <AudienceCards onCompany={() => setModal("company")} onCreator={() => openCreator()} />
         </div>
       </section>
 
-      <section className="bg-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative flex flex-col items-center justify-between gap-8 overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 p-8 text-white shadow-2xl sm:p-12 lg:flex-row lg:p-16">
+      <section className="bg-white py-20 md:py-24">
+        <div className={sectionInner}>
+          <div className="relative flex flex-col items-center justify-between gap-8 overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 p-8 text-white shadow-2xl sm:gap-10 sm:p-12 lg:flex-row lg:p-14">
             <motion.div
               aria-hidden
               style={{ y: orbOneY }}
@@ -954,24 +970,18 @@ export function LandingPage() {
               className="pointer-events-none absolute -top-20 -left-20 h-80 w-80 rounded-full bg-indigo-600/20 blur-3xl"
             />
             <div className="relative z-10 max-w-xl text-center lg:text-left">
-              <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">
+              <h2 className="text-balance text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">
                 {tl("cta.title")}
               </h2>
-              <p className="mt-3 text-sm text-slate-400 sm:text-base">
+              <p className="mt-4 text-pretty text-sm leading-relaxed text-slate-400 sm:text-base">
                 {tl("cta.subtitle")}
               </p>
             </div>
-            <div className="relative z-10 flex w-full flex-col items-center gap-3.5 sm:flex-row lg:w-auto">
-              <button
-                onClick={() => setModal("company")}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-600/30 hover:bg-purple-500 sm:w-auto"
-              >
+            <div className="relative z-10 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
+              <button onClick={() => setModal("company")} className={`${btnPrimary} sm:w-auto`}>
                 {tl("cta.company")} <ArrowRight size={16} />
               </button>
-              <button
-                onClick={() => openCreator()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-6 py-3.5 text-sm font-bold text-white hover:bg-slate-800 sm:w-auto"
-              >
+              <button onClick={() => openCreator()} className={btnOnDark}>
                 {tl("cta.creator")} <ArrowRight size={16} />
               </button>
             </div>
@@ -979,20 +989,20 @@ export function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-100 bg-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-10 border-b border-slate-100 pb-12 md:grid-cols-12 lg:gap-12">
+      <footer className="border-t border-slate-100 bg-white py-16 md:py-20">
+        <div className={sectionInner}>
+          <div className="grid grid-cols-1 gap-10 border-b border-slate-100 pb-12 md:grid-cols-12 md:gap-12">
             <div className="flex flex-col items-center text-center md:col-span-5 md:items-start md:text-left">
-              <div className="mb-4">
+              <div className="mb-5">
                 <RocketzLogo variant="light" size="md" href="/" />
               </div>
-              <p className="max-w-sm text-xs leading-relaxed text-slate-500">
+              <p className="max-w-sm text-pretty text-sm leading-relaxed text-slate-500">
                 {tl("footer.tagline")}
               </p>
             </div>
 
             <div className="flex flex-col gap-2.5 md:col-span-3">
-              <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-900">{tl("footer.platform")}</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-900">{tl("footer.platform")}</h3>
               {[
                 { id: "para-empresas", label: tl("nav.forCompanies") },
                 { id: "para-criadores", label: tl("nav.forCreators") },
@@ -1003,7 +1013,7 @@ export function LandingPage() {
                 <button
                   key={link.id}
                   onClick={() => scrollTo(link.id)}
-                  className="text-left text-xs text-slate-600 hover:text-purple-600"
+                  className="text-left text-sm leading-relaxed text-slate-600 hover:text-purple-600"
                 >
                   {link.label}
                 </button>
@@ -1011,7 +1021,7 @@ export function LandingPage() {
             </div>
 
             <div className="flex flex-col md:col-span-4">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">
+              <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-900">
                 {tl("footer.follow")}
               </h3>
               <div className="mb-6 flex items-center gap-3">
@@ -1027,22 +1037,22 @@ export function LandingPage() {
                     target="_blank"
                     rel="noreferrer"
                     aria-label={social.label}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50 text-slate-600 hover:bg-purple-50 hover:text-purple-600"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50 text-slate-600 transition-colors hover:bg-purple-50 hover:text-purple-600"
                   >
                     {social.icon ? <social.icon size={17} /> : <span className="text-xs font-bold">Tk</span>}
                   </a>
                 ))}
               </div>
               <div className="space-y-1.5">
-                <p className="text-[11px] text-slate-400">{tl("footer.support")}</p>
-                <a href="mailto:contato@rocketzmkt.com.br" className="text-xs font-semibold text-slate-700 hover:text-purple-600">
+                <p className="text-xs text-slate-400">{tl("footer.support")}</p>
+                <a href="mailto:contato@rocketzmkt.com.br" className="text-sm font-semibold text-slate-700 hover:text-purple-600">
                   contato@rocketzmkt.com.br
                 </a>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-between gap-4 pt-8 text-[11px] text-slate-400 sm:flex-row">
+          <div className="flex flex-col items-center justify-between gap-4 pt-8 text-xs text-slate-400 sm:flex-row">
             <p>{tl("footer.rights")}</p>
             <div className="flex items-center gap-6">
               <span>{tl("footer.terms")}</span>
@@ -1055,8 +1065,8 @@ export function LandingPage() {
 
       <AnimatePresence>
         {modal !== "none" ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm">
-            <motion.div initial={{ y: 24, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} className="relative my-8 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-0 backdrop-blur-sm sm:p-4">
+            <motion.div initial={{ y: 24, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} className="app-modal-panel relative my-0 max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border-0 bg-white p-5 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-slate-200 sm:p-8">
               <button
                 type="button"
                 onClick={() => setModal("none")}

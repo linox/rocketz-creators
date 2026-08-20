@@ -68,4 +68,17 @@ class Company extends Model
     {
         return $this->hasMany(ContentPlanningItem::class);
     }
+
+    public static function assertApproved(?int $companyId): void
+    {
+        abort_unless($companyId, 422, __('auth.company_not_linked'));
+
+        $company = static::query()->find($companyId);
+        abort_unless($company, 422, __('auth.company_not_linked'));
+        abort_unless(
+            $company->status === CompanyStatus::Active,
+            422,
+            __('auth.company_not_approved'),
+        );
+    }
 }

@@ -181,8 +181,9 @@ return [
     */
 
     'custom' => [
-        'attribute-name' => [
-            'rule-name' => 'custom-message',
+        'file' => [
+            'uploaded' => 'The video could not be uploaded. Check the file and try again.',
+            'max' => 'The video exceeds the maximum allowed size.',
         ],
     ],
 
@@ -197,6 +198,8 @@ return [
     |
     */
 
-    'attributes' => [],
+    'attributes' => [
+        'file' => 'video',
+    ],
 
 ];

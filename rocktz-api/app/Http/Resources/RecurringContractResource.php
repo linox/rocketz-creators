@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -12,6 +13,8 @@ class RecurringContractResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $isCreator = $request->user()?->role === UserRole::Creator;
+
         return [
             'id' => $this->id,
             'company_id' => $this->company_id,
@@ -25,11 +28,13 @@ class RecurringContractResource extends JsonResource
             'start_date' => $this->start_date?->toDateString(),
             'end_date' => $this->end_date?->toDateString(),
             'status' => $this->status?->value,
-            'monthly_fee' => $this->monthly_fee !== null ? (float) $this->monthly_fee : null,
-            'notes' => $this->notes,
+            'monthly_fee' => $isCreator ? null : ($this->monthly_fee !== null ? (float) $this->monthly_fee : null),
+            'notes' => $isCreator ? null : $this->notes,
             'creators' => $this->whenLoaded('recurringContractCreators', fn () => $this->recurringContractCreators->map(fn ($row) => [
                 'id' => $row->id,
                 'creator_id' => $row->creator_id,
+                'start_date' => $row->start_date?->toDateString(),
+                'end_date' => $row->end_date?->toDateString(),
                 'creator' => $row->creator ? [
                     'id' => $row->creator->id,
                     'artistic_name' => $row->creator->artistic_name,

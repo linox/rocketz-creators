@@ -358,11 +358,11 @@ function CreatorsInner() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="m-0 text-[28px] font-bold text-[#0F172A]">{t("creators.title")}</h1>
+          <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("creators.title")}</h1>
           <p className="mt-1 text-[14px] text-[#64748B]">{t("creators.subtitle")}</p>
         </div>
         {isAdmin ? (
-          <div className="flex items-center gap-2.5">
+          <div className="flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center">
             <button
               type="button"
               onClick={resetCasting}
@@ -384,7 +384,7 @@ function CreatorsInner() {
         ) : null}
       </header>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
         <button
           type="button"
           onClick={() => setStatusFilter("all")}

@@ -44,8 +44,16 @@ export function digitsOnly(value: string, max?: number): string {
   return max ? digits.slice(0, max) : digits;
 }
 
+export function nationalPhoneDigits(value: string): string {
+  let digits = digitsOnly(String(value ?? ""));
+  if (digits.startsWith("55") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+  return digits.slice(0, 11);
+}
+
 export function formatWhatsApp(value: string): string {
-  const digits = digitsOnly(value, 11);
+  const digits = nationalPhoneDigits(value);
   if (digits.length === 0) {
     return "";
   }
@@ -62,7 +70,7 @@ export function formatWhatsApp(value: string): string {
 }
 
 export function isValidWhatsApp(value: string): boolean {
-  const digits = digitsOnly(value);
+  const digits = nationalPhoneDigits(value);
   return digits.length === 10 || digits.length === 11;
 }
 
@@ -133,16 +141,102 @@ export function isValidCPF(value: string): boolean {
 }
 
 export function formatInstagram(value: string): string {
-  let handle = value.trim();
-  handle = handle.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "");
-  handle = handle.replace(/[/?].*$/, "");
-  handle = handle.replace(/^@+/, "").replace(/\s/g, "");
-  handle = handle.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 30);
+  const handle = instagramHandle(value);
   return handle ? `@${handle}` : "";
 }
 
 export function instagramHandle(value: string): string {
-  return formatInstagram(value).replace(/^@/, "");
+  let handle = String(value ?? "").trim();
+  if (!handle) return "";
+
+  handle = handle.replace(/^@+/, "");
+
+  try {
+    const candidate = /^https?:\/\//i.test(handle) ? handle : `https://${handle.replace(/^\/+/, "")}`;
+    const url = new URL(candidate);
+    if (/(^|\.)instagram\.com$/i.test(url.hostname)) {
+      handle = (url.pathname.split("/").filter(Boolean)[0] || "").replace(/^@+/, "");
+    }
+  } catch {
+    /* keep handle */
+  }
+
+  handle = handle.replace(/^https?:\/\//i, "");
+  handle = handle.replace(/^(www\.)?instagram\.com\/?/i, "");
+  handle = handle.replace(/[/?#].*$/, "");
+  handle = handle.replace(/^@+/, "").replace(/\s/g, "");
+  handle = handle.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 30);
+
+  const invalid = !handle || /^https?$/i.test(handle) || /^www$/i.test(handle) || /^instagram\.com$/i.test(handle);
+  return invalid ? "" : handle;
+}
+
+export function formatTikTok(value: string): string {
+  let handle = value.trim();
+  handle = handle.replace(/^https?:\/\/(www\.)?(tiktok\.com|vm\.tiktok\.com)\//i, "");
+  handle = handle.replace(/^@+/, "");
+  handle = handle.replace(/[/?].*$/, "");
+  handle = handle.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 24);
+  return handle ? `@${handle}` : "";
+}
+
+export function formatYouTube(value: string): string {
+  let handle = value.trim();
+  handle = handle.replace(/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i, "");
+  handle = handle.replace(/^@+/, "");
+  handle = handle.replace(/^(c|user|channel)\//i, "");
+  handle = handle.replace(/[/?].*$/, "").replace(/\s/g, "");
+  return handle ? `@${handle}` : "";
+}
+
+export function formatKwai(value: string): string {
+  let handle = value.trim();
+  handle = handle.replace(/^https?:\/\/(www\.)?kwai\.com\//i, "");
+  handle = handle.replace(/^@+/, "");
+  handle = handle.replace(/[/?].*$/, "");
+  handle = handle.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 24);
+  return handle ? `@${handle}` : "";
+}
+
+export function formatBRLMask(value: string): string {
+  const cleaned = value.replace(/[^\d,]/g, "");
+  if (!cleaned) return "";
+  const [intRaw, decRaw] = cleaned.split(",");
+  const intDigits = (intRaw || "").replace(/\D/g, "").slice(0, 8);
+  const formattedInt = intDigits ? Number(intDigits).toLocaleString("pt-BR") : "0";
+  if (cleaned.includes(",")) {
+    return `${formattedInt},${(decRaw || "").replace(/\D/g, "").slice(0, 2)}`;
+  }
+  return formattedInt;
+}
+
+export function parseBRLMask(value: string): number {
+  if (!value.trim()) return 0;
+  const normalized = value.replace(/\./g, "").replace(",", ".");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+export function moneyToMask(amount: number | string | null | undefined): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function formatIntegerMask(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 12);
+  if (!digits) return "";
+  return Number(digits).toLocaleString("pt-BR");
+}
+
+export function parseIntegerMask(value: string): number {
+  return Number(value.replace(/\D/g, "")) || 0;
+}
+
+export function integerToMask(amount: number | string | null | undefined): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return Math.round(n).toLocaleString("pt-BR");
 }
 
 export function formatUF(value: string): string {

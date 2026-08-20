@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
 
 class CampaignCreatorResource extends JsonResource
 {
@@ -64,11 +65,32 @@ class CampaignCreatorResource extends JsonResource
             'content' => $this->whenLoaded('content', fn () => $this->content ? [
                 'script' => $this->content->script,
                 'video_url' => $this->content->video_url,
+                'video_file_size' => (int) ($this->content->video_file_size ?? 0),
+                'video_download_url' => $this->mediaDownloadUrl($this->content->video_url),
                 'image_url' => $this->content->image_url,
                 'published_link' => $this->content->published_link,
+                'script_version' => (int) ($this->content->script_version ?? 0),
+                'video_version' => (int) ($this->content->video_version ?? 0),
+                'submission_versions' => $this->content->submission_versions ?? [],
                 'story_prints' => $this->content->story_prints ?? [],
                 'metrics' => $this->content->metrics ?? [],
             ] : null),
         ];
+    }
+
+    private function mediaDownloadUrl(?string $url): ?string
+    {
+        if (! $url) {
+            return null;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+        if (! is_string($path) || ! str_contains($path, '/uploads/')) {
+            return $url;
+        }
+
+        $relative = ltrim(Str::after($path, '/uploads/'), '/');
+
+        return rtrim((string) config('app.url'), '/').'/downloads/'.$relative;
     }
 }

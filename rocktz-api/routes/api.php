@@ -69,6 +69,7 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
         Route::patch('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'update']);
         Route::post('recurring-contracts/{recurringContract}/creators', [RecurringContractController::class, 'attachCreator']);
+        Route::post('recurring-contracts/{recurringContract}/generate-month-demands', [RecurringContractController::class, 'generateMonthDemands']);
         Route::delete('recurring-contracts/{recurringContract}/creators/{recurringContractCreator}', [RecurringContractController::class, 'detachCreator']);
         Route::post('recurring-contracts/{recurringContract}/items', [RecurringContractController::class, 'storeItem']);
         Route::delete('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'destroyItem']);

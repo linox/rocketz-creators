@@ -139,6 +139,10 @@ class CreatorController extends Controller
             'pix_key' => ['nullable', 'string', 'max:255'],
             'bank_details' => ['nullable', 'string'],
             'socials' => ['nullable', 'array'],
+            'socials.instagram' => ['nullable', 'string', 'max:255'],
+            'socials.tiktok' => ['nullable', 'string', 'max:255'],
+            'socials.youtube' => ['nullable', 'string', 'max:255'],
+            'socials.kwai' => ['nullable', 'string', 'max:255'],
             'metrics' => ['nullable', 'array'],
             'categories' => ['nullable', 'array'],
             'pricing' => ['nullable', 'array'],
@@ -247,10 +251,13 @@ class CreatorController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'url' => ['required', 'string', 'max:2048'],
             'description' => ['nullable', 'string'],
+            'orientation' => ['nullable', 'in:horizontal,vertical'],
+            'file_size' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $video = $creator->portfolioVideos()->create([
             ...$data,
+            'file_size' => $data['file_size'] ?? 0,
             'uploaded_at' => now(),
         ]);
 

@@ -198,7 +198,7 @@ class AuthController extends Controller
                 );
             }
 
-            return redirect()->away($frontend.'/auth/callback?token='.urlencode($payload['token']));
+            return redirect()->away($frontend.'/auth/callback?token='.urlencode($payload['token']).($user->wasRecentlyCreated ? '&signup=1' : ''));
         } catch (RuntimeException $e) {
             return redirect()->away($frontend.'/login?error=google_failed');
         }

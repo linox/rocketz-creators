@@ -67,7 +67,7 @@ export function LoginPage() {
           body && typeof body === "object" ? { ...(body as object), locale: getAppLocale() } : body,
         ),
       });
-      router.push(persistAuth(payload));
+      router.push(persistAuth(payload, mode === "signup" && userType === "creator"));
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -166,8 +166,8 @@ export function LoginPage() {
     "h-11 w-full rounded-xl border border-white/10 bg-[#1E293B]/40 px-4 text-sm text-white outline-none focus:border-brand-primary";
 
   return (
-    <div data-select2-root className="flex min-h-screen items-center justify-center bg-[#0F172A] px-4 py-10">
-      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#111827] p-8 shadow-2xl">
+    <div data-select2-root className="flex min-h-[100dvh] items-center justify-center bg-[#0F172A] px-4 py-8 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#111827] p-5 shadow-2xl sm:p-8">
         <div className="mb-8 flex flex-col items-center gap-4">
           <RocketzLogo variant="dark" size="lg" href="/" />
           <LanguageSwitcher theme="dark" />

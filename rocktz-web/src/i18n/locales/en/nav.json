@@ -6,7 +6,7 @@
   "creators": "Creators",
   "companies": "Companies",
   "campaigns": "Campaigns",
-  "deliveries": "Deliveries & videos",
+  "deliveries": "Deliveries & Approvals",
   "recurring": "Recurring work",
   "notifications": "Notifications",
   "adminUsers": "Admin users",
@@ -45,5 +45,11 @@
   "adminBadge": "Admin",
   "contractTerm": "Membership & image-use agreement",
   "official": "Official",
-  "lgpdProtection": "Privacy and LGPD protection"
+  "lgpdProtection": "Privacy and LGPD protection",
+  "tabMore": "More",
+  "tabHome": "Home",
+  "tabRecurring": "Recurring",
+  "tabDeliveries": "Inbox",
+  "tabAvailable": "Campaigns",
+  "tabPanel": "Panel"
 }

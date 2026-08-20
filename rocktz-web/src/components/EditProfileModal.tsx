@@ -11,7 +11,7 @@ import { alertApiError, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import { fetchMe } from "@/lib/laravel";
-import { UF_OPTIONS, formatInstagram, instagramHandle } from "@/lib/masks";
+import { UF_OPTIONS, formatInstagram, formatTikTok, formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
 
 type EditProfileModalProps = {
   isOpen: boolean;
@@ -24,6 +24,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasCreator = Boolean(user.creator?.id);
+  const isCompany = user.role === "company";
   const [fullName, setFullName] = useState("");
   const [artisticName, setArtisticName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -50,9 +52,9 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     setArtisticName(user.creator?.artistic_name || "");
     setCompanyName(user.company?.name || "");
     setPhotoUrl(user.creator?.photo_url || user.company?.logo_url || user.avatar_url || "");
-    setWhatsapp(user.creator?.whatsapp || user.company?.whatsapp || "");
-    setInstagram(user.creator?.socials?.instagram || "");
-    setTiktok(user.creator?.socials?.tiktok || "");
+    setWhatsapp(formatWhatsApp(user.creator?.whatsapp || user.company?.whatsapp || ""));
+    setInstagram(formatInstagram(user.creator?.socials?.instagram || ""));
+    setTiktok(formatTikTok(user.creator?.socials?.tiktok || "").replace(/^@+/, ""));
     setCity(user.creator?.city || user.company?.city || "");
     setState(user.creator?.state || "");
     setBio("");
@@ -119,26 +121,26 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
         avatar_url: trimmedPhoto,
       });
 
-      if (user.role === "creator" && user.creator?.id) {
+      if (hasCreator && user.creator) {
         await api.updateCreator(user.creator.id, {
           full_name: fullName.trim(),
-          artistic_name: artisticName.trim() || user.creator.artistic_name,
+          artistic_name: artisticName.replace(/^@+/, "").trim() || user.creator.artistic_name,
           photo_url: trimmedPhoto,
-          whatsapp: whatsapp.trim(),
+          whatsapp: nationalPhoneDigits(whatsapp) || whatsapp.trim(),
           city: city.trim(),
           state: state || user.creator.state,
           bio: bio.trim() || undefined,
           socials: {
             ...(user.creator.socials ?? {}),
             instagram: instagramHandle(instagram),
-            tiktok: instagramHandle(tiktok),
+            tiktok: formatTikTok(tiktok).replace(/^@+/, ""),
           },
         });
       } else if (user.role === "company" && user.company?.id) {
         await api.updateCompany(user.company.id, {
           name: companyName.trim() || user.company.name,
           responsible_name: fullName.trim(),
-          whatsapp: whatsapp.trim() || null,
+          whatsapp: nationalPhoneDigits(whatsapp) || null,
           city: city.trim() || null,
           logo_url: trimmedPhoto,
         });
@@ -158,13 +160,13 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   return (
     <AnimatePresence>
       {isOpen ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-0 sm:p-4 app-modal-overlay">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
           >
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/70 p-5 sm:p-6">
               <div className="flex items-center gap-3">
@@ -240,17 +242,19 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.fullName")}</label>
                   <input type="text" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder={t("editProfile.fullNamePh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{user.role === "company" ? t("editProfile.companyName") : t("editProfile.artisticName")}</label>
-                  {user.role === "company" ? (
-                    <input type="text" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder={t("editProfile.companyNamePh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
-                  ) : (
-                    <div className="relative">
-                      <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">@</span>
-                      <input type="text" value={artisticName} onChange={(event) => setArtisticName(event.target.value.replace(/^@+/, ""))} placeholder={t("editProfile.artisticNamePh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-8 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
-                    </div>
-                  )}
-                </div>
+                {isCompany || hasCreator ? (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{isCompany ? t("editProfile.companyName") : t("editProfile.artisticName")}</label>
+                    {isCompany ? (
+                      <input type="text" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder={t("editProfile.companyNamePh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
+                    ) : (
+                      <div className="relative">
+                        <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">@</span>
+                        <input type="text" value={artisticName} onChange={(event) => setArtisticName(event.target.value.replace(/^@+/, ""))} placeholder={t("editProfile.artisticNamePh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-8 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.email")}</label>
                   <div className="relative">
@@ -261,13 +265,13 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.whatsapp")}</label>
                   <div className="relative">
-                    <input type="text" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} placeholder={t("editProfile.whatsappPh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-9 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
+                    <input type="text" value={whatsapp} onChange={(event) => setWhatsapp(formatWhatsApp(event.target.value))} placeholder={t("editProfile.whatsappPh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-9 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
                     <Smartphone size={16} className="absolute top-3 left-3 text-slate-400" />
                   </div>
                 </div>
               </div>
 
-              {user.role !== "company" ? (
+              {hasCreator ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <label className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-600 uppercase">
@@ -291,7 +295,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                   </label>
                   <input type="text" value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("editProfile.cityPh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-brand-primary" />
                 </div>
-                {user.role !== "company" ? (
+                {hasCreator ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.state")}</label>
                     <Select2Field theme="light" placeholder={t("editProfile.statePh")} value={state} options={UF_OPTIONS} onChange={setState} />

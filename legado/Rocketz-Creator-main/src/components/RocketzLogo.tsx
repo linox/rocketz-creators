@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 interface RocketzLogoProps {
-  variant?: 'light' | 'dark'; // 'light' is for light backgrounds (dark text), 'dark' is for dark backgrounds (white text)
+  variant?: 'light' | 'dark';
   size?: 'sm' | 'md' | 'lg' | 'xl';
   to?: string;
   className?: string;
@@ -17,55 +17,21 @@ export function RocketzLogo({
   showSubtitle = true,
 }: RocketzLogoProps) {
   const sizeClasses = {
-    sm: {
-      text: 'text-[23px]',
-      sub: 'text-[9.8px] -mt-1',
-      tracking: 'tracking-[0.24em] pl-[0.24em]',
-    },
-    md: {
-      text: 'text-[31px]',
-      sub: 'text-[11.7px] -mt-1.5',
-      tracking: 'tracking-[0.25em] pl-[0.25em]',
-    },
-    lg: {
-      text: 'text-[39px]',
-      sub: 'text-[13.6px] -mt-2',
-      tracking: 'tracking-[0.27em] pl-[0.27em]',
-    },
-    xl: {
-      text: 'text-[47px]',
-      sub: 'text-[15.6px] -mt-2.5',
-      tracking: 'tracking-[0.28em] pl-[0.28em]',
-    },
+    sm: { text: 'text-[23px]', sub: 'text-[10px] mt-0.5' },
+    md: { text: 'text-[31px]', sub: 'text-[13px] mt-0.5' },
+    lg: { text: 'text-[39px]', sub: 'text-[16px] mt-1' },
+    xl: { text: 'text-[47px]', sub: 'text-[19px] mt-1' },
   }[size];
 
   const content = (
-    <div className={`flex flex-col items-center justify-center text-center select-none group inline-flex ${className}`}>
-      <div className="flex items-center justify-center leading-none">
-        <span
-          className={`font-black font-sans tracking-tight transition-colors ${
-            sizeClasses.text
-          } ${
-            variant === 'dark' ? 'text-white' : 'text-slate-950'
-          }`}
-        >
-          rocket
-        </span>
-        <span
-          className={`font-black transition-colors ${sizeClasses.text} ${
-            variant === 'dark' ? 'text-purple-400 group-hover:text-purple-300' : 'text-purple-600 group-hover:text-purple-700'
-          }`}
-        >
-          z
-        </span>
-      </div>
+    <div className={`inline-flex flex-col items-start leading-none select-none ${className}`} aria-label="creatorz by rocketz">
+      <span className={`font-black tracking-tight lowercase ${sizeClasses.text}`}>
+        <span className={variant === 'dark' ? 'text-white' : 'text-[#0B0C18]'}>creator</span>
+        <span className="text-[#8A3FFC]">z</span>
+      </span>
       {showSubtitle && (
-        <span
-          className={`font-black uppercase text-center ${sizeClasses.sub} ${sizeClasses.tracking} ${
-            variant === 'dark' ? 'text-slate-400 group-hover:text-slate-300' : 'text-slate-500 group-hover:text-slate-600'
-          }`}
-        >
-          CREATORS
+        <span className={`font-medium lowercase ${sizeClasses.sub} ${variant === 'dark' ? 'text-slate-400' : 'text-[#6B7280]'}`}>
+          by rocketz
         </span>
       )}
     </div>
@@ -73,7 +39,7 @@ export function RocketzLogo({
 
   if (to) {
     return (
-      <Link to={to} className="inline-flex items-center justify-center no-underline">
+      <Link to={to} className="inline-flex items-center no-underline" aria-label="creatorz by rocketz">
         {content}
       </Link>
     );

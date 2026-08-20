@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -26,10 +26,11 @@ import { cn } from "@/lib/cn";
 import type { AppNotification } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
-type FilterTab = "all" | "unread" | "applications" | "deliveries" | "contracts";
+type FilterTab = "all" | "unread" | "applications" | "deliveries" | "approvals" | "changes" | "contracts";
 type RoleFilter = "admin_only" | "all";
 
-const FILTERS: FilterTab[] = ["all", "unread", "applications", "deliveries", "contracts"];
+const AGENCY_FILTERS: FilterTab[] = ["all", "unread", "applications", "deliveries", "contracts"];
+const CREATOR_FILTERS: FilterTab[] = ["all", "unread", "approvals", "changes", "contracts"];
 
 function resolveNotificationHref(notif: AppNotification, user: AuthUser): string | null {
   let targetLink = notif.link;
@@ -39,28 +40,46 @@ function resolveNotificationHref(notif: AppNotification, user: AuthUser): string
       .replace("/deliveries", "/campaign-deliveries")
       .replace("/recurring-contracts", "/recurring");
 
-    if (user.role === "creator" && user.creator?.id && targetLink.startsWith("/creators/")) {
-      targetLink = targetLink.replace(/\/creators\/[^?#]+/, `/creators/${user.creator.id}`);
+    if (user.role === "creator" && user.creator?.id) {
+      if (targetLink.includes("tab=recurring") || targetLink.startsWith("/recurring")) {
+        return `/creators/${user.creator.id}?tab=recurring`;
+      }
+      if (targetLink.includes("tab=campaigns") || targetLink.startsWith("/campaigns")) {
+        return `/creators/${user.creator.id}?tab=campaigns`;
+      }
+      if (targetLink.startsWith("/creators/")) {
+        targetLink = targetLink.replace(/\/creators\/[^?#]+/, `/creators/${user.creator.id}`);
+      }
     }
 
     return targetLink;
   }
 
+  if (user.role === "creator" && user.creator?.id) {
+    if (notif.type === "contract" || notif.recurring_contract_id) {
+      return `/creators/${user.creator.id}?tab=recurring`;
+    }
+    if (notif.type === "approval" || notif.type === "delivery_review" || notif.type === "rejection" || notif.campaign_id) {
+      return `/creators/${user.creator.id}?tab=campaigns`;
+    }
+    return `/creators/${user.creator.id}?tab=dashboard`;
+  }
+
   if (notif.type === "contract" || notif.recurring_contract_id) {
-    if (user.role === "creator" && user.creator?.id) return `/creators/${user.creator.id}`;
+    if (notif.recurring_contract_id) return `/recurring/${notif.recurring_contract_id}`;
     if (user.role === "company") return "/company-dashboard";
-    return notif.recurring_contract_id ? `/recurring/${notif.recurring_contract_id}` : "/recurring";
+    return "/recurring";
   }
 
   if (notif.type === "delivery_review") {
+    if (notif.campaign_id) return `/campaigns/${notif.campaign_id}`;
+    if (notif.recurring_contract_id) return `/recurring/${notif.recurring_contract_id}`;
     if (user.role === "admin") return "/campaign-deliveries";
-    if (user.role === "creator") return "/creator-dashboard";
     return "/company-dashboard";
   }
 
-  if (notif.campaign_id && user.role === "admin") return `/campaigns/${notif.campaign_id}`;
+  if (notif.campaign_id) return `/campaigns/${notif.campaign_id}`;
   if (notif.creator_id && user.role === "admin") return `/creators/${notif.creator_id}`;
-  if (user.role === "creator" && user.creator?.id) return `/creators/${user.creator.id}`;
   if (user.role === "company") return "/company-dashboard";
   return "/dashboard";
 }
@@ -83,20 +102,52 @@ function formatTimeAgo(dateStr: string | null, t: (key: string, opts?: Record<st
   }
 }
 
-function notificationStyle(type: string, t: (key: string) => string) {
+function notificationStyle(type: string, t: (key: string) => string, targetRole?: string | null) {
   switch (type) {
     case "application":
-      return { label: t("notifications.types.application"), icon: UserPlus, bg: "bg-indigo-50 text-indigo-600 border-indigo-100" };
+      return {
+        label: t("notifications.types.application"),
+        icon: UserPlus,
+        chip: "border-indigo-100 bg-indigo-50 text-indigo-700",
+        iconWrap: "border-indigo-100 bg-indigo-50 text-indigo-600",
+      };
     case "approval":
-      return { label: t("notifications.types.approval"), icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600 border-emerald-100" };
+      return {
+        label: t("notifications.types.approval"),
+        icon: CheckCircle2,
+        chip: "border-emerald-100 bg-emerald-50 text-emerald-700",
+        iconWrap: "border-emerald-100 bg-emerald-50 text-emerald-600",
+      };
     case "rejection":
-      return { label: t("notifications.types.rejection"), icon: XCircle, bg: "bg-rose-50 text-rose-600 border-rose-100" };
+      return {
+        label: t("notifications.types.rejection"),
+        icon: XCircle,
+        chip: "border-rose-100 bg-rose-50 text-rose-700",
+        iconWrap: "border-rose-100 bg-rose-50 text-rose-600",
+      };
     case "delivery_review":
-      return { label: t("notifications.types.delivery_review"), icon: FileText, bg: "bg-amber-50 text-amber-600 border-amber-100" };
+      return {
+        label: targetRole === "creator"
+          ? t("notifications.types.change_request")
+          : t("notifications.types.new_delivery"),
+        icon: FileText,
+        chip: "border-amber-100 bg-amber-50 text-amber-700",
+        iconWrap: "border-amber-100 bg-amber-50 text-amber-600",
+      };
     case "contract":
-      return { label: t("notifications.types.contract"), icon: Repeat, bg: "bg-purple-50 text-purple-600 border-purple-100" };
+      return {
+        label: t("notifications.types.contract"),
+        icon: Repeat,
+        chip: "border-purple-100 bg-purple-50 text-purple-700",
+        iconWrap: "border-purple-100 bg-purple-50 text-purple-600",
+      };
     default:
-      return { label: t("notifications.types.general"), icon: Bell, bg: "bg-slate-50 text-slate-600 border-slate-100" };
+      return {
+        label: t("notifications.types.general"),
+        icon: Bell,
+        chip: "border-slate-200 bg-slate-50 text-slate-600",
+        iconWrap: "border-slate-200 bg-slate-50 text-slate-600",
+      };
   }
 }
 
@@ -109,6 +160,16 @@ function targetLabel(role: string | null | undefined, t: (key: string) => string
   return null;
 }
 
+function matchesTab(n: AppNotification, filter: FilterTab) {
+  if (filter === "unread") return !n.read;
+  if (filter === "applications") return n.type === "application";
+  if (filter === "deliveries") return n.type === "delivery_review" || n.type === "approval" || n.type === "rejection";
+  if (filter === "approvals") return n.type === "approval";
+  if (filter === "changes") return n.type === "delivery_review" || n.type === "rejection";
+  if (filter === "contracts") return n.type === "contract";
+  return true;
+}
+
 function NotificationsInner() {
   const user = useAuth();
   const router = useRouter();
@@ -118,20 +179,28 @@ function NotificationsInner() {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("admin_only");
 
-  async function load() {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.notifications();
       setItems(res.data);
     } catch (err) {
-      await alertApiError(err);
+      if (!silent) await alertApiError(err);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void load(true);
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [load]);
 
   const scopedItems = useMemo(() => {
     if (user.role !== "admin") return items;
@@ -139,23 +208,31 @@ function NotificationsInner() {
     return items.filter((n) => n.target_role === "admin" || !n.target_role || n.target_role === "all");
   }, [items, roleFilter, user.role]);
 
-  const filteredNotifications = useMemo(() => {
-    return scopedItems.filter((n) => {
-      if (filter === "unread") return !n.read;
-      if (filter === "applications") return n.type === "application";
-      if (filter === "deliveries") return n.type === "delivery_review" || n.type === "approval" || n.type === "rejection";
-      if (filter === "contracts") return n.type === "contract";
-      return true;
-    });
-  }, [scopedItems, filter]);
+  const isCreator = user.role === "creator";
+  const filters = isCreator ? CREATOR_FILTERS : AGENCY_FILTERS;
 
-  const unreadCount = scopedItems.filter((n) => !n.read).length;
+  const counts = useMemo(() => ({
+    all: scopedItems.length,
+    unread: scopedItems.filter((n) => !n.read).length,
+    applications: scopedItems.filter((n) => n.type === "application").length,
+    deliveries: scopedItems.filter((n) => n.type === "delivery_review" || n.type === "approval" || n.type === "rejection").length,
+    approvals: scopedItems.filter((n) => n.type === "approval").length,
+    changes: scopedItems.filter((n) => n.type === "delivery_review" || n.type === "rejection").length,
+    contracts: scopedItems.filter((n) => n.type === "contract").length,
+  }), [scopedItems]);
+
+  const filteredNotifications = useMemo(
+    () => scopedItems.filter((n) => matchesTab(n, filter)),
+    [scopedItems, filter],
+  );
 
   function tabLabel(tab: FilterTab) {
     if (tab === "all") return t("notifications.tabAll");
-    if (tab === "unread") return t("notifications.tabUnread", { count: unreadCount });
+    if (tab === "unread") return t("notifications.tabUnread", { count: counts.unread });
     if (tab === "applications") return t("notifications.tabApplications");
     if (tab === "deliveries") return t("notifications.tabDeliveries");
+    if (tab === "approvals") return t("notifications.tabApprovals");
+    if (tab === "changes") return t("notifications.tabChanges");
     return t("notifications.tabContracts");
   }
 
@@ -165,7 +242,7 @@ function NotificationsInner() {
       await api.markRead(id);
     } catch (err) {
       await alertApiError(err);
-      load();
+      void load();
     }
   }
 
@@ -175,18 +252,18 @@ function NotificationsInner() {
       await api.deleteNotification(id);
     } catch (err) {
       await alertApiError(err);
-      load();
+      void load();
     }
   }
 
   async function handleMarkAllRead() {
-    if (unreadCount === 0) return;
+    if (counts.unread === 0) return;
     setItems((prev) => prev.map((item) => ({ ...item, read: true })));
     try {
       await api.markAllRead();
     } catch (err) {
       await alertApiError(err);
-      load();
+      void load();
     }
   }
 
@@ -197,28 +274,30 @@ function NotificationsInner() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-8">
-      <header className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-center">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="m-0 flex items-center gap-2 text-2xl font-black text-[#0F172A]">
-              <Bell className="text-brand-primary" size={24} />
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-10">
+      <header className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-end">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="m-0 flex items-center gap-2.5 text-xl font-bold text-[#0F172A] sm:text-[28px]">
+              <Bell className="shrink-0 text-brand-primary" size={26} />
               {t("notifications.title")}
             </h1>
-            {unreadCount > 0 ? (
-              <span className="animate-pulse rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-white uppercase shadow-md shadow-rose-200">
-                {t("notifications.new", { count: unreadCount })}
+            {counts.unread > 0 ? (
+              <span className="rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-white uppercase shadow-md shadow-rose-200">
+                {t("notifications.new", { count: counts.unread })}
               </span>
             ) : null}
           </div>
-          <p className="m-1 mt-1 text-xs font-medium text-[#64748B]">{t("notifications.subtitle")}</p>
+          <p className="mt-1 max-w-2xl text-[14px] text-[#64748B]">
+            {isCreator ? t("notifications.subtitleCreator") : t("notifications.subtitle")}
+          </p>
         </div>
 
-        {unreadCount > 0 ? (
+        {counts.unread > 0 ? (
           <button
             type="button"
-            onClick={handleMarkAllRead}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs font-bold tracking-wider text-slate-700 uppercase shadow-sm transition-all hover:bg-slate-100"
+            onClick={() => void handleMarkAllRead()}
+            className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold tracking-wider text-slate-700 uppercase shadow-sm transition-all hover:bg-slate-50"
           >
             <Check size={14} />
             {t("notifications.markAll")}
@@ -226,18 +305,50 @@ function NotificationsInner() {
         ) : null}
       </header>
 
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(isCreator
+          ? ([
+              ["unread", counts.unread, t("notifications.summaryUnread"), "border-rose-100 bg-rose-50 text-rose-700"],
+              ["approvals", counts.approvals, t("notifications.summaryApprovals"), "border-emerald-100 bg-emerald-50 text-emerald-700"],
+              ["changes", counts.changes, t("notifications.summaryChanges"), "border-amber-100 bg-amber-50 text-amber-700"],
+              ["contracts", counts.contracts, t("notifications.summaryContracts"), "border-purple-100 bg-purple-50 text-purple-700"],
+            ] as const)
+          : ([
+              ["unread", counts.unread, t("notifications.summaryUnread"), "border-rose-100 bg-rose-50 text-rose-700"],
+              ["applications", counts.applications, t("notifications.summaryApplications"), "border-indigo-100 bg-indigo-50 text-indigo-700"],
+              ["deliveries", counts.deliveries, t("notifications.summaryDeliveries"), "border-amber-100 bg-amber-50 text-amber-700"],
+              ["contracts", counts.contracts, t("notifications.summaryContracts"), "border-purple-100 bg-purple-50 text-purple-700"],
+            ] as const)
+        ).map(([key, count, label, tone]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setFilter(key)}
+            className={cn(
+              "rounded-2xl border px-3 py-3 text-left transition hover:shadow-sm",
+              filter === key ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200 bg-white",
+            )}
+          >
+            <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold tracking-wider uppercase", tone)}>
+              {label}
+            </span>
+            <div className="mt-2 text-2xl font-black tabular-nums text-slate-900">{count}</div>
+          </button>
+        ))}
+      </div>
+
       {user.role === "admin" ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={18} className="text-brand-primary" />
+        <div className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <ShieldCheck size={18} className="shrink-0 text-brand-primary" />
             <span className="text-xs font-extrabold text-slate-800">{t("notifications.permissionLabel")}</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-xl border border-indigo-100 bg-white p-1 shadow-xs">
+          <div className="flex w-full flex-wrap items-center gap-1 rounded-xl border border-indigo-100 bg-white p-1 shadow-xs sm:w-auto">
             <button
               type="button"
               onClick={() => setRoleFilter("admin_only")}
               className={cn(
-                "cursor-pointer rounded-lg px-3 py-1 text-xs font-bold transition-all",
+                "flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all sm:flex-none",
                 roleFilter === "admin_only" ? "bg-brand-primary text-white shadow-xs" : "text-slate-600 hover:text-slate-900",
               )}
             >
@@ -247,7 +358,7 @@ function NotificationsInner() {
               type="button"
               onClick={() => setRoleFilter("all")}
               className={cn(
-                "cursor-pointer rounded-lg px-3 py-1 text-xs font-bold transition-all",
+                "flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all sm:flex-none",
                 roleFilter === "all" ? "bg-brand-primary text-white shadow-xs" : "text-slate-600 hover:text-slate-900",
               )}
             >
@@ -257,23 +368,25 @@ function NotificationsInner() {
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 overflow-x-auto border-b border-[#E2E8F0] pb-0.5">
-        {FILTERS.map((tab) => {
-          const isActive = filter === tab;
-          return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setFilter(tab)}
-              className={cn(
-                "cursor-pointer border-b-2 px-4 py-3 text-xs font-extrabold tracking-wider whitespace-nowrap uppercase transition-all",
-                isActive ? "border-brand-primary text-brand-primary" : "border-transparent text-slate-500 hover:text-slate-900",
-              )}
-            >
-              {tabLabel(tab)}
-            </button>
-          );
-        })}
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="flex min-w-0 items-center gap-1 border-b border-[#E2E8F0]">
+          {filters.map((tab) => {
+            const isActive = filter === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setFilter(tab)}
+                className={cn(
+                  "cursor-pointer border-b-2 px-3 py-3 text-xs font-extrabold tracking-wider whitespace-nowrap uppercase transition-all sm:px-4",
+                  isActive ? "border-brand-primary text-brand-primary" : "border-transparent text-slate-500 hover:text-slate-900",
+                )}
+              >
+                {tabLabel(tab)}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loading ? (
@@ -287,87 +400,97 @@ function NotificationsInner() {
             <BellOff size={28} />
           </div>
           <h3 className="text-base font-bold text-slate-700">{t("notifications.emptyTitle")}</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs text-slate-400">{t("notifications.emptyFiltered")}</p>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-400">
+            {isCreator ? t("notifications.emptyCreator") : t("notifications.emptyFiltered")}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           <AnimatePresence initial={false}>
             {filteredNotifications.map((notif) => {
-              const style = notificationStyle(notif.type, t);
+              const style = notificationStyle(notif.type, t, notif.target_role);
               const Icon = style.icon;
-              const destination = targetLabel(notif.target_role, t);
+              const destination = isCreator ? null : targetLabel(notif.target_role, t);
               return (
-                <motion.div
+                <motion.article
                   key={notif.id}
                   layout
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    "group relative flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 transition-all hover:shadow-lg hover:shadow-indigo-900/5 md:flex-row md:items-center",
-                    notif.read ? "border-slate-200 opacity-80 hover:opacity-100" : "border-indigo-100 shadow-xs shadow-indigo-100/30",
+                    "relative flex flex-col gap-4 rounded-2xl border bg-white p-4 transition-all hover:shadow-md hover:shadow-indigo-900/5 sm:flex-row sm:items-center sm:p-5",
+                    notif.read
+                      ? "border-slate-200"
+                      : "border-indigo-200 bg-indigo-50/20 shadow-xs shadow-indigo-100/40",
                   )}
                 >
                   {!notif.read ? (
-                    <span className="absolute top-1/2 left-2 h-2 w-2 -translate-y-1/2 rounded-full bg-brand-primary shadow-sm shadow-brand-primary" />
+                    <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-brand-primary" />
                   ) : null}
 
-                  <div className="flex flex-1 items-start gap-4">
-                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-xs", style.bg)}>
+                  <button
+                    type="button"
+                    onClick={() => void handleNotificationClick(notif)}
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3.5 border-0 bg-transparent p-0 text-left"
+                  >
+                    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-xs", style.iconWrap)}>
                       <Icon size={18} />
                     </div>
-                    <div className="min-w-0 flex-1 pr-2">
+
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wider uppercase", style.bg)}>
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wider uppercase", style.chip)}>
                           {style.label}
                         </span>
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
-                          <Clock size={10} /> {formatTimeAgo(notif.created_at, t)}
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold whitespace-nowrap text-slate-400">
+                          <Clock size={10} className="shrink-0" />
+                          {formatTimeAgo(notif.created_at, t)}
                         </span>
                         {destination ? (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold tracking-wider text-slate-500 uppercase">
                             {destination}
                           </span>
                         ) : null}
                       </div>
                       <h4 className="mt-1.5 text-sm leading-snug font-bold text-slate-900">{notif.title}</h4>
-                      <p className="mt-1 text-xs leading-relaxed font-medium text-slate-600">{notif.message}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed font-medium text-slate-600">{notif.message}</p>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="flex shrink-0 items-center gap-2 self-end md:self-center">
+                  <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
                     <button
                       type="button"
-                      onClick={() => handleNotificationClick(notif)}
+                      onClick={() => void handleNotificationClick(notif)}
                       title={t("notifications.goToActionTitle")}
-                      className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 text-[10px] font-black tracking-wider text-brand-primary uppercase shadow-xs transition-all hover:bg-brand-primary hover:text-white"
+                      className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 text-[10px] font-black tracking-wider text-brand-primary uppercase shadow-xs transition-all hover:bg-brand-primary hover:text-white"
                     >
                       <span>{t("notifications.goToAction")}</span>
-                      <ExternalLink size={11} />
+                      <ExternalLink size={12} />
                     </button>
 
                     {!notif.read ? (
                       <button
                         type="button"
-                        onClick={() => handleMarkAsRead(notif.id)}
+                        onClick={() => void handleMarkAsRead(notif.id)}
                         title={t("notifications.markReadTitle")}
-                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
+                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
                       >
-                        <Check size={13} />
+                        <Check size={14} />
                       </button>
                     ) : null}
 
                     <button
                       type="button"
-                      onClick={() => handleDelete(notif.id)}
+                      onClick={() => void handleDelete(notif.id)}
                       title={t("notifications.deleteTitle")}
-                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
-                </motion.div>
+                </motion.article>
               );
             })}
           </AnimatePresence>

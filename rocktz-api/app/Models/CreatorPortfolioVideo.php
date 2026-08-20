@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['creator_id', 'title', 'url', 'description', 'uploaded_at'])]
+#[Fillable(['creator_id', 'title', 'url', 'description', 'orientation', 'file_size', 'uploaded_at'])]
 class CreatorPortfolioVideo extends Model
 {
     /** @use HasFactory<CreatorPortfolioVideoFactory> */
@@ -21,6 +21,7 @@ class CreatorPortfolioVideo extends Model
     {
         return [
             'uploaded_at' => 'datetime',
+            'file_size' => 'integer',
         ];
     }
 

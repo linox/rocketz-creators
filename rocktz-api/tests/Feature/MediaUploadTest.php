@@ -39,6 +39,48 @@ class MediaUploadTest extends TestCase
         ]);
     }
 
+    public function test_authenticated_user_can_upload_portfolio_video(): void
+    {
+        Storage::fake('uploads');
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $response = $this->withToken($token)->post('/api/media', [
+            'file' => UploadedFile::fake()->create('reel.mp4', 2048, 'video/mp4'),
+        ]);
+
+        $response->assertCreated();
+        $this->assertStringStartsWith('video-', (string) $response->json('data.filename'));
+        $this->assertGreaterThan(0, (int) $response->json('data.size'));
+    }
+
+    public function test_portfolio_video_is_accepted_when_mime_is_octet_stream(): void
+    {
+        Storage::fake('uploads');
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $response = $this->withToken($token)->post('/api/media', [
+            'file' => UploadedFile::fake()->create('clip-05-05-42-utc.mp4', 8192, 'application/octet-stream'),
+        ]);
+
+        $response->assertCreated();
+        $this->assertStringEndsWith('.mp4', (string) $response->json('data.filename'));
+    }
+
+    public function test_portfolio_video_download_uses_attachment(): void
+    {
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('portfolio/video-demo.mp4', 'video-bytes');
+
+        $response = $this->get('/downloads/portfolio/video-demo.mp4');
+
+        $response->assertOk();
+        $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
+    }
+
     public function test_user_can_update_own_avatar_url(): void
     {
         $user = User::factory()->admin()->create(['name' => 'Admin']);
@@ -52,5 +94,20 @@ class MediaUploadTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user.name', 'Diogo Rocketz')
             ->assertJsonPath('user.avatar_url', 'https://apicreators.rocketz.me/uploads/avatars/foto.jpg');
+    }
+
+    public function test_oversized_media_post_returns_json(): void
+    {
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->call('POST', '/api/media', server: [
+                'CONTENT_LENGTH' => 50 * 1024 * 1024,
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+            ])
+            ->assertStatus(413)
+            ->assertJsonPath('message', __('auth.post_too_large'));
     }
 }

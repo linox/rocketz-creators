@@ -10,6 +10,9 @@ enum ContentType: string
     case Tiktok = 'tiktok';
     case Youtube = 'youtube';
     case Live = 'live';
+    case LiveInstagram = 'live_instagram';
+    case LiveTiktok = 'live_tiktok';
+    case LiveYoutube = 'live_youtube';
     case Pinterest = 'pinterest';
     case Blog = 'blog';
     case Podcast = 'podcast';

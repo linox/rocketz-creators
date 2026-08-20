@@ -55,6 +55,11 @@ export const api = {
   createRecurring: (body: unknown) => laravelFetch<Item<RecurringContract>>("/recurring-contracts", { method: "POST", body: JSON.stringify(body) }),
   updateRecurring: (id: number, body: unknown) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   addRecurringCreator: (id: number, body: unknown) => laravelFetch(`/recurring-contracts/${id}/creators`, { method: "POST", body: JSON.stringify(body) }),
+  generateRecurringMonthDemands: (id: number, body: { creator_id: number; month: string }) =>
+    laravelFetch<{ message: string; created: number; data: RecurringContract }>(`/recurring-contracts/${id}/generate-month-demands`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   deleteRecurringCreator: (contractId: number, rowId: number) => laravelFetch<{ message: string }>(`/recurring-contracts/${contractId}/creators/${rowId}`, { method: "DELETE" }),
   addPlanningItem: (id: number, body: unknown) => laravelFetch<Item<PlanningItem>>(`/recurring-contracts/${id}/items`, { method: "POST", body: JSON.stringify(body) }),
   updatePlanningItem: (id: number, body: unknown) => laravelFetch<Item<PlanningItem>>(`/content-planning-items/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -70,10 +75,10 @@ export const api = {
   adminUsers: () => laravelFetch<List<AuthUser>>("/admin-users"),
   createAdmin: (body: unknown) => laravelFetch<Item<AuthUser>>("/admin-users", { method: "POST", body: JSON.stringify(body) }),
   deleteAdmin: (id: number) => laravelFetch(`/admin-users/${id}`, { method: "DELETE" }),
-  uploadMedia: (file: Blob, filename = "avatar.jpg") => {
+  uploadMedia: (file: Blob, filename = "file.bin") => {
     const body = new FormData();
     body.append("file", file, filename);
-    return laravelFetch<{ data: { id: number; url: string; filename: string; path: string } }>("/media", { method: "POST", body });
+    return laravelFetch<{ data: { id: number; url: string; filename: string; path: string; size?: number } }>("/media", { method: "POST", body });
   },
   updateMe: (body: { name?: string; avatar_url?: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 };

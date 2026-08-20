@@ -21,6 +21,8 @@ class CreatorPortfolioVideoFactory extends Factory
             'title' => fake()->sentence(3),
             'url' => fake()->url(),
             'description' => fake()->optional()->sentence(),
+            'orientation' => fake()->randomElement(['vertical', 'horizontal']),
+            'file_size' => fake()->numberBetween(5_000_000, 80_000_000),
             'uploaded_at' => fake()->optional()->dateTimeBetween('-1 year'),
         ];
     }

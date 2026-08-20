@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -19,6 +21,7 @@ import {
   Search,
   Send,
   Sparkles,
+  UserCheck,
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -40,17 +43,24 @@ function briefingStr(campaign: Campaign, key: string) {
 }
 
 function cacheValue(campaign: Campaign) {
-  return Number(campaign.creator_cache || campaign.creators_budget || 0);
+  return Number(campaign.creator_cache || 0);
 }
 
 function AvailableInner() {
   const user = useAuth();
+  const router = useRouter();
   const { t, i18n } = useTranslation("app");
+  const { t: tp } = useTranslation("profile");
   const { t: tc } = useTranslation("common");
   const { formatCurrency } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const isCreator = user.role === "creator";
-  const canApply = isCreator && (user.creator?.status === "active" || user.creator?.status === "review");
+  const campaignsUnlocked = !isCreator || user.creator?.status === "active";
+  const hasSignedContract = Boolean(user.creator?.contract_acceptance);
+  const canApply = isCreator && campaignsUnlocked;
+  const profileContractHref = user.creator?.id
+    ? `/creators/${user.creator.id}?tab=about&contract=1`
+    : "/creator-dashboard";
 
   const [items, setItems] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,8 +84,13 @@ function AvailableInner() {
   }
 
   useEffect(() => {
+    if (!campaignsUnlocked) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     load();
-  }, []);
+  }, [campaignsUnlocked]);
 
   const myApps = useMemo(() => {
     const map: Record<number, CampaignCreator> = {};
@@ -129,6 +144,12 @@ function AvailableInner() {
   }
 
   function openApply(campaign: Campaign) {
+    if (isCreator && !hasSignedContract) {
+      void alertWarning(tp("contractRequiredTitle"), tp("contractBlockedApply")).then(() => {
+        router.push(profileContractHref);
+      });
+      return;
+    }
     setBriefing(null);
     setApplying(campaign);
     setNotes("");
@@ -145,7 +166,6 @@ function AvailableInner() {
     try {
       await api.applyCampaign(applying.id, {
         notes: notes.trim(),
-        amount: cacheValue(applying) || null,
         delivery_type: applying.is_barter ? "barter" : "ugc",
       });
       await alertSuccess(t("available.sentTitle"), t("available.sent", { name: applying.name }));
@@ -204,12 +224,18 @@ function AvailableInner() {
               <span className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1 text-[11px] font-extrabold tracking-widest text-indigo-300 uppercase">
                 <Sparkles size={13} className="text-indigo-300" /> {t("available.badge")}
               </span>
-              <span className="rounded-lg border border-emerald-500/30 bg-emerald-950/60 px-3 py-1 text-[11px] font-extrabold tracking-wider text-emerald-300 uppercase">
-                {t("available.openCount", { count: items.length })}
-              </span>
+              {campaignsUnlocked ? (
+                <span className="rounded-lg border border-emerald-500/30 bg-emerald-950/60 px-3 py-1 text-[11px] font-extrabold tracking-wider text-emerald-300 uppercase">
+                  {t("available.openCount", { count: items.length })}
+                </span>
+              ) : (
+                <span className="rounded-lg border border-amber-400/40 bg-amber-950/40 px-3 py-1 text-[11px] font-extrabold tracking-wider text-amber-200 uppercase">
+                  {t("available.reviewBadge")}
+                </span>
+              )}
             </div>
             <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{t("available.title")}</h1>
-            <p className="mt-2 text-xs leading-relaxed text-slate-300 sm:text-sm">{t("available.subtitle")}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-300 sm:text-sm">{campaignsUnlocked ? t("available.subtitle") : t("available.reviewHint")}</p>
           </div>
           <div className="relative z-10 flex shrink-0 items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 font-medium backdrop-blur-md">
             <div className="flex flex-col">
@@ -240,6 +266,23 @@ function AvailableInner() {
         </div>
       ) : null}
 
+      {!campaignsUnlocked ? (
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-amber-200 bg-white px-6 py-16 text-center shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <UserCheck size={28} />
+          </div>
+          <h2 className="m-0 text-lg font-extrabold text-slate-900">{t("available.lockedTitle")}</h2>
+          <p className="m-0 max-w-lg text-sm leading-relaxed text-slate-600">{t("available.lockedBody")}</p>
+          {user.creator?.id ? (
+            <Link href={`/creators/${user.creator.id}?tab=about`} className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-brand-primary px-5 text-xs font-bold tracking-wider text-white uppercase hover:bg-indigo-600">
+              {t("available.goToProfile")}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
+      {campaignsUnlocked ? (
+      <>
       <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5 md:flex-row">
         <div className="relative w-full md:w-96">
           <Search size={16} className="absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400" />
@@ -428,6 +471,8 @@ function AvailableInner() {
           })}
         </div>
       )}
+      </>
+      ) : null}
 
       <AnimatePresence>
         {briefing ? (

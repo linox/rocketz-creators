@@ -24,7 +24,16 @@ export type Creator = {
   accepts_exclusivity: boolean;
   internal_notes?: string | null;
   status: string;
-  portfolio?: { id: number; title: string; url: string; description: string | null; uploaded_at?: string | null }[];
+  portfolio?: {
+    id: number;
+    title: string;
+    url: string;
+    description: string | null;
+    orientation?: "horizontal" | "vertical" | null;
+    file_size?: number;
+    download_url?: string;
+    uploaded_at?: string | null;
+  }[];
   contract_acceptance?: { id: number; status: string; accepted_at: string | null; full_name: string } | null;
 };
 
@@ -103,10 +112,39 @@ export type CampaignCreator = {
   video_status: string | null;
   script_feedback: string | null;
   video_feedback: string | null;
+  script_submitted_at?: string | null;
+  video_submitted_at?: string | null;
   signature_status?: string | null;
   contract_url?: string | null;
   post_date?: string | null;
-  content?: { script: string | null; video_url: string | null; image_url: string | null; published_link: string | null } | null;
+  content?: {
+    script: string | null;
+    video_url: string | null;
+    video_file_size?: number;
+    video_download_url?: string | null;
+    image_url: string | null;
+    published_link: string | null;
+    script_version?: number;
+    video_version?: number;
+    submission_versions?: SubmissionVersionEntry[];
+  } | null;
+};
+
+export type SubmissionVersionEntry = {
+  version: number;
+  stage: string;
+  submitted_at?: string;
+  script?: string | null;
+  media_url?: string | null;
+  submission_url?: string | null;
+  video_url?: string | null;
+  video_file_size?: number | null;
+};
+
+export type RevisionHistoryEntry = {
+  stage: string;
+  note: string;
+  requested_at?: string;
 };
 
 export type RecurringContract = {
@@ -137,6 +175,8 @@ export type RecurringContract = {
     monthly_cache: number | null;
     monthly_deliverables?: Record<string, number>;
     notes?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
   }[];
   items?: PlanningItem[];
 };
@@ -154,13 +194,29 @@ export type PlanningItem = {
   description: string | null;
   briefing: string | null;
   briefing_note?: string | null;
+  references?: string | null;
+  script?: string | null;
+  caption?: string | null;
   planned_date: string | null;
   status: string;
+  approval_flow?: string | null;
+  script_status?: string | null;
+  video_status?: string | null;
+  script_feedback?: string | null;
+  video_feedback?: string | null;
+  script_submitted_at?: string | null;
+  video_submitted_at?: string | null;
+  script_version?: number;
+  video_version?: number;
+  submission_versions?: SubmissionVersionEntry[];
+  revision_history?: RevisionHistoryEntry[];
   submission_url: string | null;
   media_url: string | null;
   published_url: string | null;
   submission_notes: string | null;
   feedback_note: string | null;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
 };
 
 export type AppNotification = {

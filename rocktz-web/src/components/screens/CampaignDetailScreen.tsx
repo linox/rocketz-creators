@@ -18,6 +18,7 @@ import {
   ChevronUp,
   Clapperboard,
   Clock,
+  Columns2,
   Copy,
   DollarSign,
   Edit3,
@@ -29,6 +30,7 @@ import {
   Image as ImageIcon,
   Instagram,
   Layers,
+  LayoutGrid,
   Lock,
   Megaphone,
   MessageCircle,
@@ -47,6 +49,7 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
+import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -57,8 +60,10 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
 type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro";
-type CreatorFilter = "all" | "owing" | "delivered" | "no_demand";
+type CreatorFilter = "all" | "attention" | "owing" | "delivered" | "no_demand";
 type AppFilter = "all" | "pending" | "approved" | "rejected";
+type CreatorLayout = "split" | "grid";
+const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
   briefing: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
@@ -133,6 +138,27 @@ function deliveryClass(status: string | null | undefined) {
   return "text-slate-500";
 }
 
+function hasSubmittedMaterial(row: CampaignCreator) {
+  const content = row.content;
+  if (content?.video_url?.trim()) return true;
+  if (content?.image_url?.trim()) return true;
+  const status = row.delivery_status;
+  if (status === "sent" || status === "revision" || status === "approved" || status === "published") return true;
+  const videoStatus = row.video_status;
+  if (videoStatus === "submitted" || videoStatus === "revision" || videoStatus === "approved") return true;
+  return false;
+}
+
+function needsAgencyAttention(row: CampaignCreator) {
+  if (hasNoDemand(row)) return false;
+  if (!row.content?.video_url?.trim()) return false;
+  const status = row.delivery_status;
+  if (status === "approved" || status === "published") return false;
+  if (status === "sent") return true;
+  if (row.video_status === "submitted") return true;
+  return false;
+}
+
 function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
   if (!metrics) return 0;
   for (const key of keys) {
@@ -143,8 +169,14 @@ function metricValue(metrics: Record<string, number> | undefined, keys: string[]
 }
 
 function suggestedFee(row: CampaignCreator, campaign: Campaign) {
-  const pricing = row.creator?.pricing;
-  return Number(row.amount) || Number(pricing?.combo) || Number(pricing?.reel) || Number(campaign.creator_cache) || 0;
+  if (campaign.is_barter) return 0;
+  return Number(campaign.creator_cache) || Number(row.amount) || 0;
+}
+
+function effectiveCreatorFee(row: CampaignCreator | null | undefined, campaign: Campaign) {
+  if (campaign.is_barter || campaign.is_direct_contract) return 0;
+  if (!row) return Number(campaign.creator_cache) || 0;
+  return Number(row.amount) || Number(campaign.creator_cache) || 0;
 }
 
 function whatsappLink(phone: string | null | undefined, message: string) {
@@ -216,6 +248,8 @@ function DetailInner() {
   const locale = intlLocale(normalizeLocale(i18n.language));
   const id = usePathname().split("/").filter(Boolean).pop() ?? "";
   const isAdmin = user.role === "admin";
+  const isCreator = user.role === "creator";
+  const ownCreatorId = user.creator?.id ?? null;
   const canManage = user.role === "admin" || user.role === "company";
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -227,11 +261,14 @@ function DetailInner() {
   const [expandedIds, setExpandedIds] = useState<number[]>([]);
   const [creatorSearch, setCreatorSearch] = useState("");
   const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>("all");
+  const [creatorLayout, setCreatorLayout] = useState<CreatorLayout>("split");
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [appFilter, setAppFilter] = useState<AppFilter>("all");
   const [appSearch, setAppSearch] = useState("");
   const [customAmounts, setCustomAmounts] = useState<Record<number, number>>({});
   const [rejectModal, setRejectModal] = useState<{ row: CampaignCreator | null; reason: string }>({ row: null, reason: "" });
   const [feedback, setFeedback] = useState<Record<number, string>>({});
+  const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -244,7 +281,9 @@ function DetailInner() {
     company_id: "",
     status: "briefing",
     objective: "",
+    approval_flow: "script_and_video" as "script_and_video" | "video_only" | "script_only",
     total_budget: "",
+    creator_cache: "",
     start_date: "",
     end_date: "",
     is_secret: false,
@@ -288,7 +327,7 @@ function DetailInner() {
     load();
     if (isAdmin) {
       api.creators("?status=active").then((res) => setCreators(res.data)).catch(() => undefined);
-      api.companies().then((res) => setCompanies(res.data)).catch(() => undefined);
+      api.companies("?status=active").then((res) => setCompanies(res.data)).catch(() => undefined);
     }
     const param = new URLSearchParams(window.location.search).get("tab");
     if (param === "selection" || param === "candidaturas") setTab("candidaturas");
@@ -296,47 +335,86 @@ function DetailInner() {
     if (param === "financeiro") setTab("financeiro");
   }, [id, isAdmin]);
 
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+      if (stored === "split" || stored === "grid") setCreatorLayout(stored);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function changeCreatorLayout(next: CreatorLayout) {
+    setCreatorLayout(next);
+    setDetailModalOpen(false);
+    try {
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
+
   const applications = campaign?.applications ?? [];
   const approvedCreators = useMemo(() => applications.filter(isApproved), [applications]);
+  const displayCreators = useMemo(() => {
+    if (!isCreator || !ownCreatorId) return approvedCreators;
+    return approvedCreators.filter((row) => row.creator_id === ownCreatorId);
+  }, [approvedCreators, isCreator, ownCreatorId]);
+  const myParticipation = useMemo(
+    () => (ownCreatorId ? approvedCreators.find((row) => row.creator_id === ownCreatorId) ?? null : null),
+    [approvedCreators, ownCreatorId],
+  );
   const pendingApps = applications.filter((row) => row.application_status === "pending");
+  const pendingAppCount = Math.max(pendingApps.length, campaign?.pending_applications ?? 0);
   const approvedApps = applications.filter((row) => row.application_status === "approved");
   const rejectedApps = applications.filter((row) => row.application_status === "rejected");
 
   useEffect(() => {
-    if (approvedCreators.length > 0 && (selectedId == null || !approvedCreators.some((row) => row.id === selectedId))) {
-      setSelectedId(approvedCreators[0].id);
-    } else if (approvedCreators.length === 0) {
+    if (displayCreators.length > 0 && (selectedId == null || !displayCreators.some((row) => row.id === selectedId))) {
+      setSelectedId(displayCreators[0].id);
+    } else if (displayCreators.length === 0) {
       setSelectedId(null);
     }
-  }, [approvedCreators, selectedId]);
+  }, [displayCreators, selectedId]);
 
-  const selected = approvedCreators.find((row) => row.id === selectedId) ?? null;
+  useEffect(() => {
+    if (isCreator && (tab === "candidaturas" || tab === "financeiro")) setTab("entregas");
+  }, [isCreator, tab]);
+
+  const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
   const selectedCreator = selected?.creator;
 
+  useEffect(() => {
+    setPublishedLinkDraft(selected?.content?.published_link || "");
+  }, [selected?.id, selected?.content?.published_link]);
+
   const statusCounts = useMemo(() => {
+    let attention = 0;
     let owing = 0;
     let delivered = 0;
     let noDemand = 0;
-    approvedCreators.forEach((row) => {
+    displayCreators.forEach((row) => {
+      if (needsAgencyAttention(row)) attention += 1;
       if (hasNoDemand(row)) noDemand += 1;
       else if (row.delivery_status === "approved" || row.delivery_status === "published") delivered += 1;
       else owing += 1;
     });
-    return { all: approvedCreators.length, owing, delivered, no_demand: noDemand };
-  }, [approvedCreators]);
+    return { all: displayCreators.length, attention, owing, delivered, no_demand: noDemand };
+  }, [displayCreators]);
 
   const filteredCreators = useMemo(() => {
     const term = creatorSearch.trim().toLowerCase();
-    return approvedCreators.filter((row) => {
+    return displayCreators.filter((row) => {
       const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${row.delivery_type ?? ""}`.toLowerCase();
       if (term && !name.includes(term)) return false;
       const none = hasNoDemand(row);
+      if (creatorFilter === "attention") return needsAgencyAttention(row);
       if (creatorFilter === "no_demand") return none;
       if (creatorFilter === "delivered") return !none && (row.delivery_status === "approved" || row.delivery_status === "published");
       if (creatorFilter === "owing") return !none && row.delivery_status !== "approved" && row.delivery_status !== "published";
       return true;
     });
-  }, [approvedCreators, creatorSearch, creatorFilter]);
+  }, [displayCreators, creatorSearch, creatorFilter]);
 
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
@@ -350,7 +428,9 @@ function DetailInner() {
   }, [applications, appFilter, appSearch]);
 
   const totalBudget = Number(campaign?.total_budget) || 0;
-  const castingCost = approvedCreators.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
+  const castingCost = campaign
+    ? approvedCreators.reduce((acc, row) => acc + effectiveCreatorFee(row, campaign), 0)
+    : 0;
   const agencyMargin = totalBudget - castingCost;
   const marginPercent = totalBudget > 0 ? Math.round((agencyMargin / totalBudget) * 100) : 0;
   const endDate = campaign?.end_date ? new Date(`${campaign.end_date}T00:00:00`) : null;
@@ -437,12 +517,18 @@ function DetailInner() {
   function openEdit() {
     if (!campaign) return;
     setImageUrl(campaign.image_url || "");
+    const flow = campaign.approval_flow;
     setEditForm({
       name: campaign.name,
       company_id: String(campaign.company_id),
       status: campaign.status,
       objective: campaign.objective || "",
+      approval_flow:
+        flow === "video_only" || flow === "script_only" || flow === "script_and_video"
+          ? flow
+          : "script_and_video",
       total_budget: campaign.total_budget != null ? String(campaign.total_budget) : "",
+      creator_cache: campaign.creator_cache != null ? String(campaign.creator_cache) : "",
       start_date: campaign.start_date || "",
       end_date: campaign.end_date || "",
       is_secret: campaign.is_secret,
@@ -478,7 +564,9 @@ function DetailInner() {
         company_id: isAdmin ? Number(editForm.company_id) : undefined,
         status: editForm.status,
         objective: editForm.objective,
+        approval_flow: editForm.approval_flow,
         total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
+        creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? Number(editForm.creator_cache) : null,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
         image_url: imageUrl || null,
@@ -533,7 +621,7 @@ function DetailInner() {
       await api.assignCreator(campaign.id, {
         creator_id: creator.id,
         delivery_type: formatDeliverablesSummary(campaign.deliverables) || "Reel",
-        amount: creator.pricing?.reel || creator.pricing?.combo || 0,
+        amount: effectiveCreatorFee(null, campaign),
       });
       setAddOpen(false);
       await load();
@@ -567,7 +655,20 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.revisionRequired"));
       return;
     }
-    await patch(row, { delivery_status: "revision", revision_details: note, script_status: "revision" });
+    const needsScriptRevision = row.script_status === "submitted"
+      || (Boolean(row.content?.script) && row.script_status !== "approved" && !row.content?.video_url);
+    await patch(row, needsScriptRevision
+      ? { delivery_status: "revision", revision_details: note, script_status: "revision", script_feedback: note }
+      : { delivery_status: "revision", revision_details: note, video_status: "revision", video_feedback: note });
+  }
+
+  async function markPublished(row: CampaignCreator) {
+    const link = publishedLinkDraft.trim();
+    if (!link) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.publishedLinkRequired"));
+      return;
+    }
+    await patch(row, { delivery_status: "published", published_link: link });
   }
 
   if (loading) {
@@ -593,6 +694,25 @@ function DetailInner() {
 
   const companyName = campaign.company?.name || t("campaigns.client");
   const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value));
+  const myFeeDisplay = (() => {
+    if (campaign.is_barter) return t("deliveries.barter");
+    if (campaign.is_direct_contract) return t("deliveries.direct");
+    const amount = effectiveCreatorFee(myParticipation, campaign);
+    return amount > 0 ? formatCurrency(amount) : t("available.toDefine");
+  })();
+  const detailTabs = (
+    isCreator
+      ? [
+          ["entregas", Video, t("campaignDetail.tabMyDeliveries"), "", ""] as const,
+          ["briefing", FileText, t("campaignDetail.tabBriefing"), "", ""] as const,
+        ]
+      : [
+          ["entregas", Video, t("campaignDetail.tabDeliveries"), String(approvedCreators.length), "bg-indigo-600 text-white"] as const,
+          ["candidaturas", Users, t("campaignDetail.tabCasting"), pendingAppCount > 0 ? (pendingAppCount > 1 ? t("campaignDetail.pendingBadgeMany", { count: pendingAppCount }) : t("campaignDetail.pendingBadge", { count: pendingAppCount })) : String(applications.length), pendingAppCount > 0 ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600"] as const,
+          ["briefing", FileText, t("campaignDetail.tabBriefing"), "", ""] as const,
+          ["financeiro", DollarSign, t("campaignDetail.tabFinance"), "", ""] as const,
+        ]
+  );
 
   return (
     <div className="flex flex-col gap-6 pb-24">
@@ -648,11 +768,14 @@ function DetailInner() {
             ) : (
               <span className={cn("rounded-xl border px-3 py-2 text-xs font-extrabold", statusCfg.bg, statusCfg.text, statusCfg.border)}>{t(STATUS_LABEL[campaign.status as (typeof STATUSES)[number]] ?? "deliveries.statusBriefing")}</span>
             )}
-            {pendingApps.length > 0 ? (
-              <button type="button" onClick={() => setActiveTab("candidaturas")} className="flex animate-pulse items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-md">
-                <Users size={14} /> {pendingApps.length > 1 ? t("campaignDetail.pendingMany", { count: pendingApps.length }) : t("campaignDetail.pendingOne", { count: pendingApps.length })}
-              </button>
-            ) : null}
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-extrabold text-indigo-700">
+              <FileText size={13} />
+              {campaign.approval_flow === "video_only"
+                ? t("campaigns.flowVideo")
+                : campaign.approval_flow === "script_only"
+                  ? t("campaigns.flowScript")
+                  : t("campaigns.flowScriptVideo")}
+            </span>
             {canManage ? (
               <button type="button" onClick={openEdit} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-xs hover:bg-slate-50">
                 <Edit3 size={14} /> {t("campaignDetail.edit")}
@@ -716,7 +839,42 @@ function DetailInner() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={cn("grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2", isCreator ? "lg:grid-cols-2" : "lg:grid-cols-4")}>
+          {isCreator ? (
+            <>
+              <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-brand-primary">
+                      <DollarSign size={15} />
+                    </div>
+                    <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiMyFee")}</span>
+                  </div>
+                  {myParticipation && !campaign.is_barter && Number(myParticipation.amount) > 0 ? (
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", myParticipation.payment_status === "paid" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
+                      {myParticipation.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{myFeeDisplay}</span>
+              </div>
+              <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                      <CalendarCheck size={15} />
+                    </div>
+                    <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiSchedule")}</span>
+                  </div>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", daysRemaining > 5 ? "bg-emerald-50 text-emerald-700" : daysRemaining >= 0 ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700")}>
+                    {daysRemaining >= 0 ? t("campaignDetail.daysLeft", { count: daysRemaining }) : t("campaignDetail.ended")}
+                  </span>
+                </div>
+                <span className="pt-3 text-xs font-black text-slate-800 sm:text-sm">{t("campaignDetail.endsOn", { date: endDate ? endDate.toLocaleDateString(locale) : "—" })}</span>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
@@ -771,37 +929,42 @@ function DetailInner() {
             </div>
             <span className="pt-3 text-xs font-black text-slate-800 sm:text-sm">{t("campaignDetail.endsOn", { date: endDate ? endDate.toLocaleDateString(locale) : "—" })}</span>
           </div>
+            </>
+          )}
         </div>
 
-        {pendingApps.length > 0 && tab !== "candidaturas" ? (
-          <div className="mt-1 flex flex-col justify-between gap-3 rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 p-4 shadow-xs sm:flex-row sm:items-center">
+        {!isCreator && pendingAppCount > 0 && tab !== "candidaturas" ? (
+          <div className="mt-1 flex flex-col justify-between gap-3 rounded-2xl border border-amber-200/80 bg-[#FFF9E6] p-4 shadow-xs sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 animate-bounce items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
                 <Users size={20} />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-slate-900">{pendingApps.length === 1 ? t("campaignDetail.pendingBannerOne") : t("campaignDetail.pendingBannerMany")}</h4>
-                  <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white uppercase">{t("campaignDetail.actionNeeded")}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-sm font-bold text-slate-900">
+                    {pendingAppCount === 1
+                      ? t("campaignDetail.pendingBannerOne", { count: pendingAppCount })
+                      : t("campaignDetail.pendingBannerMany", { count: pendingAppCount })}
+                  </h4>
+                  <span className="rounded-full bg-brand-primary px-2 py-0.5 text-[10px] font-black tracking-wide text-white uppercase">
+                    {t("campaignDetail.actionNeeded")}
+                  </span>
                 </div>
-                <p className="text-xs text-slate-600">{t("campaignDetail.pendingHint")}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{t("campaignDetail.pendingHint")}</p>
               </div>
             </div>
-            <button type="button" onClick={() => setActiveTab("candidaturas")} className="flex items-center gap-1.5 self-end rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800 sm:self-center">
+            <button
+              type="button"
+              onClick={() => setActiveTab("candidaturas")}
+              className="flex shrink-0 items-center gap-1.5 self-end rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-slate-800 sm:self-center"
+            >
               <UserCheck size={14} className="text-amber-400" /> {t("campaignDetail.reviewApps")}
             </button>
           </div>
         ) : null}
 
         <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pt-3">
-          {(
-            [
-              ["entregas", Video, t("campaignDetail.tabDeliveries"), String(approvedCreators.length), "bg-indigo-600 text-white"],
-              ["candidaturas", Users, t("campaignDetail.tabCasting"), pendingApps.length > 0 ? (pendingApps.length > 1 ? t("campaignDetail.pendingBadgeMany", { count: pendingApps.length }) : t("campaignDetail.pendingBadge", { count: pendingApps.length })) : String(applications.length), pendingApps.length > 0 ? "bg-rose-500 text-white animate-pulse" : "bg-slate-100 text-slate-600"],
-              ["briefing", FileText, t("campaignDetail.tabBriefing"), "", ""],
-              ["financeiro", DollarSign, t("campaignDetail.tabFinance"), "", ""],
-            ] as const
-          ).map(([key, Icon, label, badge, badgeClass]) => (
+          {detailTabs.map(([key, Icon, label, badge, badgeClass]) => (
             <button
               key={key}
               type="button"
@@ -820,21 +983,32 @@ function DetailInner() {
       </div>
 
       {tab === "entregas" ? (
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-          <div className="flex flex-col gap-4 lg:col-span-4">
+        <div className={cn("grid grid-cols-1 items-start gap-6", !isCreator && creatorLayout === "split" && "lg:grid-cols-12")}>
+          {!isCreator ? (
+          <div className={cn("flex flex-col gap-4", creatorLayout === "split" ? "lg:col-span-4" : "col-span-full")}>
             <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="flex items-center gap-1.5 text-xs font-black tracking-wider text-slate-800 uppercase">
                     <Users size={14} className="text-brand-primary" /> {t("campaignDetail.allocated")}
                   </h3>
                   <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.inCasting", { count: approvedCreators.length })}</span>
                 </div>
-                {isAdmin ? (
-                  <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-[11px] font-extrabold text-white shadow-xs hover:bg-indigo-600">
-                    <Plus size={13} /> {t("campaignDetail.addCreator")}
-                  </button>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+                    <button type="button" onClick={() => changeCreatorLayout("split")} title={t("campaignDetail.layoutSplitHint")} aria-label={t("campaignDetail.layoutSplitHint")} className={cn("inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold whitespace-nowrap", creatorLayout === "split" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-white")}>
+                      <Columns2 size={13} className="shrink-0" /> <span className="hidden sm:inline">{t("campaignDetail.layoutSplit")}</span>
+                    </button>
+                    <button type="button" onClick={() => changeCreatorLayout("grid")} title={t("campaignDetail.layoutGridHint")} aria-label={t("campaignDetail.layoutGridHint")} className={cn("inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold whitespace-nowrap", creatorLayout === "grid" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-white")}>
+                      <LayoutGrid size={13} className="shrink-0" /> <span className="hidden sm:inline">{t("campaignDetail.layoutGrid")}</span>
+                    </button>
+                  </div>
+                  {isAdmin ? (
+                    <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-[11px] font-extrabold text-white shadow-xs hover:bg-indigo-600">
+                      <Plus size={13} /> {t("campaignDetail.addCreator")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="relative">
                 <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={14} />
@@ -843,28 +1017,35 @@ function DetailInner() {
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
                 {(
                   [
-                    ["all", t("campaignDetail.filterAll"), statusCounts.all, "bg-slate-900 text-white border-slate-900", "bg-white text-slate-600 border-slate-200"],
-                    ["owing", t("campaignDetail.filterOwing"), statusCounts.owing, "bg-rose-600 text-white border-rose-600", "bg-white text-rose-700 border-rose-200"],
-                    ["delivered", t("campaignDetail.filterDelivered"), statusCounts.delivered, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200"],
-                    ["no_demand", t("campaignDetail.filterNoDemand"), statusCounts.no_demand, "bg-slate-700 text-white border-slate-700", "bg-white text-slate-500 border-slate-200"],
+                    ["all", t("campaignDetail.filterAll"), statusCounts.all, "bg-slate-900 text-white border-slate-900", "bg-white text-slate-600 border-slate-200", false],
+                    ["attention", t("campaignDetail.filterAttention"), statusCounts.attention, "bg-amber-500 text-white border-amber-500", "bg-white text-amber-800 border-amber-200", true],
+                    ["owing", t("campaignDetail.filterOwing"), statusCounts.owing, "bg-rose-600 text-white border-rose-600", "bg-white text-rose-700 border-rose-200", true],
+                    ["delivered", t("campaignDetail.filterDelivered"), statusCounts.delivered, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200", true],
+                    ["no_demand", t("campaignDetail.filterNoDemand"), statusCounts.no_demand, "bg-slate-700 text-white border-slate-700", "bg-white text-slate-500 border-slate-200", false],
                   ] as const
-                ).map(([key, label, count, active, idle]) => (
+                ).map(([key, label, count, active, idle, dot]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setCreatorFilter(key)}
                     className={cn("flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold whitespace-nowrap", creatorFilter === key ? active : idle)}
                   >
-                    {key === "owing" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" /> : null}
-                    {key === "delivered" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
+                    {dot ? (
+                      <span
+                        className={cn(
+                          "inline-block h-1.5 w-1.5 rounded-full",
+                          key === "attention" ? "bg-amber-500" : key === "owing" ? "bg-rose-500" : "bg-emerald-500",
+                        )}
+                      />
+                    ) : null}
                     <span>{label}</span>
                     <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-black", creatorFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600")}>{count}</span>
                   </button>
                 ))}
               </div>
-              <div className="flex max-h-[580px] flex-col gap-2.5 overflow-y-auto pt-1">
+              <div className={cn(creatorLayout === "grid" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6" : "flex max-h-[580px] flex-col gap-2.5 overflow-y-auto", "pt-1")}>
                 {filteredCreators.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                  <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
                     <Users size={24} className="mx-auto mb-2 text-slate-300" />
                     <p className="text-xs font-bold text-slate-600">{t("campaignDetail.noCreatorFound")}</p>
                     <p className="mt-0.5 text-[10px] text-slate-400">{t("campaignDetail.noCreatorHint")}</p>
@@ -872,12 +1053,74 @@ function DetailInner() {
                 ) : (
                   filteredCreators.map((row) => {
                     const expanded = expandedIds.includes(row.id);
+                    const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+                    const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.delivery");
+                    const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
+                    const needsAttention = needsAgencyAttention(row);
+                    const showAttentionTag = creatorFilter === "all" && needsAttention;
+
+                    if (creatorLayout === "grid") {
+                      return (
+                        <div
+                          key={row.id}
+                          className={cn(
+                            "group relative flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
+                            needsAttention ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70" : row.delivery_status === "pending" || row.delivery_status === "revision" ? "border-rose-200/80" : row.delivery_status === "published" || row.delivery_status === "approved" ? "border-emerald-200/80" : "border-slate-200",
+                          )}
+                        >
+                          {showAttentionTag ? (
+                            <span className="absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-900 uppercase shadow-xs">
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                              {t("campaignDetail.attentionBadge")}
+                            </span>
+                          ) : null}
+                          <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="circle" className="mb-2 h-12 w-12 shrink-0 border border-slate-200" textClassName="text-xs font-bold" />
+                          <h4 className="w-full truncate px-0.5 text-[11px] font-bold text-slate-900" title={name}>{name}</h4>
+                          {handle ? <p className="mt-0.5 w-full truncate px-0.5 text-[9px] text-slate-400">{handle}</p> : null}
+                          {followers > 0 ? (
+                            <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
+                          ) : null}
+                          <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          <span className={cn("mt-1.5 rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(row.delivery_status), "border-slate-200 bg-slate-50")}>
+                            {deliveryLabel(row.delivery_status, t)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedId(row.id);
+                              setDetailModalOpen(true);
+                            }}
+                            className="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-1 rounded-lg bg-brand-primary px-2 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-600"
+                          >
+                            <FileText size={11} className="shrink-0" /> {t("campaignDetail.viewDemands")}
+                          </button>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={row.id}
-                        onClick={() => setSelectedId(row.id)}
-                        className={cn("flex cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all", selectedId === row.id ? "border-brand-primary/60 bg-indigo-50/50 ring-1 ring-brand-primary/20 shadow-xs" : "border-slate-200 bg-white hover:bg-slate-50")}
+                        onClick={() => {
+                          setSelectedId(row.id);
+                          const mobile = typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches;
+                          if (mobile) setDetailModalOpen(true);
+                        }}
+                        className={cn(
+                          "relative flex cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all",
+                          selectedId === row.id
+                            ? "border-brand-primary/60 bg-indigo-50/50 ring-1 ring-brand-primary/20 shadow-xs"
+                            : showAttentionTag
+                              ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/60 hover:bg-amber-50/70"
+                              : "border-slate-200 bg-white hover:bg-slate-50",
+                        )}
                       >
+                        {showAttentionTag ? (
+                          <span className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-900 uppercase shadow-xs">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                            {t("campaignDetail.attentionBadge")}
+                          </span>
+                        ) : null}
                         <div className="flex items-center justify-between">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
@@ -903,7 +1146,7 @@ function DetailInner() {
                         <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[10px]">
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
-                            <span className="mt-0.5 truncate font-black text-slate-800">{moneyOrMode(Number(row.amount) || 0)}</span>
+                            <span className="mt-0.5 truncate font-black text-slate-800">{moneyOrMode(effectiveCreatorFee(row, campaign))}</span>
                           </div>
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryStatus")}</span>
@@ -954,10 +1197,24 @@ function DetailInner() {
               </div>
             </div>
           </div>
+          ) : null}
 
-          <div className="flex flex-col gap-5 lg:col-span-8">
+          <div className={cn(
+            isCreator && "flex flex-col gap-5",
+            !isCreator && creatorLayout === "split" && !detailModalOpen && "hidden lg:flex lg:col-span-8 lg:flex-col lg:gap-5",
+            !isCreator && detailModalOpen && "app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm sm:p-4",
+            !isCreator && creatorLayout === "grid" && !detailModalOpen && "hidden",
+          )}>
             {selected && selectedCreator ? (
-              <>
+              <div className={cn(
+                "flex flex-col gap-5",
+                !isCreator && detailModalOpen && "app-modal-panel relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl",
+              )}>
+                {!isCreator && detailModalOpen ? (
+                  <button type="button" onClick={() => setDetailModalOpen(false)} className="sticky top-0 z-10 inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-100">
+                    <ArrowLeft size={14} /> {tc("back")}
+                  </button>
+                ) : null}
                 <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center">
                   <div className="flex items-center gap-3.5">
                     <UserAvatar src={selectedCreator.photo_url} name={selectedCreator.artistic_name || selectedCreator.full_name} size="custom" shape="rounded-2xl" className="h-12 w-12 border border-indigo-100 shadow-xs" textClassName="text-base" />
@@ -993,7 +1250,7 @@ function DetailInner() {
                 <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
-                    <span className="mt-1 truncate text-sm font-black text-slate-900">{moneyOrMode(Number(selected.amount) || 0)}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-900">{moneyOrMode(effectiveCreatorFee(selected, campaign))}</span>
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryFormat")}</span>
@@ -1005,132 +1262,190 @@ function DetailInner() {
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.contentStatus")}</span>
-                    <span className={cn("mt-1 truncate text-xs font-black uppercase", deliveryClass(selected.delivery_status))}>{deliveryLabel(selected.delivery_status, t, "detail")}</span>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className={cn("truncate text-xs font-black uppercase", deliveryClass(selected.delivery_status))}>{deliveryLabel(selected.delivery_status, t, "detail")}</span>
+                      {selected.delivery_status === "approved" ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-emerald-800 uppercase">
+                          {t("campaignDetail.contentApprovedTag")}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                  <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                          <FileText size={13} className="text-brand-primary" /> {t("campaignDetail.scriptTitle")}
-                        </span>
-                        {selected.content?.script ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(selected.content?.script || "");
-                              await alertSuccess(t("campaignDetail.copied"));
-                            }}
-                            className="flex items-center gap-1 text-[10px] font-bold text-brand-primary hover:underline"
-                          >
-                            <Copy size={11} /> {t("campaignDetail.copy")}
-                          </button>
+                {hasSubmittedMaterial(selected) ? (
+                  <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+                    {(selected.content?.script?.trim() || selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
+                      <div className={cn("grid grid-cols-1 items-start gap-6", selected.content?.script?.trim() && (selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? "md:grid-cols-2" : "")}>
+                        {selected.content?.script?.trim() ? (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                              <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                                <FileText size={13} className="text-brand-primary" /> {t("campaignDetail.scriptTitle")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(selected.content?.script || "");
+                                  await alertSuccess(t("campaignDetail.copied"));
+                                }}
+                                className="flex items-center gap-1 text-[10px] font-bold text-brand-primary hover:underline"
+                              >
+                                <Copy size={11} /> {t("campaignDetail.copy")}
+                              </button>
+                            </div>
+                            <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-700">{selected.content.script}</div>
+                          </div>
+                        ) : null}
+                        {(selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                                  <Video size={13} className="text-brand-primary" /> {t("campaignDetail.mediaTitle")}
+                                </span>
+                                {selected.delivery_status === "approved" ? (
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-emerald-800 uppercase">
+                                    {t("campaignDetail.contentApprovedTag")}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </div>
+                            {selected.content?.video_url ? (
+                              <CampaignSubmittedVideo
+                                key={selected.id}
+                                videoUrl={selected.content.video_url}
+                                fileSize={selected.content.video_file_size}
+                              />
+                            ) : null}
+                            {selected.content?.image_url ? (
+                              <a href={selected.content.image_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
+                                <span className="truncate">{selected.content.image_url}</span>
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : null}
+                            {selected.content?.published_link ? (
+                              <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                                <div className="flex items-center gap-2 truncate">
+                                  <Sparkles size={16} className="shrink-0 text-emerald-600" />
+                                  <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
+                                </div>
+                                <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
+                                  {t("campaignDetail.viewPost")} ↗
+                                </a>
+                              </div>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
-                      {selected.content?.script ? (
-                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-700">{selected.content.script}</div>
-                      ) : (
-                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-400">{t("campaignDetail.noScript")}</div>
-                      )}
-                      {selected.notes ? (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
-                          <strong className="mb-0.5 block">{t("campaignDetail.creatorNotes")}</strong>
-                          {selected.notes}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                          <Video size={13} className="text-brand-primary" /> {t("campaignDetail.mediaTitle")}
-                        </span>
+                    ) : null}
+                    {selected.notes ? (
+                      <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
+                        <strong className="mb-0.5 block">{t("campaignDetail.creatorNotes")}</strong>
+                        {selected.notes}
                       </div>
-                      {selected.content?.video_url ? (
-                        <a href={selected.content.video_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50/50 p-3 text-xs font-bold text-slate-800">
-                          <span className="truncate">{selected.content.video_url}</span>
-                          <ExternalLink size={12} />
-                        </a>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-400">
-                          <Video size={24} className="text-slate-300" />
-                          <span>{t("campaignDetail.waitingVideo")}</span>
-                        </div>
-                      )}
-                      {selected.content?.published_link ? (
-                        <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                          <div className="flex items-center gap-2 truncate">
-                            <Sparkles size={16} className="shrink-0 text-emerald-600" />
-                            <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
-                          </div>
-                          <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
-                            {t("campaignDetail.viewPost")} ↗
-                          </a>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                    ) : null}
 
-                  {canManage ? (
-                    <div className="mt-2 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                          <Edit3 size={13} className="text-brand-primary" /> {t("campaignDetail.decisionTitle")}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
-                        <textarea
-                          rows={3}
-                          placeholder={t("campaignDetail.feedbackPh")}
-                          value={feedback[selected.id] ?? selected.revision_details ?? ""}
-                          onChange={(event) => setFeedback((prev) => ({ ...prev, [selected.id]: event.target.value }))}
-                          className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium outline-none focus:border-brand-primary"
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                        <button
-                          type="button"
-                          disabled={updatingId !== null || !(feedback[selected.id] || "").trim()}
-                          onClick={async () => {
-                            if (await patch(selected, { revision_details: feedback[selected.id] })) {
-                              await alertSuccess(t("campaignDetail.feedbackSaved"));
-                            }
-                          }}
-                          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          {t("campaignDetail.saveFeedback")}
-                        </button>
-                        <div className="flex items-center gap-2">
-                          <button type="button" disabled={updatingId !== null} onClick={() => void requestRevision(selected)} className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-rose-800 uppercase hover:bg-rose-100 disabled:opacity-50">
-                            {t("campaignDetail.requestRevision")}
-                          </button>
-                          <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "approved", script_status: "approved", video_status: "approved", revision_details: "" })} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
-                            <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveMaterial")}
-                          </button>
-                          <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "published" })} className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
-                            <Sparkles size={12} /> {t("campaignDetail.markPublished")}
-                          </button>
+                    {canManage ? (
+                      <div className="mt-2 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+                        {selected.delivery_status === "approved" ? (
+                          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
+                            <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                            {t("campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
+                          </div>
+                        ) : null}
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                            <Edit3 size={13} className="text-brand-primary" /> {t("campaignDetail.decisionTitle")}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
                         </div>
+                        {selected.delivery_status === "approved" ? (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.publishedLinkLabel")}</label>
+                            <input
+                              type="url"
+                              placeholder={t("campaignDetail.publishedLinkPh")}
+                              value={publishedLinkDraft}
+                              onChange={(event) => setPublishedLinkDraft(event.target.value)}
+                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-medium outline-none focus:border-emerald-500"
+                            />
+                            <p className="text-[10px] font-medium text-slate-500">{t("campaignDetail.publishedLinkHint")}</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
+                            <textarea
+                              rows={3}
+                              placeholder={t("campaignDetail.feedbackPh")}
+                              value={feedback[selected.id] ?? selected.revision_details ?? ""}
+                              onChange={(event) => setFeedback((prev) => ({ ...prev, [selected.id]: event.target.value }))}
+                              className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium outline-none focus:border-brand-primary"
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                          {selected.delivery_status !== "approved" && selected.delivery_status !== "published" ? (
+                            <button
+                              type="button"
+                              disabled={updatingId !== null || !(feedback[selected.id] || "").trim()}
+                              onClick={async () => {
+                                if (await patch(selected, { revision_details: feedback[selected.id] })) {
+                                  await alertSuccess(t("campaignDetail.feedbackSaved"));
+                                }
+                              }}
+                              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {t("campaignDetail.saveFeedback")}
+                            </button>
+                          ) : (
+                            <span />
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {selected.delivery_status !== "approved" && selected.delivery_status !== "published" ? (
+                              <>
+                                <button type="button" disabled={updatingId !== null} onClick={() => void requestRevision(selected)} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-rose-800 uppercase hover:bg-rose-100 disabled:opacity-50">
+                                  {t("campaignDetail.requestRevision")}
+                                </button>
+                                {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url) ? (
+                                  <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { script_status: "approved", script_feedback: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
+                                    <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveScript")}
+                                  </button>
+                                ) : (
+                                  <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "approved", script_status: "approved", video_status: "approved", revision_details: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
+                                    <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveMaterial")}
+                                  </button>
+                                )}
+                              </>
+                            ) : null}
+                            {selected.delivery_status === "approved" ? (
+                              <button type="button" disabled={updatingId !== null || !publishedLinkDraft.trim()} onClick={() => void markPublished(selected)} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
+                                <Sparkles size={12} /> {t("campaignDetail.markPublished")}
+                              </button>
+                            ) : null}
+                            {selected.delivery_status === "published" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-emerald-800 uppercase">
+                                <CheckCircle2 size={12} /> {t("campaignDetail.publishedDone")}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        {selected.delivery_status === "revision" ? (
+                          <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-800">
+                            <AlertCircle size={16} className="shrink-0 text-rose-600" />
+                            {t("campaignDetail.revisionBanner")}
+                          </div>
+                        ) : null}
                       </div>
-                      {selected.delivery_status === "approved" ? (
-                        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
-                          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                          {t("campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
-                        </div>
-                      ) : null}
-                      {selected.delivery_status === "revision" ? (
-                        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-800">
-                          <AlertCircle size={16} className="shrink-0 text-rose-600" />
-                          {t("campaignDetail.revisionBanner")}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-xs text-slate-400 shadow-xs">
+                    <Video size={28} className="text-slate-300" />
+                    <span>{t("campaignDetail.waitingVideo")}</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-16 text-center text-slate-400 shadow-xs">
                 <Users size={36} className="text-slate-300" />
@@ -1147,7 +1462,7 @@ function DetailInner() {
         </div>
       ) : null}
 
-      {tab === "candidaturas" ? (
+      {!isCreator && tab === "candidaturas" ? (
         <div className="flex flex-col gap-6">
           <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs md:flex-row md:items-center">
             <div>
@@ -1317,7 +1632,7 @@ function DetailInner() {
                             className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 pl-8 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
                           />
                         </div>
-                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable")}</span>
+                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0) })}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {waUrl ? (
@@ -1464,7 +1779,7 @@ function DetailInner() {
         </div>
       ) : null}
 
-      {tab === "financeiro" ? (
+      {!isCreator && tab === "financeiro" ? (
         <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
           <div className="border-b border-slate-100 pb-4">
             <h2 className="text-lg font-black text-slate-900">{t("campaignDetail.financeTitle")}</h2>
@@ -1492,7 +1807,7 @@ function DetailInner() {
                       </div>
                     </td>
                     <td className="px-4 py-3.5 font-medium text-slate-600">{row.delivery_type}</td>
-                    <td className="px-4 py-3.5 font-black text-slate-900">{moneyOrMode(Number(row.amount) || 0)}</td>
+                    <td className="px-4 py-3.5 font-black text-slate-900">{moneyOrMode(effectiveCreatorFee(row, campaign))}</td>
                     <td className="px-4 py-3.5">
                       <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.signature_status === "signed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
                         {row.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}
@@ -1621,6 +1936,10 @@ function DetailInner() {
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget")}</label>
                     <input type="number" step="0.01" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.total_budget} onChange={(event) => setEditForm({ ...editForm, total_budget: event.target.value })} />
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache")}</label>
+                    <input type="number" step="0.01" min="0" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.creator_cache} onChange={(event) => setEditForm({ ...editForm, creator_cache: event.target.value })} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -1632,7 +1951,91 @@ function DetailInner() {
                     <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm.end_date} onChange={(event) => setEditForm({ ...editForm, end_date: event.target.value })} />
                   </div>
                 </div>
-                <textarea rows={2} className="w-full resize-none rounded-xl border border-slate-200 p-2.5 text-xs font-medium" value={editForm.objective} onChange={(event) => setEditForm({ ...editForm, objective: event.target.value })} />
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.approvalLabel")}</label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {(
+                      [
+                        {
+                          id: "script_and_video" as const,
+                          icon: FileText,
+                          title: t("campaigns.flowScriptVideo"),
+                          hint: t("campaigns.flowScriptVideoHint"),
+                          badge: t("campaigns.flowScriptVideoBadge"),
+                          recommended: true,
+                        },
+                        {
+                          id: "video_only" as const,
+                          icon: Video,
+                          title: t("campaigns.flowVideo"),
+                          hint: t("campaigns.flowVideoHint"),
+                          badge: t("campaigns.flowVideoBadge"),
+                          recommended: false,
+                        },
+                        {
+                          id: "script_only" as const,
+                          icon: FileText,
+                          title: t("campaigns.flowScript"),
+                          hint: t("campaigns.flowScriptHint"),
+                          badge: t("campaigns.flowScriptBadge"),
+                          recommended: false,
+                        },
+                      ] as const
+                    ).map((option) => {
+                      const Icon = option.icon;
+                      const selected = editForm.approval_flow === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setEditForm({ ...editForm, approval_flow: option.id })}
+                          className={cn(
+                            "flex cursor-pointer flex-col justify-between gap-2 rounded-2xl border p-3 text-left transition-all",
+                            selected
+                              ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="flex items-center gap-1.5 text-[11px] font-black">
+                              <Icon size={13} className={selected ? "text-indigo-600" : "text-slate-400"} />
+                              {option.title}
+                            </span>
+                            <span
+                              className={cn(
+                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
+                                selected ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300",
+                              )}
+                            >
+                              {selected ? "✓" : ""}
+                            </span>
+                          </div>
+                          <p className="text-[10px] leading-snug text-slate-500">{option.hint}</p>
+                          <span
+                            className={cn(
+                              "self-start rounded-md border px-2 py-0.5 text-[9px] font-bold",
+                              option.recommended
+                                ? "border-indigo-100 bg-white/80 text-indigo-600"
+                                : "border-slate-200 bg-white/80 text-slate-600",
+                            )}
+                          >
+                            {option.badge}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.objective")}</label>
+                  <textarea
+                    rows={2}
+                    placeholder={t("deliveries.objectivePh")}
+                    className="w-full resize-none rounded-xl border border-slate-200 p-2.5 text-xs font-medium"
+                    value={editForm.objective}
+                    onChange={(event) => setEditForm({ ...editForm, objective: event.target.value })}
+                  />
+                </div>
                 <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_secret} onChange={(event) => setEditForm({ ...editForm, is_secret: event.target.checked })} /> {t("deliveries.secretNda")}</label>
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_direct_contract} onChange={(event) => setEditForm({ ...editForm, is_direct_contract: event.target.checked })} /> {t("deliveries.directCompany")}</label>

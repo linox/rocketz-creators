@@ -20,7 +20,13 @@ function GoogleCallback() {
 
     setToken(token);
     fetchMe()
-      .then((user) => router.replace(homePathForUser(user)))
+      .then((user) => {
+        if (params.get("signup") === "1" && user.role === "creator" && user.creator?.id) {
+          router.replace(`/creators/${user.creator.id}?tab=portfolio`);
+          return;
+        }
+        router.replace(homePathForUser(user));
+      })
       .catch(() => {
         clearToken();
         router.replace("/login?error=google_failed");

@@ -60,6 +60,8 @@ class CreatorSeeder extends Seeder
             'title' => 'UGC skincare rotina noturna',
             'url' => 'https://example.com/portfolio/ana-skincare',
             'description' => 'Vídeo UGC de 30s para marca de skincare.',
+            'orientation' => 'vertical',
+            'file_size' => 18_000_000,
             'uploaded_at' => now()->subMonths(2),
         ]);
 
@@ -68,6 +70,8 @@ class CreatorSeeder extends Seeder
             'title' => 'Unboxing + first impression',
             'url' => 'https://example.com/portfolio/ana-unboxing',
             'description' => 'Unboxing espontâneo com CTA de cupom.',
+            'orientation' => 'horizontal',
+            'file_size' => 42_000_000,
             'uploaded_at' => now()->subMonth(),
         ]);
 

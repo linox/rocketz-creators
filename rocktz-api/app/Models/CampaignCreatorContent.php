@@ -12,8 +12,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'campaign_creator_id',
     'script',
     'video_url',
+    'video_file_size',
     'image_url',
     'published_link',
+    'script_version',
+    'video_version',
+    'submission_versions',
     'story_prints',
     'metrics',
 ])]
@@ -30,6 +34,10 @@ class CampaignCreatorContent extends Model
         return [
             'story_prints' => 'array',
             'metrics' => 'array',
+            'video_file_size' => 'integer',
+            'script_version' => 'integer',
+            'video_version' => 'integer',
+            'submission_versions' => 'array',
         ];
     }
 

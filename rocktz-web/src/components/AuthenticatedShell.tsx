@@ -22,17 +22,29 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    fetchMe()
-      .then((next) => {
-        if (next.locale && !localStorage.getItem(LOCALE_STORAGE_KEY)) {
-          void setAppLocale(normalizeLocale(next.locale));
-        }
-        setUser(next);
-      })
-      .catch(() => {
-        clearToken();
-        router.replace("/login");
-      });
+    function loadUser() {
+      return fetchMe()
+        .then((next) => {
+          if (next.locale && !localStorage.getItem(LOCALE_STORAGE_KEY)) {
+            void setAppLocale(normalizeLocale(next.locale));
+          }
+          setUser(next);
+        })
+        .catch(() => {
+          clearToken();
+          router.replace("/login");
+        });
+    }
+
+    void loadUser();
+
+    function onAuthRefresh() {
+      if (!getToken()) return;
+      void fetchMe().then(setUser).catch(() => undefined);
+    }
+
+    window.addEventListener("rocketz:auth-refresh", onAuthRefresh);
+    return () => window.removeEventListener("rocketz:auth-refresh", onAuthRefresh);
   }, [router]);
 
   if (!user) {

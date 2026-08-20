@@ -5,8 +5,11 @@ namespace App\Services;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\UserRole;
+use App\Models\CompanyUser;
+use App\Models\Creator;
 use App\Models\Notification;
 use App\Models\User;
+use BackedEnum;
 
 class NotificationService
 {
@@ -41,5 +44,54 @@ class NotificationService
                 'link' => $link,
             ]));
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function notifyCompany(int $companyId, array $payload): void
+    {
+        CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->whereNotNull('user_id')
+            ->get()
+            ->each(function (CompanyUser $row) use ($payload) {
+                $this->send(array_merge($payload, [
+                    'user_id' => $row->user_id,
+                    'target_role' => NotificationTargetRole::Company,
+                ]));
+            });
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function notifyCreator(?int $creatorId, array $payload): ?Notification
+    {
+        if (! $creatorId) {
+            return null;
+        }
+
+        $userId = $payload['user_id'] ?? Creator::query()->whereKey($creatorId)->value('user_id');
+
+        return $this->send(array_merge($payload, [
+            'user_id' => $userId,
+            'creator_id' => $creatorId,
+            'target_role' => NotificationTargetRole::Creator,
+        ]));
+    }
+
+    public static function value(mixed $status): ?string
+    {
+        if ($status === null || $status === '') {
+            return null;
+        }
+
+        return $status instanceof BackedEnum ? (string) $status->value : (string) $status;
+    }
+
+    public static function is(mixed $status, BackedEnum $expected): bool
+    {
+        return self::value($status) === (string) $expected->value;
     }
 }

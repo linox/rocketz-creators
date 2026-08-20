@@ -49,6 +49,10 @@ export function homePathForUser(user: AuthUser): string {
     return "/company-dashboard";
   }
 
+  if (user.creator?.id) {
+    return `/creators/${user.creator.id}?tab=dashboard`;
+  }
+
   return "/creator-dashboard";
 }
 

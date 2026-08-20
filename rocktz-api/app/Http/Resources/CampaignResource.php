@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -12,6 +13,8 @@ class CampaignResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $isCreator = $request->user()?->role === UserRole::Creator;
+
         return [
             'id' => $this->id,
             'company_id' => $this->company_id,
@@ -26,9 +29,9 @@ class CampaignResource extends JsonResource
             'objective' => $this->objective,
             'start_date' => $this->start_date?->toDateString(),
             'end_date' => $this->end_date?->toDateString(),
-            'total_budget' => $this->total_budget !== null ? (float) $this->total_budget : null,
-            'agency_fee' => $this->agency_fee !== null ? (float) $this->agency_fee : null,
-            'creators_budget' => $this->creators_budget !== null ? (float) $this->creators_budget : null,
+            'total_budget' => $isCreator ? null : ($this->total_budget !== null ? (float) $this->total_budget : null),
+            'agency_fee' => $isCreator ? null : ($this->agency_fee !== null ? (float) $this->agency_fee : null),
+            'creators_budget' => $isCreator ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
             'creator_cache' => $this->creator_cache !== null ? (float) $this->creator_cache : null,
             'status' => $this->status?->value,
             'image_url' => $this->image_url,
@@ -59,7 +62,15 @@ class CampaignResource extends JsonResource
                 'deadline_days' => $this->deliverable->deadline_days,
                 'guidelines' => $this->deliverable->guidelines,
             ] : null),
-            'applications' => $this->whenLoaded('campaignCreators', fn () => CampaignCreatorResource::collection($this->campaignCreators)),
+            'applications' => $this->whenLoaded('campaignCreators', function () use ($request, $isCreator) {
+                $rows = $this->campaignCreators;
+                if ($isCreator) {
+                    $ownId = $request->user()?->creator?->id;
+                    $rows = $rows->where('creator_id', $ownId);
+                }
+
+                return CampaignCreatorResource::collection($rows);
+            }),
             'pending_applications' => $this->when(isset($this->pending_applications_count), (int) $this->pending_applications_count),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

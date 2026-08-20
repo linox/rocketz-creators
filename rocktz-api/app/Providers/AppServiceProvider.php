@@ -13,7 +13,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(
+            \Illuminate\Foundation\Console\ServeCommand::class,
+            \App\Console\Commands\ServeCommand::class,
+        );
     }
 
     /**

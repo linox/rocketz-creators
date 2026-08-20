@@ -31,6 +31,8 @@
   "hidePassword": "Hide password",
   "showPassword": "Show password",
   "openMenu": "Open menu",
+  "closeMenu": "Close menu",
+  "moreMenu": "More options",
   "comingSoon": "Coming soon",
   "comingSoonBody": "This area will be ported from the legacy app in upcoming phases. The MySQL database is already modeled and seeded for tests.",
   "alerts": {

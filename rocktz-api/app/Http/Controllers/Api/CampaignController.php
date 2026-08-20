@@ -9,7 +9,6 @@ use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\SignatureStatus;
-use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
@@ -19,7 +18,9 @@ use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
+use App\Models\Company;
 use App\Services\NotificationService;
+use App\Support\SubmissionVersioning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +54,12 @@ class CampaignController extends Controller
     public function available(Request $request): JsonResponse
     {
         $user = $request->user();
+        abort_if(
+            $user->role === UserRole::Creator && $user->creator?->status !== CreatorStatus::Active,
+            403,
+            __('auth.creator_must_be_approved'),
+        );
+
         $query = Campaign::query()
             ->with(['company', 'briefing', 'deliverable', 'campaignCreators'])
             ->where('status', '!=', CampaignStatus::Finished);
@@ -72,6 +79,7 @@ class CampaignController extends Controller
     {
         $this->assertCanView($request, $campaign);
         $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
     }
@@ -96,6 +104,13 @@ class CampaignController extends Controller
     public function update(Request $request, Campaign $campaign): JsonResponse
     {
         $data = $this->validatedCampaign($request, false);
+        if (
+            array_key_exists('company_id', $data)
+            && $data['company_id']
+            && (int) $data['company_id'] !== (int) $campaign->company_id
+        ) {
+            Company::assertApproved((int) $data['company_id']);
+        }
         DB::transaction(function () use ($campaign, $data) {
             $briefing = $data['briefing'] ?? null;
             $deliverables = $data['deliverables'] ?? null;
@@ -132,11 +147,15 @@ class CampaignController extends Controller
         $user = $request->user();
         $creator = $user->creator;
         abort_unless($creator, 403, __('auth.creators_only_apply'));
-        abort_unless(in_array($creator->status, [CreatorStatus::Active, CreatorStatus::Review], true), 422, __('auth.creator_must_be_approved'));
+        abort_unless($creator->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
+        abort_unless(
+            $creator->contractAcceptances()->exists(),
+            403,
+            __('auth.creator_must_accept_contract'),
+        );
 
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
-            'amount' => ['nullable', 'numeric'],
             'delivery_type' => ['nullable', 'string', 'max:80'],
         ]);
 
@@ -144,7 +163,7 @@ class CampaignController extends Controller
             ['campaign_id' => $campaign->id, 'creator_id' => $creator->id],
             [
                 'notes' => $data['notes'] ?? null,
-                'amount' => $data['amount'] ?? 0,
+                'amount' => $this->defaultCreatorAmount($campaign),
                 'delivery_type' => $data['delivery_type'] ?? 'ugc',
                 'application_status' => ApplicationStatus::Pending,
                 'delivery_status' => DeliveryStatus::Pending,
@@ -180,17 +199,27 @@ class CampaignController extends Controller
             'delivery_date' => ['nullable', 'date'],
             'script' => ['nullable', 'string'],
             'video_url' => ['nullable', 'string', 'max:2048'],
+            'video_file_size' => ['nullable', 'integer', 'min:0'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'published_link' => ['nullable', 'string', 'max:2048'],
         ]);
 
-        $contentFields = array_intersect_key($data, array_flip(['script', 'video_url', 'image_url', 'published_link']));
-        unset($data['script'], $data['video_url'], $data['image_url'], $data['published_link']);
+        $contentFields = array_intersect_key($data, array_flip(['script', 'video_url', 'video_file_size', 'image_url', 'published_link']));
+        unset($data['script'], $data['video_url'], $data['video_file_size'], $data['image_url'], $data['published_link']);
 
-        if (isset($data['script_status']) && $data['script_status'] === StageApprovalStatus::Submitted) {
+        $campaignCreator->loadMissing('campaign');
+        $approvedStatus = ApplicationStatus::Approved->value;
+        $nextStatus = isset($data['application_status'])
+            ? ($data['application_status'] instanceof ApplicationStatus ? $data['application_status']->value : $data['application_status'])
+            : null;
+        if ($nextStatus === $approvedStatus && (! array_key_exists('amount', $data) || $data['amount'] === null)) {
+            $data['amount'] = $this->defaultCreatorAmount($campaignCreator->campaign);
+        }
+
+        if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
             $data['script_submitted_at'] = now();
         }
-        if (isset($data['video_status']) && $data['video_status'] === StageApprovalStatus::Submitted) {
+        if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Submitted)) {
             $data['video_submitted_at'] = now();
         }
 
@@ -203,25 +232,30 @@ class CampaignController extends Controller
             );
         }
 
-        $creatorUserId = $campaignCreator->creator?->user_id;
-        $statusValue = isset($data['application_status'])
-            ? ($data['application_status'] instanceof ApplicationStatus ? $data['application_status']->value : $data['application_status'])
-            : null;
-        if ($creatorUserId && in_array($statusValue, [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], true)) {
-            $approved = $statusValue === ApplicationStatus::Approved->value;
-            $this->notifications->send([
-                'user_id' => $creatorUserId,
-                'creator_id' => $campaignCreator->creator_id,
-                'campaign_id' => $campaignCreator->campaign_id,
-                'title' => $approved ? __('auth.application_approved_title') : __('auth.application_rejected_title'),
-                'message' => $approved
-                    ? __('auth.application_approved')
-                    : (($data['rejection_reason'] ?? '') ?: __('auth.application_rejected')),
-                'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
-                'target_role' => NotificationTargetRole::Creator,
-                'link' => '/creators/'.$campaignCreator->creator_id,
+        $campaignCreator->unsetRelation('content');
+        $campaignCreator->load('content');
+
+        if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
+            $content = $campaignCreator->content
+                ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
+            SubmissionVersioning::append($content, 'script', [
+                'script' => $content->script,
             ]);
         }
+
+        if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Submitted)) {
+            $content = $campaignCreator->content
+                ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
+            if ($content->video_url) {
+                SubmissionVersioning::append($content, 'video', [
+                    'video_url' => $content->video_url,
+                    'video_file_size' => $content->video_file_size,
+                ]);
+            }
+        }
+
+        $campaignCreator->loadMissing(['creator', 'campaign', 'content']);
+        $this->notifyParticipationChange($campaignCreator, $data);
 
         return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
     }
@@ -244,7 +278,9 @@ class CampaignController extends Controller
         $row = CampaignCreator::query()->updateOrCreate(
             ['campaign_id' => $campaign->id, 'creator_id' => $data['creator_id']],
             [
-                'amount' => $data['amount'] ?? 0,
+                'amount' => array_key_exists('amount', $data) && $data['amount'] !== null
+                    ? $data['amount']
+                    : $this->defaultCreatorAmount($campaign),
                 'delivery_type' => $data['delivery_type'] ?? 'ugc',
                 'application_status' => ApplicationStatus::Approved,
                 'delivery_status' => DeliveryStatus::Pending,
@@ -269,7 +305,7 @@ class CampaignController extends Controller
             'total_budget' => ['nullable', 'numeric'],
             'agency_fee' => ['nullable', 'numeric'],
             'creators_budget' => ['nullable', 'numeric'],
-            'creator_cache' => ['nullable', 'numeric'],
+            'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter')), 'nullable', 'numeric', 'min:0'],
             'status' => ['nullable', Rule::enum(CampaignStatus::class)],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'is_secret' => ['sometimes', 'boolean'],
@@ -285,7 +321,10 @@ class CampaignController extends Controller
         if ($user->role === UserRole::Company) {
             $data['company_id'] = $user->companyUser?->company_id;
         }
-        abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
+        if ($creating) {
+            abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
+            Company::assertApproved((int) $data['company_id']);
+        }
         $data['status'] ??= CampaignStatus::Briefing;
         $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
 
@@ -300,10 +339,12 @@ class CampaignController extends Controller
         return match ($user->role) {
             UserRole::Admin => $query,
             UserRole::Company => $query->where('company_id', $user->companyUser?->company_id),
-            UserRole::Creator => $query->where(function ($builder) use ($user) {
-                $builder->where('is_secret', false)
-                    ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
-            }),
+            UserRole::Creator => $user->creator?->status === CreatorStatus::Active
+                ? $query->where(function ($builder) use ($user) {
+                    $builder->where('is_secret', false)
+                        ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+                })
+                : $query->whereRaw('1 = 0'),
             default => $query->whereRaw('1=0'),
         };
     }
@@ -318,10 +359,132 @@ class CampaignController extends Controller
             return;
         }
         if ($user->role === UserRole::Creator) {
+            abort_unless($user->creator?->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
             if (! $campaign->is_secret || $campaign->campaignCreators()->where('creator_id', $user->creator?->id)->exists()) {
                 return;
             }
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    private function defaultCreatorAmount(Campaign $campaign): float
+    {
+        if ($campaign->is_barter) {
+            return 0.0;
+        }
+
+        return (float) ($campaign->creator_cache ?? 0);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function notifyParticipationChange(CampaignCreator $campaignCreator, array $data): void
+    {
+        $creatorId = $campaignCreator->creator_id;
+        $campaignId = (int) $campaignCreator->campaign_id;
+        $companyId = (int) ($campaignCreator->campaign?->company_id ?? 0);
+        $campaignName = $campaignCreator->campaign?->name ?? '';
+        $companyLink = '/campaigns/'.$campaignId;
+        $creatorLink = '/creators/'.$creatorId.'?tab=campaigns';
+        $application = NotificationService::value($data['application_status'] ?? null);
+        $script = NotificationService::value($data['script_status'] ?? null);
+        $video = NotificationService::value($data['video_status'] ?? null);
+        $delivery = NotificationService::value($data['delivery_status'] ?? null);
+        $materialApproved = $delivery === DeliveryStatus::Approved->value
+            || $video === StageApprovalStatus::Approved->value;
+        $videoRevision = $video === StageApprovalStatus::Revision->value
+            || $delivery === DeliveryStatus::Revision->value;
+
+        if (in_array($application, [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], true)) {
+            $approved = $application === ApplicationStatus::Approved->value;
+            $this->notifications->notifyCreator($creatorId, [
+                'campaign_id' => $campaignId,
+                'title' => $approved ? __('auth.application_approved_title') : __('auth.application_rejected_title'),
+                'message' => $approved
+                    ? __('auth.application_approved')
+                    : (($data['rejection_reason'] ?? '') ?: __('auth.application_rejected')),
+                'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
+                'link' => $creatorLink,
+            ]);
+        }
+
+        if ($script === StageApprovalStatus::Approved->value && ! $materialApproved) {
+            $this->notifications->notifyCreator($creatorId, [
+                'campaign_id' => $campaignId,
+                'title' => __('auth.script_approved_title'),
+                'message' => __('auth.script_approved', ['title' => $campaignName, 'project' => $campaignName]),
+                'type' => NotificationType::Approval,
+                'link' => $creatorLink,
+            ]);
+        }
+
+        if ($materialApproved) {
+            $this->notifications->notifyCreator($creatorId, [
+                'campaign_id' => $campaignId,
+                'title' => __('auth.material_approved_title'),
+                'message' => __('auth.material_approved', ['title' => $campaignName, 'project' => $campaignName]),
+                'type' => NotificationType::Approval,
+                'link' => $creatorLink,
+            ]);
+        }
+
+        if ($script === StageApprovalStatus::Revision->value && ! $videoRevision) {
+            $this->notifications->notifyCreator($creatorId, [
+                'campaign_id' => $campaignId,
+                'title' => __('auth.material_revision_title'),
+                'message' => ($data['script_feedback'] ?? $data['revision_details'] ?? '')
+                    ?: __('auth.material_revision', ['title' => $campaignName]),
+                'type' => NotificationType::DeliveryReview,
+                'link' => $creatorLink,
+            ]);
+        }
+
+        if ($videoRevision) {
+            $this->notifications->notifyCreator($creatorId, [
+                'campaign_id' => $campaignId,
+                'title' => __('auth.material_revision_title'),
+                'message' => ($data['video_feedback'] ?? $data['revision_details'] ?? '')
+                    ?: __('auth.material_revision', ['title' => $campaignName]),
+                'type' => NotificationType::DeliveryReview,
+                'link' => $creatorLink,
+            ]);
+        }
+
+        if ($companyId && $script === StageApprovalStatus::Submitted->value) {
+            $this->notifications->notifyCompany($companyId, [
+                'creator_id' => $creatorId,
+                'campaign_id' => $campaignId,
+                'title' => __('auth.script_submitted_title'),
+                'message' => __('auth.script_submitted', ['title' => $campaignName, 'project' => $campaignName]),
+                'type' => NotificationType::DeliveryReview,
+                'link' => $companyLink,
+            ]);
+            $this->notifications->notifyAdmins(
+                __('auth.script_submitted_title'),
+                __('auth.script_submitted', ['title' => $campaignName, 'project' => $campaignName]),
+                NotificationType::DeliveryReview,
+                $companyLink,
+                ['creator_id' => $creatorId, 'campaign_id' => $campaignId],
+            );
+        }
+
+        if ($companyId && ($video === StageApprovalStatus::Submitted->value || $delivery === DeliveryStatus::Sent->value)) {
+            $this->notifications->notifyCompany($companyId, [
+                'creator_id' => $creatorId,
+                'campaign_id' => $campaignId,
+                'title' => __('auth.video_submitted_title'),
+                'message' => __('auth.video_submitted', ['title' => $campaignName, 'project' => $campaignName]),
+                'type' => NotificationType::DeliveryReview,
+                'link' => $companyLink,
+            ]);
+            $this->notifications->notifyAdmins(
+                __('auth.video_submitted_title'),
+                __('auth.video_submitted', ['title' => $campaignName, 'project' => $campaignName]),
+                NotificationType::DeliveryReview,
+                $companyLink,
+                ['creator_id' => $creatorId, 'campaign_id' => $campaignId],
+            );
+        }
     }
 }

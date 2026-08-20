@@ -15,6 +15,7 @@ import {
   Edit3,
   ExternalLink,
   Eye,
+  FileText,
   Film,
   Instagram,
   Layers,
@@ -25,12 +26,14 @@ import {
   Plus,
   Radio,
   Repeat,
+  ScrollText,
   Search,
   Sparkles,
   Trash2,
   UserCheck,
   Users,
   Video,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -38,6 +41,7 @@ import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import type { Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
@@ -57,6 +61,9 @@ const TYPE_STYLE: Record<string, { bg: string; text: string; border: string; ico
   tiktok: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-100", icon: Clapperboard },
   youtube: { bg: "bg-red-50", text: "text-red-700", border: "border-red-100", icon: Video },
   live: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-100", icon: Radio },
+  live_instagram: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-100", icon: Radio },
+  live_tiktok: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-100", icon: Radio },
+  live_youtube: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-100", icon: Radio },
   pinterest: { bg: "bg-pink-50", text: "text-pink-700", border: "border-pink-100", icon: Pin },
   blog: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-100", icon: Newspaper },
   podcast: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-100", icon: Mic },
@@ -73,6 +80,9 @@ const QUOTA_PILLS: { keys: string[]; type: string; labelKey: string }[] = [
   { keys: ["tiktok", "tiktoks"], type: "tiktok", labelKey: "quotaTiktok" },
   { keys: ["youtube"], type: "youtube", labelKey: "quotaYoutube" },
   { keys: ["live", "lives"], type: "live", labelKey: "quotaLive" },
+  { keys: ["live_instagram"], type: "live_instagram", labelKey: "quotaLiveInstagram" },
+  { keys: ["live_tiktok"], type: "live_tiktok", labelKey: "quotaLiveTiktok" },
+  { keys: ["live_youtube"], type: "live_youtube", labelKey: "quotaLiveYoutube" },
   { keys: ["pinterest", "pins"], type: "pinterest", labelKey: "quotaPinterest" },
   { keys: ["blog", "artigos", "articles"], type: "blog", labelKey: "quotaBlog" },
   { keys: ["podcast", "podcasts"], type: "podcast", labelKey: "quotaPodcast" },
@@ -138,35 +148,6 @@ function itemInMonth(item: PlanningItem, month: string) {
   return item.month === month || Boolean(item.planned_date?.startsWith(month));
 }
 
-function getCalendarDays(selectedMonth: string) {
-  const [yearStr, monthStr] = selectedMonth.split("-");
-  const year = Number(yearStr);
-  const monthIndex = Number(monthStr) - 1;
-  const firstDay = new Date(year, monthIndex, 1);
-  const lastDay = new Date(year, monthIndex + 1, 0);
-  const startWeek = (firstDay.getDay() + 6) % 7;
-  const daysInMonth = lastDay.getDate();
-  const grid: { dateStr: string; dayNumber: number; isCurrentMonth: boolean }[] = [];
-
-  const prevLast = new Date(year, monthIndex, 0).getDate();
-  for (let i = startWeek - 1; i >= 0; i -= 1) {
-    const day = prevLast - i;
-    const prevM = monthIndex === 0 ? 12 : monthIndex;
-    const prevY = monthIndex === 0 ? year - 1 : year;
-    grid.push({ dateStr: `${prevY}-${String(prevM).padStart(2, "0")}-${String(day).padStart(2, "0")}`, dayNumber: day, isCurrentMonth: false });
-  }
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    grid.push({ dateStr: `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, dayNumber: day, isCurrentMonth: true });
-  }
-  const remaining = grid.length <= 35 ? 35 - grid.length : 42 - grid.length;
-  for (let day = 1; day <= remaining; day += 1) {
-    const nextM = monthIndex === 11 ? 1 : monthIndex + 2;
-    const nextY = monthIndex === 11 ? year + 1 : year;
-    grid.push({ dateStr: `${nextY}-${String(nextM).padStart(2, "0")}-${String(day).padStart(2, "0")}`, dayNumber: day, isCurrentMonth: false });
-  }
-  return grid;
-}
-
 function itemStatusClass(status: string) {
   if (status === "published") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (status === "approved") return "bg-blue-50 text-blue-700 border-blue-200";
@@ -196,6 +177,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const locale = intlLocale(normalizeLocale(i18n.language));
   const canManage = user.role === "admin" || user.role === "company";
   const isAdmin = user.role === "admin";
+  const isCreator = user.role === "creator";
 
   const [contracts, setContracts] = useState<RecurringContract[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -227,7 +209,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
 
   useEffect(() => {
     load();
-    api.companies().then((res) => setCompanies(res.data)).catch(() => undefined);
+    api.companies("?status=active").then((res) => setCompanies(res.data)).catch(() => undefined);
     api.creators().then((res) => setCreators(res.data)).catch(() => undefined);
   }, []);
 
@@ -295,6 +277,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       setEditingContract(null);
       setContractForm({
         ...EMPTY_CONTRACT,
+        monthly_fee: "0",
         company_id: user.role === "company" && user.company?.id ? String(user.company.id) : companies[0] ? String(companies[0].id) : "",
         start_date: new Date().toISOString().slice(0, 10),
       });
@@ -309,7 +292,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         contract_id: String(opts.item.recurring_contract_id),
         creator_id: String(opts.item.creator_id),
         content_type: opts.item.content_type || "reel",
-        title: opts.item.title,
+        title: /\s+\d+\/\d+$/.test((opts.item.title || "").trim()) ? "" : (opts.item.title || ""),
         description: opts.item.description || "",
         briefing: opts.item.briefing || opts.item.briefing_note || "",
         planned_date: opts.item.planned_date || "",
@@ -338,9 +321,21 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       await alertWarning(t("recurring.companyRequired"), t("recurring.companyRequiredText"));
       return;
     }
+    const companyId = isAdmin ? Number(contractForm.company_id) : user.company?.id;
+    if (!editingContract) {
+      const selectedCompany = isAdmin
+        ? companies.find((company) => company.id === companyId)
+        : user.company
+          ? { id: user.company.id, status: user.company.status }
+          : companies.find((company) => company.id === companyId);
+      if (selectedCompany && selectedCompany.status !== "active") {
+        await alertWarning(t("recurring.companyNotApproved"), t("recurring.companyNotApprovedText"));
+        return;
+      }
+    }
     const body = {
       title: contractForm.title,
-      company_id: isAdmin ? Number(contractForm.company_id) : user.company?.id,
+      company_id: companyId,
       monthly_fee: contractForm.monthly_fee ? Number(contractForm.monthly_fee) : null,
       objective: contractForm.objective || null,
       start_date: contractForm.start_date || null,
@@ -447,28 +442,28 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
 
   return (
     <div className="space-y-8 pb-8">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider text-brand-primary uppercase">
-            <Repeat size={14} /> {t("recurring.breadcrumb")}
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider whitespace-nowrap text-brand-primary uppercase">
+            <Repeat size={14} className="shrink-0" /> {t("recurring.breadcrumb")}
           </div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 lg:text-3xl">{t("recurring.title")}</h2>
-          <p className="mt-1 text-sm text-slate-500">{t("recurring.subtitle")}</p>
+          <h2 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">{t("recurring.title")}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">{t("recurring.subtitle")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
           {isAdmin ? (
-            <button type="button" onClick={onReset} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 shadow-xs transition-colors hover:bg-rose-100">
-              <Trash2 size={15} /> {t("recurring.reset")}
+            <button type="button" onClick={onReset} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 shadow-xs transition-colors hover:bg-rose-100 sm:w-auto">
+              <Trash2 size={15} className="shrink-0" /> {t("recurring.reset")}
             </button>
           ) : null}
           {canManage ? (
-            <button type="button" onClick={() => openContentModal()} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
-              <Plus size={16} className="text-slate-500" /> {t("recurring.addContent")}
+            <button type="button" onClick={() => openContentModal()} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:w-auto">
+              <Plus size={16} className="shrink-0 text-slate-500" /> {t("recurring.addContent")}
             </button>
           ) : null}
           {canManage ? (
-            <button type="button" onClick={() => openContractModal()} className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 transition-all hover:bg-indigo-600">
-              <Plus size={16} /> {t("recurring.new")}
+            <button type="button" onClick={() => openContractModal()} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 transition-all hover:bg-indigo-600 sm:w-auto">
+              <Plus size={16} className="shrink-0" /> {t("recurring.new")}
             </button>
           ) : null}
         </div>
@@ -486,11 +481,22 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
           icon={CalendarCheck}
           iconClass="bg-amber-50 text-amber-600"
         />
-        <KpiCard label={t("recurring.kpiRevenue")} value={formatCurrency(activeContracts.reduce((sum, c) => sum + Number(c.monthly_fee || 0), 0))} hint={t("recurring.kpiRevenueHint")} hintClass="text-slate-400" icon={DollarSign} iconClass="bg-violet-50 text-violet-600" />
+        {isCreator ? (
+          <KpiCard
+            label={t("recurring.kpiMyCache")}
+            value={formatCurrency(contracts.reduce((sum, contract) => sum + (contract.creators || []).reduce((inner, row) => inner + creatorCost(row), 0), 0))}
+            hint={t("recurring.kpiMyCacheHint")}
+            hintClass="text-slate-400"
+            icon={DollarSign}
+            iconClass="bg-violet-50 text-violet-600"
+          />
+        ) : (
+          <KpiCard label={t("recurring.kpiRevenue")} value={formatCurrency(activeContracts.reduce((sum, c) => sum + Number(c.monthly_fee || 0), 0))} hint={t("recurring.kpiRevenueHint")} hintClass="text-slate-400" icon={DollarSign} iconClass="bg-violet-50 text-violet-600" />
+        )}
       </div>
 
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 md:flex-row md:items-center">
-        <div className="flex flex-wrap gap-4 lg:gap-8">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-200">
+        <div className="flex min-w-0 flex-1 items-end gap-4 overflow-x-auto hide-scrollbar lg:gap-8">
           {([
             ["contracts", Building2, t("recurring.tabContracts"), contracts.length],
             ["planning", Layers, t("recurring.tabPlanning"), contentItems.length],
@@ -502,11 +508,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               type="button"
               onClick={() => setInnerTab(id)}
               className={cn(
-                "relative flex cursor-pointer items-center gap-2 pb-4 text-sm font-bold transition-all",
+                "relative flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap pb-4 text-sm font-bold transition-all",
                 innerTab === id ? "border-b-2 border-brand-primary text-brand-primary" : "border-b-2 border-transparent text-slate-500 hover:text-slate-800",
               )}
             >
-              <Icon size={16} />
+              <Icon size={16} className="shrink-0" />
               {label}
               {count != null ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600">{count}</span> : null}
             </button>
@@ -516,8 +522,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
           <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50" title={t("recurring.prevMonth")}>
             <ChevronLeft size={16} />
           </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm">
-            <Calendar size={14} className="text-slate-400" />
+          <label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm">
+            <Calendar size={14} className="shrink-0 text-slate-400" />
             <span className="capitalize">{monthLabel}</span>
             <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="sr-only" />
           </label>
@@ -561,63 +567,56 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 const months = contractMonths(contract.start_date, contract.end_date);
                 const margin = fee > 0 ? Math.round((remaining / fee) * 100) : 0;
                 return (
-                  <article key={contract.id} className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-all hover:shadow-md">
-                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-black tracking-wider text-brand-primary uppercase">{contract.company?.name || t("campaigns.company")}</span>
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase", contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-600")}>
-                            {contract.status === "active" ? "● " : ""}
-                            {t(`status.${contract.status}`, { defaultValue: contract.status })}
-                          </span>
-                          {fee ? <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-700">{t("recurring.monthly", { value: formatCurrency(fee) })}</span> : null}
-                          {contract.end_date && months > 1 && fee ? <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">{t("recurring.periodTotal", { value: formatCurrency(fee * months), months })}</span> : null}
-                          {fee ? (
-                            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-black", remaining >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700")}>
-                              {t("recurring.balance", { value: formatCurrency(remaining) })}
+                  <article key={contract.id} className="@container flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-all hover:shadow-md">
+                    <div className="border-b border-slate-100 p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className="max-w-full truncate rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-black tracking-wider text-brand-primary uppercase">{contract.company?.name || t("campaigns.company")}</span>
+                            <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase", contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-600")}>
+                              {contract.status === "active" ? "● " : ""}
+                              {t(`status.${contract.status}`, { defaultValue: contract.status })}
                             </span>
-                          ) : null}
+                            {canManage && fee ? <span className="max-w-full truncate rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-700">{t("recurring.monthly", { value: formatCurrency(fee) })}</span> : null}
+                            {canManage && contract.end_date && months > 1 && fee ? <span className="max-w-full truncate rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">{t("recurring.periodTotal", { value: formatCurrency(fee * months), months })}</span> : null}
+                            {canManage && fee ? (
+                              <span className={cn("max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-black", remaining >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700")}>
+                                {t("recurring.balance", { value: formatCurrency(remaining) })}
+                              </span>
+                            ) : null}
+                          </div>
+                          <h3 className="mt-1 truncate text-lg font-bold text-slate-900 transition-colors hover:text-brand-primary">
+                            <Link href={`/recurring/${contract.id}`}>{contract.title}</Link>
+                          </h3>
+                          {contract.objective ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{contract.objective}</p> : null}
                         </div>
-                        <h3 className="mt-1 text-lg font-bold text-slate-900 transition-colors hover:text-brand-primary">
-                          <Link href={`/recurring/${contract.id}`}>{contract.title}</Link>
-                        </h3>
-                        {contract.objective ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{contract.objective}</p> : null}
-                        {fee > 0 ? (
-                          <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5 sm:grid-cols-3">
-                            <div className="rounded-lg border border-slate-200/60 bg-white/80 p-2">
-                              <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurring.budgetMonthly")}</span>
-                              <div className="mt-0.5 flex items-baseline gap-1">
-                                <span className="text-sm font-black text-slate-900">{formatCurrency(fee)}</span>
-                                <span className="text-[9px] text-slate-400">{t("recurring.perMonth")}</span>
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-slate-200/60 bg-white/80 p-2">
-                              <span className="block truncate text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurring.creatorsLabel", { count: contract.creators?.length || 0 })}</span>
-                              <div className="mt-0.5 flex items-baseline gap-1">
-                                <span className="text-sm font-black text-slate-700">{formatCurrency(cost)}</span>
-                                <span className="text-[9px] text-slate-400">{t("recurring.perMonth")}</span>
-                              </div>
-                            </div>
-                            <div className={cn("rounded-lg border p-2", remaining >= 0 ? "border-emerald-200/70 bg-emerald-50/70" : "border-rose-200/70 bg-rose-50/70")}>
-                              <span className={cn("block truncate text-[9px] font-extrabold tracking-wider uppercase", remaining >= 0 ? "text-emerald-700" : "text-rose-700")}>{t("recurring.remaining")}</span>
-                              <div className="mt-0.5 flex items-baseline gap-1">
-                                <span className={cn("text-sm font-black", remaining >= 0 ? "text-emerald-700" : "text-rose-700")}>{formatCurrency(remaining)}</span>
-                                <span className="text-[9px] font-semibold text-slate-400">{remaining >= 0 ? `+${margin}%` : t("recurring.deficit")}</span>
-                              </div>
-                            </div>
+                        {canManage ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button type="button" onClick={() => openContractModal(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" title={t("recurring.edit")}>
+                              <Edit3 size={16} />
+                            </button>
+                            {isAdmin ? (
+                              <button type="button" onClick={() => onDeleteContract(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600" title={t("recurring.delete")}>
+                                <Trash2 size={16} />
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
-                      {canManage ? (
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => openContractModal(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" title={t("recurring.edit")}>
-                            <Edit3 size={16} />
-                          </button>
-                          {isAdmin ? (
-                            <button type="button" onClick={() => onDeleteContract(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600" title={t("recurring.delete")}>
-                              <Trash2 size={16} />
-                            </button>
-                          ) : null}
+                      {canManage && fee > 0 ? (
+                        <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5 @[520px]:grid-cols-3">
+                          <BudgetCell label={t("recurring.budgetMonthly")} value={formatCurrency(fee)} hint={t("recurring.perMonth")} />
+                          <BudgetCell label={t("recurring.creatorsLabel", { count: contract.creators?.length || 0 })} value={formatCurrency(cost)} hint={t("recurring.perMonth")} />
+                          <BudgetCell
+                            label={t("recurring.remaining")}
+                            value={formatCurrency(remaining)}
+                            hint={remaining >= 0 ? `+${margin}%` : t("recurring.deficit")}
+                            tone={remaining >= 0 ? "positive" : "negative"}
+                          />
+                        </div>
+                      ) : isCreator && cost > 0 ? (
+                        <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5">
+                          <BudgetCell label={t("recurringDetail.monthlyCache")} value={formatCurrency(cost)} hint={t("recurring.perMonth")} />
                         </div>
                       ) : null}
                     </div>
@@ -628,10 +627,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         {QUOTA_PILLS.map((pill) => {
                           const count = (contract.creators || []).reduce((sum, row) => sum + quotaValue(row.monthly_deliverables, pill.keys), 0);
                           if (!count) return null;
-                          const style = TYPE_STYLE[pill.type];
+                          const style = TYPE_STYLE[pill.type] || TYPE_STYLE.other;
                           const Icon = style.icon;
                           return (
-                            <span key={pill.type} className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-bold", style.bg, style.text, style.border)}>
+                            <span key={pill.type} className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-bold whitespace-nowrap", style.bg, style.text, style.border)}>
                               <Icon size={13} /> {t(`recurring.${pill.labelKey}`, { count })}
                             </span>
                           );
@@ -639,10 +638,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 p-4 text-xs">
-                      <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 p-4 text-xs @[520px]:flex-row @[520px]:items-center @[520px]:justify-between">
+                      <div className="flex min-w-0 flex-wrap items-center gap-3">
                         {(contract.creators || []).length ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
                               {(contract.creators || []).slice(0, 10).map((row) => (
                                 <div key={row.id} className="relative inline-block shrink-0 rounded-full ring-2 ring-white">
@@ -650,7 +649,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                                 </div>
                               ))}
                             </div>
-                            <span className="rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-xs font-bold text-slate-700">
+                            <span className="shrink-0 rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-xs font-bold whitespace-nowrap text-slate-700">
                               {t((contract.creators || []).length === 1 ? "recurring.creatorOne" : "recurring.creatorMany", { count: (contract.creators || []).length })}
                             </span>
                           </div>
@@ -661,19 +660,19 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         )}
                         {contract.start_date ? (
                           <>
-                            <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-                            <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
-                              <Calendar size={13} className="text-slate-400" />
+                            <div className="hidden h-4 w-px bg-slate-200 @[520px]:block" />
+                            <span className="flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap text-slate-500">
+                              <Calendar size={13} className="shrink-0 text-slate-400" />
                               {t("recurring.start", { date: new Date(`${contract.start_date}T00:00:00`).toLocaleDateString(locale) })}
                             </span>
                           </>
                         ) : null}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Link href={`/recurring/${contract.id}`} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-100 hover:bg-indigo-600">
-                          <ExternalLink size={13} /> {t("recurring.manage")}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href={`/recurring/${contract.id}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-primary px-3.5 py-1.5 text-xs font-bold whitespace-nowrap text-white shadow-sm shadow-indigo-100 hover:bg-indigo-600">
+                          <ExternalLink size={13} className="shrink-0" /> {t("recurring.manage")}
                         </Link>
-                        <button type="button" onClick={() => setDetails(contract)} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                        <button type="button" onClick={() => setDetails(contract)} className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold whitespace-nowrap text-slate-700 hover:bg-slate-100">
                           {t("recurring.details")}
                         </button>
                         <button
@@ -682,9 +681,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                             setInnerTab("planning");
                             setCompanyFilter(String(contract.company_id));
                           }}
-                          className="inline-flex cursor-pointer items-center gap-1 text-xs font-bold text-brand-primary hover:underline"
+                          className="inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-bold whitespace-nowrap text-brand-primary hover:underline"
                         >
-                          {t("recurring.viewGrid")} <ChevronRight size={14} />
+                          {t("recurring.viewGrid")} <ChevronRight size={14} className="shrink-0" />
                         </button>
                       </div>
                     </div>
@@ -778,7 +777,25 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                                 {item.title}
                               </button>
                               {item.description ? <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{item.description}</p> : null}
-                              {item.briefing || item.briefing_note ? <p className="mt-1.5 line-clamp-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[10px] text-slate-500 italic">&quot;{item.briefing || item.briefing_note}&quot;</p> : null}
+                              {item.briefing || item.briefing_note || item.script || item.references ? (
+                                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                                  {item.briefing || item.briefing_note ? (
+                                    <button type="button" onClick={() => setViewingItem(item)} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold whitespace-nowrap text-slate-700 hover:border-indigo-200 hover:text-brand-primary">
+                                      <FileText size={11} /> {t("recurringDetail.viewBriefing")}
+                                    </button>
+                                  ) : null}
+                                  {item.script ? (
+                                    <button type="button" onClick={() => setViewingItem(item)} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-bold whitespace-nowrap text-brand-primary hover:border-indigo-200 hover:bg-white">
+                                      <ScrollText size={11} /> {t("recurringDetail.viewScript")}
+                                    </button>
+                                  ) : null}
+                                  {item.references ? (
+                                    <button type="button" onClick={() => setViewingItem(item)} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold whitespace-nowrap text-indigo-600 hover:bg-indigo-50">
+                                      <ExternalLink size={11} /> {t("recurringDetail.viewReferences")}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                             <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-400">
                               <span className="font-semibold text-slate-600">{item.planned_date ? t("recurring.dateLabel", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) }) : t("recurring.noDate")}</span>
@@ -815,41 +832,48 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             </div>
           </div>
           <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
-            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/70 py-3 text-center text-xs font-extrabold tracking-wider text-slate-500 uppercase">
-              {[t("recurring.weekMon"), t("recurring.weekTue"), t("recurring.weekWed"), t("recurring.weekThu"), t("recurring.weekFri"), t("recurring.weekSat"), t("recurring.weekSun")].map((day) => (
-                <div key={day}>{day}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 divide-x divide-y divide-slate-100">
-              {getCalendarDays(selectedMonth).map((cell) => {
-                const dayItems = filteredItems.filter((item) => item.planned_date === cell.dateStr);
-                const isToday = cell.dateStr === new Date().toISOString().slice(0, 10);
-                return (
-                  <div key={cell.dateStr} className={cn("group flex min-h-[120px] flex-col justify-between p-2", cell.isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-300")}>
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold", isToday ? "bg-brand-primary text-white" : cell.isCurrentMonth ? "text-slate-700" : "text-slate-300")}>{cell.dayNumber}</span>
-                        {cell.isCurrentMonth && canManage ? (
-                          <button type="button" onClick={() => openContentModal({ date: cell.dateStr })} className="cursor-pointer rounded p-1 text-[10px] font-bold text-brand-primary opacity-0 transition-all group-hover:opacity-100 hover:bg-indigo-50">
-                            {t("recurring.addDay")}
-                          </button>
-                        ) : null}
+            <div className="overflow-x-auto">
+              <div className="min-w-[640px]">
+                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/70 py-3 text-center text-xs font-extrabold tracking-wider text-slate-500 uppercase">
+                  {[t("recurring.weekMon"), t("recurring.weekTue"), t("recurring.weekWed"), t("recurring.weekThu"), t("recurring.weekFri"), t("recurring.weekSat"), t("recurring.weekSun")].map((day) => (
+                    <div key={day}>{day}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 auto-rows-[9.5rem] divide-x divide-y divide-slate-100">
+                  {getCalendarDays(selectedMonth).map((cell) => {
+                    const dayItems = filteredItems.filter((item) => toDateKey(item.planned_date) === cell.dateStr);
+                    const isToday = cell.dateStr === localDateStr();
+                    return (
+                      <div key={cell.dateStr} className={cn("group flex h-full min-h-0 flex-col overflow-hidden p-2", cell.isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-300")}>
+                        <div className="mb-1.5 flex shrink-0 items-center justify-between">
+                          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold", isToday ? "bg-brand-primary text-white" : cell.isCurrentMonth ? "text-slate-700" : "text-slate-300")}>{cell.dayNumber}</span>
+                          <div className="flex items-center gap-1">
+                            {dayItems.length > 1 ? (
+                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">{dayItems.length}</span>
+                            ) : null}
+                            {cell.isCurrentMonth && canManage ? (
+                              <button type="button" onClick={() => openContentModal({ date: cell.dateStr })} className="cursor-pointer rounded p-1 text-[10px] font-bold text-brand-primary opacity-0 transition-all group-hover:opacity-100 hover:bg-indigo-50">
+                                {t("recurring.addDay")}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
+                          {dayItems.map((item) => (
+                            <button key={item.id} type="button" onClick={() => setViewingItem(item)} className={cn("w-full cursor-pointer rounded-lg border p-1.5 text-left text-[10px] font-bold transition-all hover:scale-[1.02]", itemStatusClass(item.status))}>
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[9px] font-black uppercase opacity-80">{t(`recurring.shortFormats.${item.content_type}`, { defaultValue: item.content_type })}</span>
+                                <span className="truncate text-[9px] font-semibold">{item.creator?.artistic_name}</span>
+                              </div>
+                              <p className="mt-0.5 truncate font-bold">{item.title}</p>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        {dayItems.map((item) => (
-                          <button key={item.id} type="button" onClick={() => setViewingItem(item)} className={cn("w-full cursor-pointer rounded-lg border p-1.5 text-left text-[10px] font-bold transition-all hover:scale-[1.02]", itemStatusClass(item.status))}>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[9px] font-black uppercase opacity-80">{t(`recurring.shortFormats.${item.content_type}`, { defaultValue: item.content_type })}</span>
-                              <span className="truncate text-[9px] font-semibold">{item.creator?.artistic_name}</span>
-                            </div>
-                            <p className="mt-0.5 truncate font-bold">{item.title}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -941,34 +965,166 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       ) : null}
 
       {contractModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <form noValidate onSubmit={onSaveContract} className="w-full max-w-lg space-y-3 rounded-3xl bg-white p-6">
-            <h2 className="text-xl font-black">{editingContract ? t("recurring.modalEdit") : t("recurring.modalTitle")}</h2>
-            <input className="h-11 w-full rounded-xl border px-4" placeholder={t("recurring.contractTitle")} value={contractForm.title} onChange={(e) => setContractForm({ ...contractForm, title: e.target.value })} />
-            {isAdmin ? <Select2Field theme="light" placeholder={t("campaigns.company")} value={contractForm.company_id} options={companies.map((c) => ({ value: String(c.id), label: c.name }))} onChange={(value) => setContractForm({ ...contractForm, company_id: value })} /> : null}
-            <input className="h-11 w-full rounded-xl border px-4" placeholder={t("recurring.fee")} value={contractForm.monthly_fee} onChange={(e) => setContractForm({ ...contractForm, monthly_fee: e.target.value })} />
-            <textarea className="min-h-24 w-full rounded-xl border px-4 py-3" placeholder={t("recurring.objectivePh")} value={contractForm.objective} onChange={(e) => setContractForm({ ...contractForm, objective: e.target.value })} />
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs font-bold text-slate-500">{t("recurring.startDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contractForm.start_date} onChange={(e) => setContractForm({ ...contractForm, start_date: e.target.value })} /></label>
-              <label className="text-xs font-bold text-slate-500">{t("recurring.endDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contractForm.end_date} onChange={(e) => setContractForm({ ...contractForm, end_date: e.target.value })} /></label>
+        <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4">
+          <div className="app-modal-panel relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white p-5 sm:p-6">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-brand-primary">
+                  <Repeat size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">{editingContract ? t("recurring.modalEdit") : t("recurring.modalTitle")}</h3>
+                  <p className="text-xs text-slate-500">{t("recurring.modalSubtitle")}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setContractModal(false)} className="cursor-pointer rounded-lg p-2 text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
             </div>
-            <Select2Field theme="light" placeholder={t("recurring.contractStatus")} value={contractForm.status} options={CONTRACT_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))} onChange={(value) => setContractForm({ ...contractForm, status: value })} />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setContractModal(false)} className="flex-1 rounded-xl border py-3 font-bold">{tc("cancel")}</button>
-              <button className="flex-1 rounded-xl bg-brand-primary py-3 font-bold text-white">{t("recurring.save")}</button>
-            </div>
-          </form>
+            <form noValidate onSubmit={onSaveContract} className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.companyLabel")}</span>
+                  {isAdmin ? (
+                    <Select2Field
+                      theme="light"
+                      placeholder={t("recurring.companyPh")}
+                      value={contractForm.company_id}
+                      options={companies.map((company) => ({ value: String(company.id), label: company.name }))}
+                      onChange={(value) => setContractForm({ ...contractForm, company_id: value })}
+                      triggerClassName="h-10 rounded-xl px-3.5 text-xs font-bold text-slate-800"
+                    />
+                  ) : (
+                    <input
+                      readOnly
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs font-bold text-slate-800 outline-none"
+                      value={user.company?.name || companies.find((company) => String(company.id) === contractForm.company_id)?.name || ""}
+                    />
+                  )}
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.projectTitle")}</span>
+                  <input
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-brand-primary"
+                    placeholder={t("recurring.projectTitlePh")}
+                    value={contractForm.title}
+                    onChange={(e) => setContractForm({ ...contractForm, title: e.target.value })}
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.objectiveLabel")}</span>
+                <textarea
+                  rows={3}
+                  className="h-20 w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 outline-none focus:border-brand-primary"
+                  placeholder={t("recurring.objectivePh")}
+                  value={contractForm.objective}
+                  onChange={(e) => setContractForm({ ...contractForm, objective: e.target.value })}
+                />
+              </label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.startDate")}</span>
+                  <input
+                    type="date"
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary"
+                    value={contractForm.start_date}
+                    onChange={(e) => setContractForm({ ...contractForm, start_date: e.target.value })}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.fee")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary"
+                    placeholder="0"
+                    value={contractForm.monthly_fee}
+                    onChange={(e) => setContractForm({ ...contractForm, monthly_fee: e.target.value })}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.contractStatus")}</span>
+                  <Select2Field
+                    theme="light"
+                    value={contractForm.status}
+                    options={CONTRACT_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))}
+                    onChange={(value) => setContractForm({ ...contractForm, status: value })}
+                    triggerClassName="h-10 rounded-xl px-3.5 text-xs font-bold text-slate-800"
+                  />
+                </label>
+              </div>
+              {editingContract ? (
+                <>
+                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px]">
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span>{t("recurring.projectBudget")}</span>
+                      <span className="font-bold text-slate-800">{formatCurrency(Number(contractForm.monthly_fee || 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span>{t("recurring.creatorsCost", { count: editingContract.creators?.length || 0 })}</span>
+                      <span className="font-bold text-slate-700">{formatCurrency((editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
+                      <span className="font-bold text-slate-700">{t("recurring.remainingBalance")}</span>
+                      <span className={cn("font-black", Number(contractForm.monthly_fee || 0) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0) >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                        {formatCurrency(Number(contractForm.monthly_fee || 0) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                    <span className="text-xs font-bold tracking-wider text-slate-800 uppercase">{t("recurring.allocatedCreators", { count: editingContract.creators?.length || 0 })}</span>
+                    <Link href={`/recurring/${editingContract.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline">
+                      <ExternalLink size={12} /> {t("recurring.manageOnProject")}
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-indigo-100/60 bg-indigo-50/50 p-4 text-xs">
+                  <div className="flex items-start gap-2.5">
+                    <div className="shrink-0 rounded-xl bg-brand-primary p-2 text-white">
+                      <Users size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">{t("recurring.allocateTitle")}</h4>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{t("recurring.allocateBody")}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3 border-t border-slate-100 bg-white pt-4">
+                {editingContract ? (
+                  <button
+                    type="button"
+                    onClick={() => { setContractModal(false); void onDeleteContract(editingContract); }}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                  >
+                    <Trash2 size={14} /> {t("recurring.delete")}
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => setContractModal(false)} className="flex-1 cursor-pointer rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  {tc("cancel")}
+                </button>
+                <button type="submit" className="flex-1 cursor-pointer rounded-xl bg-brand-primary py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-600">
+                  {editingContract ? t("recurring.saveChanges") : t("recurring.createSubmit")}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       ) : null}
 
       {contentModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <form noValidate onSubmit={onSaveContent} className="w-full max-w-lg space-y-3 rounded-3xl bg-white p-6">
+        <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-0 sm:p-4">
+          <form noValidate onSubmit={onSaveContent} className="app-modal-panel w-full max-w-lg space-y-3 rounded-3xl bg-white p-6">
             <h2 className="text-xl font-black">{editingItem ? t("recurring.contentEdit") : t("recurring.contentModal")}</h2>
             <Select2Field theme="light" placeholder={t("recurring.tabContracts")} value={contentForm.contract_id} options={contracts.map((c) => ({ value: String(c.id), label: `${c.company?.name || ""} · ${c.title}` }))} onChange={(value) => setContentForm({ ...contentForm, contract_id: value, creator_id: "" })} />
             <Select2Field theme="light" placeholder={t("recurringDetail.creator")} value={contentForm.creator_id} options={contentCreatorOptions.length ? contentCreatorOptions : fallbackCreatorOptions} onChange={(value) => setContentForm({ ...contentForm, creator_id: value })} />
             <Select2Field theme="light" placeholder={t("recurring.contentType")} value={contentForm.content_type} options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))} onChange={(value) => setContentForm({ ...contentForm, content_type: value })} />
-            <input className="h-11 w-full rounded-xl border px-4" placeholder={t("recurring.contentTitle")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
+            <label className="block text-xs font-bold text-slate-600">
+              {t("recurring.contentTitle")}
+              <input className="mt-1 h-11 w-full rounded-xl border px-4 text-sm font-semibold" placeholder={t("recurringDetail.pautaTitlePh")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
+            </label>
             <label className="text-xs font-bold text-slate-500">{t("recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
             <textarea className="min-h-24 w-full rounded-xl border px-4 py-3" placeholder={t("recurring.contentBriefing")} value={contentForm.briefing} onChange={(e) => setContentForm({ ...contentForm, briefing: e.target.value })} />
             <div className="flex gap-2">
@@ -980,12 +1136,12 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       ) : null}
 
       {details ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-6">
+        <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-0 sm:p-4">
+          <div className="app-modal-panel w-full max-w-lg space-y-4 rounded-3xl bg-white p-6">
             <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-black tracking-wider text-brand-primary uppercase">{details.company?.name}</span>
             <h2 className="text-xl font-black text-slate-900">{details.title}</h2>
             {details.objective ? <p className="text-sm text-slate-600">{details.objective}</p> : null}
-            <p className="text-sm font-bold text-slate-800">{details.monthly_fee != null ? formatCurrency(details.monthly_fee) : "—"}</p>
+            {canManage && details.monthly_fee != null ? <p className="text-sm font-bold text-slate-800">{formatCurrency(details.monthly_fee)}</p> : null}
             <div className="flex flex-wrap gap-2">
               {(details.creators || []).map((row) => (
                 <span key={row.id} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold">
@@ -1003,8 +1159,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       ) : null}
 
       {viewingItem ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4">
+          <div className="app-modal-panel relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-100 p-6">
               <div>
                 <div className="mb-1.5 flex items-center gap-2">
@@ -1016,9 +1172,32 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               </div>
               <button type="button" onClick={() => setViewingItem(null)} className="cursor-pointer rounded-lg p-2 text-slate-400 hover:bg-slate-100">{tc("cancel")}</button>
             </div>
-            <div className="space-y-3 p-6 text-sm text-slate-600">
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto p-6 text-sm text-slate-600">
               {viewingItem.description ? <p>{viewingItem.description}</p> : null}
-              {viewingItem.briefing || viewingItem.briefing_note ? <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 italic">{viewingItem.briefing || viewingItem.briefing_note}</p> : null}
+              {viewingItem.briefing || viewingItem.briefing_note ? (
+                <div>
+                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.pautaBriefingLabel")}</span>
+                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingItem.briefing || viewingItem.briefing_note}</p>
+                </div>
+              ) : null}
+              {viewingItem.script ? (
+                <div>
+                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-brand-primary uppercase">{t("recurringDetail.pautaScriptLabel")}</span>
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingItem.script}</p>
+                </div>
+              ) : null}
+              {viewingItem.references ? (
+                <div>
+                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-indigo-600 uppercase">{t("recurringDetail.pautaReferencesLabel")}</span>
+                  {/^https?:\/\//i.test(viewingItem.references) ? (
+                    <a href={viewingItem.references} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
+                      <ExternalLink size={12} className="shrink-0" /> {viewingItem.references}
+                    </a>
+                  ) : (
+                    <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingItem.references}</p>
+                  )}
+                </div>
+              ) : null}
               <p className="text-xs font-bold text-slate-500">{viewingItem.planned_date ? t("recurring.dateLabel", { date: new Date(`${viewingItem.planned_date}T00:00:00`).toLocaleDateString(locale) }) : t("recurring.noDate")}</p>
             </div>
           </div>
@@ -1028,16 +1207,51 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   );
 }
 
+function BudgetCell({ label, value, hint, tone = "neutral" }: { label: string; value: string; hint?: string; tone?: "neutral" | "positive" | "negative" }) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 overflow-hidden rounded-lg border p-2.5",
+        tone === "positive" && "border-emerald-200/70 bg-emerald-50/70",
+        tone === "negative" && "border-rose-200/70 bg-rose-50/70",
+        tone === "neutral" && "border-slate-200/60 bg-white/80",
+      )}
+    >
+      <span
+        className={cn(
+          "block truncate text-[9px] font-extrabold tracking-wider uppercase",
+          tone === "positive" && "text-emerald-700",
+          tone === "negative" && "text-rose-700",
+          tone === "neutral" && "text-slate-400",
+        )}
+      >
+        {label}
+      </span>
+      <p
+        className={cn(
+          "mt-1 break-words text-[13px] leading-tight font-black tabular-nums @[520px]:text-sm",
+          tone === "positive" && "text-emerald-700",
+          tone === "negative" && "text-rose-700",
+          tone === "neutral" && "text-slate-900",
+        )}
+      >
+        {value}
+      </p>
+      {hint ? <span className="mt-0.5 block truncate text-[9px] font-semibold text-slate-400">{hint}</span> : null}
+    </div>
+  );
+}
+
 function KpiCard({ label, value, suffix, hint, hintClass, icon: Icon, iconClass }: { label: string; value: string; suffix?: string; hint: string; hintClass?: string; icon: LucideIcon; iconClass: string }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-      <div>
-        <span className="block text-[11px] font-bold tracking-wider text-slate-400 uppercase">{label}</span>
-        <span className="mt-1 block text-2xl font-black text-slate-900">
+    <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-[11px] font-bold tracking-wider text-slate-400 uppercase">{label}</span>
+        <span className="mt-1 block text-xl leading-tight font-black break-words text-slate-900 tabular-nums sm:text-2xl">
           {value}
           {suffix ? <span className="text-xs font-semibold text-slate-400"> {suffix}</span> : null}
         </span>
-        <span className={cn("mt-0.5 block text-[10px] font-semibold", hintClass || "text-slate-500")}>{hint}</span>
+        <span className={cn("mt-0.5 block truncate text-[10px] font-semibold", hintClass || "text-slate-500")}>{hint}</span>
       </div>
       <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl", iconClass)}>
         <Icon size={22} />

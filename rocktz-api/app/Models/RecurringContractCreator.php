@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'recurring_contract_id',
     'creator_id',
+    'start_date',
+    'end_date',
     'monthly_cache',
     'monthly_fee',
     'deliverables_fee',
@@ -28,6 +30,8 @@ class RecurringContractCreator extends Model
     protected function casts(): array
     {
         return [
+            'start_date' => 'date',
+            'end_date' => 'date',
             'monthly_cache' => 'decimal:2',
             'monthly_fee' => 'decimal:2',
             'deliverables_fee' => 'decimal:2',

@@ -19,7 +19,7 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col gap-2 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm"
+      className="flex flex-col gap-2 rounded-[16px] border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5"
     >
       <span className="text-[12px] font-semibold tracking-[0.05em] text-[#64748B] uppercase">{label}</span>
       <span className="text-[24px] font-bold text-[#0F172A]">{value}</span>
@@ -36,7 +36,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <h1 className="m-0 text-[28px] font-bold text-[#0F172A]">{t("dash.title")}</h1>
+        <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("dash.title")}</h1>
         <p className="mt-1 text-[14px] text-[#64748B]">{t("dash.subtitle")}</p>
       </header>
 
@@ -63,7 +63,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
         <KpiCard label={t("dash.kpiCasting")} value={formatNumber(stats.total_creators)} />
         <KpiCard label={t("dash.kpiCampaigns")} value={stats.running_campaigns ?? 0} />
         <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_campaign_value)} />
@@ -76,7 +76,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
             <h2 className="text-[16px] font-bold text-[#0F172A]">{t("dash.revenue")}</h2>
             <span className="text-[12px] font-bold text-brand-primary">{t("dash.monthly")}</span>
           </div>
-          <div className="h-[320px] w-full p-6">
+          <div className="h-[220px] w-full p-3 sm:h-[320px] sm:p-6">
             {emptyChart ? (
               <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 p-6 text-center">
                 <TrendingUp size={28} className="animate-pulse text-slate-300" />

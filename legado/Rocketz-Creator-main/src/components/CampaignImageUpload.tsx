@@ -170,10 +170,13 @@ export const CampaignImageUpload: React.FC<CampaignImageUploadProps> = ({
       </div>
 
       {/* Main Image Preview & Drop Area */}
-      <div className="relative rounded-2xl border border-slate-200 bg-slate-900/5 overflow-hidden shadow-xs">
+      <div className={cn("relative overflow-hidden border border-slate-200 bg-slate-900/5 shadow-xs", compact ? "rounded-xl" : "rounded-2xl")}>
         {value && !imageError ? (
           /* Preview of Selected Image in Standard 16:9 */
-          <div className="relative w-full aspect-[16/9] bg-slate-950 flex items-center justify-center overflow-hidden group">
+          <div className={cn(
+            "relative w-full bg-slate-950 flex items-center justify-center overflow-hidden group",
+            compact ? "h-28 sm:h-32" : "aspect-[16/9]",
+          )}>
             <img
               src={value}
               alt="Capa da Campanha"
@@ -217,16 +220,33 @@ export const CampaignImageUpload: React.FC<CampaignImageUploadProps> = ({
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             className={cn(
-              "w-full aspect-[16/9] flex flex-col items-center justify-center p-6 text-center transition-all border-2 border-dashed rounded-2xl",
+              "w-full flex items-center justify-center transition-all border-2 border-dashed cursor-pointer",
+              compact ? "min-h-[4.5rem] gap-3 px-4 py-3 rounded-xl" : "aspect-[16/9] flex-col p-6 text-center rounded-2xl",
               dragOver 
                 ? "border-brand-primary bg-indigo-50/50" 
                 : "border-slate-300 hover:border-slate-400 bg-slate-50/50"
             )}
+            onClick={() => !isUploading && fileInputRef.current?.click()}
           >
             {isUploading ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-9 h-9 border-3 border-brand-primary border-t-transparent rounded-full animate-spin" />
+              <div className={cn("flex items-center gap-2", !compact && "flex-col")}>
+                <div className="w-7 h-7 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs font-bold text-slate-700">Enviando e ajustando imagem...</span>
+              </div>
+            ) : compact ? (
+              <div className="flex w-full items-center gap-3 text-left">
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-indigo-50 text-brand-primary flex items-center justify-center">
+                  <UploadCloud size={18} />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-xs font-bold text-slate-800">
+                    Arraste a imagem aqui ou{' '}
+                    <span className="text-brand-primary font-extrabold">clique para enviar</span>
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    16:9 • PNG, JPG ou WEBP até 10MB
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 max-w-sm">
@@ -238,7 +258,7 @@ export const CampaignImageUpload: React.FC<CampaignImageUploadProps> = ({
                     Arraste a imagem da campanha aqui ou{' '}
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
                       className="text-brand-primary hover:underline font-extrabold bg-transparent border-none cursor-pointer p-0"
                     >
                       clique para enviar
@@ -305,8 +325,8 @@ export const CampaignImageUpload: React.FC<CampaignImageUploadProps> = ({
           </button>
         </div>
 
-        {/* Tab 1: Upload Action Button */}
-        {activeTab === 'upload' && (
+        {/* Tab 1: Upload Action Button — omitted in compact (dropzone already opens the file picker) */}
+        {activeTab === 'upload' && !compact && (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -328,6 +348,15 @@ export const CampaignImageUpload: React.FC<CampaignImageUploadProps> = ({
             )}
           </div>
         )}
+        {activeTab === 'upload' && compact && value ? (
+          <button
+            type="button"
+            onClick={handleRemoveImage}
+            className="self-start px-2 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+          >
+            Remover imagem
+          </button>
+        ) : null}
 
         {/* Tab 2: URL Input */}
         {activeTab === 'url' && (

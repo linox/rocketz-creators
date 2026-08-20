@@ -105,3 +105,34 @@ export async function alertConfirm(title: string, text: string, confirmText?: st
   });
   return result.isConfirmed;
 }
+
+export async function promptTextarea(options: {
+  title: string;
+  text?: string;
+  placeholder?: string;
+  confirmText?: string;
+  requiredMessage?: string;
+}): Promise<string | null> {
+  const result = await Swal.fire({
+    ...base(),
+    icon: "question",
+    title: options.title,
+    text: options.text,
+    input: "textarea",
+    inputPlaceholder: options.placeholder ?? "",
+    showCancelButton: true,
+    confirmButtonText: options.confirmText ?? i18n.t("common:confirm"),
+    cancelButtonText: i18n.t("common:cancel"),
+    inputValidator: (value) => {
+      if (!value?.trim()) {
+        return options.requiredMessage ?? i18n.t("common:alerts.incompleteTitle");
+      }
+    },
+  });
+
+  if (!result.isConfirmed || typeof result.value !== "string") {
+    return null;
+  }
+
+  return result.value.trim();
+}

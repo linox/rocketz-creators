@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -29,7 +29,8 @@ import {
   Video,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
-import { Select2Field } from "@/components/Select2Field";
+import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -246,7 +247,6 @@ function CampaignsInner() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState<Record<number, string>>({});
   const [updatingId, setUpdatingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: "", company_id: "", objective: "", total_budget: "", image_url: "", start_date: "", end_date: "" });
 
   async function load() {
     try {
@@ -260,7 +260,7 @@ function CampaignsInner() {
   useEffect(() => {
     load();
     if (isAdmin) {
-      api.companies().then((res) => setCompanies(res.data)).catch(() => undefined);
+      api.companies("?status=active").then((res) => setCompanies(res.data)).catch(() => undefined);
     }
   }, [isAdmin]);
 
@@ -311,32 +311,6 @@ function CampaignsInner() {
     }
   }
 
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    if (!form.name || (isAdmin && !form.company_id)) {
-      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.incomplete"));
-      return;
-    }
-    try {
-      await api.createCampaign({
-        name: form.name,
-        company_id: isAdmin ? Number(form.company_id) : user.company?.id,
-        objective: form.objective,
-        total_budget: form.total_budget ? Number(form.total_budget) : null,
-        image_url: form.image_url || null,
-        start_date: form.start_date || null,
-        end_date: form.end_date || null,
-        status: "briefing",
-      });
-      setOpen(false);
-      setForm({ name: "", company_id: "", objective: "", total_budget: "", image_url: "", start_date: "", end_date: "" });
-      await alertSuccess(t("campaigns.created"));
-      load();
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
   async function approveMaterial(row: MaterialRow) {
     setUpdatingId(row.id);
     try {
@@ -380,11 +354,11 @@ function CampaignsInner() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="m-0 text-[28px] font-bold text-[#0F172A]">{t("campaigns.title")}</h1>
+          <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("campaigns.title")}</h1>
           <p className="mt-1 text-[14px] text-[#64748B]">{t("campaigns.subtitle")}</p>
         </div>
         {canManage ? (
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
             {isAdmin ? (
               <button
                 type="button"
@@ -408,7 +382,7 @@ function CampaignsInner() {
         ) : null}
       </header>
 
-      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-1 hide-scrollbar">
         <button
           type="button"
           onClick={() => setActiveView("active")}
@@ -718,15 +692,11 @@ function CampaignsInner() {
                                     </div>
                                     {row.content?.video_url ? (
                                       <div className="space-y-3">
-                                        <div className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50/50 p-3">
-                                          <div className="flex min-w-0 items-center gap-2.5 truncate">
-                                            <Video size={18} className="shrink-0 text-red-600" />
-                                            <span className="truncate text-xs font-bold text-slate-800">{row.content.video_url}</span>
-                                          </div>
-                                          <a href={row.content.video_url} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">
-                                            {t("campaigns.openVideo")} <ExternalLink size={12} />
-                                          </a>
-                                        </div>
+                                        <CampaignSubmittedVideo
+                                          key={row.id}
+                                          videoUrl={row.content.video_url}
+                                          fileSize={row.content.video_file_size}
+                                        />
                                         {row.content.published_link ? (
                                           <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
                                             <span className="truncate text-xs font-bold text-emerald-900">{t("campaigns.publishedPost")}</span>
@@ -802,64 +772,14 @@ function CampaignsInner() {
         </div>
       ) : null}
 
-      {open ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-          <button type="button" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label={tc("close")} />
-          <div className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white p-5 sm:p-6">
-              <div>
-                <h2 className="text-xl font-bold text-[#0F172A]">{t("campaigns.modalTitle")}</h2>
-                <p className="mt-0.5 text-xs text-[#64748B]">{t("campaigns.modalSubtitle")}</p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} className="p-1 font-bold text-slate-400 hover:text-slate-700">
-                ✕
-              </button>
-            </div>
-            <form noValidate className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6" onSubmit={onCreate}>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.name")}</label>
-                <input placeholder={t("campaigns.namePh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </div>
-              {isAdmin ? (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.company")}</label>
-                  <Select2Field theme="light" placeholder={t("campaigns.companyPh")} value={form.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setForm({ ...form, company_id: value })} />
-                </div>
-              ) : null}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.startDate")}</label>
-                  <input type="date" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.endDate")}</label>
-                  <input type="date" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.objective")}</label>
-                <input className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.objective} onChange={(e) => setForm({ ...form, objective: e.target.value })} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.budget")}</label>
-                <input className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={form.total_budget} onChange={(e) => setForm({ ...form, total_budget: e.target.value })} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.image")}</label>
-                <input placeholder="https://..." className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} />
-              </div>
-              <div className="mt-2 flex justify-end gap-3 border-t border-[#E2E8F0] pt-4">
-                <button type="button" onClick={() => setOpen(false)} className="px-6 py-2.5 text-sm font-bold text-[#64748B] transition-all hover:text-[#0F172A]">
-                  {tc("cancel")}
-                </button>
-                <button className="rounded-lg bg-brand-primary px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:bg-indigo-600 active:scale-95">
-                  {tc("create")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+      <CreateCampaignModal
+        open={open}
+        onClose={() => setOpen(false)}
+        isAdmin={isAdmin}
+        companies={companies}
+        defaultCompanyId={user.company?.id}
+        onCreated={load}
+      />
     </div>
   );
 }
