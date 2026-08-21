@@ -13,6 +13,7 @@ use App\Models\Consent;
 use App\Models\Creator;
 use App\Models\User;
 use App\Support\AppLocale;
+use App\Support\Geo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -46,7 +47,8 @@ class AuthService
                 'artistic_name' => $artisticName,
                 'whatsapp' => $data['whatsapp'],
                 'city' => $data['city'],
-                'state' => Str::upper($data['state']),
+                'country' => Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY),
+                'state' => Geo::normalizeRegion($data['state'] ?? ''),
                 'socials' => [
                     'instagram' => $instagram,
                 ],
@@ -97,6 +99,8 @@ class AuthService
                 'whatsapp' => $data['whatsapp'],
                 'email' => Str::lower($data['email']),
                 'city' => $data['city'] ?? null,
+                'country' => Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY),
+                'currency' => Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($data['country'] ?? null)),
                 'objective' => $data['objective'] ?? null,
                 'status' => CompanyStatus::Pending,
             ]);

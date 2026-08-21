@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'agency_fee',
     'creators_budget',
     'creator_cache',
+    'currency',
     'status',
     'image_url',
     'is_secret',
@@ -90,5 +91,14 @@ class Campaign extends Model
     public function isPendingAgency(): bool
     {
         return $this->status === CampaignStatus::PendingAgency;
+    }
+
+    public function scopeForCreatorMarketplace($query, Creator $creator)
+    {
+        if ($creator->canAccessAllCountries()) {
+            return $query;
+        }
+
+        return $query->whereHas('company', fn ($builder) => $builder->where('country', $creator->countryCode()));
     }
 }

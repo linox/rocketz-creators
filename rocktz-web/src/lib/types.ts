@@ -8,6 +8,7 @@ export type Creator = {
   whatsapp: string | null;
   email?: string | null;
   city: string | null;
+  country?: string | null;
   state: string | null;
   bio: string | null;
   document: string | null;
@@ -24,6 +25,7 @@ export type Creator = {
   accepts_exclusivity: boolean;
   internal_notes?: string | null;
   status: string;
+  can_access_all_countries?: boolean;
   portfolio?: {
     id: number;
     title: string;
@@ -46,6 +48,8 @@ export type Company = {
   whatsapp: string | null;
   email: string | null;
   city: string | null;
+  country?: string | null;
+  currency?: string | null;
   observations: string | null;
   logo_url: string | null;
   objective: string | null;
@@ -58,7 +62,7 @@ export type Company = {
 export type Campaign = {
   id: number;
   company_id: number;
-  company?: { id: number; name: string; logo_url: string | null; status: string; segment?: string | null };
+  company?: { id: number; name: string; logo_url: string | null; status: string; segment?: string | null; country?: string | null; currency?: string | null };
   name: string;
   objective: string | null;
   start_date: string | null;
@@ -67,6 +71,7 @@ export type Campaign = {
   agency_fee: number | null;
   creators_budget: number | null;
   creator_cache?: number | null;
+  currency?: string | null;
   status: string;
   image_url: string | null;
   is_secret: boolean;
@@ -91,6 +96,7 @@ export type CampaignCreator = {
     photo_url: string | null;
     status: string;
     city?: string | null;
+    country?: string | null;
     state?: string | null;
     whatsapp?: string | null;
     categories?: string[];
@@ -98,7 +104,7 @@ export type CampaignCreator = {
     pricing?: Record<string, number>;
     socials?: Record<string, string>;
   };
-  campaign?: { id: number; name: string; status: string; image_url: string | null };
+  campaign?: { id: number; name: string; status: string; image_url: string | null; currency?: string | null };
   delivery_type: string | null;
   amount: number | null;
   delivery_date: string | null;
@@ -151,13 +157,14 @@ export type RevisionHistoryEntry = {
 export type RecurringContract = {
   id: number;
   company_id: number;
-  company?: { id: number; name: string; logo_url: string | null };
+  company?: { id: number; name: string; logo_url: string | null; country?: string | null; currency?: string | null };
   title: string;
   objective: string | null;
   start_date: string | null;
   end_date: string | null;
   status: string;
   monthly_fee: number | null;
+  currency?: string | null;
   notes: string | null;
   creators?: {
     id: number;
@@ -168,6 +175,7 @@ export type RecurringContract = {
       full_name: string;
       photo_url: string | null;
       city?: string | null;
+      country?: string | null;
       state?: string | null;
       categories?: string[];
       socials?: Record<string, string>;
@@ -249,6 +257,7 @@ export type DashboardStats = {
   running_campaigns?: number;
   finished_campaigns?: number;
   total_campaign_value?: number;
+  currency?: string | null;
   pending_signatures?: number;
   upcoming_deliveries?: number;
   campaigns?: number;

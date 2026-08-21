@@ -58,6 +58,7 @@ import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { itemHasPautaBriefing, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
+import { currencySymbol, DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -374,7 +375,7 @@ function DetailInner() {
   const router = useRouter();
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
-  const { formatCurrency } = usePrivacy();
+  const { formatCurrency: formatCurrencyRaw } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const id = usePathname().split("/").filter(Boolean).pop() ?? "";
   const canManage = user.role === "admin" || user.role === "company";
@@ -383,6 +384,7 @@ function DetailInner() {
   const ownCreatorId = user.creator?.id ?? null;
 
   const [contract, setContract] = useState<RecurringContract | null>(null);
+  const formatCurrency = (value?: number | null) => formatCurrencyRaw(value, moneyCurrency(contract));
   const [catalog, setCatalog] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewTab>("creators");
@@ -479,6 +481,7 @@ function DetailInner() {
       full_name: row.creator?.full_name || extra?.full_name || "",
       photo_url: row.creator?.photo_url || extra?.photo_url || null,
       city: row.creator?.city || extra?.city || null,
+      country: row.creator?.country || extra?.country || null,
       state: row.creator?.state || extra?.state || null,
       categories: row.creator?.categories?.length ? row.creator.categories : extra?.categories || [],
       socials: row.creator?.socials || extra?.socials || {},
@@ -541,7 +544,18 @@ function DetailInner() {
   }, [allocated, items, selectedMonth]);
 
   const segments = [...new Set(allocated.flatMap((row) => profile(row).categories).filter(Boolean))].sort((a, b) => a.localeCompare(b, locale));
-  const states = [...new Set(allocated.map((row) => (profile(row).state || "").trim().toUpperCase()).filter(Boolean))].sort();
+  const locationOptions = [...new Map(
+    allocated.map((row) => {
+      const info = profile(row);
+      const country = (info.country || DEFAULT_COUNTRY).toUpperCase();
+      const state = (info.state || "").trim().toUpperCase();
+      const value = state ? `${country}:${state}` : country;
+      return [value, formatLocation(locale, { state: info.state, country })] as const;
+    }),
+  ).entries()]
+    .filter(([, label]) => Boolean(label))
+    .sort((a, b) => a[1].localeCompare(b[1], locale))
+    .map(([value, label]) => ({ value, label }));
 
   const filteredCreators = allocated
     .filter((row) => {
@@ -551,12 +565,19 @@ function DetailInner() {
       return summary(row).statusCategory === statusFilter;
     })
     .filter((row) => segmentFilter === "all" || profile(row).categories.some((cat) => cat.trim().toLowerCase() === segmentFilter.toLowerCase()))
-    .filter((row) => stateFilter === "all" || (profile(row).state || "").toUpperCase() === stateFilter)
+    .filter((row) => {
+      if (stateFilter === "all") return true;
+      const info = profile(row);
+      const country = (info.country || DEFAULT_COUNTRY).toUpperCase();
+      const state = (info.state || "").trim().toUpperCase();
+      const value = state ? `${country}:${state}` : country;
+      return value === stateFilter;
+    })
     .filter((row) => {
       const term = search.trim().toLowerCase();
       if (!term) return true;
       const info = profile(row);
-      return [info.artistic_name, info.full_name, info.socials.instagram, info.city, info.state, info.categories.join(" ")].join(" ").toLowerCase().includes(term);
+      return [info.artistic_name, info.full_name, info.socials.instagram, info.city, info.state, info.country, info.categories.join(" ")].join(" ").toLowerCase().includes(term);
     })
     .sort((a, b) => profile(a).artistic_name.localeCompare(profile(b).artistic_name, locale, { sensitivity: "base" }));
 
@@ -1079,7 +1100,7 @@ function DetailInner() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Select2Field theme="light" value={segmentFilter} options={[{ value: "all", label: t("recurringDetail.allSegments") }, ...segments.map((seg) => ({ value: seg, label: seg }))]} onChange={setSegmentFilter} />
-                  <Select2Field theme="light" value={stateFilter} options={[{ value: "all", label: t("recurringDetail.allStates") }, ...states.map((st) => ({ value: st, label: st }))]} onChange={setStateFilter} />
+                  <Select2Field theme="light" value={stateFilter} options={[{ value: "all", label: t("recurringDetail.allStates") }, ...locationOptions]} onChange={setStateFilter} />
                 </div>
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
                   {([
@@ -1126,7 +1147,7 @@ function DetailInner() {
                   const selected = selectedRow?.creator_id === row.creator_id;
                   const expanded = expandedIds.includes(row.creator_id);
                   const handle = info.socials.instagram ? `@${info.socials.instagram.replace(/^@/, "")}` : null;
-                  const location = info.city || info.state ? `${info.city ? `${info.city}/` : ""}${info.state || ""}` : null;
+                  const location = formatLocation(locale, info);
 
                   if (creatorLayout === "grid") {
                     return (
@@ -1220,7 +1241,7 @@ function DetailInner() {
                               <h4 className="truncate text-sm font-bold text-slate-900">{info.artistic_name || info.full_name}</h4>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                 <span className="truncate text-[11px] text-slate-400">{info.socials.instagram ? `@${info.socials.instagram.replace(/^@/, "")}` : t("recurringDetail.partner")}</span>
-                                {info.city || info.state ? <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600">📍 {info.city ? `${info.city}/` : ""}{info.state || ""}</span> : null}
+                                {formatLocation(locale, info) ? <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600">📍 {formatLocation(locale, info)}</span> : null}
                                 {info.categories.slice(0, 2).map((cat) => <span key={cat} className="rounded-md border border-indigo-100 bg-indigo-50 px-1.5 text-[9px] font-extrabold text-indigo-700">{cat}</span>)}
                               </div>
                             </div>
@@ -1395,7 +1416,7 @@ function DetailInner() {
                       )}
                     </h3>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {selectedInfo.city || selectedInfo.state ? <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">📍 {selectedInfo.city ? `${selectedInfo.city}/` : ""}{selectedInfo.state || ""}</span> : null}
+                      {formatLocation(locale, selectedInfo) ? <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">📍 {formatLocation(locale, selectedInfo)}</span> : null}
                       {selectedInfo.categories.map((cat) => <span key={cat} className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">🏷️ {cat}</span>)}
                     </div>
                   </div>
@@ -1923,7 +1944,7 @@ function DetailInner() {
                   options={catalog
                     .map((c) => ({
                       value: String(c.id),
-                      label: `${c.artistic_name || c.full_name}${c.city ? ` (${c.city}/${c.state || ""})` : ""} - ${Number(c.metrics?.followers || 0).toLocaleString(locale)} ${t("recurringDetail.followers")}`,
+                      label: `${c.artistic_name || c.full_name}${formatLocation(locale, c) ? ` (${formatLocation(locale, c)})` : ""} - ${Number(c.metrics?.followers || 0).toLocaleString(locale)} ${t("recurringDetail.followers")}`,
                     }))
                     .sort((a, b) => a.label.localeCompare(b.label, locale, { sensitivity: "base" }))}
                   onChange={(value) => setCreatorForm({ ...creatorForm, creator_id: value })}
@@ -1946,7 +1967,7 @@ function DetailInner() {
               <div className="flex flex-col gap-1.5">
                 <label className="font-bold text-slate-700">{t("recurringDetail.cache")} *</label>
                 <div className="relative">
-                  <span className="absolute top-1/2 left-3.5 -translate-y-1/2 font-bold text-slate-400">R$</span>
+                  <span className="absolute top-1/2 left-3.5 -translate-y-1/2 font-bold text-slate-400">{currencySymbol(moneyCurrency(contract), locale)}</span>
                   <input type="number" min="0" step="0.01" required value={creatorForm.monthly_cache} onChange={(e) => setCreatorForm({ ...creatorForm, monthly_cache: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-4 pl-10 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary" placeholder="0.00" />
                 </div>
                 {creatorBudgetPreview ? (

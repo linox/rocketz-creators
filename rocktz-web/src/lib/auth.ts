@@ -17,8 +17,10 @@ export type AuthUser = {
     photo_url: string | null;
     whatsapp?: string | null;
     city?: string | null;
+    country?: string | null;
     state?: string | null;
     document?: string | null;
+    can_access_all_countries?: boolean;
     socials?: Record<string, string>;
     contract_acceptance?: {
       id: number;
@@ -34,6 +36,8 @@ export type AuthUser = {
     logo_url: string | null;
     whatsapp?: string | null;
     city?: string | null;
+    country?: string | null;
+    currency?: string | null;
   } | null;
 };
 

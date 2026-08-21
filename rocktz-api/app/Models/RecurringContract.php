@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'end_date',
     'status',
     'monthly_fee',
+    'currency',
     'notes',
 ])]
 class RecurringContract extends Model

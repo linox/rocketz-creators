@@ -20,6 +20,7 @@ use App\Models\Creator;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\GoogleAuthService;
+use App\Support\Geo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -239,6 +240,8 @@ class AuthController extends Controller
                     'whatsapp' => $request->input('whatsapp'),
                     'email' => $user->email,
                     'city' => $request->input('city'),
+                    'country' => Geo::normalizeCountry($request->input('country', Geo::DEFAULT_COUNTRY)),
+                    'currency' => Geo::normalizeCurrency($request->input('currency', Geo::defaultCurrency($request->input('country')))),
                     'objective' => $request->input('objective'),
                     'status' => CompanyStatus::Pending,
                 ]);
@@ -266,7 +269,8 @@ class AuthController extends Controller
                 'artistic_name' => $artisticName,
                 'whatsapp' => $request->input('whatsapp'),
                 'city' => $request->input('city'),
-                'state' => $request->input('state') ? Str::upper((string) $request->input('state')) : null,
+                'country' => Geo::normalizeCountry($request->input('country', Geo::DEFAULT_COUNTRY)),
+                'state' => $request->input('state') ? Geo::normalizeRegion((string) $request->input('state')) : null,
                 'socials' => ['instagram' => $instagram],
                 'metrics' => ['followers' => 0, 'avgViews' => 0, 'avgEngagement' => 0],
                 'categories' => [$request->input('category', 'UGC Content')],

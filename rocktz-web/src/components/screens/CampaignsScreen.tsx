@@ -37,6 +37,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
+import { moneyCurrency } from "@/lib/geo";
 import type { Campaign, CampaignCreator, Company } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -113,7 +114,7 @@ function CampaignCard({
   campaign: Campaign;
   finished?: boolean;
   dateLabel: string;
-  formatCurrency: (value?: number | null) => string;
+  formatCurrency: (value?: number | null, currency?: string | null) => string;
   isAdmin?: boolean;
   onApprove?: (campaign: Campaign) => void;
 }) {
@@ -218,7 +219,7 @@ function CampaignCard({
             ) : (
               <>
                 <DollarSign size={13} className={cn("shrink-0", finished ? "text-slate-400" : "text-brand-primary")} />
-                <span>{campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(campaign.total_budget)}</span>
+                <span>{campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(campaign.total_budget, moneyCurrency(campaign))}</span>
               </>
             )}
           </div>

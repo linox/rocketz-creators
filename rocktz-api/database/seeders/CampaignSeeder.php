@@ -32,6 +32,7 @@ class CampaignSeeder extends Seeder
             'agency_fee' => 3000,
             'creators_budget' => 15000,
             'creator_cache' => 15000,
+            'currency' => $aurora->currency,
         ]);
 
         $this->attachBriefingAndDeliverables($briefing, 'Sérum facial Aurora Glow', 2, 4, 1);
@@ -44,6 +45,7 @@ class CampaignSeeder extends Seeder
             'agency_fee' => 2000,
             'creators_budget' => 10000,
             'creator_cache' => 10000,
+            'currency' => $aurora->currency,
         ]);
 
         $this->attachBriefingAndDeliverables($selection, 'Kit verão Aurora', 1, 3, 1);
@@ -64,6 +66,7 @@ class CampaignSeeder extends Seeder
             'agency_fee' => 1500,
             'creators_budget' => 7500,
             'creator_cache' => 7500,
+            'currency' => $aurora->currency,
         ]);
 
         $this->attachBriefingAndDeliverables($production, 'Rotina de 7 dias com sérum', 3, 5, 0);
@@ -92,6 +95,7 @@ class CampaignSeeder extends Seeder
             'agency_fee' => 1000,
             'creators_budget' => 5500,
             'creator_cache' => 5500,
+            'currency' => $aurora->currency,
             'start_date' => now()->subMonths(2)->toDateString(),
             'end_date' => now()->subWeeks(2)->toDateString(),
         ]);

@@ -29,6 +29,7 @@ import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
+import { moneyCurrency } from "@/lib/geo";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -360,7 +361,7 @@ function AvailableInner() {
                   <div className="absolute right-3 bottom-3 left-3 flex items-end justify-between text-white">
                     <div className="flex flex-col">
                       <span className="text-[9px] font-bold tracking-wider text-indigo-200 uppercase">{campaign.is_barter ? t("available.compensation") : t("available.suggestedCache")}</span>
-                      <span className="text-base font-black text-emerald-400">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache)}</span>
+                      <span className="text-base font-black text-emerald-400">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
                     </div>
                     <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-medium text-slate-200 backdrop-blur-sm">{segmentLabel}</span>
                   </div>
@@ -417,7 +418,7 @@ function AvailableInner() {
                       </div>
                       <div className="hidden shrink-0 flex-col items-end lg:flex">
                         <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{campaign.is_barter ? t("available.compensation") : t("available.suggestedCache")}</span>
-                        <span className="text-xl font-black text-emerald-600">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache)}</span>
+                        <span className="text-xl font-black text-emerald-600">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-2">

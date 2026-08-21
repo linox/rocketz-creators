@@ -25,6 +25,7 @@ class CampaignCreatorResource extends JsonResource
                     'photo_url' => $this->creator->photo_url,
                     'status' => $this->creator->status?->value,
                     'city' => $this->creator->city,
+                    'country' => $this->creator->country,
                     'state' => $this->creator->state,
                 ];
 
@@ -43,6 +44,7 @@ class CampaignCreatorResource extends JsonResource
                 'name' => $this->campaign->name,
                 'status' => $this->campaign->status?->value,
                 'image_url' => $this->campaign->image_url,
+                'currency' => $this->campaign->currency,
             ]),
             'delivery_type' => $this->delivery_type,
             'amount' => $this->amount !== null ? (float) $this->amount : null,

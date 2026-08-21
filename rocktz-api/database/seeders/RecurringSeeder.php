@@ -25,6 +25,7 @@ class RecurringSeeder extends Seeder
             'start_date' => now()->startOfMonth()->toDateString(),
             'end_date' => now()->addMonths(6)->toDateString(),
             'monthly_fee' => 4500,
+            'currency' => $aurora->currency,
             'notes' => 'Contrato ativo com entregas mensais combinadas.',
         ]);
 

@@ -8,11 +8,13 @@ import { Building2, CheckCircle2, Clock, Edit, Eye, Mail, MapPin, Phone, Plus, S
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PasswordField } from "@/components/PasswordField";
 import { Select2Field } from "@/components/Select2Field";
+import { CountrySelect, CurrencySelect } from "@/components/GeoSelectFields";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatCNPJ, formatWhatsApp, isValidCNPJ, isValidEmail, passwordError } from "@/lib/masks";
+import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, countryLabel, defaultCurrencyForCountry, isValidCountry, isValidCurrency } from "@/lib/geo";
 import type { Company } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
@@ -21,7 +23,7 @@ type FilterTab = "all" | "pending" | "active";
 
 const INPUT = "w-full rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-primary";
 const LABEL = "text-[11px] font-bold tracking-wider text-[#64748B] uppercase";
-const EMPTY_FORM = { name: "", cnpj: "", segment: "", email: "", whatsapp: "", city: "", observations: "", logo_url: "" };
+const EMPTY_FORM = { name: "", cnpj: "", segment: "", email: "", whatsapp: "", city: "", country: DEFAULT_COUNTRY, currency: DEFAULT_CURRENCY, observations: "", logo_url: "" };
 
 function CompanyStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation("app");
@@ -54,7 +56,7 @@ function CompanyCard({
   onApprove: (company: Company) => void;
   onReject: (company: Company) => void;
 }) {
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
   const status = company.status || "pending";
   const contacts = company.contacts ?? [];
 
@@ -137,7 +139,7 @@ function CompanyCard({
         <div className="mt-4 flex flex-col gap-2">
           <div className="flex items-center gap-3 text-xs text-[#64748B]">
             <MapPin size={14} className="shrink-0" />
-            {company.city || t("companies.cityMissing")}
+            {[company.city, countryLabel(company.country || DEFAULT_COUNTRY, i18n.language), company.currency || DEFAULT_CURRENCY].filter(Boolean).join(" · ") || t("companies.cityMissing")}
           </div>
           <div className="flex items-center gap-3 text-xs text-[#64748B]">
             <Mail size={14} className="shrink-0" />
@@ -323,6 +325,14 @@ function CompaniesInner() {
       await alertWarning(tc("alerts.checkData"), t("companies.invalidCnpj"));
       return;
     }
+    if (!isValidCountry(createForm.country)) {
+      await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+      return;
+    }
+    if (!isValidCurrency(createForm.currency)) {
+      await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
+      return;
+    }
     try {
       await api.createCompany({
         name: createForm.name.trim(),
@@ -331,6 +341,8 @@ function CompaniesInner() {
         email: createForm.email.trim() || null,
         whatsapp: createForm.whatsapp.trim() || null,
         city: createForm.city.trim() || null,
+        country: createForm.country,
+        currency: createForm.currency,
         observations: createForm.observations.trim() || null,
         logo_url: createForm.logo_url.trim() || null,
         status: "active",
@@ -357,6 +369,8 @@ function CompaniesInner() {
         email: next.email || "",
         whatsapp: next.whatsapp || "",
         city: next.city || "",
+        country: next.country || DEFAULT_COUNTRY,
+        currency: next.currency || defaultCurrencyForCountry(next.country),
         observations: next.observations || "",
         logo_url: next.logo_url || "",
       });
@@ -383,6 +397,14 @@ function CompaniesInner() {
       await alertWarning(tc("alerts.checkData"), t("companies.invalidCnpj"));
       return;
     }
+    if (!isValidCountry(editForm.country)) {
+      await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+      return;
+    }
+    if (!isValidCurrency(editForm.currency)) {
+      await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
+      return;
+    }
     try {
       await api.updateCompany(editing.id, {
         name: editForm.name.trim(),
@@ -391,6 +413,8 @@ function CompaniesInner() {
         email: editForm.email.trim() || null,
         whatsapp: editForm.whatsapp.trim() || null,
         city: editForm.city.trim() || null,
+        country: editForm.country,
+        currency: editForm.currency,
         observations: editForm.observations.trim() || null,
         logo_url: editForm.logo_url.trim() || null,
         status: editStatus,
@@ -625,6 +649,17 @@ function CompaniesInner() {
                   <input className={INPUT} value={createForm.whatsapp} onChange={(event) => setCreateForm({ ...createForm, whatsapp: formatWhatsApp(event.target.value) })} />
                 </div>
               </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className={LABEL}>{t("companies.country")}</label>
+                  <CountrySelect theme="light" value={createForm.country} onChange={(country) => setCreateForm({ ...createForm, country, currency: defaultCurrencyForCountry(country) })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={LABEL}>{t("companies.currency")}</label>
+                  <CurrencySelect theme="light" value={createForm.currency} onChange={(currency) => setCreateForm({ ...createForm, currency })} />
+                </div>
+              </div>
+              <p className="-mt-2 text-[10px] text-[#64748B]">{t("companies.currencyHint")}</p>
               <div className="flex flex-col gap-1.5">
                 <label className={LABEL}>{t("companies.city")}</label>
                 <input className={INPUT} value={createForm.city} onChange={(event) => setCreateForm({ ...createForm, city: event.target.value })} />
@@ -695,6 +730,17 @@ function CompaniesInner() {
                   <input className={INPUT} value={editForm.whatsapp} onChange={(event) => setEditForm({ ...editForm, whatsapp: formatWhatsApp(event.target.value) })} />
                 </div>
               </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className={LABEL}>{t("companies.country")}</label>
+                  <CountrySelect theme="light" value={editForm.country} onChange={(country) => setEditForm({ ...editForm, country, currency: defaultCurrencyForCountry(country) })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={LABEL}>{t("companies.currency")}</label>
+                  <CurrencySelect theme="light" value={editForm.currency} onChange={(currency) => setEditForm({ ...editForm, currency })} />
+                </div>
+              </div>
+              <p className="-mt-2 text-[10px] text-[#64748B]">{t("companies.currencyHint")}</p>
               <div className="flex flex-col gap-1.5">
                 <label className={LABEL}>{t("companies.city")}</label>
                 <input className={INPUT} value={editForm.city} onChange={(event) => setEditForm({ ...editForm, city: event.target.value })} />

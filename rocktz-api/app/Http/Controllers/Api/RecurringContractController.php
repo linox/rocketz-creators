@@ -17,6 +17,7 @@ use App\Models\ContentPlanningItem;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Services\NotificationService;
+use App\Support\Geo;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Database\Eloquent\Builder;
@@ -85,6 +86,8 @@ class RecurringContractController extends Controller
 
         abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
         Company::assertApproved((int) $data['company_id']);
+        $data['currency'] = Company::query()->find((int) $data['company_id'])?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
+        $data['start_date'] ??= now()->toDateString();
 
         $ids = $data['creator_ids'] ?? [];
         unset($data['creator_ids']);

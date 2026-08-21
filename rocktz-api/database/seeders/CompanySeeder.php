@@ -31,6 +31,8 @@ class CompanySeeder extends Seeder
             'whatsapp' => '+55 11 4000-1000',
             'email' => 'empresa@rocketz.test',
             'city' => 'São Paulo',
+            'country' => 'BR',
+            'currency' => 'BRL',
             'objective' => 'Escalar UGC para lançamentos de skincare.',
             'logo_url' => 'https://placehold.co/200x200?text=Aurora',
         ]);
@@ -72,6 +74,8 @@ class CompanySeeder extends Seeder
             'whatsapp' => '+55 21 3000-2000',
             'email' => 'pending.empresa@rocketz.test',
             'city' => 'Rio de Janeiro',
+            'country' => 'BR',
+            'currency' => 'BRL',
             'objective' => 'Campanhas pontuais de conteúdo para clientes do estúdio.',
         ]);
 

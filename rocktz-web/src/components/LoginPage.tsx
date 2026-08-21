@@ -4,26 +4,32 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
-import { Select2Field } from "@/components/Select2Field";
 import { RocketzLogo } from "@/components/RocketzLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { alertApiError, alertWarning } from "@/lib/alerts";
 import type { AuthPayload } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
 import { laravelFetch, persistAuth } from "@/lib/laravel";
 import {
+  DEFAULT_COUNTRY,
+  DEFAULT_CURRENCY,
+  defaultCurrencyForCountry,
+  hasRegions,
+  isValidCountry,
+  isValidCurrency,
+  isValidRegion,
+} from "@/lib/geo";
+import {
   formatCNPJ,
   formatInstagram,
-  formatUF,
   formatWhatsApp,
   instagramHandle,
   isValidCNPJ,
   isValidEmail,
-  isValidUF,
   isValidWhatsApp,
   passwordError,
-  UF_OPTIONS,
 } from "@/lib/masks";
 import { useTranslation } from "react-i18next";
 
@@ -48,14 +54,22 @@ export function LoginPage() {
     email: "",
     whatsapp: "",
     city: "",
+    country: DEFAULT_COUNTRY,
     state: "",
+    currency: DEFAULT_CURRENCY,
     password: "",
     password_confirmation: "",
     lgpd_accepted: false,
   });
 
   function update(key: string, value: string | boolean) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      if (key === "country" && typeof value === "string") {
+        const nextCurrency = defaultCurrencyForCountry(value);
+        return { ...current, country: value, state: "", currency: nextCurrency };
+      }
+      return { ...current, [key]: value };
+    });
   }
 
   async function submit(path: string, body: unknown) {
@@ -109,8 +123,16 @@ export function LoginPage() {
       await alertWarning(tc("alerts.cityRequiredTitle"), ta("cityRequired"));
       return;
     }
-    if (!isValidUF(form.state)) {
-      await alertWarning(tc("alerts.ufRequiredTitle"), tc("alerts.ufRequired"));
+    if (!isValidCountry(form.country)) {
+      await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+      return;
+    }
+    if (userType === "creator" && hasRegions(form.country) && !isValidRegion(form.country, form.state)) {
+      await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+      return;
+    }
+    if (userType === "company" && !isValidCurrency(form.currency)) {
+      await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
       return;
     }
     if (form.cnpj && !isValidCNPJ(form.cnpj)) {
@@ -136,7 +158,8 @@ export function LoginPage() {
         email: form.email,
         whatsapp: form.whatsapp,
         city: form.city,
-        state: formatUF(form.state),
+        country: form.country,
+        state: form.state,
         password: form.password,
         password_confirmation: form.password_confirmation,
         lgpd_accepted: form.lgpd_accepted,
@@ -151,7 +174,8 @@ export function LoginPage() {
       email: form.email,
       whatsapp: form.whatsapp,
       city: form.city,
-      state: formatUF(form.state),
+      country: form.country,
+      currency: form.currency,
       password: form.password,
       password_confirmation: form.password_confirmation,
       lgpd_accepted: form.lgpd_accepted,
@@ -202,15 +226,12 @@ export function LoginPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <input className={fieldClass} placeholder={ta("fields.whatsappLong")} inputMode="tel" autoComplete="tel" value={form.whatsapp} onChange={(e) => update("whatsapp", formatWhatsApp(e.target.value))} />
                 <input className={fieldClass} placeholder={ta("fields.city")} autoComplete="address-level2" value={form.city} onChange={(e) => update("city", e.target.value)} />
-                <div className="sm:col-span-2">
-                  <Select2Field
-                    theme="dark"
-                    placeholder={ta("fields.uf")}
-                    value={form.state}
-                    options={UF_OPTIONS}
-                    onChange={(value) => update("state", value)}
-                  />
-                </div>
+                <CountrySelect theme="dark" placeholder={ta("fields.country")} value={form.country} onChange={(value) => update("country", value)} />
+                {userType === "creator" ? (
+                  <RegionSelect theme="dark" country={form.country} placeholder={ta("fields.region")} value={form.state} onChange={(value) => update("state", value)} />
+                ) : (
+                  <CurrencySelect theme="dark" placeholder={ta("fields.currency")} value={form.currency} onChange={(value) => update("currency", value)} />
+                )}
               </div>
             </>
           ) : null}

@@ -39,8 +39,10 @@ class UserResource extends JsonResource
                     'photo_url' => $this->creator->photo_url,
                     'whatsapp' => $this->creator->whatsapp,
                     'city' => $this->creator->city,
+                    'country' => $this->creator->country,
                     'state' => $this->creator->state,
                     'document' => $this->creator->document,
+                    'can_access_all_countries' => (bool) $this->creator->can_access_all_countries,
                     'socials' => $this->creator->socials ?? [],
                     'contract_acceptance' => $latestContract ? [
                         'id' => $latestContract->id,
@@ -62,6 +64,8 @@ class UserResource extends JsonResource
                     'logo_url' => $this->company->logo_url,
                     'whatsapp' => $this->company->whatsapp,
                     'city' => $this->company->city,
+                    'country' => $this->company->country,
+                    'currency' => $this->company->currency,
                 ];
             }),
         ];

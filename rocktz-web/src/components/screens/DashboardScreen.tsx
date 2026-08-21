@@ -213,7 +213,7 @@ function DashboardInner() {
         <div className="grid gap-4 sm:grid-cols-3">
           <KpiCard label={t("dash.campaigns")} value={stats.campaigns ?? 0} />
           <KpiCard label={t("dash.running")} value={stats.running_campaigns ?? 0} />
-          <KpiCard label={t("dash.investment")} value={formatCurrency(stats.total_campaign_value)} />
+          <KpiCard label={t("dash.investment")} value={formatCurrency(stats.total_campaign_value, stats.currency)} />
         </div>
       </>
     );

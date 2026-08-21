@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CompanyStatus;
+use App\Support\Geo;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'whatsapp',
     'email',
     'city',
+    'country',
+    'currency',
     'observations',
     'logo_url',
     'objective',
@@ -80,5 +83,15 @@ class Company extends Model
             422,
             __('auth.company_not_approved'),
         );
+    }
+
+    public function countryCode(): string
+    {
+        return Geo::isValidCountry($this->country) ? Geo::normalizeCountry($this->country) : Geo::DEFAULT_COUNTRY;
+    }
+
+    public function currencyCode(): string
+    {
+        return Geo::isValidCurrency($this->currency) ? Geo::normalizeCurrency($this->currency) : Geo::defaultCurrency($this->countryCode());
     }
 }

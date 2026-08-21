@@ -30,7 +30,8 @@ class CreatorFactory extends Factory
             'cpf' => fake()->numerify('###.###.###-##'),
             'whatsapp' => fake()->numerify('+55 ## 9####-####'),
             'city' => fake()->city(),
-            'state' => fake()->stateAbbr(),
+            'country' => 'BR',
+            'state' => fake()->randomElement(['SP', 'RJ', 'MG', 'RS', 'PR', 'BA', 'SC']),
             'birth_date' => fake()->dateTimeBetween('-40 years', '-18 years')->format('Y-m-d'),
             'pix_key' => fake()->safeEmail(),
             'bank_details' => 'Banco '.fake()->randomElement(['Nubank', 'Itaú', 'Bradesco', 'Inter']).' / agência '.fake()->numerify('####').' / conta '.fake()->numerify('#####-#'),
@@ -63,6 +64,7 @@ class CreatorFactory extends Factory
             ),
             'internal_notes' => fake()->optional()->sentence(),
             'status' => CreatorStatus::Review,
+            'can_access_all_countries' => false,
         ];
     }
 

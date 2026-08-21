@@ -11,6 +11,7 @@ use App\Http\Resources\CreatorResource;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Support\Geo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,11 +80,13 @@ class CreatorController extends Controller
             'password' => ['nullable', 'string', 'min:6'],
             'whatsapp' => ['nullable', 'string', 'max:30'],
             'city' => ['nullable', 'string', 'max:120'],
-            'state' => ['nullable', 'string', 'size:2'],
+            'country' => Geo::countryRules(false),
+            'state' => Geo::regionRules($request->string('country')->toString() ?: null, false),
             'cpf' => ['nullable', 'string', 'max:20'],
             'photo_url' => ['nullable', 'string', 'max:2048'],
             'instagram' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],
+            'can_access_all_countries' => ['sometimes', 'boolean'],
             'status' => ['nullable', Rule::enum(CreatorStatus::class)],
         ]);
 
@@ -106,7 +109,9 @@ class CreatorController extends Controller
                 'document' => $data['cpf'] ?? null,
                 'whatsapp' => $data['whatsapp'] ?? null,
                 'city' => $data['city'] ?? null,
-                'state' => isset($data['state']) ? Str::upper($data['state']) : null,
+                'country' => Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY),
+                'state' => isset($data['state']) ? Geo::normalizeRegion($data['state']) : null,
+                'can_access_all_countries' => (bool) ($data['can_access_all_countries'] ?? false),
                 'socials' => ['instagram' => $handle],
                 'metrics' => ['followers' => 0, 'avgViews' => 0, 'avgEngagement' => 0],
                 'categories' => array_values(array_filter([$data['category'] ?? null])),
@@ -132,7 +137,8 @@ class CreatorController extends Controller
             'photo_url' => ['nullable', 'string', 'max:2048'],
             'whatsapp' => ['sometimes', 'string', 'max:30'],
             'city' => ['sometimes', 'string', 'max:120'],
-            'state' => ['sometimes', 'string', 'size:2'],
+            'country' => Geo::countryRules(false),
+            'state' => Geo::regionRules($request->input('country') ?: $creator->country, false),
             'bio' => ['nullable', 'string'],
             'document' => ['nullable', 'string', 'max:40'],
             'cpf' => ['nullable', 'string', 'max:20'],
@@ -151,15 +157,21 @@ class CreatorController extends Controller
             'accepts_paid_traffic' => ['sometimes', 'boolean'],
             'accepts_exclusivity' => ['sometimes', 'boolean'],
             'internal_notes' => ['nullable', 'string'],
+            'can_access_all_countries' => ['sometimes', 'boolean'],
             'status' => ['nullable', Rule::enum(CreatorStatus::class)],
         ]);
 
-        if ($user->role !== UserRole::Admin) {
-            unset($data['status'], $data['internal_notes']);
+        $isAdmin = $user->role === UserRole::Admin;
+        if (! $isAdmin) {
+            unset($data['status'], $data['internal_notes'], $data['can_access_all_countries']);
+        }
+
+        if (isset($data['country'])) {
+            $data['country'] = Geo::normalizeCountry($data['country']);
         }
 
         if (isset($data['state'])) {
-            $data['state'] = Str::upper($data['state']);
+            $data['state'] = Geo::normalizeRegion($data['state']);
         }
 
         $creator->fill($data)->save();

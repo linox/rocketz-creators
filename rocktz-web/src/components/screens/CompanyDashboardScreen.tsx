@@ -30,9 +30,11 @@ import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { formatLocation, moneyCurrency } from "@/lib/geo";
 import { usePrivacy } from "@/lib/privacy";
 import type { Campaign, Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 type DashTab = "overview" | "campaigns" | "recurring" | "favorites";
 
@@ -85,8 +87,9 @@ function CompanyDashboardInner() {
   const user = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
   const { formatCurrency, hideValues, toggleHideValues } = usePrivacy();
+  const locale = intlLocale(normalizeLocale(i18n.language));
   const isAdmin = user.role === "admin";
   const queryCompanyId = Number(searchParams.get("companyId") || 0);
 
@@ -475,7 +478,7 @@ function CompanyDashboardInner() {
         <KpiCard
           icon={DollarSign}
           label={t("companyDash.kpi.budgetLabel")}
-          value={formatCurrency(campaignBudget)}
+          value={formatCurrency(campaignBudget, moneyCurrency(company))}
           hint={t("companyDash.kpi.budgetHint")}
           action={(
             <button
@@ -566,7 +569,7 @@ function CompanyDashboardInner() {
               )}
               hint={t("companyDash.overview.publishedPlannedHint")}
             />
-            <MetricMini icon={DollarSign} iconClass="bg-amber-50 text-amber-600" label={t("companyDash.overview.investmentLabel")} value={formatCurrency(campaignBudget + recurringMonthly)} hint={t("companyDash.overview.investmentHint")} />
+            <MetricMini icon={DollarSign} iconClass="bg-amber-50 text-amber-600" label={t("companyDash.overview.investmentLabel")} value={formatCurrency(campaignBudget + recurringMonthly, moneyCurrency(company))} hint={t("companyDash.overview.investmentHint")} />
           </div>
 
           <div className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -747,7 +750,7 @@ function CompanyDashboardInner() {
                       <p className="mt-1 truncate text-[10px] text-slate-400">
                         {t("companyDash.overview.creatorsAllocated", { count: contract.creators?.length ?? 0 })}
                         {" · "}
-                        {t("companyDash.overview.monthFee", { value: formatCurrency(contractMonthlyValue(contract)) })}
+                        {t("companyDash.overview.monthFee", { value: formatCurrency(contractMonthlyValue(contract), moneyCurrency(contract)) })}
                       </p>
                     </Link>
                   ))}
@@ -803,7 +806,7 @@ function CompanyDashboardInner() {
                 </span>
               </div>
               <p className="mt-2 truncate text-xs text-slate-500">
-                {t("companyDash.recurringTab.monthFee", { value: formatCurrency(contractMonthlyValue(row)) })}
+                {t("companyDash.recurringTab.monthFee", { value: formatCurrency(contractMonthlyValue(row), moneyCurrency(row)) })}
               </p>
             </Link>
           ))}
@@ -826,7 +829,7 @@ function CompanyDashboardInner() {
                   <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-12 w-12 shrink-0" textClassName="text-sm" />
                   <div className="min-w-0">
                     <h3 className="m-0 truncate font-black text-slate-900">@{creator.artistic_name}</h3>
-                    <p className="m-0 truncate text-sm text-slate-500">{creator.city}{creator.state ? `, ${creator.state}` : ""}</p>
+                    <p className="m-0 truncate text-sm text-slate-500">{formatLocation(locale, creator) || "—"}</p>
                   </div>
                 </div>
                 <button

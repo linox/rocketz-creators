@@ -13,9 +13,12 @@ import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatCPF, isValidCPF, isValidEmail } from "@/lib/masks";
+import { DEFAULT_COUNTRY, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency } from "@/lib/geo";
+import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const CATEGORIES = [
   "Beleza",
@@ -37,7 +40,7 @@ const CATEGORIES = [
 const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
 type CatalogLayout = "list" | "grid";
 
-const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "Beleza", photo_url: "" };
+const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "Beleza", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
 
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
@@ -57,13 +60,6 @@ function creatorRecurringContracts(creator: Creator, recurringContracts: Recurri
   );
 }
 
-function creatorMonthlyEarnings(creator: Creator, contracts: RecurringContract[]) {
-  return contracts.reduce((sum, contract) => {
-    const row = contract.creators?.find((item) => item.creator_id === creator.id);
-    return sum + Number(row?.monthly_cache ?? row?.monthly_fee ?? 0);
-  }, 0);
-}
-
 function CreatorFeeValue({
   creator,
   contracts,
@@ -73,11 +69,17 @@ function CreatorFeeValue({
 }) {
   const { t } = useTranslation("app");
   const { formatCurrency } = usePrivacy();
-  const monthly = creatorMonthlyEarnings(creator, contracts);
+  const monthly = formatMoneyGroups(
+    formatCurrency,
+    contracts.map((contract) => {
+      const row = contract.creators?.find((item) => item.creator_id === creator.id);
+      return { amount: Number(row?.monthly_cache ?? row?.monthly_fee ?? 0), currency: moneyCurrency(contract) };
+    }),
+  );
   if (contracts.length > 0) {
     return (
       <>
-        {formatCurrency(monthly)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perMonth")}</span>
+        {monthly} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perMonth")}</span>
       </>
     );
   }
@@ -121,9 +123,10 @@ function CreatorCard({
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
 }) {
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
   const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
+  const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
 
   return (
     <motion.article
@@ -148,6 +151,7 @@ function CreatorCard({
             />
             <div className="min-w-0">
               <h3 className="m-0 truncate font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
+              {location ? <p className="m-0 truncate text-[11px] font-medium text-slate-500">{location}</p> : null}
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={creator.status} />
                 <span
@@ -262,12 +266,13 @@ function CreatorListRow({
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
 }) {
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
   const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
   const followers = formatNumber(metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]));
   const avgViews = formatNumber(metricValue(creator.metrics, ["avgViews", "avg_views"]));
   const companyNames = creatorContracts.map((c) => c.company?.name ?? c.title).join(", ");
+  const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
 
   return (
     <motion.article
@@ -304,6 +309,7 @@ function CreatorListRow({
           {creator.full_name ? (
             <p className="m-0 truncate text-[11px] font-medium text-slate-500">{creator.full_name}</p>
           ) : null}
+          {location ? <p className="m-0 truncate text-[11px] text-slate-400">{location}</p> : null}
           <div className="mt-1 flex flex-wrap gap-1">
             {(creator.categories || []).slice(0, 3).map((cat) => (
               <span key={cat} className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#64748B] uppercase">
@@ -531,6 +537,14 @@ function CreatorsInner() {
       await alertWarning(t("creators.invalidCpfTitle"), t("creators.invalidCpf"));
       return;
     }
+    if (!isValidCountry(form.country)) {
+      await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+      return;
+    }
+    if (hasRegions(form.country) && !isValidRegion(form.country, form.state)) {
+      await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+      return;
+    }
     try {
       await api.createCreator({
         full_name: form.full_name.trim(),
@@ -540,6 +554,8 @@ function CreatorsInner() {
         photo_url: form.photo_url.trim() || null,
         category: form.category,
         instagram: form.artistic_name.replace(/^@/, "").trim(),
+        country: form.country,
+        state: form.state || null,
       });
       setModalOpen(false);
       setForm(EMPTY_FORM);
@@ -793,6 +809,14 @@ function CreatorsInner() {
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.email")}</label>
                   <input type="email" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.country")}</label>
+                  <CountrySelect theme="light" value={form.country} onChange={(country) => setForm({ ...form, country, state: "" })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.region")}</label>
+                  <RegionSelect theme="light" country={form.country} value={form.state} onChange={(state) => setForm({ ...form, state })} />
                 </div>
                 <div className="flex flex-col gap-1.5 md:col-span-2">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.mainCategory")}</label>

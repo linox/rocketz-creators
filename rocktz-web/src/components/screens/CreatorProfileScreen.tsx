@@ -65,7 +65,9 @@ import {
   planningItemDeliveryState,
   type ContentDeliveryState,
 } from "@/lib/content-delivery-status";
-import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, formatBRLMask, parseBRLMask, moneyToMask, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF, UF_OPTIONS } from "@/lib/masks";
+import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, formatBRLMask, parseBRLMask, moneyToMask, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF } from "@/lib/masks";
+import { DEFAULT_COUNTRY, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
+import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromPath } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
@@ -471,6 +473,7 @@ function ProfileInner() {
   const [artisticName, setArtisticName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [state, setState] = useState("");
   const [cpf, setCpf] = useState("");
   const [bio, setBio] = useState("");
@@ -488,6 +491,7 @@ function ProfileInner() {
     setArtisticName(data.artistic_name);
     setWhatsapp(data.whatsapp ?? "");
     setCity(data.city ?? "");
+    setCountry(data.country || DEFAULT_COUNTRY);
     setState(data.state ?? "");
     setCpf(data.cpf || data.document || "");
     setBio(data.bio ?? "");
@@ -743,7 +747,7 @@ function ProfileInner() {
   function creatorFeeText(campaign: Campaign, row: { amount: number | null; payment_status?: string | null }) {
     if (campaign.is_barter) return ta("available.barterPay");
     const amount = Number(row.amount) || Number(campaign.creator_cache) || 0;
-    if (amount > 0) return formatCurrency(amount);
+    if (amount > 0) return formatCurrency(amount, campaign.currency);
     return ta("available.toDefine");
   }
 
@@ -757,12 +761,17 @@ function ProfileInner() {
       await alertWarning(tp("invalidCpfTitle"), tp("invalidCpf"));
       return;
     }
+    if (hasRegions(country) && !isValidRegion(country, state)) {
+      await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+      return;
+    }
     try {
       await api.updateCreator(profile.id, {
         full_name: fullName.trim(),
         artistic_name: artisticName.replace(/^@/, "").trim(),
         whatsapp: whatsapp || null,
         city: city || null,
+        country,
         state: state || null,
         cpf: cpf || null,
         document: cpf || null,
@@ -903,7 +912,7 @@ function ProfileInner() {
                 </span>
               </div>
               <p className="mt-0.5 text-[14px] font-medium text-[#64748B]">
-                {creator.full_name}{creator.city ? ` • ${creator.city}${creator.state ? `, ${creator.state}` : ""}` : ""}
+                {creator.full_name}{formatLocation(locale, creator) ? ` • ${formatLocation(locale, creator)}` : ""}
               </p>
             </div>
           </div>
@@ -942,6 +951,25 @@ function ProfileInner() {
                   <UserCheck size={13} /> {editing ? tp("viewPortfolioShort") : tp("editProfileBtn")}
                 </button>
               </div>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600"
+                  checked={Boolean(creator.can_access_all_countries)}
+                  onChange={async (event) => {
+                    try {
+                      await api.updateCreator(creator.id, { can_access_all_countries: event.target.checked });
+                      load();
+                    } catch (err) {
+                      await alertApiError(err);
+                    }
+                  }}
+                />
+                <span>
+                  <span className="block text-[11px] font-bold text-slate-800">{tp("accessAllCountries")}</span>
+                  <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">{tp("accessAllCountriesHint")}</span>
+                </span>
+              </label>
             </div>
           </div>
         ) : canEdit ? (
@@ -1091,8 +1119,13 @@ function ProfileInner() {
                     </div>
                   </Field>
                   <Field label={tp("whatsappContact")}><input className={inputClass} value={whatsapp} onChange={(e) => setWhatsapp(formatWhatsApp(e.target.value))} /></Field>
+                  <Field label={tp("country")}>
+                    <CountrySelect theme="light" value={country} onChange={(value) => { setCountry(value); setState(""); }} />
+                  </Field>
+                  <Field label={tp("stateUf")}>
+                    <RegionSelect theme="light" country={country} value={state} onChange={setState} />
+                  </Field>
                   <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-                  <Field label={tp("stateUf")}><Select2Field theme="light" value={state} options={UF_OPTIONS} onChange={setState} /></Field>
                   <Field label={tp("cpfCreator")}><input className={inputClass} value={cpf} maxLength={14} onChange={(e) => setCpf(formatCPF(e.target.value))} /></Field>
                 </div>
               </div>

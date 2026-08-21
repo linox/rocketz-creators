@@ -362,7 +362,9 @@ class DomainApiTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('data.name', 'Bia Ribeiro Beauty')
-            ->assertJsonPath('data.status', 'active');
+            ->assertJsonPath('data.status', 'active')
+            ->assertJsonPath('data.country', 'BR')
+            ->assertJsonPath('data.currency', 'BRL');
     }
 
     public function test_admin_can_update_creator_password(): void
@@ -898,5 +900,146 @@ class DomainApiTest extends TestCase
                 'permissions' => [Permission::CreatorsModerate->value],
             ])
             ->assertStatus(422);
+    }
+
+    public function test_campaign_and_recurring_inherit_company_currency(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $company = Company::factory()->active()->create([
+            'name' => 'Marca México',
+            'country' => 'MX',
+            'currency' => 'MXN',
+        ]);
+
+        $campaign = $this->withToken($token)
+            ->postJson('/api/campaigns', [
+                'name' => 'Campanha MXN',
+                'company_id' => $company->id,
+                'is_barter' => true,
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertSame('MXN', $campaign['currency']);
+        $this->assertSame('MX', $campaign['company']['country']);
+
+        $recurring = $this->withToken($token)
+            ->postJson('/api/recurring-contracts', [
+                'title' => 'Retainer MXN',
+                'company_id' => $company->id,
+                'monthly_fee' => 1500,
+                'start_date' => now()->toDateString(),
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertSame('MXN', $recurring['currency']);
+    }
+
+    public function test_sync_currencies_converts_existing_campaigns_to_company_currency(): void
+    {
+        $company = Company::factory()->active()->create([
+            'country' => 'MX',
+            'currency' => 'MXN',
+        ]);
+
+        $campaign = Campaign::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Campanha em BRL',
+            'total_budget' => 5450,
+            'agency_fee' => 545,
+            'creators_budget' => 4905,
+            'creator_cache' => 4905,
+            'currency' => 'BRL',
+            'status' => CampaignStatus::Briefing,
+            'is_barter' => true,
+        ]);
+
+        $this->artisan('geo:sync-currencies')->assertSuccessful();
+
+        $campaign->refresh();
+        $this->assertSame('MXN', $campaign->currency);
+        $this->assertSame(18600.0, (float) $campaign->total_budget);
+        $this->assertSame(1860.0, (float) $campaign->agency_fee);
+    }
+
+    public function test_sync_currencies_can_treat_existing_amounts_as_brl(): void
+    {
+        $company = Company::factory()->active()->create([
+            'country' => 'MX',
+            'currency' => 'MXN',
+        ]);
+
+        $campaign = Campaign::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Já marcada MXN',
+            'total_budget' => 5450,
+            'agency_fee' => 0,
+            'creators_budget' => 5450,
+            'creator_cache' => 5450,
+            'currency' => 'MXN',
+            'status' => CampaignStatus::Briefing,
+            'is_barter' => true,
+        ]);
+
+        $this->artisan('geo:sync-currencies', ['--from' => 'BRL'])->assertSuccessful();
+
+        $campaign->refresh();
+        $this->assertSame('MXN', $campaign->currency);
+        $this->assertSame(18600.0, (float) $campaign->total_budget);
+    }
+
+    public function test_creator_only_sees_campaigns_from_own_country_unless_unlocked(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+
+        $foreign = Company::factory()->active()->create([
+            'name' => 'US Brand',
+            'country' => 'US',
+            'currency' => 'USD',
+        ]);
+        $this->assertSame('US', $foreign->fresh()->country);
+
+        $campaign = Campaign::query()->create([
+            'company_id' => $foreign->id,
+            'name' => 'US Only Campaign',
+            'is_barter' => true,
+            'is_secret' => false,
+            'status' => CampaignStatus::Briefing,
+            'currency' => 'USD',
+            'creator_cache' => 0,
+        ]);
+        $campaignId = $campaign->id;
+
+        $creator = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+        $creator->load('creator');
+        $this->assertFalse($creator->creator->canAccessAllCountries());
+        $this->assertSame('BR', $creator->creator->countryCode());
+        $creatorToken = $creator->createToken('auth')->plainTextToken;
+
+        $available = $this->withToken($creatorToken)->getJson('/api/campaigns/available')->assertOk()->json('data');
+        $this->assertFalse(collect($available)->contains(fn ($row) => (int) $row['id'] === (int) $campaignId));
+
+        $this->withToken($creatorToken)
+            ->postJson("/api/campaigns/{$campaignId}/apply", ['notes' => 'Quero participar'])
+            ->assertForbidden()
+            ->assertJsonPath('message', __('auth.campaign_country_restricted'));
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->patchJson("/api/creators/{$creator->creator->id}", ['can_access_all_countries' => true])
+            ->assertOk()
+            ->assertJsonPath('data.can_access_all_countries', true);
+
+        $this->app['auth']->forgetGuards();
+        $availableAfter = $this->withToken($creatorToken)->getJson('/api/campaigns/available')->assertOk()->json('data');
+        $this->assertTrue(collect($availableAfter)->contains(fn ($row) => (int) $row['id'] === (int) $campaignId));
     }
 }

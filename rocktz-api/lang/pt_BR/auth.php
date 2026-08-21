@@ -48,6 +48,7 @@ return [
     'creators_only_apply' => 'Somente criadores podem se candidatar.',
     'creator_must_be_approved' => 'Seu cadastro precisa ser confirmado pela curadoria para acessar as campanhas.',
     'creator_must_accept_contract' => 'Você precisa assinar o contrato de uso de imagem para se candidatar às campanhas.',
+    'campaign_country_restricted' => 'Esta campanha não está disponível no seu país.',
     'application_approved_title' => 'Candidatura aprovada',
     'application_approved' => 'Você foi selecionado para a campanha.',
     'application_rejected_title' => 'Candidatura recusada',

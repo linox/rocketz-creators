@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { resolveCurrency } from "@/lib/geo";
 
 const HIDE_KEY = "rocktz_hide_values";
 const LGPD_KEY = "rocktz_lgpd_accepted";
@@ -15,7 +16,7 @@ type PrivacyContextValue = {
   lgpdOpen: boolean;
   openLgpd: () => void;
   closeLgpd: () => void;
-  formatCurrency: (value?: number | null) => string;
+  formatCurrency: (value?: number | null, currency?: string | null) => string;
   formatNumber: (value?: number | null) => string;
 };
 
@@ -48,10 +49,24 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const formatCurrency = useCallback(
-    (value?: number | null) => {
-      if (hideValues) return "R$ •••••";
+    (value?: number | null, currency?: string | null) => {
+      const code = resolveCurrency(currency);
+      if (hideValues) {
+        try {
+          const symbol = new Intl.NumberFormat(locale, { style: "currency", currency: code })
+            .formatToParts(0)
+            .find((part) => part.type === "currency")?.value;
+          return `${symbol || code} •••••`;
+        } catch {
+          return `${code} •••••`;
+        }
+      }
       if (value == null) return "—";
-      return value.toLocaleString(locale, { style: "currency", currency: "BRL" });
+      try {
+        return value.toLocaleString(locale, { style: "currency", currency: code });
+      } catch {
+        return value.toLocaleString(locale, { style: "currency", currency: "BRL" });
+      }
     },
     [hideValues, locale],
   );

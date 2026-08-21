@@ -14,6 +14,7 @@ use App\Models\CompanyUser;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
+use App\Support\Geo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,11 +76,16 @@ class CompanyController extends Controller
             'cnpj' => ['nullable', 'string', 'max:20'],
             'segment' => ['nullable', 'string', 'max:120'],
             'city' => ['nullable', 'string', 'max:120'],
+            'country' => Geo::countryRules(false),
+            'currency' => Geo::currencyRules(false),
             'observations' => ['nullable', 'string'],
             'objective' => ['nullable', 'string'],
             'logo_url' => ['nullable', 'string', 'max:2048'],
             'status' => ['nullable', Rule::enum(CompanyStatus::class)],
         ]);
+
+        $data['country'] = Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY);
+        $data['currency'] = Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($data['country']));
 
         $company = Company::query()->create([
             ...$data,
@@ -104,6 +110,8 @@ class CompanyController extends Controller
             'cnpj' => ['nullable', 'string', 'max:20'],
             'segment' => ['nullable', 'string', 'max:120'],
             'city' => ['nullable', 'string', 'max:120'],
+            'country' => Geo::countryRules(false),
+            'currency' => Geo::currencyRules(false),
             'observations' => ['nullable', 'string'],
             'objective' => ['nullable', 'string'],
             'logo_url' => ['nullable', 'string', 'max:2048'],
@@ -121,6 +129,12 @@ class CompanyController extends Controller
 
         $contacts = $data['contacts'] ?? null;
         unset($data['contacts']);
+        if (isset($data['country'])) {
+            $data['country'] = Geo::normalizeCountry($data['country']);
+            $data['currency'] = Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($data['country']));
+        } elseif (isset($data['currency'])) {
+            $data['currency'] = Geo::normalizeCurrency($data['currency']);
+        }
         $company->fill($data)->save();
 
         if (is_array($contacts)) {

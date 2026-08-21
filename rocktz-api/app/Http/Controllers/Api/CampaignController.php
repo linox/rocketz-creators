@@ -20,6 +20,7 @@ use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
 use App\Services\NotificationService;
+use App\Support\Geo;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Http\JsonResponse;
@@ -72,6 +73,10 @@ class CampaignController extends Controller
 
         if ($user->role === UserRole::Company) {
             $query->where('company_id', '!=', $user->companyUser?->company_id);
+        }
+
+        if ($user->role === UserRole::Creator && $user->creator) {
+            $query->forCreatorMarketplace($user->creator);
         }
 
         return response()->json(['data' => CampaignResource::collection($query->latest()->get())]);
@@ -176,6 +181,12 @@ class CampaignController extends Controller
             $creator->contractAcceptances()->exists(),
             403,
             __('auth.creator_must_accept_contract'),
+        );
+        $campaign->loadMissing('company');
+        abort_unless(
+            $creator->canAccessCompanyCountry($campaign->company),
+            403,
+            __('auth.campaign_country_restricted'),
         );
 
         $data = $request->validate([
@@ -390,6 +401,11 @@ class CampaignController extends Controller
             abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
             Company::assertApproved((int) $data['company_id']);
         }
+        $companyId = (int) ($data['company_id'] ?? $request->route('campaign')?->company_id);
+        if ($creating || array_key_exists('company_id', $data)) {
+            $company = Company::query()->find($companyId);
+            $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
+        }
         if (! $user->canPublishWithoutApproval()) {
             if ($creating) {
                 $data['status'] = CampaignStatus::PendingAgency;
@@ -415,8 +431,16 @@ class CampaignController extends Controller
             UserRole::Creator => $user->creator?->status === CreatorStatus::Active
                 ? $query->where('status', '!=', CampaignStatus::PendingAgency)
                     ->where(function ($builder) use ($user) {
-                        $builder->where('is_secret', false)
-                            ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+                        $builder->whereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+                        if ($user->creator?->canAccessAllCountries()) {
+                            $builder->orWhere('is_secret', false);
+                        } else {
+                            $country = $user->creator?->countryCode() ?: Geo::DEFAULT_COUNTRY;
+                            $builder->orWhere(function ($inner) use ($country) {
+                                $inner->where('is_secret', false)
+                                    ->whereHas('company', fn ($q) => $q->where('country', $country));
+                            });
+                        }
                     })
                 : $query->whereRaw('1 = 0'),
             default => $query->whereRaw('1=0'),
@@ -435,9 +459,17 @@ class CampaignController extends Controller
         if ($user->role === UserRole::Creator) {
             abort_if($campaign->isPendingAgency(), 403, __('auth.campaign_awaiting_agency'));
             abort_unless($user->creator?->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
-            if (! $campaign->is_secret || $campaign->campaignCreators()->where('creator_id', $user->creator?->id)->exists()) {
+            $assigned = $campaign->campaignCreators()->where('creator_id', $user->creator?->id)->exists();
+            if ($assigned) {
                 return;
             }
+            if ($campaign->is_secret) {
+                abort(403, __('auth.forbidden'));
+            }
+            $campaign->loadMissing('company');
+            abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
+
+            return;
         }
         abort(403, __('auth.forbidden'));
     }

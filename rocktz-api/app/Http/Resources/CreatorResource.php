@@ -25,6 +25,7 @@ class CreatorResource extends JsonResource
             'whatsapp' => $this->whatsapp,
             'email' => $this->user?->email,
             'city' => $this->city,
+            'country' => $this->country,
             'state' => $this->state,
             'birth_date' => $this->birth_date?->toDateString(),
             'pix_key' => $this->pix_key,
@@ -40,6 +41,7 @@ class CreatorResource extends JsonResource
             'work_affinities' => $this->work_affinities ?? [],
             'internal_notes' => $this->when($request->user()?->role?->value === 'admin', $this->internal_notes),
             'status' => $this->status?->value,
+            'can_access_all_countries' => (bool) $this->can_access_all_countries,
             'portfolio' => $this->whenLoaded('portfolioVideos', fn () => $this->portfolioVideos->map(fn ($video) => [
                 'id' => $video->id,
                 'title' => $video->title,

@@ -27,6 +27,7 @@ import type { AuthUser, UserRole } from "@/lib/auth";
 import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
+import { formatLocation } from "@/lib/geo";
 
 export type ProfileMenuData = {
   fullName: string;
@@ -37,6 +38,7 @@ export type ProfileMenuData = {
   instagram?: string;
   city?: string;
   state?: string;
+  country?: string;
 };
 
 type UserProfileMenuProps = {
@@ -106,7 +108,7 @@ export function UserProfileMenu({
   onLogout,
   variant = "header",
 }: UserProfileMenuProps) {
-  const { t } = useTranslation("nav");
+  const { t, i18n } = useTranslation("nav");
   const [isOpen, setIsOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -119,9 +121,7 @@ export function UserProfileMenu({
   const email = userData.email || user.email;
   const phone = userData.phone ? displayPhone(userData.phone) : "";
   const phoneDigits = userData.phone ? nationalPhoneDigits(userData.phone) : "";
-  const city = userData.city ? titleCase(userData.city) : "";
-  const state = userData.state?.trim().toUpperCase() || "";
-  const locationText = [city, state].filter(Boolean).join(" - ");
+  const locationText = formatLocation(i18n.language, { city: userData.city ? titleCase(userData.city) : "", state: userData.state, country: userData.country });
   const roleInfo = roleBadge(role, t, user.company?.name);
 
   function placeMenu() {

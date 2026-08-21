@@ -51,6 +51,8 @@ class AuthTest extends TestCase
         $this->assertDatabaseHas('creators', [
             'artistic_name' => 'mariasilva',
             'status' => CreatorStatus::Review->value,
+            'country' => 'BR',
+            'state' => 'SP',
         ]);
 
         $this->postJson('/api/auth/login', [
@@ -77,6 +79,8 @@ class AuthTest extends TestCase
         $this->assertDatabaseHas('companies', [
             'name' => 'Marca Teste',
             'status' => CompanyStatus::Pending->value,
+            'country' => 'BR',
+            'currency' => 'BRL',
         ]);
     }
 

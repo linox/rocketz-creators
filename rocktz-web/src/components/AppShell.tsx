@@ -95,6 +95,7 @@ function profileMenuData(user: AuthUser) {
     instagram: user.creator?.socials?.instagram,
     city: user.creator?.city || user.company?.city || undefined,
     state: user.creator?.state || undefined,
+    country: user.creator?.country || user.company?.country || undefined,
   };
 }
 

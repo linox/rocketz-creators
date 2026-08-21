@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\Geo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -10,6 +11,15 @@ class CompleteGoogleProfileRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $country = Geo::normalizeCountry($this->input('country') ?: Geo::DEFAULT_COUNTRY);
+        $this->merge([
+            'country' => $country,
+            'currency' => Geo::normalizeCurrency($this->input('currency') ?: Geo::defaultCurrency($country)),
+        ]);
     }
 
     /**
@@ -23,7 +33,9 @@ class CompleteGoogleProfileRequest extends FormRequest
             'artistic_name' => ['required_if:type,creator', 'nullable', 'string', 'max:255'],
             'whatsapp' => ['required', 'string', 'max:30'],
             'city' => ['required_if:type,creator', 'nullable', 'string', 'max:120'],
-            'state' => ['required_if:type,creator', 'nullable', 'string', 'size:2'],
+            'country' => Geo::countryRules(),
+            'state' => Geo::regionRules(Geo::normalizeCountry((string) $this->input('country', Geo::DEFAULT_COUNTRY)), $this->input('type') === 'creator'),
+            'currency' => Geo::currencyRules($this->input('type') === 'company'),
             'instagram' => ['required_if:type,creator', 'nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],
             'name' => ['required_if:type,company', 'nullable', 'string', 'max:255'],

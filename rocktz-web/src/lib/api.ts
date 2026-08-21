@@ -90,7 +90,12 @@ export const api = {
   updateMe: (body: { name?: string; avatar_url?: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 };
 
-export function money(value?: number | null) {
+export function money(value?: number | null, currency?: string | null) {
   if (value == null) return "—";
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const code = (currency || "BRL").toUpperCase();
+  try {
+    return value.toLocaleString("pt-BR", { style: "currency", currency: code });
+  } catch {
+    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
 }

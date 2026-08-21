@@ -58,6 +58,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
+import { currencySymbol, moneyCurrency } from "@/lib/geo";
 import { campaignCreatorDeliveryState, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -821,12 +822,12 @@ function DetailInner() {
   }
 
   const companyName = campaign.company?.name || t("campaigns.client");
-  const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value));
+  const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value, moneyCurrency(campaign)));
   const myFeeDisplay = (() => {
     if (campaign.is_barter) return t("deliveries.barter");
     if (campaign.is_direct_contract) return t("deliveries.direct");
     const amount = effectiveCreatorFee(myParticipation, campaign);
-    return amount > 0 ? formatCurrency(amount) : t("available.toDefine");
+    return amount > 0 ? formatCurrency(amount, moneyCurrency(campaign)) : t("available.toDefine");
   })();
   const detailTabs = (
     isCreator
@@ -1032,7 +1033,7 @@ function DetailInner() {
               </div>
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{t("campaignDetail.kpiInvestmentBadge")}</span>
             </div>
-            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(totalBudget)}</span>
+            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(totalBudget, moneyCurrency(campaign))}</span>
           </div>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1800,7 +1801,7 @@ function DetailInner() {
                       <div className="flex min-w-[140px] flex-col gap-1">
                         <label className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.agreedFee")}</label>
                         <div className="relative">
-                          <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                          <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-xs font-bold text-slate-400">{currencySymbol(moneyCurrency(campaign), locale)}</span>
                           <input
                             type="number"
                             min="0"
@@ -1811,7 +1812,7 @@ function DetailInner() {
                             className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 pl-8 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
                           />
                         </div>
-                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0) })}</span>
+                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {waUrl ? (

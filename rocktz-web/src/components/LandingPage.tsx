@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { PasswordField } from "@/components/PasswordField";
 import { Select2Field } from "@/components/Select2Field";
+import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { RocketzLogo } from "@/components/RocketzLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { alertApiError, alertWarning } from "@/lib/alerts";
@@ -45,15 +46,21 @@ import { getAppLocale } from "@/i18n/config";
 import { laravelFetch, persistAuth } from "@/lib/laravel";
 import {
   formatInstagram,
-  formatUF,
   formatWhatsApp,
   instagramHandle,
   isValidEmail,
-  isValidUF,
   isValidWhatsApp,
   passwordError,
-  UF_OPTIONS,
 } from "@/lib/masks";
+import {
+  DEFAULT_COUNTRY,
+  DEFAULT_CURRENCY,
+  defaultCurrencyForCountry,
+  hasRegions,
+  isValidCountry,
+  isValidCurrency,
+  isValidRegion,
+} from "@/lib/geo";
 import { useTranslation } from "react-i18next";
 
 type Modal = "none" | "creator" | "company" | "login";
@@ -373,6 +380,7 @@ export function LandingPage() {
     category: "UGC Content",
     whatsapp: "",
     city: "",
+    country: DEFAULT_COUNTRY,
     state: "",
     email: "",
     password: "",
@@ -386,6 +394,8 @@ export function LandingPage() {
     email: "",
     whatsapp: "",
     segment: "",
+    country: DEFAULT_COUNTRY,
+    currency: DEFAULT_CURRENCY,
     objective: "",
     password: "",
     password_confirmation: "",
@@ -482,8 +492,12 @@ export function LandingPage() {
         await alertWarning(tc("alerts.cityRequiredTitle"), tc("alerts.cityRequired"));
         return;
       }
-      if (!isValidUF(creator.state)) {
-        await alertWarning(tc("alerts.ufRequiredTitle"), tc("alerts.ufRequired"));
+      if (!isValidCountry(creator.country)) {
+        await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+        return;
+      }
+      if (hasRegions(creator.country) && !isValidRegion(creator.country, creator.state)) {
+        await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
         return;
       }
     }
@@ -508,7 +522,6 @@ export function LandingPage() {
     await submitJson("/auth/register/creator", {
       ...creator,
       instagram: instagramHandle(creator.instagram),
-      state: formatUF(creator.state),
     });
   }
 
@@ -524,6 +537,14 @@ export function LandingPage() {
     }
     if (!isValidWhatsApp(company.whatsapp)) {
       await alertWarning(tc("alerts.invalidWhatsappTitle"), tc("alerts.invalidWhatsapp"));
+      return;
+    }
+    if (!isValidCountry(company.country)) {
+      await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+      return;
+    }
+    if (!isValidCurrency(company.currency)) {
+      await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
       return;
     }
     const passwordIssue = passwordError(company.password, company.password_confirmation);
@@ -1147,20 +1168,26 @@ export function LandingPage() {
                         <ModalField label={ta("fields.whatsapp")} required>
                           <input placeholder={ta("fields.whatsappPh")} inputMode="tel" autoComplete="tel" className={modalInput} value={creator.whatsapp} onChange={(e) => setCreator({ ...creator, whatsapp: formatWhatsApp(e.target.value) })} />
                         </ModalField>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="col-span-2">
-                            <ModalField label={ta("fields.city")} required>
-                              <input placeholder={ta("fields.cityPh")} autoComplete="address-level2" className={modalInput} value={creator.city} onChange={(e) => setCreator({ ...creator, city: e.target.value })} />
-                            </ModalField>
-                          </div>
-                          <ModalField label={ta("fields.uf")} required>
-                            <Select2Field
+                        <div className="grid grid-cols-1 gap-3">
+                          <ModalField label={ta("fields.country")} required>
+                            <CountrySelect
                               theme="light"
-                              placeholder={ta("fields.uf")}
+                              placeholder={ta("fields.countryPh")}
+                              value={creator.country}
+                              onChange={(value) => setCreator({ ...creator, country: value, state: "" })}
+                            />
+                          </ModalField>
+                          <ModalField label={ta("fields.region")} required>
+                            <RegionSelect
+                              theme="light"
+                              country={creator.country}
+                              placeholder={ta("fields.regionPh")}
                               value={creator.state}
-                              options={UF_OPTIONS}
                               onChange={(value) => setCreator({ ...creator, state: value })}
                             />
+                          </ModalField>
+                          <ModalField label={ta("fields.city")} required>
+                            <input placeholder={ta("fields.cityPh")} autoComplete="address-level2" className={modalInput} value={creator.city} onChange={(e) => setCreator({ ...creator, city: e.target.value })} />
                           </ModalField>
                         </div>
                         <div className="flex items-center gap-3 pt-2">
@@ -1223,6 +1250,24 @@ export function LandingPage() {
                     <ModalField label={ta("fields.whatsapp")} required>
                       <input placeholder={ta("fields.whatsappPh")} inputMode="tel" autoComplete="tel" className={modalInput} value={company.whatsapp} onChange={(e) => setCompany({ ...company, whatsapp: formatWhatsApp(e.target.value) })} />
                     </ModalField>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <ModalField label={ta("fields.country")} required>
+                        <CountrySelect
+                          theme="light"
+                          placeholder={ta("fields.countryPh")}
+                          value={company.country}
+                          onChange={(value) => setCompany({ ...company, country: value, currency: defaultCurrencyForCountry(value) })}
+                        />
+                      </ModalField>
+                      <ModalField label={ta("fields.currency")} required>
+                        <CurrencySelect
+                          theme="light"
+                          placeholder={ta("fields.currencyPh")}
+                          value={company.currency}
+                          onChange={(value) => setCompany({ ...company, currency: value })}
+                        />
+                      </ModalField>
+                    </div>
                     <ModalField label={ta("fields.segment")}>
                       <input placeholder={ta("fields.segment")} className={modalInput} value={company.segment} onChange={(e) => setCompany({ ...company, segment: e.target.value })} />
                     </ModalField>

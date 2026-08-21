@@ -48,6 +48,7 @@ return [
     'creators_only_apply' => 'Only creators can apply.',
     'creator_must_be_approved' => 'Your signup must be confirmed by curatorship before you can access campaigns.',
     'creator_must_accept_contract' => 'You must sign the image usage agreement before applying to campaigns.',
+    'campaign_country_restricted' => 'This campaign is not available in your country.',
     'application_approved_title' => 'Application approved',
     'application_approved' => 'You were selected for the campaign.',
     'application_rejected_title' => 'Application rejected',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CreatorStatus;
+use App\Support\Geo;
 use Database\Factories\CreatorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'cpf',
     'whatsapp',
     'city',
+    'country',
     'state',
     'birth_date',
     'pix_key',
@@ -35,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'work_affinities',
     'internal_notes',
     'status',
+    'can_access_all_countries',
 ])]
 class Creator extends Model
 {
@@ -57,6 +60,7 @@ class Creator extends Model
             'accepts_exclusivity' => 'boolean',
             'work_affinities' => 'array',
             'status' => CreatorStatus::class,
+            'can_access_all_countries' => 'boolean',
         ];
     }
 
@@ -105,5 +109,26 @@ class Creator extends Model
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);
+    }
+
+    public function countryCode(): string
+    {
+        return Geo::isValidCountry($this->country) ? Geo::normalizeCountry($this->country) : Geo::DEFAULT_COUNTRY;
+    }
+
+    public function canAccessAllCountries(): bool
+    {
+        return filter_var($this->can_access_all_countries, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    public function canAccessCompanyCountry(?Company $company): bool
+    {
+        if ($this->canAccessAllCountries()) {
+            return true;
+        }
+
+        $companyCountry = $company?->countryCode() ?: Geo::DEFAULT_COUNTRY;
+
+        return $this->countryCode() === $companyCountry;
     }
 }

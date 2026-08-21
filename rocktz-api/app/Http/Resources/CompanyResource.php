@@ -21,6 +21,8 @@ class CompanyResource extends JsonResource
             'whatsapp' => $this->whatsapp,
             'email' => $this->email,
             'city' => $this->city,
+            'country' => $this->country,
+            'currency' => $this->currency,
             'observations' => $this->observations,
             'logo_url' => $this->logo_url,
             'objective' => $this->objective,

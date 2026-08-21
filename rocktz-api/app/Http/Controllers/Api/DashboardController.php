@@ -11,6 +11,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\Company;
 use App\Models\Creator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -94,6 +95,7 @@ class DashboardController extends Controller
             'campaigns' => (clone $campaigns)->count(),
             'running_campaigns' => (clone $campaigns)->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency])->count(),
             'total_campaign_value' => (float) (clone $campaigns)->sum('total_budget'),
+            'currency' => Company::query()->find($companyId)?->currencyCode(),
             'pending_applications' => CampaignCreator::query()
                 ->whereHas('campaign', fn ($q) => $q->where('company_id', $companyId))
                 ->where('application_status', ApplicationStatus::Pending)

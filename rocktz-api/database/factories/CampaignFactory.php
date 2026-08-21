@@ -6,6 +6,7 @@ use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use App\Models\Company;
+use App\Support\Geo;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -31,6 +32,7 @@ class CampaignFactory extends Factory
             'agency_fee' => $agencyFee,
             'creators_budget' => $creatorsBudget,
             'creator_cache' => $creatorsBudget,
+            'currency' => 'BRL',
             'status' => CampaignStatus::Briefing,
             'image_url' => fake()->boolean(50) ? 'https://placehold.co/800x600?text=Campaign' : null,
             'is_secret' => false,
@@ -39,6 +41,34 @@ class CampaignFactory extends Factory
             'barter_details' => null,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Campaign $campaign) {
+            $company = $campaign->company;
+            if (! $company) {
+                return;
+            }
+
+            $from = Geo::normalizeCurrency($campaign->currency ?: Geo::DEFAULT_CURRENCY);
+            $to = $company->currencyCode();
+            if ($from === $to) {
+                if ($campaign->currency !== $to) {
+                    $campaign->forceFill(['currency' => $to])->saveQuietly();
+                }
+
+                return;
+            }
+
+            $campaign->forceFill([
+                'total_budget' => Geo::convertMoney($campaign->total_budget, $from, $to),
+                'agency_fee' => Geo::convertMoney($campaign->agency_fee, $from, $to),
+                'creators_budget' => Geo::convertMoney($campaign->creators_budget, $from, $to),
+                'creator_cache' => Geo::convertMoney($campaign->creator_cache, $from, $to),
+                'currency' => $to,
+            ])->saveQuietly();
+        });
     }
 
     public function briefing(): static

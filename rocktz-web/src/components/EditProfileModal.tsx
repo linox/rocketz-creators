@@ -5,13 +5,14 @@ import { useTranslation } from "react-i18next";
 import { Camera, Check, Instagram, Mail, MapPin, Smartphone, Sparkles, UploadCloud, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { ImageCropModal } from "@/components/ImageCropModal";
-import { Select2Field } from "@/components/Select2Field";
+import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { UserAvatar } from "@/components/UserAvatar";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import { fetchMe } from "@/lib/laravel";
-import { UF_OPTIONS, formatInstagram, formatTikTok, formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
+import { formatInstagram, formatTikTok, formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
+import { DEFAULT_COUNTRY, hasRegions, isValidRegion } from "@/lib/geo";
 
 type EditProfileModalProps = {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const [instagram, setInstagram] = useState("");
   const [tiktok, setTiktok] = useState("");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [state, setState] = useState("");
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,6 +54,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     setInstagram(formatInstagram(user.creator?.socials?.instagram || ""));
     setTiktok(formatTikTok(user.creator?.socials?.tiktok || "").replace(/^@+/, ""));
     setCity(user.creator?.city || user.company?.city || "");
+    setCountry(user.creator?.country || user.company?.country || DEFAULT_COUNTRY);
     setState(user.creator?.state || "");
     setBio("");
   }, [isOpen, user]);
@@ -102,6 +105,10 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
       await alertWarning(t("editProfile.nameRequiredTitle"), t("editProfile.nameRequired"));
       return;
     }
+    if (hasCreator && hasRegions(country) && !isValidRegion(country, state)) {
+      await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+      return;
+    }
 
     setLoading(true);
 
@@ -120,6 +127,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           photo_url: trimmedPhoto,
           whatsapp: nationalPhoneDigits(whatsapp) || whatsapp.trim(),
           city: city.trim(),
+          country,
           state: state || user.creator.state,
           bio: bio.trim() || undefined,
           socials: {
@@ -134,6 +142,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           responsible_name: fullName.trim(),
           whatsapp: nationalPhoneDigits(whatsapp) || null,
           city: city.trim() || null,
+          country,
           logo_url: trimmedPhoto,
         });
       }
@@ -267,21 +276,31 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.country")}</label>
+                  <CountrySelect
+                    theme="light"
+                    placeholder={t("editProfile.countryPh")}
+                    value={country}
+                    onChange={(value) => {
+                      setCountry(value);
+                      setState("");
+                    }}
+                  />
+                </div>
+                {hasCreator ? (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.state")}</label>
+                    <RegionSelect theme="light" country={country} placeholder={t("editProfile.statePh")} value={state} onChange={setState} />
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1.5">
                   <label className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-600 uppercase">
                     <MapPin size={13} className="text-emerald-500" /> {t("editProfile.city")}
                   </label>
                   <input type="text" value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("editProfile.cityPh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-brand-primary" />
                 </div>
-                {hasCreator ? (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.state")}</label>
-                    <Select2Field theme="light" placeholder={t("editProfile.statePh")} value={state} options={UF_OPTIONS} onChange={setState} />
-                  </div>
-                ) : (
-                  <div />
-                )}
               </div>
 
               <div className="flex flex-col gap-1.5">

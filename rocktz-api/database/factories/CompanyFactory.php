@@ -24,6 +24,8 @@ class CompanyFactory extends Factory
             'whatsapp' => fake()->numerify('+55 ## 9####-####'),
             'email' => fake()->unique()->companyEmail(),
             'city' => fake()->city(),
+            'country' => 'BR',
+            'currency' => 'BRL',
             'observations' => fake()->optional()->sentence(),
             'logo_url' => fake()->boolean(40) ? 'https://placehold.co/200x200?text=Logo' : null,
             'objective' => fake()->optional()->sentence(),
