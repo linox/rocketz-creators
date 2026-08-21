@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Notifications\ResetPasswordNotification;
 use App\Support\AppLocale;
@@ -70,6 +71,30 @@ class User extends Authenticatable implements HasLocalePreference
         return $this->hasMany(Notification::class);
     }
 
+    public function permissionGrants(): HasMany
+    {
+        return $this->hasMany(UserPermission::class);
+    }
+
+    public function permissionSlugs(): array
+    {
+        if ($this->relationLoaded('permissionGrants')) {
+            return $this->permissionGrants->pluck('permission')->unique()->values()->all();
+        }
+
+        return $this->permissionGrants()->pluck('permission')->unique()->values()->all();
+    }
+
+    public function hasPermission(Permission|string $permission): bool
+    {
+        $slug = $permission instanceof Permission ? $permission->value : $permission;
+        if ($this->role === UserRole::Admin && $slug === Permission::CampaignsPublishWithoutApproval->value) {
+            return true;
+        }
+
+        return in_array($slug, $this->permissionSlugs(), true);
+    }
+
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token)
     {
         $this->notify(new ResetPasswordNotification($token));
@@ -78,5 +103,19 @@ class User extends Authenticatable implements HasLocalePreference
     public function preferredLocale(): string
     {
         return AppLocale::laravelLocale($this->locale ?: AppLocale::DEFAULT);
+    }
+
+    public function canPublishWithoutApproval(): bool
+    {
+        if ($this->role === UserRole::Admin) {
+            return true;
+        }
+
+        if ($this->role !== UserRole::Company) {
+            return false;
+        }
+
+        return $this->hasPermission(Permission::CampaignsPublishWithoutApproval)
+            || (bool) $this->companyUser?->can_publish_without_approval;
     }
 }

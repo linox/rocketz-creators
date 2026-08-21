@@ -72,6 +72,7 @@ class CampaignCreatorResource extends JsonResource
                 'script_version' => (int) ($this->content->script_version ?? 0),
                 'video_version' => (int) ($this->content->video_version ?? 0),
                 'submission_versions' => $this->content->submission_versions ?? [],
+                'revision_history' => $this->content->revision_history ?? [],
                 'story_prints' => $this->content->story_prints ?? [],
                 'metrics' => $this->content->metrics ?? [],
             ] : null),

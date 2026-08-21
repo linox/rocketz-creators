@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RecurringContractController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
@@ -76,28 +77,49 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
-        Route::post('creators', [CreatorController::class, 'store']);
-        Route::post('creators/reset-casting', [CreatorController::class, 'resetCasting']);
-        Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
-        Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
-        Route::post('creators/{creator}/password', [CreatorController::class, 'updatePassword']);
+        Route::middleware('permission:creators.moderate')->group(function () {
+            Route::post('creators', [CreatorController::class, 'store']);
+            Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
+            Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
+        });
 
-        Route::post('companies', [CompanyController::class, 'store']);
-        Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
-        Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
-        Route::post('companies/{company}/users', [CompanyController::class, 'storeUser']);
-        Route::delete('companies/{company}/users/{companyUser}', [CompanyController::class, 'destroyUser']);
+        Route::middleware('permission:companies.moderate')->group(function () {
+            Route::post('companies', [CompanyController::class, 'store']);
+            Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
+            Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
+        });
 
-        Route::post('campaigns/reset', [CampaignController::class, 'reset']);
+        Route::middleware('permission:campaigns.assign')->group(function () {
+            Route::post('campaigns/{campaign}/assign', [CampaignController::class, 'assign']);
+            Route::delete('campaign-creators/{campaignCreator}', [CampaignController::class, 'destroyParticipation']);
+        });
+
         Route::delete('campaigns/{campaign}', [CampaignController::class, 'destroy']);
-        Route::post('campaigns/{campaign}/assign', [CampaignController::class, 'assign']);
-        Route::delete('campaign-creators/{campaignCreator}', [CampaignController::class, 'destroyParticipation']);
-
-        Route::post('recurring-contracts/reset', [RecurringContractController::class, 'reset']);
         Route::delete('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'destroy']);
 
-        Route::get('admin-users', [AdminUserController::class, 'index']);
-        Route::post('admin-users', [AdminUserController::class, 'store']);
-        Route::delete('admin-users/{adminUser}', [AdminUserController::class, 'destroy']);
+        Route::middleware('permission:users.manage')->group(function () {
+            Route::get('users', [UserController::class, 'index']);
+            Route::post('users', [UserController::class, 'store']);
+            Route::patch('users/{user}', [UserController::class, 'update']);
+            Route::delete('users/{user}', [UserController::class, 'destroy']);
+            Route::get('admin-users', [AdminUserController::class, 'index']);
+            Route::post('admin-users', [AdminUserController::class, 'store']);
+            Route::delete('admin-users/{adminUser}', [AdminUserController::class, 'destroy']);
+            Route::post('companies/{company}/users', [CompanyController::class, 'storeUser']);
+            Route::patch('companies/{company}/users/{companyUser}', [CompanyController::class, 'updateUser']);
+            Route::delete('companies/{company}/users/{companyUser}', [CompanyController::class, 'destroyUser']);
+            Route::post('creators/{creator}/password', [CreatorController::class, 'updatePassword']);
+        });
+
+        Route::middleware('permission:campaigns.approve_agency')->group(function () {
+            Route::post('campaigns/{campaign}/approve-agency', [CampaignController::class, 'approveAgency']);
+            Route::post('recurring-contracts/{recurringContract}/approve-agency', [RecurringContractController::class, 'approveAgency']);
+        });
+
+        Route::middleware('permission:data.reset')->group(function () {
+            Route::post('creators/reset-casting', [CreatorController::class, 'resetCasting']);
+            Route::post('campaigns/reset', [CampaignController::class, 'reset']);
+            Route::post('recurring-contracts/reset', [RecurringContractController::class, 'reset']);
+        });
     });
 });

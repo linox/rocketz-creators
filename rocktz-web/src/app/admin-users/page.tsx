@@ -1,5 +1,5 @@
-import { AdminUsersScreen } from "@/components/screens/AdminUsersScreen";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <AdminUsersScreen />;
+  redirect("/users");
 }

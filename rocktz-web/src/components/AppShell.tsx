@@ -33,6 +33,7 @@ import { UserProfileMenu } from "@/components/UserProfileMenu";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess } from "@/lib/alerts";
 import type { AuthUser } from "@/lib/auth";
+import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { fetchMe, logoutRequest } from "@/lib/laravel";
 import { usePrivacy } from "@/lib/privacy";
@@ -173,6 +174,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
     : user.role === "company"
       ? [
           { href: "/company-dashboard", label: t("tabPanel"), icon: Building2, active: isActive("/company-dashboard") },
+          { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
           { href: "/available-campaigns", label: t("tabAvailable"), icon: Sparkles, active: isAvailableCampaignsActive },
           { href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") },
           { href: "/campaign-deliveries", label: t("tabDeliveries"), icon: Video, active: isActive("/campaign-deliveries") },
@@ -211,7 +213,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-                <SidebarItem href="/admin-users" label={t("adminUsers")} icon={ShieldCheck} active={isActive("/admin-users")} onClick={close} />
+                {userHasPermission(user, "users.manage") ? (
+                  <SidebarItem href="/users" label={t("users")} icon={ShieldCheck} active={isActive("/users") || isActive("/admin-users")} onClick={close} />
+                ) : null}
                 <div className="mt-6 border-t border-white/20 pt-6">
                   <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("shortcuts")}</div>
                   <SidebarItem href="/available-campaigns?view=creator" label={t("viewAsCreator")} icon={Sparkles} active={false} onClick={close} />
@@ -224,6 +228,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               <>
                 <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("companyPanel")}</div>
                 <SidebarItem href="/company-dashboard" label={t("campaignPanel")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
+                <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
                 <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />

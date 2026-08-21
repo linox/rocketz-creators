@@ -6,14 +6,17 @@ use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
+use App\Enums\Permission;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\Company;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\Notification;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -79,7 +82,114 @@ class DomainApiTest extends TestCase
         $this->withToken($token)
             ->postJson('/api/campaigns', ['name' => 'Campanha Aurora', 'is_barter' => true])
             ->assertCreated()
-            ->assertJsonPath('data.name', 'Campanha Aurora');
+            ->assertJsonPath('data.name', 'Campanha Aurora')
+            ->assertJsonPath('data.status', 'pending_agency');
+    }
+
+    public function test_privileged_company_user_creates_campaign_without_agency_approval(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company->companyUser()->update(['can_publish_without_approval' => true]);
+        $token = $company->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/campaigns', ['name' => 'Campanha Direta', 'is_barter' => true])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'briefing');
+    }
+
+    public function test_company_cannot_self_approve_pending_campaign(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $token = $company->createToken('auth')->plainTextToken;
+
+        $id = $this->withToken($token)
+            ->postJson('/api/campaigns', ['name' => 'Campanha Fila', 'is_barter' => true])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withToken($token)
+            ->patchJson("/api/campaigns/{$id}", ['status' => 'briefing'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_agency');
+    }
+
+    public function test_admin_approves_pending_campaign_and_creator_cannot_see_it_before(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyToken = $company->createToken('auth')->plainTextToken;
+        $id = $this->withToken($companyToken)
+            ->postJson('/api/campaigns', ['name' => 'Campanha Revisão', 'is_barter' => true, 'is_secret' => false])
+            ->assertCreated()
+            ->json('data.id');
+
+        $creator = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+        $creatorToken = $creator->createToken('auth')->plainTextToken;
+        $available = $this->withToken($creatorToken)->getJson('/api/campaigns/available')->assertOk()->json('data');
+        $this->assertFalse(collect($available)->contains(fn ($row) => (int) $row['id'] === (int) $id));
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $this->withoutToken()->actingAs($admin, 'sanctum')
+            ->postJson("/api/campaigns/{$id}/approve-agency")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'briefing');
+
+        $availableAfter = $this->withToken($creatorToken)->getJson('/api/campaigns/available')->assertOk()->json('data');
+        $this->assertTrue(collect($availableAfter)->contains(fn ($row) => (int) $row['id'] === (int) $id));
+    }
+
+    public function test_company_creates_recurring_pending_until_agency_or_privilege(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $token = $company->createToken('auth')->plainTextToken;
+
+        $id = $this->withToken($token)
+            ->postJson('/api/recurring-contracts', ['title' => 'Contrato Fila', 'start_date' => now()->toDateString()])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'pending_agency')
+            ->json('data.id');
+
+        $this->withToken($token)
+            ->patchJson("/api/recurring-contracts/{$id}", ['status' => 'active'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_agency');
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $this->withoutToken()->actingAs($admin, 'sanctum')
+            ->postJson("/api/recurring-contracts/{$id}/approve-agency")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'active');
+
+        $company->companyUser()->update(['can_publish_without_approval' => true]);
+        $company->unsetRelation('companyUser');
+        $this->actingAs($company->fresh(['companyUser']), 'sanctum')
+            ->postJson('/api/recurring-contracts', ['title' => 'Contrato Direto', 'start_date' => now()->toDateString()])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'active');
+    }
+
+    public function test_admin_can_toggle_company_user_publish_without_approval(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyUser = $company->companyUser;
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson("/api/companies/{$companyUser->company_id}/users/{$companyUser->id}", [
+                'can_publish_without_approval' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.can_publish_without_approval', true);
     }
 
     public function test_pending_company_cannot_create_campaign_or_recurring_contract(): void
@@ -136,6 +246,7 @@ class DomainApiTest extends TestCase
         $campaigns = $this->withToken($token)->getJson('/api/campaigns/available')->assertOk();
         $id = $campaigns->json('data.0.id');
         $this->assertNotEmpty($id);
+        $this->assertNotEmpty($campaigns->json('data.0.company.logo_url'));
 
         $expectedCache = (float) Campaign::query()->findOrFail($id)->creator_cache;
 
@@ -472,9 +583,13 @@ class DomainApiTest extends TestCase
             ->assertJsonCount(1, 'data.creators')
             ->assertJsonPath('data.creators.0.creator_id', $ana->creator->id)
             ->assertJsonPath('data.creators.0.monthly_cache', 3500)
+            ->assertJsonPath('data.company.logo_url', $contract->company?->logo_url)
             ->json('data');
 
+        $this->assertNotEmpty($payload['company']['logo_url'] ?? null);
         $this->assertNotContains('Pauta secreta de outro criador', array_column($payload['items'], 'title'));
+        $this->assertNotEmpty($payload['items']);
+        $this->assertNotEmpty($payload['items'][0]['company']['logo_url'] ?? null);
         foreach ($payload['items'] as $item) {
             $this->assertSame($ana->creator->id, $item['creator_id']);
         }
@@ -526,7 +641,10 @@ class DomainApiTest extends TestCase
                 'delivery_status' => 'revision',
                 'video_feedback' => 'Ajuste o gancho inicial.',
             ])
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('data.video_feedback', 'Ajuste o gancho inicial.')
+            ->assertJsonPath('data.content.revision_history.0.stage', 'video')
+            ->assertJsonPath('data.content.revision_history.0.note', 'Ajuste o gancho inicial.');
 
         $this->withToken($adminToken)
             ->patchJson("/api/content-planning-items/{$planningItem->id}", [
@@ -552,5 +670,233 @@ class DomainApiTest extends TestCase
         foreach ($inbox as $notification) {
             $this->assertSame('creator', $notification['target_role']);
         }
+    }
+
+    public function test_creator_is_notified_when_added_to_recurring_work_and_when_receiving_pauta(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $contract = RecurringContract::query()->where('title', 'Conteúdo mensal Aurora + Ana')->firstOrFail();
+        $campaign = Campaign::query()->firstOrFail();
+        $creator = Creator::factory()->active()->create();
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+        $creatorToken = $creator->user->createToken('auth')->plainTextToken;
+
+        $this->withToken($adminToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/creators", [
+                'creator_id' => $creator->id,
+                'start_date' => now()->startOfMonth()->toDateString(),
+                'monthly_deliverables' => ['reels' => 1],
+            ])
+            ->assertCreated();
+
+        $this->app['auth']->forgetGuards();
+        $inbox = $this->withToken($creatorToken)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->json('data');
+        $titles = array_column($inbox, 'title');
+        $this->assertContains(__('auth.recurring_assigned_title'), $titles);
+        $this->assertSame(1, count(array_filter($titles, fn ($title) => $title === __('auth.recurring_assigned_title'))));
+
+        $item = ContentPlanningItem::query()
+            ->where('recurring_contract_id', $contract->id)
+            ->where('creator_id', $creator->id)
+            ->where('status', 'planned')
+            ->firstOrFail();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'title' => 'Tutorial de produto',
+                'briefing' => 'Fale dos 3 benefícios principais.',
+            ])
+            ->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/items", [
+                'creator_id' => $creator->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'post',
+                'title' => 'Post da semana',
+                'briefing' => 'Mostre o produto no feed.',
+                'planned_date' => now()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'briefing' => 'Atualize o gancho inicial.',
+            ])
+            ->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/creators", [
+                'creator_id' => $creator->id,
+                'monthly_cache' => 800,
+            ])
+            ->assertCreated();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->postJson("/api/campaigns/{$campaign->id}/assign", [
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+
+        $this->app['auth']->forgetGuards();
+        $inbox = $this->withToken($creatorToken)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->json('data');
+        $titles = array_column($inbox, 'title');
+
+        $this->assertContains(__('auth.pauta_ready_title'), $titles);
+        $this->assertSame(2, count(array_filter($titles, fn ($title) => $title === __('auth.pauta_ready_title'))));
+        $this->assertSame(1, count(array_filter($titles, fn ($title) => $title === __('auth.recurring_assigned_title'))));
+        $this->assertContains(__('auth.campaign_assigned_title'), $titles);
+
+        foreach ($inbox as $notification) {
+            $this->assertSame('creator', $notification['target_role']);
+        }
+    }
+
+    public function test_recurring_pauta_accepts_structured_briefing_and_published_url_after_approval(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $ana = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+        $contract = RecurringContract::query()->where('title', 'Conteúdo mensal Aurora + Ana')->firstOrFail();
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+        $creatorToken = $ana->createToken('auth')->plainTextToken;
+
+        $created = $this->withToken($adminToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/items", [
+                'creator_id' => $ana->creator->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'reel',
+                'title' => 'Reels de rotina',
+                'planned_date' => now()->toDateString(),
+                'briefing_fields' => [
+                    'product' => 'Sérum Aurora Glow',
+                    'key_message' => 'Pele iluminada em 7 dias.',
+                    'must_have' => 'Mostrar a embalagem nos primeiros 3 segundos.',
+                    'donts' => 'Não citar concorrentes.',
+                    'cta' => 'Link na bio',
+                    'hashtags' => '#AuroraGlow',
+                ],
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertSame('Sérum Aurora Glow', $created['briefing_fields']['product']);
+        $this->assertStringContainsString('Sérum Aurora Glow', (string) $created['briefing']);
+
+        $itemId = $created['id'];
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$itemId}", [
+                'video_status' => 'approved',
+                'status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($creatorToken)
+            ->patchJson("/api/content-planning-items/{$itemId}", [
+                'published_url' => 'https://instagram.com/reel/aurora-glow',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.published_url', 'https://instagram.com/reel/aurora-glow')
+            ->assertJsonPath('data.status', 'published');
+    }
+
+    public function test_admin_can_list_all_users_and_manage_permissions(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $company = Company::query()->firstOrFail();
+
+        $this->withToken($token)
+            ->getJson('/api/users')
+            ->assertOk()
+            ->assertJsonStructure(['data' => [['id', 'name', 'email', 'role', 'permissions']]]);
+
+        $created = $this->withToken($token)
+            ->postJson('/api/users', [
+                'name' => 'Ops Rocketz',
+                'email' => 'ops@rocketz.test',
+                'password' => 'password',
+                'role' => 'admin',
+                'permissions' => ['users.manage', 'creators.moderate'],
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertEqualsCanonicalizing(['users.manage', 'creators.moderate'], $created['permissions']);
+
+        $this->withToken($token)
+            ->patchJson("/api/users/{$created['id']}", [
+                'permissions' => ['creators.moderate'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.permissions', ['creators.moderate']);
+
+        $companyUser = $this->withToken($token)
+            ->postJson('/api/users', [
+                'name' => 'Editor Empresa',
+                'email' => 'editor.empresa@rocketz.test',
+                'password' => 'password',
+                'role' => 'company',
+                'company_id' => $company->id,
+                'permissions' => ['campaigns.publish_without_approval'],
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertTrue($companyUser['can_publish_without_approval']);
+        $this->assertContains('campaigns.publish_without_approval', $companyUser['permissions']);
+
+        $this->withToken($token)
+            ->deleteJson("/api/users/{$created['id']}")
+            ->assertOk();
+    }
+
+    public function test_admin_without_users_manage_cannot_list_users(): void
+    {
+        $this->seed();
+
+        $limited = User::factory()->admin()->create(['email' => 'limited@rocketz.test']);
+        app(PermissionService::class)->sync($limited, [Permission::CreatorsModerate->value]);
+        $token = $limited->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)->getJson('/api/users')->assertForbidden();
+
+        $bruno = Creator::query()->where('status', CreatorStatus::Review)->firstOrFail();
+        $this->withToken($token)
+            ->postJson("/api/creators/{$bruno->id}/approve")
+            ->assertOk();
+    }
+
+    public function test_admin_cannot_remove_own_users_manage_permission(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson("/api/users/{$admin->id}", [
+                'permissions' => [Permission::CreatorsModerate->value],
+            ])
+            ->assertStatus(422);
     }
 }

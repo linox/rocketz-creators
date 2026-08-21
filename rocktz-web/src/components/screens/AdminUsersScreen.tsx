@@ -1,76 +1,457 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
+import { Plus, Search, ShieldCheck, Users } from "lucide-react";
+import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { PasswordField } from "@/components/PasswordField";
+import { Select2Field } from "@/components/Select2Field";
+import { UserAvatar } from "@/components/UserAvatar";
+import { PageHeader, StatCard } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
-import type { AuthUser } from "@/lib/auth";
+import type { AuthUser, UserRole } from "@/lib/auth";
+import { userHasPermission } from "@/lib/auth";
+import { cn } from "@/lib/cn";
+import { isValidEmail, passwordError } from "@/lib/masks";
+import type { Company } from "@/lib/types";
+import { useAuth } from "@/lib/use-auth";
 
-function AdminInner() {
+const ADMIN_PERMISSIONS = [
+  "users.manage",
+  "creators.moderate",
+  "companies.moderate",
+  "campaigns.assign",
+  "campaigns.approve_agency",
+  "data.reset",
+] as const;
+
+const COMPANY_PERMISSIONS = ["campaigns.publish_without_approval"] as const;
+
+function permissionsForRole(role: string) {
+  if (role === "admin") return [...ADMIN_PERMISSIONS];
+  if (role === "company") return [...COMPANY_PERMISSIONS];
+  return [];
+}
+
+function permissionKey(slug: string) {
+  return slug.replaceAll(".", "_");
+}
+
+const EMPTY_FORM = { name: "", email: "", password: "", role: "admin", company_id: "" };
+
+function UsersInner() {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
+  const { t: tn } = useTranslation("nav");
+  const me = useAuth();
   const [items, setItems] = useState<AuthUser[]>([]);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formPerms, setFormPerms] = useState<string[]>([...ADMIN_PERMISSIONS]);
+  const [editing, setEditing] = useState<AuthUser | null>(null);
+  const [editPerms, setEditPerms] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const canManage = userHasPermission(me, "users.manage");
 
   async function load() {
     try {
-      setItems((await api.adminUsers()).data);
+      const params = new URLSearchParams();
+      if (roleFilter !== "all") params.set("role", roleFilter);
+      if (query.trim()) params.set("q", query.trim());
+      const suffix = params.toString() ? `?${params}` : "";
+      const [usersRes, companiesRes] = await Promise.all([
+        api.users(suffix),
+        api.companies(),
+      ]);
+      setItems(usersRes.data);
+      setCompanies(companiesRes.data);
     } catch (err) {
       await alertApiError(err);
     }
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [roleFilter]);
+
+  const counts = useMemo(() => ({
+    all: items.length,
+    admin: items.filter((item) => item.role === "admin").length,
+    company: items.filter((item) => item.role === "company").length,
+    creator: items.filter((item) => item.role === "creator").length,
+  }), [items]);
+
+  const roleOptions = [
+    { value: "all", label: t("users.filterAll") },
+    { value: "admin", label: tn("roleAdmin") },
+    { value: "company", label: tn("roleCompany") },
+    { value: "creator", label: tn("roleCreator") },
+  ];
+
+  const createRoleOptions = [
+    { value: "admin", label: tn("roleAdmin") },
+    { value: "company", label: tn("roleCompany") },
+  ];
+
+  const companyOptions = companies.map((company) => ({
+    value: String(company.id),
+    label: company.name,
+  }));
+
+  function togglePerm(list: string[], slug: string, setList: (next: string[]) => void) {
+    setList(list.includes(slug) ? list.filter((item) => item !== slug) : [...list, slug]);
+  }
+
+  function openCreate() {
+    setForm(EMPTY_FORM);
+    setFormPerms([...ADMIN_PERMISSIONS]);
+    setCreateOpen(true);
+  }
+
+  function onRoleChange(role: string) {
+    setForm((current) => ({ ...current, role, company_id: role === "company" ? current.company_id : "" }));
+    setFormPerms(role === "admin" ? [...ADMIN_PERMISSIONS] : []);
+  }
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
-    if (!form.name || !form.email || !form.password) {
-      await alertWarning(tc("alerts.incompleteTitle"), t("admin.incomplete"));
+    if (!form.name.trim() || !form.email.trim() || !form.password) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("users.incomplete"));
       return;
     }
+    if (!isValidEmail(form.email)) {
+      await alertWarning(tc("alerts.invalidEmailTitle"), tc("alerts.invalidEmail"));
+      return;
+    }
+    const passwordIssue = passwordError(form.password);
+    if (passwordIssue) {
+      await alertWarning(tc("alerts.invalidPasswordTitle"), tc(`password.${passwordIssue}`));
+      return;
+    }
+    if (form.role === "company" && !form.company_id) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("users.companyRequired"));
+      return;
+    }
+    setSaving(true);
     try {
-      await api.createAdmin(form);
-      setForm({ name: "", email: "", password: "" });
-      await alertSuccess(t("admin.created"));
-      load();
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        role: form.role,
+        permissions: formPerms,
+      };
+      if (form.role === "company") {
+        payload.company_id = Number(form.company_id);
+      }
+      await api.createUser(payload);
+      setCreateOpen(false);
+      await alertSuccess(t("users.created"));
+      await load();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSavePermissions() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      await api.updateUser(editing.id, { permissions: editPerms });
+      setEditing(null);
+      await alertSuccess(t("users.permissionsSaved"));
+      await load();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onRemove(item: AuthUser) {
+    if (item.role === "creator") {
+      await alertWarning(t("users.removeCreatorTitle"), t("users.removeCreatorText"));
+      return;
+    }
+    if (!(await alertConfirm(t("users.removeTitle"), item.email, tc("remove")))) return;
+    try {
+      await api.deleteUser(item.id);
+      await alertSuccess(t("users.removed"));
+      await load();
     } catch (err) {
       await alertApiError(err);
     }
   }
 
+  function roleBadge(role: UserRole) {
+    const styles = {
+      admin: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      company: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      creator: "border-amber-200 bg-amber-50 text-amber-800",
+    } as const;
+    const labels = { admin: tn("roleAdmin"), company: tn("roleCompany"), creator: tn("roleCreator") };
+    return (
+      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold tracking-wider uppercase", styles[role])}>
+        {labels[role]}
+      </span>
+    );
+  }
+
+  function PermissionList({
+    role,
+    selected,
+    onToggle,
+  }: {
+    role: string;
+    selected: string[];
+    onToggle: (slug: string) => void;
+  }) {
+    const slugs = permissionsForRole(role);
+    if (slugs.length === 0) {
+      return <p className="m-0 text-sm text-slate-500">{t("users.noPermissionsForRole")}</p>;
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        {slugs.map((slug) => {
+          const key = permissionKey(slug);
+          const checked = selected.includes(slug);
+          return (
+            <label key={slug} className={cn("flex cursor-pointer items-start gap-3 rounded-2xl border p-3", checked ? "border-indigo-200 bg-indigo-50/50" : "border-slate-200 bg-white")}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(slug)}
+                className="mt-0.5 h-4 w-4 accent-brand-primary"
+              />
+              <span>
+                <span className="block text-sm font-bold text-slate-900">{t(`users.permissions.${key}.label`)}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{t(`users.permissions.${key}.hint`)}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <>
-      <PageHeader title={t("admin.title")} subtitle={t("admin.subtitle")} />
-      <form noValidate onSubmit={onCreate} className="mb-6 grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-4">
-        <input className="h-11 rounded-xl border px-4" placeholder={t("admin.name")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input className="h-11 rounded-xl border px-4" placeholder={t("admin.email")} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <input className="h-11 rounded-xl border px-4" placeholder={t("admin.password")} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        <button className="rounded-xl bg-purple-600 font-bold text-white">{tc("add")}</button>
-      </form>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between rounded-2xl border bg-white p-4">
-            <div>
-              <p className="font-black">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.email}</p>
-            </div>
-            <button type="button" className="text-xs font-bold text-rose-600" onClick={async () => {
-              if (await alertConfirm(t("admin.removeTitle"), item.email, tc("remove"))) {
-                await api.deleteAdmin(item.id).catch(alertApiError);
-                load();
-              }
-            }}>{tc("remove")}</button>
-          </div>
-        ))}
+      <PageHeader
+        title={t("users.title")}
+        subtitle={t("users.subtitle")}
+        actions={canManage ? (
+          <button type="button" onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-primary px-4 text-xs font-bold text-white hover:bg-indigo-600">
+            <Plus size={14} /> {t("users.new")}
+          </button>
+        ) : undefined}
+      />
+
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label={t("users.kpiAll")} value={counts.all} />
+        <StatCard label={tn("roleAdmin")} value={counts.admin} />
+        <StatCard label={tn("roleCompany")} value={counts.company} />
+        <StatCard label={tn("roleCreator")} value={counts.creator} />
       </div>
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <Search size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white pr-4 pl-10 text-sm outline-none focus:border-brand-primary"
+            placeholder={t("users.searchPh")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void load();
+            }}
+          />
+        </div>
+        <Select2Field theme="light" className="sm:w-52" value={roleFilter} options={roleOptions} onChange={setRoleFilter} />
+        <button type="button" onClick={() => void load()} className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50">
+          {tc("search")}
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="hidden lg:block">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
+                <th className="p-3.5 pl-5">{t("users.colUser")}</th>
+                <th className="p-3.5">{t("users.colRole")}</th>
+                <th className="p-3.5">{t("users.colContext")}</th>
+                <th className="p-3.5">{t("users.colPermissions")}</th>
+                <th className="p-3.5 pr-5 text-right">{t("users.colActions")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {items.map((item) => (
+                <tr key={item.id} className="hover:bg-slate-50/80">
+                  <td className="p-3.5 pl-5">
+                    <div className="flex items-center gap-3">
+                      <UserAvatar src={item.avatar_url || item.creator?.photo_url || item.company?.logo_url} name={item.name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-[10px]" />
+                      <div>
+                        <p className="m-0 text-sm font-bold text-slate-900">{item.name}</p>
+                        <p className="m-0 text-[11px] text-slate-500">{item.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3.5">{roleBadge(item.role)}</td>
+                  <td className="p-3.5 text-slate-600">
+                    {item.company?.name || item.creator?.artistic_name || "—"}
+                  </td>
+                  <td className="p-3.5 font-semibold text-slate-700">
+                    {t("users.permissionCount", { count: (item.permissions ?? []).length })}
+                  </td>
+                  <td className="p-3.5 pr-5 text-right">
+                    <div className="flex justify-end gap-2">
+                      {item.role === "creator" && item.creator?.id ? (
+                        <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200">
+                          {t("users.openProfile")}
+                        </Link>
+                      ) : null}
+                      {canManage && permissionsForRole(item.role).length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(item);
+                            setEditPerms(item.permissions ?? []);
+                          }}
+                          className="rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] font-bold text-brand-primary hover:bg-indigo-100"
+                        >
+                          {t("users.editPermissions")}
+                        </button>
+                      ) : null}
+                      {canManage && item.role !== "creator" && item.id !== me.id ? (
+                        <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50">
+                          {tc("remove")}
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-col divide-y divide-slate-100 lg:hidden">
+          {items.map((item) => (
+            <div key={item.id} className="flex flex-col gap-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <UserAvatar src={item.avatar_url || item.creator?.photo_url || item.company?.logo_url} name={item.name} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
+                  <div className="min-w-0">
+                    <p className="m-0 truncate text-sm font-bold text-slate-900">{item.name}</p>
+                    <p className="m-0 truncate text-[11px] text-slate-500">{item.email}</p>
+                  </div>
+                </div>
+                {roleBadge(item.role)}
+              </div>
+              <p className="m-0 text-xs text-slate-500">{item.company?.name || item.creator?.artistic_name || t("users.noContext")}</p>
+              <div className="flex flex-wrap gap-2">
+                {item.role === "creator" && item.creator?.id ? (
+                  <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.openProfile")}</Link>
+                ) : null}
+                {canManage && permissionsForRole(item.role).length > 0 ? (
+                  <button type="button" onClick={() => { setEditing(item); setEditPerms(item.permissions ?? []); }} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{t("users.editPermissions")}</button>
+                ) : null}
+                {canManage && item.role !== "creator" && item.id !== me.id ? (
+                  <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-2 text-[11px] font-bold text-rose-600">{tc("remove")}</button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        {items.length === 0 ? (
+          <div className="p-12 text-center">
+            <Users size={28} className="mx-auto text-slate-300" />
+            <p className="mt-3 text-sm font-bold text-slate-700">{t("users.empty")}</p>
+          </div>
+        ) : null}
+      </div>
+
+      {createOpen ? (
+        <AppModal onClose={() => setCreateOpen(false)}>
+          <form noValidate onSubmit={onCreate} className="flex min-h-0 flex-col">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="m-0 flex items-center gap-2 text-[10px] font-bold tracking-wider text-brand-primary uppercase">
+                  <ShieldCheck size={14} /> {t("users.new")}
+                </p>
+                <h3 className="m-0 mt-1 text-base font-black text-slate-900">{t("users.createTitle")}</h3>
+              </div>
+              <button type="button" onClick={() => setCreateOpen(false)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100" aria-label={tc("close")}>✕</button>
+            </div>
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.role")}</span>
+                  <Select2Field theme="light" value={form.role} options={createRoleOptions} onChange={onRoleChange} />
+                </label>
+                {form.role === "company" ? (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.company")}</span>
+                    <Select2Field theme="light" value={form.company_id} options={companyOptions} placeholder={t("users.companyPh")} onChange={(value) => setForm((current) => ({ ...current, company_id: value }))} />
+                  </label>
+                ) : (
+                  <div className="hidden sm:block" />
+                )}
+                <input className="h-11 rounded-xl border border-slate-200 px-4 text-sm" placeholder={t("users.name")} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+                <input className="h-11 rounded-xl border border-slate-200 px-4 text-sm" placeholder={t("users.email")} value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
+                <PasswordField className="sm:col-span-2" placeholder={t("users.password")} value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} inputClassName="border border-slate-200 px-4 text-sm" />
+              </div>
+              <div>
+                <p className="mb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.permissionsTitle")}</p>
+                <PermissionList role={form.role} selected={formPerms} onToggle={(slug) => togglePerm(formPerms, slug, setFormPerms)} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+              <button type="button" onClick={() => setCreateOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+              <button type="submit" disabled={saving} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("create")}</button>
+            </div>
+          </form>
+        </AppModal>
+      ) : null}
+
+      {editing ? (
+        <AppModal onClose={() => setEditing(null)}>
+          <div className="flex min-h-0 flex-col">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <p className="m-0 text-[10px] font-bold tracking-wider text-brand-primary uppercase">{t("users.editPermissions")}</p>
+              <h3 className="m-0 mt-1 text-base font-black text-slate-900">{editing.name}</h3>
+              <p className="m-0 text-xs text-slate-500">{editing.email}</p>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <PermissionList role={editing.role} selected={editPerms} onToggle={(slug) => togglePerm(editPerms, slug, setEditPerms)} />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+              <button type="button" onClick={() => setEditing(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+              <button type="button" disabled={saving} onClick={() => void onSavePermissions()} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("save")}</button>
+            </div>
+          </div>
+        </AppModal>
+      ) : null}
     </>
   );
 }
 
 export function AdminUsersScreen() {
-  return <AuthenticatedShell><AdminInner /></AuthenticatedShell>;
+  return (
+    <AuthenticatedShell>
+      <UsersInner />
+    </AuthenticatedShell>
+  );
+}
+
+export function UsersScreen() {
+  return <AdminUsersScreen />;
 }

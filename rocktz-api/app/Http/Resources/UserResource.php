@@ -20,6 +20,8 @@ class UserResource extends JsonResource
             'role' => $this->role?->value,
             'locale' => $this->locale ?: AppLocale::DEFAULT,
             'avatar_url' => $this->avatar_url,
+            'permissions' => $this->permissionSlugs(),
+            'can_publish_without_approval' => $this->canPublishWithoutApproval(),
             'creator' => $this->whenLoaded('creator', function () {
                 if (! $this->creator) {
                     return null;

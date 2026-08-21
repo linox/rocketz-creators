@@ -272,7 +272,7 @@ function CompaniesInner() {
   const [editStatus, setEditStatus] = useState("active");
   const [tempContacts, setTempContacts] = useState<CompanyContact[]>([]);
   const [newContact, setNewContact] = useState({ name: "", role: "", email: "", whatsapp: "" });
-  const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
+  const [newUser, setNewUser] = useState({ name: "", email: "", password: "", can_publish_without_approval: false });
   const [creatingUser, setCreatingUser] = useState(false);
 
   const statusOptions = useMemo(
@@ -362,7 +362,7 @@ function CompaniesInner() {
       });
       setTempContacts(next.contacts ?? []);
       setNewContact({ name: "", role: "", email: "", whatsapp: "" });
-      setNewUser({ name: "", email: "", password: "" });
+      setNewUser({ name: "", email: "", password: "", can_publish_without_approval: false });
     } catch (err) {
       await alertApiError(err);
     }
@@ -448,15 +448,29 @@ function CompaniesInner() {
         name: newUser.name.trim(),
         email: newUser.email.trim(),
         password: newUser.password,
+        can_publish_without_approval: newUser.can_publish_without_approval,
       });
       const res = await api.company(editing.id);
       setEditing(res.data);
-      setNewUser({ name: "", email: "", password: "" });
+      setNewUser({ name: "", email: "", password: "", can_publish_without_approval: false });
       await alertSuccess(t("companies.userCreated"));
     } catch (err) {
       await alertApiError(err);
     } finally {
       setCreatingUser(false);
+    }
+  }
+
+  async function togglePublishWithoutApproval(companyUser: NonNullable<Company["users"]>[number]) {
+    if (!editing) return;
+    try {
+      await api.updateCompanyUser(editing.id, companyUser.id, {
+        can_publish_without_approval: !companyUser.can_publish_without_approval,
+      });
+      const res = await api.company(editing.id);
+      setEditing(res.data);
+    } catch (err) {
+      await alertApiError(err);
     }
   }
 
@@ -578,9 +592,9 @@ function CompaniesInner() {
       ) : null}
 
       {createOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-          <button type="button" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setCreateOpen(false)} aria-label={tc("close")} />
-          <div className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+          <button type="button" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setCreateOpen(false)} aria-label={tc("close")} />
+          <div className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white p-5 sm:p-6">
               <h2 className="text-xl font-bold text-[#0F172A]">{t("companies.modalTitle")}</h2>
               <button type="button" onClick={() => setCreateOpen(false)} className="p-1 font-bold text-slate-400 hover:text-slate-700">✕</button>
@@ -629,9 +643,9 @@ function CompaniesInner() {
       ) : null}
 
       {editing ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-          <button type="button" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditing(null)} aria-label={tc("close")} />
-          <div className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+          <button type="button" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setEditing(null)} aria-label={tc("close")} />
+          <div className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white p-5 sm:p-6">
               <div>
                 <h2 className="text-xl font-bold text-[#0F172A]">{t("companies.editModalTitle")}</h2>
@@ -738,23 +752,46 @@ function CompaniesInner() {
                   </h3>
                   <span className="text-[10px] font-bold text-slate-500">{t("companies.registeredCount", { count: editing.users?.length ?? 0 })}</span>
                 </div>
+                <p className="m-0 text-[11px] leading-snug text-slate-500">{t("companies.publishWithoutApprovalHint")}</p>
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   <input className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 font-medium text-slate-800 outline-none" placeholder={t("companies.userName")} value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} disabled={creatingUser} />
                   <input type="email" className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-slate-800 outline-none" placeholder={t("companies.userEmail")} value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} disabled={creatingUser} />
                   <PasswordField inputClassName="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-slate-800 outline-none h-auto" placeholder={t("companies.userPassword")} value={newUser.password} onChange={(event) => setNewUser({ ...newUser, password: event.target.value })} disabled={creatingUser} />
                 </div>
+                <label className="flex cursor-pointer items-start gap-2 text-[11px] font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={newUser.can_publish_without_approval}
+                    onChange={(event) => setNewUser({ ...newUser, can_publish_without_approval: event.target.checked })}
+                    disabled={creatingUser}
+                  />
+                  <span>{t("companies.publishWithoutApprovalOn")}</span>
+                </label>
                 <button type="button" disabled={creatingUser} onClick={() => void createAccessUser()} className="flex items-center justify-center gap-1.5 self-end rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-100 disabled:opacity-50">
                   <Plus size={14} /> {creatingUser ? t("companies.creatingUser") : t("companies.addUser")}
                 </button>
-                <div className="mt-2 flex max-h-[140px] flex-col gap-2 overflow-y-auto">
+                <div className="mt-2 flex max-h-[180px] flex-col gap-2 overflow-y-auto">
                   {(editing.users ?? []).length === 0 ? (
                     <p className="py-2 text-center text-[11px] text-[#64748B] italic">{t("companies.noUsers")}</p>
                   ) : (
                     (editing.users ?? []).map((companyUser) => (
-                      <div key={companyUser.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-sm">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-bold text-slate-800">{companyUser.name}</span>
-                          <span className="text-[10px] text-[#64748B]">{companyUser.email}</span>
+                      <div key={companyUser.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-sm">
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate font-bold text-slate-800">{companyUser.name}</span>
+                          <span className="block truncate text-[10px] text-[#64748B]">{companyUser.email}</span>
+                          <button
+                            type="button"
+                            onClick={() => void togglePublishWithoutApproval(companyUser)}
+                            className={cn(
+                              "mt-1 rounded-full border px-2 py-0.5 text-[10px] font-bold",
+                              companyUser.can_publish_without_approval
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-amber-200 bg-amber-50 text-amber-800",
+                            )}
+                          >
+                            {companyUser.can_publish_without_approval ? t("companies.publishWithoutApprovalOn") : t("companies.publishWithoutApprovalOff")}
+                          </button>
                         </div>
                         <button type="button" title={t("companies.removeAccess")} onClick={() => void removeAccessUser(companyUser.id)} className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700">
                           <Trash2 size={14} />

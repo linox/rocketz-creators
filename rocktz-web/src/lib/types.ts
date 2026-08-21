@@ -52,7 +52,7 @@ export type Company = {
   status: string;
   contacts?: { id: number; name: string; role: string | null; email: string | null; whatsapp: string | null }[];
   favorite_creator_ids?: number[];
-  users?: { id: number; email: string | null; name: string | null; status: string | null }[];
+  users?: { id: number; email: string | null; name: string | null; status: string | null; can_publish_without_approval?: boolean }[];
 };
 
 export type Campaign = {
@@ -127,6 +127,7 @@ export type CampaignCreator = {
     script_version?: number;
     video_version?: number;
     submission_versions?: SubmissionVersionEntry[];
+    revision_history?: RevisionHistoryEntry[];
   } | null;
 };
 
@@ -185,7 +186,7 @@ export type PlanningItem = {
   id: number;
   recurring_contract_id: number;
   company_id?: number;
-  company?: { id: number; name: string } | null;
+  company?: { id: number; name: string; logo_url?: string | null } | null;
   creator_id: number;
   creator?: { id: number; artistic_name: string; full_name: string; photo_url: string | null } | null;
   month: string;
@@ -194,6 +195,14 @@ export type PlanningItem = {
   description: string | null;
   briefing: string | null;
   briefing_note?: string | null;
+  briefing_fields?: {
+    product?: string | null;
+    key_message?: string | null;
+    must_have?: string | null;
+    donts?: string | null;
+    cta?: string | null;
+    hashtags?: string | null;
+  } | null;
   references?: string | null;
   script?: string | null;
   caption?: string | null;

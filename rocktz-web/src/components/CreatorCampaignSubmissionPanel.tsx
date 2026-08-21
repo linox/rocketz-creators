@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CheckCircle2, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, UploadCloud, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, UploadCloud, Video } from "lucide-react";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -20,13 +20,15 @@ type Props = {
   row: CampaignCreator;
   onClose: () => void;
   onSubmitted: () => void;
+  showBriefingToggle?: boolean;
 };
 
-export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmitted }: Props) {
+export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmitted, showBriefingToggle = true }: Props) {
   const { t: tp } = useTranslation("profile");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [briefingOpen, setBriefingOpen] = useState(true);
+  const [briefingDetailsOpen, setBriefingDetailsOpen] = useState(false);
   const [script, setScript] = useState(row.content?.script || "");
   const [publishedUrl, setPublishedUrl] = useState(row.content?.published_link || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -196,6 +198,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
               <FileText size={16} className="text-brand-primary" />
               {tp("creativeBriefing", { name: campaign.name })}
             </h5>
+            {showBriefingToggle ? (
             <button
               type="button"
               onClick={() => setBriefingOpen(false)}
@@ -203,6 +206,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             >
               <ChevronUp size={13} /> {tp("closePanel")}
             </button>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 gap-4 text-xs font-medium md:grid-cols-2">
             <div>
@@ -213,6 +217,18 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
               <span className="mb-1 block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("briefingKeyMessage")}</span>
               <p className="font-medium text-slate-800">{keyMessage}</p>
             </div>
+            <div className="md:col-span-2">
+              <button
+                type="button"
+                onClick={() => setBriefingDetailsOpen((open) => !open)}
+                className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-indigo-100 bg-slate-50 px-3 py-2 text-[11px] font-bold text-brand-primary transition-colors hover:bg-indigo-50"
+              >
+                {briefingDetailsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {briefingDetailsOpen ? tp("hideBriefingDetails") : tp("showBriefingDetails")}
+              </button>
+            </div>
+            {briefingDetailsOpen ? (
+              <>
             <div className="md:col-span-2">
               <span className="mb-1 block text-[9px] font-bold tracking-wide text-emerald-600 uppercase">{tp("briefingMustHave")}</span>
               <p className="rounded-xl border border-emerald-100/60 bg-emerald-50/40 p-3.5 leading-relaxed whitespace-pre-line text-slate-800">{mustHave}</p>
@@ -243,6 +259,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 <p className="text-slate-500">{tp("noneItem")}</p>
               )}
             </div>
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}

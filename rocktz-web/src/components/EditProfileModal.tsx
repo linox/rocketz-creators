@@ -2,12 +2,12 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Camera, Check, CheckCircle2, Instagram, Mail, MapPin, Smartphone, Sparkles, UploadCloud, User, X } from "lucide-react";
+import { Camera, Check, Instagram, Mail, MapPin, Smartphone, Sparkles, UploadCloud, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
-import { alertApiError, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import { fetchMe } from "@/lib/laravel";
@@ -40,13 +40,9 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
-    setErrorMessage("");
-    setSuccessMessage("");
     setCropSrc(null);
     setFullName(user.creator?.full_name || user.name);
     setArtisticName(user.creator?.artistic_name || "");
@@ -86,14 +82,12 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
 
     setIsUploadingPhoto(true);
     setUploadProgress(20);
-    setErrorMessage("");
     try {
       setUploadProgress(55);
       const uploaded = await api.uploadMedia(blob, "avatar.jpg");
       setUploadProgress(100);
       setPhotoUrl(uploaded.data.url);
-      setSuccessMessage(t("editProfile.photoUploaded"));
-      setTimeout(() => setSuccessMessage(""), 2500);
+      await alertSuccess(t("editProfile.photoUploaded"));
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -110,8 +104,6 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     }
 
     setLoading(true);
-    setErrorMessage("");
-    setSuccessMessage("");
 
     try {
       const trimmedPhoto = photoUrl.trim() || null;
@@ -148,8 +140,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
 
       const next = await fetchMe();
       onProfileUpdated(next);
-      setSuccessMessage(t("editProfile.updated"));
-      setTimeout(onClose, 900);
+      await alertSuccess(t("editProfile.updated"));
+      onClose();
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -184,19 +176,6 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
             </div>
 
             <form noValidate onSubmit={handleSubmit} className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 sm:p-6">
-              {errorMessage ? (
-                <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-bold text-rose-700">
-                  <AlertCircle size={16} className="shrink-0 text-rose-500" />
-                  <span>{errorMessage}</span>
-                </div>
-              ) : null}
-              {successMessage ? (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-bold text-emerald-700">
-                  <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
-                  <span>{successMessage}</span>
-                </div>
-              ) : null}
-
               <div className="flex flex-col items-center gap-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 sm:flex-row">
                 <div className="group relative shrink-0">
                   <UserAvatar src={photoUrl} name={artisticName || fullName || user.email} size="custom" shape="rounded-2xl" className="h-20 w-20 border-2 border-white shadow-md sm:h-24 sm:w-24" textClassName="text-2xl font-bold" />

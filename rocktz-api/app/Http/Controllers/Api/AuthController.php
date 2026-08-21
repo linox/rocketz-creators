@@ -72,7 +72,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->load(['creator', 'company']);
+        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
 
         return response()->json([
             'user' => new UserResource($user),
@@ -83,7 +83,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
         $user->forceFill(['locale' => $request->validated('locale')])->save();
-        $user->load(['creator', 'company']);
+        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
 
         return response()->json([
             'message' => __('auth.locale_updated'),
@@ -110,7 +110,7 @@ class AuthController extends Controller
             $user->company?->update(['logo_url' => $data['avatar_url']]);
         }
 
-        $user->load(['creator', 'company']);
+        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
 
         return response()->json([
             'user' => new UserResource($user),

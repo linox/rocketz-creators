@@ -88,10 +88,21 @@ class RecurringContractController extends Controller
 
         $ids = $data['creator_ids'] ?? [];
         unset($data['creator_ids']);
-        $data['status'] ??= RecurringContractStatus::Active;
+        if (! $request->user()->canPublishWithoutApproval()) {
+            $data['status'] = RecurringContractStatus::PendingAgency;
+        } else {
+            $data['status'] ??= RecurringContractStatus::Active;
+        }
         $contract = RecurringContract::query()->create($data);
         foreach ($ids as $creatorId) {
             $contract->recurringContractCreators()->create(['creator_id' => $creatorId]);
+            if (! $contract->isPendingAgency()) {
+                $this->notifyRecurringAssigned($contract, (int) $creatorId);
+            }
+        }
+
+        if ($contract->isPendingAgency()) {
+            $this->notifyAgencyReview($contract);
         }
 
         return response()->json(['data' => new RecurringContractResource($contract->load(['company', 'recurringContractCreators.creator']))], 201);
@@ -117,7 +128,22 @@ class RecurringContractController extends Controller
             'monthly_fee' => ['nullable', 'numeric'],
             'notes' => ['nullable', 'string'],
         ]);
+        if (! $request->user()->canPublishWithoutApproval()) {
+            unset($data['status']);
+        }
+        $previousStatus = $recurringContract->status;
         $recurringContract->fill($data)->save();
+        $this->notifyReleasedIfNeeded($recurringContract, $previousStatus);
+
+        return response()->json(['data' => new RecurringContractResource($recurringContract->fresh()->load(['company', 'recurringContractCreators.creator']))]);
+    }
+
+    public function approveAgency(Request $request, RecurringContract $recurringContract): JsonResponse
+    {
+        abort_unless($recurringContract->isPendingAgency(), 422, __('auth.agency_approval_not_pending'));
+        $previousStatus = $recurringContract->status;
+        $recurringContract->update(['status' => RecurringContractStatus::Active]);
+        $this->notifyReleasedIfNeeded($recurringContract, $previousStatus);
 
         return response()->json(['data' => new RecurringContractResource($recurringContract->fresh()->load(['company', 'recurringContractCreators.creator']))]);
     }
@@ -149,6 +175,10 @@ class RecurringContractController extends Controller
 
         $this->syncMonthlyDeliverables($recurringContract, $row);
 
+        if ($row->wasRecentlyCreated && ! $recurringContract->isPendingAgency()) {
+            $this->notifyRecurringAssigned($recurringContract, (int) $row->creator_id);
+        }
+
         return response()->json(['data' => $row->load('creator')], 201);
     }
 
@@ -166,7 +196,7 @@ class RecurringContractController extends Controller
 
         $created = $this->syncMonthlyDeliverables($recurringContract, $row, $data['month']);
 
-        if ($created > 0) {
+        if ($created > 0 && ! $recurringContract->isPendingAgency()) {
             $row->loadMissing('creator');
             $this->notifications->notifyCreator($row->creator_id, [
                 'recurring_contract_id' => $recurringContract->id,
@@ -209,7 +239,14 @@ class RecurringContractController extends Controller
             'content_type' => ['required', Rule::enum(ContentType::class)],
             'title' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'briefing' => ['nullable', 'string'],
+            'briefing' => ['nullable'],
+            'briefing_fields' => ['nullable', 'array'],
+            'briefing_fields.product' => ['nullable', 'string'],
+            'briefing_fields.key_message' => ['nullable', 'string'],
+            'briefing_fields.must_have' => ['nullable', 'string'],
+            'briefing_fields.donts' => ['nullable', 'string'],
+            'briefing_fields.cta' => ['nullable', 'string'],
+            'briefing_fields.hashtags' => ['nullable', 'string'],
             'script' => ['nullable', 'string'],
             'references' => ['nullable', 'string', 'max:2048'],
             'planned_date' => ['nullable', 'date'],
@@ -217,6 +254,7 @@ class RecurringContractController extends Controller
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
             'published_url' => ['nullable', 'string', 'max:2048'],
         ]);
+        $this->normalizeBriefingPayload($data);
 
         if ($this->isLiveContentType($data['content_type'] ?? null)) {
             $data['approval_flow'] = ApprovalFlowType::LiveLink;
@@ -234,16 +272,9 @@ class RecurringContractController extends Controller
             'status' => $data['status'] ?? ContentPlanningStatus::Planned,
         ]);
 
-        $this->notifications->notifyCreator($item->creator_id, [
-            'recurring_contract_id' => $recurringContract->id,
-            'title' => __('auth.new_demand_title'),
-            'message' => __('auth.new_demand', [
-                'title' => $this->itemLabel($item),
-                'project' => $recurringContract->title,
-            ]),
-            'type' => NotificationType::Contract,
-            'link' => '/creators/'.$item->creator_id.'?tab=recurring',
-        ]);
+        if (! $recurringContract->isPendingAgency()) {
+            $this->notifyPautaReady($item, $recurringContract);
+        }
 
         return response()->json(['data' => new ContentPlanningItemResource($item->load('creator'))], 201);
     }
@@ -253,7 +284,14 @@ class RecurringContractController extends Controller
         $data = $request->validate([
             'title' => ['sometimes', 'nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'briefing' => ['nullable', 'string'],
+            'briefing' => ['nullable'],
+            'briefing_fields' => ['nullable', 'array'],
+            'briefing_fields.product' => ['nullable', 'string'],
+            'briefing_fields.key_message' => ['nullable', 'string'],
+            'briefing_fields.must_have' => ['nullable', 'string'],
+            'briefing_fields.donts' => ['nullable', 'string'],
+            'briefing_fields.cta' => ['nullable', 'string'],
+            'briefing_fields.hashtags' => ['nullable', 'string'],
             'script' => ['nullable', 'string'],
             'references' => ['nullable', 'string', 'max:2048'],
             'caption' => ['nullable', 'string'],
@@ -273,9 +311,12 @@ class RecurringContractController extends Controller
             'script_feedback' => ['nullable', 'string'],
             'video_feedback' => ['nullable', 'string'],
         ]);
+        $this->normalizeBriefingPayload($data);
 
         $this->assertCanViewItem($request, $contentPlanningItem);
-        if ($request->user()->role === UserRole::Creator) {
+        $actorIsCreator = $request->user()->role === UserRole::Creator;
+        $hadBriefing = $this->itemHasBriefing($contentPlanningItem);
+        if ($actorIsCreator) {
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
             unset($data['creator_id'], $data['feedback_note'], $data['script_feedback'], $data['video_feedback']);
         }
@@ -284,9 +325,15 @@ class RecurringContractController extends Controller
             $data['approval_flow'] = ApprovalFlowType::LiveLink;
         }
 
-        if (isset($data['published_url']) && ($contentPlanningItem->approval_flow === ApprovalFlowType::LiveLink || $this->isLiveContentType($contentPlanningItem->content_type?->value))) {
-            $data['status'] = ! empty($data['published_url']) ? ContentPlanningStatus::Published : ($data['status'] ?? $contentPlanningItem->status);
-            $data['reviewed_at'] = ! empty($data['published_url']) ? now() : $contentPlanningItem->reviewed_at;
+        if (isset($data['published_url']) && trim((string) $data['published_url']) !== '') {
+            $isLive = $contentPlanningItem->approval_flow === ApprovalFlowType::LiveLink
+                || $this->isLiveContentType($data['content_type'] ?? $contentPlanningItem->content_type?->value);
+            $materialApproved = $contentPlanningItem->status === ContentPlanningStatus::Approved
+                || $contentPlanningItem->video_status === StageApprovalStatus::Approved;
+            if ($isLive || $materialApproved) {
+                $data['status'] = ContentPlanningStatus::Published;
+                $data['reviewed_at'] = now();
+            }
         }
 
         if (isset($data['submission_url']) || isset($data['media_url'])) {
@@ -364,6 +411,15 @@ class RecurringContractController extends Controller
         $contentPlanningItem->loadMissing(['creator', 'recurringContract']);
         $this->notifyPlanningItemChange($contentPlanningItem, $data);
 
+        if (
+            ! $actorIsCreator
+            && ! $hadBriefing
+            && $this->itemHasBriefing($contentPlanningItem)
+            && $contentPlanningItem->recurringContract
+        ) {
+            $this->notifyPautaReady($contentPlanningItem, $contentPlanningItem->recurringContract);
+        }
+
         return response()->json(['data' => new ContentPlanningItemResource($contentPlanningItem->fresh()->load(['creator', 'company']))]);
     }
 
@@ -379,7 +435,8 @@ class RecurringContractController extends Controller
         if ($user->role === UserRole::Company) {
             $query->where('company_id', $user->companyUser?->company_id);
         } elseif ($user->role === UserRole::Creator) {
-            $query->whereHas('recurringContractCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+            $query->where('status', '!=', RecurringContractStatus::PendingAgency)
+                ->whereHas('recurringContractCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
         }
     }
 
@@ -388,6 +445,7 @@ class RecurringContractController extends Controller
         $creatorId = $user->creator?->id;
         if ($user->role === UserRole::Creator && $creatorId) {
             $query->with([
+                'company',
                 'recurringContractCreators' => fn ($q) => $q->where('creator_id', $creatorId)->with('creator'),
                 'contentPlanningItems' => fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']),
             ]);
@@ -512,6 +570,7 @@ class RecurringContractController extends Controller
             return;
         }
         if ($user->role === UserRole::Creator && $contract->recurringContractCreators()->where('creator_id', $user->creator?->id)->exists()) {
+            abort_if($contract->isPendingAgency(), 403, __('auth.recurring_awaiting_agency'));
             return;
         }
         abort(403, __('auth.forbidden'));
@@ -527,6 +586,133 @@ class RecurringContractController extends Controller
             return;
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    private function notifyAgencyReview(RecurringContract $contract): void
+    {
+        $this->notifications->notifyAdmins(
+            __('auth.agency_review_recurring_title'),
+            __('auth.agency_review_recurring', ['name' => $contract->title]),
+            NotificationType::Approval,
+            '/recurring/'.$contract->id,
+            ['recurring_contract_id' => $contract->id],
+        );
+    }
+
+    private function notifyReleasedIfNeeded(RecurringContract $contract, mixed $previousStatus): void
+    {
+        $wasPending = $previousStatus === RecurringContractStatus::PendingAgency
+            || $previousStatus === RecurringContractStatus::PendingAgency->value;
+        if (! $wasPending || $contract->isPendingAgency()) {
+            return;
+        }
+
+        $this->notifications->notifyCompany((int) $contract->company_id, [
+            'recurring_contract_id' => $contract->id,
+            'title' => __('auth.agency_approved_recurring_title'),
+            'message' => __('auth.agency_approved_recurring', ['name' => $contract->title]),
+            'type' => NotificationType::Approval,
+            'link' => '/recurring/'.$contract->id,
+        ]);
+
+        $contract->loadMissing('recurringContractCreators');
+        foreach ($contract->recurringContractCreators as $row) {
+            $this->notifyRecurringAssigned($contract, (int) $row->creator_id);
+        }
+    }
+
+    private function notifyRecurringAssigned(RecurringContract $contract, int $creatorId): void
+    {
+        $this->notifications->notifyCreator($creatorId, [
+            'recurring_contract_id' => $contract->id,
+            'title' => __('auth.recurring_assigned_title'),
+            'message' => __('auth.recurring_assigned', ['project' => $contract->title]),
+            'type' => NotificationType::Contract,
+            'link' => '/creators/'.$creatorId.'?tab=recurring',
+        ]);
+    }
+
+    private function notifyPautaReady(ContentPlanningItem $item, RecurringContract $contract): void
+    {
+        $this->notifications->notifyCreator($item->creator_id, [
+            'recurring_contract_id' => $contract->id,
+            'title' => __('auth.pauta_ready_title'),
+            'message' => __('auth.pauta_ready', [
+                'title' => $this->itemLabel($item),
+                'project' => $contract->title,
+            ]),
+            'type' => NotificationType::Contract,
+            'link' => '/creators/'.$item->creator_id.'?tab=recurring',
+        ]);
+    }
+
+    private function itemHasBriefing(ContentPlanningItem $item): bool
+    {
+        if (trim((string) ($item->briefing ?: $item->briefing_note)) !== '') {
+            return true;
+        }
+
+        return $this->briefingFieldsSummary($item->briefing_fields ?? []) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function normalizeBriefingPayload(array &$data): void
+    {
+        if (isset($data['briefing']) && is_array($data['briefing'])) {
+            $data['briefing_fields'] = array_merge($data['briefing_fields'] ?? [], $data['briefing']);
+            unset($data['briefing']);
+        }
+
+        if (! isset($data['briefing_fields']) || ! is_array($data['briefing_fields'])) {
+            return;
+        }
+
+        $data['briefing_fields'] = $this->sanitizeBriefingFields($data['briefing_fields']);
+        $summary = $this->briefingFieldsSummary($data['briefing_fields']);
+        if ($summary !== '' && (! array_key_exists('briefing', $data) || $data['briefing'] === null || $data['briefing'] === '')) {
+            $data['briefing'] = $summary;
+        }
+        if (is_string($data['briefing'] ?? null)) {
+            $data['briefing'] = trim((string) $data['briefing']) ?: null;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $fields
+     * @return array<string, string|null>
+     */
+    private function sanitizeBriefingFields(array $fields): array
+    {
+        $clean = [];
+        foreach (['product', 'key_message', 'must_have', 'donts', 'cta', 'hashtags'] as $key) {
+            $value = $fields[$key] ?? null;
+            if (is_string($value) || is_numeric($value)) {
+                $trimmed = trim((string) $value);
+                $clean[$key] = $trimmed === '' ? null : $trimmed;
+            } else {
+                $clean[$key] = null;
+            }
+        }
+
+        return $clean;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fields
+     */
+    private function briefingFieldsSummary(array $fields): string
+    {
+        $parts = [];
+        foreach (['product', 'key_message', 'must_have', 'donts', 'cta', 'hashtags'] as $key) {
+            $value = trim((string) ($fields[$key] ?? ''));
+            if ($value !== '') {
+                $parts[] = $value;
+            }
+        }
+
+        return implode("\n\n", $parts);
     }
 
     /**

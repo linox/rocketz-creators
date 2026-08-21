@@ -57,6 +57,34 @@ body {
   }
 }
 
+.swal2-popup {
+  font-family: var(--font-sans) !important;
+  border-radius: 1.5rem !important;
+  padding: 2rem 1.5rem 1.5rem !important;
+}
+
+.swal2-title {
+  color: #0f172a !important;
+  font-size: 1.125rem !important;
+  font-weight: 800 !important;
+}
+
+.swal2-html-container {
+  color: #475569 !important;
+}
+
+.swal2-styled.swal2-confirm {
+  border-radius: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 0.625rem 1.25rem !important;
+}
+
+.swal2-styled.swal2-cancel {
+  border-radius: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 0.625rem 1.25rem !important;
+}
+
 @keyframes landing-marquee {
   from {
     transform: translate3d(0, 0, 0);

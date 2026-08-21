@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'script_version',
     'video_version',
     'submission_versions',
+    'revision_history',
     'story_prints',
     'metrics',
 ])]
@@ -38,6 +39,7 @@ class CampaignCreatorContent extends Model
             'script_version' => 'integer',
             'video_version' => 'integer',
             'submission_versions' => 'array',
+            'revision_history' => 'array',
         ];
     }
 

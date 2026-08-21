@@ -36,6 +36,7 @@ export const api = {
   rejectCompany: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/reject`, { method: "POST" }),
   toggleFavorite: (companyId: number, creatorId: number) => laravelFetch<Item<Company>>(`/companies/${companyId}/favorites/${creatorId}`, { method: "POST" }),
   createCompanyUser: (companyId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users`, { method: "POST", body: JSON.stringify(body) }),
+  updateCompanyUser: (companyId: number, userId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCompanyUser: (companyId: number, userId: number) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "DELETE" }),
 
   campaigns: (query = "") => laravelFetch<List<Campaign>>(`/campaigns${query}`),
@@ -44,6 +45,7 @@ export const api = {
   campaign: (id: number | string) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`),
   createCampaign: (body: unknown) => laravelFetch<Item<Campaign>>("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  approveCampaignAgency: (id: number) => laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST" }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),
   applyCampaign: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/apply`, { method: "POST", body: JSON.stringify(body) }),
   assignCreator: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/assign`, { method: "POST", body: JSON.stringify(body) }),
@@ -54,6 +56,7 @@ export const api = {
   recurringOne: (id: number | string) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}`),
   createRecurring: (body: unknown) => laravelFetch<Item<RecurringContract>>("/recurring-contracts", { method: "POST", body: JSON.stringify(body) }),
   updateRecurring: (id: number, body: unknown) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  approveRecurringAgency: (id: number) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}/approve-agency`, { method: "POST" }),
   addRecurringCreator: (id: number, body: unknown) => laravelFetch(`/recurring-contracts/${id}/creators`, { method: "POST", body: JSON.stringify(body) }),
   generateRecurringMonthDemands: (id: number, body: { creator_id: number; month: string }) =>
     laravelFetch<{ message: string; created: number; data: RecurringContract }>(`/recurring-contracts/${id}/generate-month-demands`, {
@@ -75,6 +78,10 @@ export const api = {
   adminUsers: () => laravelFetch<List<AuthUser>>("/admin-users"),
   createAdmin: (body: unknown) => laravelFetch<Item<AuthUser>>("/admin-users", { method: "POST", body: JSON.stringify(body) }),
   deleteAdmin: (id: number) => laravelFetch(`/admin-users/${id}`, { method: "DELETE" }),
+  users: (query = "") => laravelFetch<List<AuthUser>>(`/users${query}`),
+  createUser: (body: unknown) => laravelFetch<Item<AuthUser>>("/users", { method: "POST", body: JSON.stringify(body) }),
+  updateUser: (id: number, body: unknown) => laravelFetch<Item<AuthUser>>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUser: (id: number) => laravelFetch(`/users/${id}`, { method: "DELETE" }),
   uploadMedia: (file: Blob, filename = "file.bin") => {
     const body = new FormData();
     body.append("file", file, filename);

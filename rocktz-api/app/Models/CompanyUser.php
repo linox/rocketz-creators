@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'company_id', 'status'])]
+#[Fillable(['user_id', 'company_id', 'status', 'can_publish_without_approval'])]
 class CompanyUser extends Model
 {
     /** @use HasFactory<CompanyUserFactory> */
@@ -22,6 +22,7 @@ class CompanyUser extends Model
     {
         return [
             'status' => CompanyStatus::class,
+            'can_publish_without_approval' => 'boolean',
         ];
     }
 

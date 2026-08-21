@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, Suspense, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, Fragment, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
@@ -8,16 +8,17 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import {
   ArrowLeft,
   Briefcase,
+  Building2,
   Calendar,
   Check,
   CheckCircle2,
-  ChevronUp,
   Clapperboard,
   Clock,
   DollarSign,
   Eye,
   ExternalLink,
   FileText,
+  Filter,
   FolderPlus,
   Home,
   Hourglass,
@@ -25,7 +26,6 @@ import {
   Instagram,
   Key,
   KeyRound,
-  Link2,
   Megaphone,
   AlertTriangle,
   Repeat,
@@ -36,8 +36,12 @@ import {
   User,
   UserCheck,
   Video,
+  X,
   Youtube,
 } from "lucide-react";
+import { itemHasPautaBriefing } from "@/lib/pauta-briefing";
+import { AppModal } from "@/components/AppModal";
+import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
@@ -52,49 +56,78 @@ import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import {
+  CONTENT_DELIVERY_STATES,
+  campaignCreatorDeliveryState,
+  deliveryStatusRank,
+  isApprovedDelivery,
+  isRevisionDelivery,
+  planningItemDeliveryState,
+  type ContentDeliveryState,
+} from "@/lib/content-delivery-status";
 import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, formatBRLMask, parseBRLMask, moneyToMask, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF, UF_OPTIONS } from "@/lib/masks";
 import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromPath } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
-type RecurringDeliveryStatus = "pending" | "sent" | "revision" | "approved" | "published";
-
 type RecurringWorkRow = {
   key: string;
   contract: RecurringContract;
   item: PlanningItem | null;
   fee: number | null;
-  deliveryStatus: RecurringDeliveryStatus;
+  deliverables: Record<string, number>;
+  deliveryStatus: ContentDeliveryState;
 };
 
-function planningDeliveryStatus(item: PlanningItem): RecurringDeliveryStatus {
-  if (item.status === "published") return "published";
-  if (item.script_status === "revision" || item.video_status === "revision") return "revision";
-  if (
-    item.status === "approved"
-    || item.video_status === "approved"
-    || (item.approval_flow === "script_only" && item.script_status === "approved")
-  ) {
-    return "approved";
-  }
-  if (
-    item.script_status === "submitted"
-    || item.video_status === "submitted"
-    || item.status === "review"
-  ) {
-    return "sent";
-  }
-  return "pending";
+const QUOTA_PILLS: { keys: string[]; labelKey: string }[] = [
+  { keys: ["reels", "reel"], labelKey: "quotaReel" },
+  { keys: ["stories", "story"], labelKey: "quotaStory" },
+  { keys: ["posts", "post"], labelKey: "quotaPost" },
+  { keys: ["tiktok", "tiktoks"], labelKey: "quotaTiktok" },
+  { keys: ["youtube"], labelKey: "quotaYoutube" },
+  { keys: ["live", "lives"], labelKey: "quotaLive" },
+  { keys: ["live_instagram"], labelKey: "quotaLiveInstagram" },
+  { keys: ["live_tiktok"], labelKey: "quotaLiveTiktok" },
+  { keys: ["live_youtube"], labelKey: "quotaLiveYoutube" },
+  { keys: ["pinterest", "pins"], labelKey: "quotaPinterest" },
+  { keys: ["blog", "artigos", "articles"], labelKey: "quotaBlog" },
+  { keys: ["podcast", "podcasts"], labelKey: "quotaPodcast" },
+  { keys: ["unboxing", "unboxings"], labelKey: "quotaUnboxing" },
+  { keys: ["ugc", "ugcs"], labelKey: "quotaUgc" },
+  { keys: ["event", "events"], labelKey: "quotaEvent" },
+  { keys: ["other", "outro"], labelKey: "quotaOther" },
+];
+
+function currentYearMonth() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function planningStatusRank(status: RecurringDeliveryStatus) {
-  if (status === "revision") return 0;
-  if (status === "pending") return 1;
-  if (status === "sent") return 2;
-  if (status === "approved") return 3;
-  return 4;
+function itemInMonth(item: PlanningItem, month: string) {
+  return item.month === month || Boolean(item.planned_date?.startsWith(month));
 }
+
+function quotaEntries(deliverables?: Record<string, number>) {
+  return QUOTA_PILLS
+    .map((pill) => ({
+      labelKey: pill.labelKey,
+      count: pill.keys.reduce((sum, key) => sum + Number(deliverables?.[key] || 0), 0),
+    }))
+    .filter((entry) => entry.count > 0);
+}
+
+function quotaTotal(deliverables?: Record<string, number>) {
+  return quotaEntries(deliverables).reduce((sum, entry) => sum + entry.count, 0);
+}
+
+type CompanyGroup<T> = {
+  key: string;
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  rows: T[];
+};
 
 function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: number): RecurringWorkRow[] {
   const rows: RecurringWorkRow[] = [];
@@ -104,7 +137,7 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
     const fee = creatorRow?.monthly_cache ?? creatorRow?.monthly_fee ?? null;
     const items = (contract.items ?? [])
       .filter((item) => item.creator_id === creatorId && item.status !== "published")
-      .sort((a, b) => planningStatusRank(planningDeliveryStatus(a)) - planningStatusRank(planningDeliveryStatus(b)));
+      .sort((a, b) => deliveryStatusRank(planningItemDeliveryState(a)) - deliveryStatusRank(planningItemDeliveryState(b)));
 
     if (items.length === 0) {
       rows.push({
@@ -112,7 +145,8 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
         contract,
         item: null,
         fee,
-        deliveryStatus: "pending",
+        deliverables: creatorRow?.monthly_deliverables ?? {},
+        deliveryStatus: "waiting",
       });
       continue;
     }
@@ -123,24 +157,188 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
         contract,
         item,
         fee,
-        deliveryStatus: planningDeliveryStatus(item),
+        deliverables: creatorRow?.monthly_deliverables ?? {},
+        deliveryStatus: planningItemDeliveryState(item),
       });
     }
   }
 
-  return rows.sort((a, b) => planningStatusRank(a.deliveryStatus) - planningStatusRank(b.deliveryStatus));
+  return rows.sort((a, b) => deliveryStatusRank(a.deliveryStatus) - deliveryStatusRank(b.deliveryStatus));
 }
 
-function planningNeedsCreatorAction(item: PlanningItem | null) {
-  if (!item) return false;
-  const status = planningDeliveryStatus(item);
-  if (status === "revision" || status === "pending") return true;
-  if (status === "approved" && item.approval_flow === "live_link" && !item.published_url) return true;
-  const staged = (item.approval_flow || "script_and_video") === "script_and_video";
-  if (staged && item.script_status === "approved" && item.video_status !== "approved" && item.video_status !== "submitted") {
-    return true;
+function companyFilterId(id?: number | null, name?: string | null) {
+  if (id) return String(id);
+  return name?.trim() ? `name:${name.trim().toLowerCase()}` : "none";
+}
+
+function groupRowsByCompany<T>(
+  rows: T[],
+  getCompany: (row: T) => { id?: number | null; name: string; logoUrl?: string | null },
+): CompanyGroup<T>[] {
+  const map = new Map<string, CompanyGroup<T>>();
+  for (const row of rows) {
+    const company = getCompany(row);
+    const id = companyFilterId(company.id, company.name);
+    const existing = map.get(id);
+    if (existing) {
+      existing.rows.push(row);
+      continue;
+    }
+    map.set(id, {
+      key: id,
+      id,
+      name: company.name,
+      logoUrl: company.logoUrl ?? null,
+      rows: [row],
+    });
   }
-  return false;
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+function WorkTableFilters({
+  company,
+  status,
+  companyOptions,
+  statusOptions,
+  onCompany,
+  onStatus,
+  tp,
+}: {
+  company: string;
+  status: string;
+  companyOptions: { value: string; label: string }[];
+  statusOptions: { value: string; label: string }[];
+  onCompany: (value: string) => void;
+  onStatus: (value: string) => void;
+  tp: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
+          <Building2 size={11} /> {tp("filterCompany")}
+        </span>
+        <Select2Field theme="light" value={company} options={companyOptions} onChange={onCompany} placeholder={tp("filterCompany")} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
+          <Filter size={11} /> {tp("filterStatus")}
+        </span>
+        <Select2Field theme="light" value={status} options={statusOptions} onChange={onStatus} placeholder={tp("filterStatus")} />
+      </div>
+    </div>
+  );
+}
+
+function CompanyGroupHeader({
+  name,
+  count,
+  logoUrl,
+  countLabel,
+  tone,
+}: {
+  name: string;
+  count: number;
+  logoUrl?: string | null;
+  countLabel: string;
+  tone: "purple" | "indigo";
+}) {
+  return (
+    <div className={cn(
+      "flex items-center gap-2.5 border-y px-4 py-2.5 sm:px-5",
+      tone === "purple" ? "border-purple-100 bg-purple-50/80" : "border-indigo-100 bg-indigo-50/80",
+    )}>
+      <UserAvatar
+        src={logoUrl}
+        name={name}
+        size="custom"
+        shape="rounded-lg"
+        className={cn(
+          "h-7 w-7 border bg-white shadow-sm",
+          tone === "purple" ? "border-purple-100" : "border-indigo-100",
+        )}
+        textClassName="text-[9px]"
+      />
+      <span className="min-w-0 truncate text-sm font-black text-slate-900">{name}</span>
+      <span className={cn(
+        "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold",
+        tone === "purple" ? "border-purple-200 bg-white text-purple-700" : "border-indigo-200 bg-white text-indigo-700",
+      )}>
+        {countLabel}
+      </span>
+    </div>
+  );
+}
+
+function RecurringCompanyHeader({
+  name,
+  projectTitle,
+  logoUrl,
+  feeLabel,
+  quotaItems,
+  pendingCount,
+  quotaCount,
+  tp,
+  ta,
+}: {
+  name: string;
+  projectTitle: string;
+  logoUrl?: string | null;
+  feeLabel: string;
+  quotaItems: { labelKey: string; count: number }[];
+  pendingCount: number;
+  quotaCount: number;
+  tp: (key: string, options?: Record<string, unknown>) => string;
+  ta: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="border-b border-purple-100 bg-purple-50/80 px-4 py-4 sm:px-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <UserAvatar
+            src={logoUrl}
+            name={name}
+            size="custom"
+            shape="rounded-xl"
+            className="h-11 w-11 shrink-0 border border-white shadow-sm"
+            textClassName="text-sm"
+          />
+          <div className="min-w-0">
+            <h4 className="m-0 truncate text-base font-black text-slate-900">{name}</h4>
+            <p className="mt-0.5 mb-0 truncate text-[11px] font-semibold text-slate-500">{projectTitle}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-start gap-0.5 sm:items-end">
+          <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("monthlyCacheLabel")}</span>
+          <span className="text-lg font-black text-brand-primary">{feeLabel}</span>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("monthlyDeliveriesLabel")}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {quotaItems.length ? quotaItems.map((entry) => (
+            <span key={entry.labelKey} className="rounded-full border border-purple-200 bg-white px-2.5 py-1 text-[10px] font-extrabold text-purple-700">
+              {ta(`recurring.${entry.labelKey}`, { count: entry.count })}
+            </span>
+          )) : (
+            <span className="text-[11px] font-semibold text-slate-400">{tp("noMonthlyQuota")}</span>
+          )}
+          {quotaCount > 0 || pendingCount > 0 ? (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-800">
+              {tp("monthQuotaProgress", { pending: pendingCount, total: quotaCount || pendingCount })}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryStatusIcon({ state }: { state: ContentDeliveryState }) {
+  if (isRevisionDelivery(state)) return <AlertTriangle size={11} />;
+  if (isApprovedDelivery(state) || state === "scriptApproved") return <CheckCircle2 size={11} />;
+  if (state === "scriptReview" || state === "videoReview" || state === "sent") return <Clock size={11} />;
+  return <Hourglass size={11} />;
 }
 
 const STATUS_OPTION_VALUES = ["active", "review", "paused", "rejected"] as const;
@@ -408,12 +606,12 @@ function ProfileInner() {
   }
 
   function openSubmission(rowId: number) {
-    setExpandedSubmissionId((current) => (current === rowId ? null : rowId));
+    setExpandedSubmissionId(rowId);
     setExpandedRecurringKey(null);
   }
 
   function openRecurringWork(rowKey: string) {
-    setExpandedRecurringKey((current) => (current === rowKey ? null : rowKey));
+    setExpandedRecurringKey(rowKey);
     setExpandedSubmissionId(null);
   }
 
@@ -495,6 +693,11 @@ function ProfileInner() {
     .filter((item) => item.row.payment_status !== "paid" && item.row.delivery_status === "approved")
     .reduce((sum, item) => sum + (Number(item.row.amount) || Number(item.campaign.creator_cache) || 0), 0);
 
+  const monthlyEarnings = myContracts.reduce((sum, contract) => {
+    const row = contract.creators?.find((item) => item.creator_id === profile.id);
+    return sum + Number(row?.monthly_cache ?? row?.monthly_fee ?? 0);
+  }, 0);
+
   function applicationLabel(status: string | null | undefined) {
     if (status === "approved") return tp("applicationApproved");
     if (status === "rejected") return tp("applicationRejected");
@@ -504,15 +707,26 @@ function ProfileInner() {
   function deliveryLabel(status: string | null | undefined) {
     if (status === "published") return ta("campaignDetail.published");
     if (status === "approved") return ta("campaignDetail.approved");
+    if (status === "scriptApproved") return ta("campaignDetail.scriptApprovedStatus");
+    if (status === "scriptRevision") return ta("campaignDetail.scriptRevisionStatus");
+    if (status === "videoRevision") return ta("campaignDetail.videoRevisionStatus");
+    if (status === "scriptReview") return ta("campaignDetail.scriptReviewStatus");
+    if (status === "videoReview") return ta("campaignDetail.videoReviewStatus");
     if (status === "revision") return ta("campaignDetail.adjustments");
     if (status === "sent") return ta("campaignDetail.inReview");
     return tp("deliveryPending");
   }
 
   function deliveryBadgeClass(status: string | null | undefined) {
-    if (status === "revision") return "border-amber-200 bg-amber-100 text-amber-800";
-    if (status === "approved" || status === "published") return "border-emerald-200 bg-emerald-100 text-emerald-800";
-    if (status === "sent") return "border-indigo-200 bg-indigo-100 text-indigo-800";
+    if (status === "scriptRevision" || status === "videoRevision" || status === "revision") {
+      return "border-amber-200 bg-amber-100 text-amber-800";
+    }
+    if (status === "approved" || status === "published" || status === "scriptApproved") {
+      return "border-emerald-200 bg-emerald-100 text-emerald-800";
+    }
+    if (status === "scriptReview" || status === "videoReview" || status === "sent") {
+      return "border-indigo-200 bg-indigo-100 text-indigo-800";
+    }
     return "border-slate-200 bg-slate-100 text-slate-700";
   }
 
@@ -1004,8 +1218,8 @@ function ProfileInner() {
                 </div>
                 <div className="flex shrink-0 items-center gap-6 rounded-2xl border border-white/10 bg-white/5 p-4 font-medium backdrop-blur-sm">
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("totalEarnings")}</span>
-                    <span className="mt-1 text-xl font-black text-emerald-400">{formatCurrency(totalReceived + totalToReceive)}</span>
+                    <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("monthlyEarnings")}</span>
+                    <span className="mt-1 text-xl font-black text-emerald-400">{formatCurrency(monthlyEarnings)}</span>
                   </div>
                   <div className="h-10 w-px bg-white/10" />
                   <div className="flex flex-col">
@@ -1015,7 +1229,15 @@ function ProfileInner() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 font-medium sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 font-medium sm:grid-cols-3">
+                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+                  <div>
+                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("monthlyEarnings")}</span>
+                    <h3 className="mt-1 text-xl font-bold text-purple-700">{formatCurrency(monthlyEarnings)}</h3>
+                    <p className="mt-1 mb-0 text-[11px] font-medium text-slate-500">{tp("monthlyEarningsHint")}</p>
+                  </div>
+                  <div className="rounded-xl bg-purple-50 p-3 text-purple-600"><Repeat size={18} /></div>
+                </div>
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("receivedPaid")}</span>
@@ -1331,9 +1553,12 @@ function CreatorRecurringEmptyOrList({ myContracts }: { myContracts: RecurringCo
         return (
           <Link key={contract.id} href={`/recurring/${contract.id}`} className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-purple-300">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="m-0 text-sm font-bold text-[#0F172A]">{contract.company?.name ?? contract.title}</p>
-                <p className="m-0 text-xs text-slate-500">{contract.title}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <UserAvatar src={contract.company?.logo_url} name={contract.company?.name ?? contract.title} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
+                <div className="min-w-0">
+                  <p className="m-0 truncate text-sm font-bold text-[#0F172A]">{contract.company?.name ?? contract.title}</p>
+                  <p className="m-0 truncate text-xs text-slate-500">{contract.title}</p>
+                </div>
               </div>
               {fee != null ? (
                 <span className="text-sm font-extrabold text-brand-primary">{formatCurrency(Number(fee) || 0)}</span>
@@ -1343,6 +1568,49 @@ function CreatorRecurringEmptyOrList({ myContracts }: { myContracts: RecurringCo
         );
       })}
     </div>
+  );
+}
+
+function RecurringBriefingModal({
+  work,
+  onClose,
+  onSubmitted,
+  tp,
+}: {
+  work: RecurringWorkRow;
+  onClose: () => void;
+  onSubmitted: () => void;
+  tp: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { t: tc } = useTranslation("common");
+  const item = work.item;
+  if (!item) return null;
+
+  const hasBriefing = itemHasPautaBriefing(item);
+
+  return (
+    <AppModal onClose={onClose} zIndexClassName="z-[110]" panelClassName="max-w-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="min-w-0">
+          <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
+          <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{item.title || work.contract.title}</h3>
+          <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">
+            {[work.contract.company?.name, work.contract.title].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={tc("close")}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
+        {hasBriefing ? (
+          <PautaBriefingView collapsible item={item} title={tp("creativeBriefing", { name: item.title })} />
+        ) : (
+          <p className="m-0 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500">{tp("noBriefingYet")}</p>
+        )}
+        <CreatorPautaSubmissionPanel key={item.id} item={item} onSubmitted={onSubmitted} />
+      </div>
+    </AppModal>
   );
 }
 
@@ -1369,6 +1637,74 @@ function ActiveRecurringWorksTable({
   formatCurrency: (value: number) => string;
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
+  const { t: ta } = useTranslation("app");
+  const { i18n } = useTranslation();
+  const locale = intlLocale(normalizeLocale(i18n.language));
+  const month = currentYearMonth();
+  const monthLabelRaw = new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
+  const monthLabel = monthLabelRaw.charAt(0).toUpperCase() + monthLabelRaw.slice(1);
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const companyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const work of rows) {
+      const name = work.contract.company?.name || tp("partnerCompany");
+      const id = companyFilterId(work.contract.company_id ?? work.contract.company?.id, name);
+      if (!seen.has(id)) seen.set(id, name);
+    }
+    return [
+      { value: "all", label: tp("filterAllCompanies") },
+      ...[...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: "base" })).map(([value, label]) => ({ value, label })),
+    ];
+  }, [rows, tp]);
+
+  const statusOptions = useMemo(() => [
+    { value: "all", label: tp("filterAllStatuses") },
+    ...CONTENT_DELIVERY_STATES.filter((state) => state !== "published").map((state) => ({ value: state, label: deliveryLabel(state) })),
+  ], [tp, deliveryLabel]);
+
+  const sections = useMemo(() => {
+    const byContract = new Map<number, RecurringWorkRow[]>();
+    for (const work of rows) {
+      const list = byContract.get(work.contract.id) ?? [];
+      list.push(work);
+      byContract.set(work.contract.id, list);
+    }
+
+    return [...byContract.values()]
+      .map((list) => {
+        const sample = list[0];
+        const companyName = sample.contract.company?.name || tp("partnerCompany");
+        const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
+        if (companyFilter !== "all" && companyId !== companyFilter) return null;
+        const monthItems = list.filter((work) => work.item && itemInMonth(work.item, month));
+        const pendingRows = monthItems.filter((work) => {
+          if (work.deliveryStatus === "published") return false;
+          if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
+          return true;
+        });
+        return {
+          key: `contract-${sample.contract.id}`,
+          contract: sample.contract,
+          companyName,
+          logoUrl: sample.contract.company?.logo_url ?? null,
+          fee: sample.fee,
+          deliverables: sample.deliverables,
+          pendingRows,
+          monthTotal: quotaTotal(sample.deliverables) || monthItems.length,
+        };
+      })
+      .filter((section): section is NonNullable<typeof section> => Boolean(section))
+      .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
+  }, [rows, companyFilter, statusFilter, month, tp]);
+
+  const pendingCount = sections.reduce((sum, section) => sum + section.pendingRows.length, 0);
+  const openWork = useMemo(
+    () => rows.find((work) => work.key === expandedKey) ?? null,
+    [rows, expandedKey],
+  );
+
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
@@ -1380,39 +1716,63 @@ function ActiveRecurringWorksTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[20px] border border-purple-200/90 bg-white shadow-sm">
-      <div className="flex flex-col gap-2 border-b border-purple-100 bg-purple-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <Repeat size={16} className="shrink-0 text-purple-600" />
-          <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("recurringWorkTableTitle")}</span>
+    <>
+    <div className="flex flex-col gap-4">
+      <div className="rounded-[20px] border border-purple-200/90 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <Repeat size={16} className="shrink-0 text-purple-600" />
+            <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("recurringWorkTableTitle")}</span>
+          </div>
+          <span className="w-fit rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-extrabold text-purple-700">
+            {tp("recurringInProgressBadge", { count: pendingCount })}
+          </span>
         </div>
-        <span className="w-fit rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-extrabold text-purple-700">
-          {tp("recurringInProgressBadge", { count: rows.length })}
-        </span>
+        <WorkTableFilters
+          company={companyFilter}
+          status={statusFilter}
+          companyOptions={companyOptions}
+          statusOptions={statusOptions}
+          onCompany={setCompanyFilter}
+          onStatus={setStatusFilter}
+          tp={tp}
+        />
       </div>
-      <div className="flex flex-col divide-y divide-slate-100 lg:hidden">
-        {rows.map((work) => {
-          const { contract, item, fee, deliveryStatus, key } = work;
-          const isExpanded = expandedKey === key;
-          const needsAction = planningNeedsCreatorAction(item);
-          const isRevision = deliveryStatus === "revision";
-          const isApproved = deliveryStatus === "approved" || deliveryStatus === "published";
-          const deliveryPending = deliveryStatus === "pending";
-          const briefingText = item?.briefing || item?.briefing_note || item?.description || item?.references || "";
+      {sections.length === 0 ? (
+        <div className="rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm font-medium text-slate-500">{tp("noFilterResults")}</div>
+      ) : (
+        sections.map((section) => (
+          <article key={section.key} className="overflow-hidden rounded-[20px] border border-purple-200/90 bg-white shadow-sm">
+            <RecurringCompanyHeader
+              name={section.companyName}
+              projectTitle={section.contract.title}
+              logoUrl={section.logoUrl}
+              feeLabel={section.fee != null ? formatCurrency(Number(section.fee) || 0) : "—"}
+              quotaItems={quotaEntries(section.deliverables)}
+              pendingCount={section.pendingRows.length}
+              quotaCount={section.monthTotal}
+              tp={tp}
+              ta={ta}
+            />
+            <div className="border-t border-purple-100 bg-slate-50 px-4 py-2 sm:px-5">
+              <p className="m-0 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">{tp("pendingThisMonth", { month: monthLabel })}</p>
+            </div>
+            {section.pendingRows.length === 0 ? (
+              <p className="m-0 px-5 py-8 text-center text-sm font-medium text-slate-500">{tp("noPendingThisMonth")}</p>
+            ) : (
+              <>
+      <div className="flex flex-col lg:hidden">
+            <div className="divide-y divide-slate-100">
+        {section.pendingRows.map((work) => {
+          const { contract, item, deliveryStatus, key } = work;
+          const isOpen = expandedKey === key;
 
           return (
-            <div key={key} className={cn("p-4", isExpanded && "bg-purple-50/40")}>
+            <div key={key} className={cn("p-4", isOpen && "bg-purple-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{item?.title || contract.title}</p>
-                  <p className="mt-0.5 mb-0 text-[11px] text-slate-400">
-                    {contract.company?.name || tp("partnerCompany")}
-                    {item ? ` · ${contract.title}` : ""}
-                  </p>
                 </div>
-                <span className="shrink-0 text-sm font-extrabold text-brand-primary">
-                  {fee != null ? formatCurrency(Number(fee) || 0) : "—"}
-                </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
@@ -1423,254 +1783,110 @@ function ActiveRecurringWorksTable({
                   <CheckCircle2 size={11} />
                   {tp("contractLinked")}
                 </span>
-                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "pending"))}>
-                  {isRevision ? <AlertTriangle size={11} /> : null}
-                  {isApproved ? <CheckCircle2 size={11} /> : null}
-                  {deliveryPending ? <Hourglass size={11} /> : null}
+                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                  <DeliveryStatusIcon state={item ? deliveryStatus : "waiting"} />
                   {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
                 </span>
               </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <Link
-                  href={`/recurring/${contract.id}`}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
-                >
-                  <Eye size={13} /> {item ? tp("viewBriefing") : tp("openProject")}
-                </Link>
-                {item && deliveryStatus !== "published" ? (
+              <div className="mt-3">
+                {item ? (
                   <button
                     type="button"
                     onClick={() => openRow(key)}
-                    className={cn(
-                      "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border-none px-3.5 py-2 text-xs font-bold shadow-sm transition-all sm:w-auto",
-                      isExpanded
-                        ? "bg-slate-800 text-white hover:bg-slate-900"
-                        : isRevision
-                          ? "bg-amber-500 text-white hover:bg-amber-600"
-                          : isApproved
-                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                            : needsAction
-                              ? "bg-brand-primary text-white hover:bg-indigo-600"
-                              : "bg-slate-700 text-white hover:bg-slate-800",
-                    )}
+                    className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
                   >
-                    {isExpanded ? (
-                      <ChevronUp size={13} />
-                    ) : isRevision ? (
-                      <AlertTriangle size={13} />
-                    ) : needsAction ? (
-                      <Send size={13} />
-                    ) : (
-                      <Eye size={13} />
-                    )}
-                    {isExpanded
-                      ? tp("closeSubmission")
-                      : isRevision
-                        ? tp("sendNewVersion")
-                        : needsAction
-                          ? tp("submitDelivery")
-                          : isApproved
-                            ? tp("materialApprovedShort")
-                            : tp("viewDemand")}
+                    <Eye size={13} /> {tp("viewBriefing")}
                   </button>
-                ) : null}
+                ) : (
+                  <Link
+                    href={`/recurring/${contract.id}`}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
+                  >
+                    <Eye size={13} /> {tp("openProject")}
+                  </Link>
+                )}
               </div>
-              {isExpanded && item ? (
-                <div className="mt-3 space-y-4 rounded-2xl border border-purple-100 bg-white p-4">
-                  {isApproved ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
-                      <p className="m-0 flex items-center gap-2 text-sm font-extrabold">
-                        <CheckCircle2 size={16} /> {tp("materialApprovedTitle")}
-                      </p>
-                      <p className="mt-1 mb-0 text-xs leading-relaxed text-emerald-800">{tp("materialApprovedHint")}</p>
-                    </div>
-                  ) : null}
-                  {briefingText ? (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("creativeBriefing", { name: item.title })}</p>
-                      <p className="mt-2 mb-0 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{briefingText}</p>
-                    </div>
-                  ) : null}
-                  <CreatorPautaSubmissionPanel
-                    key={item.id}
-                    item={item}
-                    onSubmitted={() => {
-                      onCloseRow();
-                      void reloadRecurring();
-                    }}
-                  />
-                  {!planningNeedsCreatorAction(item) && !isRevision ? (
-                    <div className="flex justify-end">
-                      <Link
-                        href={`/recurring/${contract.id}`}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600"
-                      >
-                        <ExternalLink size={13} /> {tp("openProject")}
-                      </Link>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           );
         })}
+            </div>
       </div>
       <div className="hidden lg:block">
         <table className="w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-purple-100 bg-purple-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
               <th className="p-3.5 pl-5">{tp("colDemandProject")}</th>
-              <th className="p-3.5">{tp("colCache")}</th>
               <th className="p-3.5">{tp("colDeadline")}</th>
-              <th className="p-3.5">{tp("colContractStatus")}</th>
               <th className="p-3.5">{tp("colDeliveryStatus")}</th>
               <th className="p-3.5 pr-5 text-right">{tp("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
-            {rows.map((work) => {
-              const { contract, item, fee, deliveryStatus, key } = work;
-              const isExpanded = expandedKey === key;
-              const needsAction = planningNeedsCreatorAction(item);
-              const isRevision = deliveryStatus === "revision";
-              const isApproved = deliveryStatus === "approved" || deliveryStatus === "published";
-              const deliveryPending = deliveryStatus === "pending";
-              const briefingText = item?.briefing || item?.briefing_note || item?.description || item?.references || "";
+            {section.pendingRows.map((work) => {
+              const { contract, item, deliveryStatus, key } = work;
+              const isOpen = expandedKey === key;
 
               return (
-                <Fragment key={key}>
-                  <tr className={cn("transition-colors hover:bg-purple-50/30", isExpanded && "bg-purple-50/50")}>
-                    <td className="p-3.5 pl-5">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-900">
-                          {item?.title || contract.title}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {contract.company?.name || tp("partnerCompany")}
-                          {item ? ` · ${contract.title}` : ""}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-3.5">
-                      <span className="text-sm font-extrabold text-brand-primary">
-                        {fee != null ? formatCurrency(Number(fee) || 0) : "—"}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-slate-700">
-                      <div className="flex items-center gap-1 font-semibold">
-                        <Calendar size={13} className="text-slate-400" />
-                        <span>{item?.planned_date ? fmtDate(item.planned_date) : (item ? "—" : tp("awaitingDemand"))}</span>
-                      </div>
-                    </td>
-                    <td className="p-3.5">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-emerald-700 uppercase">
-                        <CheckCircle2 size={11} />
-                        {tp("contractLinked")}
-                      </span>
-                    </td>
-                    <td className="p-3.5">
-                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "pending"))}>
-                        {isRevision ? <AlertTriangle size={11} /> : null}
-                        {isApproved ? <CheckCircle2 size={11} /> : null}
-                        {deliveryPending ? <Hourglass size={11} /> : null}
-                        {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
-                      </span>
-                    </td>
-                    <td className="p-3.5 pr-5 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          href={`/recurring/${contract.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
-                        >
-                          <Eye size={13} /> {item ? tp("viewBriefing") : tp("openProject")}
-                        </Link>
-                        {item && deliveryStatus !== "published" ? (
-                          <button
-                            type="button"
-                            onClick={() => openRow(key)}
-                            className={cn(
-                              "inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-none px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all",
-                              isExpanded
-                                ? "bg-slate-800 text-white hover:bg-slate-900"
-                                : isRevision
-                                  ? "bg-amber-500 text-white hover:bg-amber-600"
-                                  : isApproved
-                                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                    : needsAction
-                                      ? "bg-brand-primary text-white hover:bg-indigo-600"
-                                      : "bg-slate-700 text-white hover:bg-slate-800",
-                            )}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp size={13} />
-                            ) : isRevision ? (
-                              <AlertTriangle size={13} />
-                            ) : needsAction ? (
-                              <Send size={13} />
-                            ) : (
-                              <Eye size={13} />
-                            )}
-                            {isExpanded
-                              ? tp("closeSubmission")
-                              : isRevision
-                                ? tp("sendNewVersion")
-                                : needsAction
-                                  ? tp("submitDelivery")
-                                  : isApproved
-                                    ? tp("materialApprovedShort")
-                                    : tp("viewDemand")}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                  {isExpanded && item ? (
-                    <tr className="bg-slate-50/70">
-                      <td colSpan={6} className="border-b border-purple-100 p-0">
-                        <div className="space-y-4 p-4 sm:p-5">
-                          {isApproved ? (
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
-                              <p className="m-0 flex items-center gap-2 text-sm font-extrabold">
-                                <CheckCircle2 size={16} /> {tp("materialApprovedTitle")}
-                              </p>
-                              <p className="mt-1 mb-0 text-xs leading-relaxed text-emerald-800">{tp("materialApprovedHint")}</p>
-                            </div>
-                          ) : null}
-                          {briefingText ? (
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                              <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("creativeBriefing", { name: item.title })}</p>
-                              <p className="mt-2 mb-0 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{briefingText}</p>
-                            </div>
-                          ) : null}
-                          <CreatorPautaSubmissionPanel
-                            key={item.id}
-                            item={item}
-                            onSubmitted={() => {
-                              onCloseRow();
-                              void reloadRecurring();
-                            }}
-                          />
-                          {!planningNeedsCreatorAction(item) && !isRevision ? (
-                            <div className="flex justify-end">
-                              <Link
-                                href={`/recurring/${contract.id}`}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600"
-                              >
-                                <ExternalLink size={13} /> {tp("openProject")}
-                              </Link>
-                            </div>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
+                <tr key={key} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
+                  <td className="p-3.5 pl-5">
+                    <span className="text-sm font-bold text-slate-900">
+                      {item?.title || contract.title}
+                    </span>
+                  </td>
+                  <td className="p-3.5 text-slate-700">
+                    <div className="flex items-center gap-1 font-semibold">
+                      <Calendar size={13} className="text-slate-400" />
+                      <span>{item?.planned_date ? fmtDate(item.planned_date) : (item ? "—" : tp("awaitingDemand"))}</span>
+                    </div>
+                  </td>
+                  <td className="p-3.5">
+                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                      <DeliveryStatusIcon state={item ? deliveryStatus : "waiting"} />
+                      {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
+                    </span>
+                  </td>
+                  <td className="p-3.5 pr-5 text-right whitespace-nowrap">
+                    {item ? (
+                      <button
+                        type="button"
+                        onClick={() => openRow(key)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
+                      >
+                        <Eye size={13} /> {tp("viewBriefing")}
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/recurring/${contract.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
+                      >
+                        <Eye size={13} /> {tp("openProject")}
+                      </Link>
+                    )}
+                  </td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+              </>
+            )}
+          </article>
+        ))
+      )}
     </div>
+    {openWork?.item ? (
+      <RecurringBriefingModal
+        work={openWork}
+        onClose={onCloseRow}
+        onSubmitted={() => {
+          onCloseRow();
+          void reloadRecurring();
+        }}
+        tp={tp}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -1678,6 +1894,47 @@ type ApprovedCampaignRow = {
   campaign: Campaign;
   row: NonNullable<Campaign["applications"]>[number];
 };
+
+function CampaignBriefingModal({
+  campaign,
+  row,
+  onClose,
+  onSubmitted,
+  tp,
+}: {
+  campaign: Campaign;
+  row: NonNullable<Campaign["applications"]>[number];
+  onClose: () => void;
+  onSubmitted: () => void;
+  tp: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { t: tc } = useTranslation("common");
+
+  return (
+    <AppModal onClose={onClose} zIndexClassName="z-[110]" panelClassName="max-w-3xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="min-w-0">
+          <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
+          <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{campaign.name}</h3>
+          <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">{campaign.company?.name}</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={tc("close")}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="min-h-0 overflow-y-auto">
+        <CreatorCampaignSubmissionPanel
+          key={row.id}
+          campaign={campaign}
+          row={row}
+          onClose={onClose}
+          onSubmitted={onSubmitted}
+          showBriefingToggle={false}
+        />
+      </div>
+    </AppModal>
+  );
+}
 
 function ActiveCampaignsTable({
   approvedCampaigns,
@@ -1706,27 +1963,91 @@ function ActiveCampaignsTable({
   fmtDate: (value?: string | null) => string;
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const rows = useMemo(() => approvedCampaigns.map((item) => ({
+    ...item,
+    deliveryStatus: campaignCreatorDeliveryState(item.row, item.campaign.approval_flow),
+    companyId: companyFilterId(item.campaign.company_id ?? item.campaign.company?.id, item.campaign.company?.name),
+    companyName: item.campaign.company?.name || tp("partnerCompany"),
+    logoUrl: item.campaign.company?.logo_url ?? null,
+  })), [approvedCampaigns, tp]);
+
+  const companyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const item of rows) {
+      if (!seen.has(item.companyId)) seen.set(item.companyId, item.companyName);
+    }
+    return [
+      { value: "all", label: tp("filterAllCompanies") },
+      ...[...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: "base" })).map(([value, label]) => ({ value, label })),
+    ];
+  }, [rows, tp]);
+
+  const statusOptions = useMemo(() => [
+    { value: "all", label: tp("filterAllStatuses") },
+    ...CONTENT_DELIVERY_STATES.map((state) => ({ value: state, label: deliveryLabel(state) })),
+  ], [tp, deliveryLabel]);
+
+  const filteredRows = useMemo(() => rows.filter((item) => {
+    if (companyFilter !== "all" && item.companyId !== companyFilter) return false;
+    if (statusFilter !== "all" && item.deliveryStatus !== statusFilter) return false;
+    return true;
+  }), [rows, companyFilter, statusFilter]);
+
+  const groups = useMemo(() => groupRowsByCompany(filteredRows, (item) => ({
+    id: item.campaign.company_id ?? item.campaign.company?.id,
+    name: item.companyName,
+    logoUrl: item.logoUrl,
+  })), [filteredRows]);
+
+  const openCampaign = useMemo(
+    () => approvedCampaigns.find((item) => item.row.id === expandedSubmissionId) ?? null,
+    [approvedCampaigns, expandedSubmissionId],
+  );
+
   return (
+    <>
     <div className="overflow-hidden rounded-[20px] border border-indigo-200/90 bg-white shadow-sm">
-      <div className="flex flex-col gap-2 border-b border-indigo-100 bg-indigo-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <Briefcase size={16} className="shrink-0 text-brand-primary" />
-          <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("workTableTitle")}</span>
+      <div className="flex flex-col gap-3 border-b border-indigo-100 bg-indigo-50/70 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <Briefcase size={16} className="shrink-0 text-brand-primary" />
+            <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("workTableTitle")}</span>
+          </div>
+          <span className="w-fit rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 text-xs font-extrabold text-brand-primary">
+            {tp("inProgressBadge", { count: filteredRows.length })}
+          </span>
         </div>
-        <span className="w-fit rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 text-xs font-extrabold text-brand-primary">
-          {tp("inProgressBadge", { count: approvedCampaigns.length })}
-        </span>
+        <WorkTableFilters
+          company={companyFilter}
+          status={statusFilter}
+          companyOptions={companyOptions}
+          statusOptions={statusOptions}
+          onCompany={setCompanyFilter}
+          onStatus={setStatusFilter}
+          tp={tp}
+        />
       </div>
-      <div className="flex flex-col divide-y divide-slate-100 lg:hidden">
-        {approvedCampaigns.map(({ campaign, row }) => {
-          const isExpanded = expandedSubmissionId === row.id;
-          const deliveryStatus = row.script_status === "revision" || row.video_status === "revision"
-            ? "revision"
-            : row.delivery_status;
-          const needsPublishLink = deliveryStatus === "approved";
+      {filteredRows.length === 0 ? (
+        <div className="p-10 text-center text-sm font-medium text-slate-500">{tp("noFilterResults")}</div>
+      ) : (
+        <>
+      <div className="flex flex-col lg:hidden">
+        {groups.map((group) => (
+          <div key={`cm-${group.key}`}>
+            <CompanyGroupHeader
+              name={group.name}
+              count={group.rows.length}
+              logoUrl={group.logoUrl}
+              countLabel={tp(group.rows.length === 1 ? "companyCampaignCountOne" : "companyCampaignCount", { count: group.rows.length })}
+              tone="indigo"
+            />
+            <div className="divide-y divide-slate-100">
+        {group.rows.map(({ campaign, row, deliveryStatus }) => {
+          const isOpen = expandedSubmissionId === row.id;
           const isPublished = deliveryStatus === "published";
-          const deliveryPending = !deliveryStatus || deliveryStatus === "pending" || deliveryStatus === "waiting";
-          const needsRevision = deliveryStatus === "revision";
           const actions = (
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <button
@@ -1745,51 +2066,14 @@ function ActiveCampaignsTable({
                 >
                   <ExternalLink size={13} /> {tp("viewPublishedPost")}
                 </a>
-              ) : !isPublished ? (
-                <button
-                  type="button"
-                  onClick={() => openSubmission(row.id)}
-                  className={cn(
-                    "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border-none px-3.5 py-2 text-xs font-bold shadow-sm transition-all sm:w-auto",
-                    needsPublishLink
-                      ? isExpanded
-                        ? "bg-slate-800 text-white hover:bg-slate-900"
-                        : "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : needsRevision
-                        ? isExpanded
-                          ? "bg-slate-800 text-white hover:bg-slate-900"
-                          : "bg-amber-500 text-white hover:bg-amber-600"
-                      : isExpanded
-                        ? "bg-slate-800 text-white hover:bg-slate-900"
-                        : "bg-brand-primary text-white hover:bg-indigo-600",
-                  )}
-                >
-                  {isExpanded ? (
-                    <ChevronUp size={13} />
-                  ) : needsPublishLink ? (
-                    <Link2 size={13} />
-                  ) : needsRevision ? (
-                    <AlertTriangle size={13} />
-                  ) : (
-                    <Send size={13} />
-                  )}
-                  {isExpanded
-                    ? tp("closeSubmission")
-                    : needsPublishLink
-                      ? tp("insertContentLink")
-                      : needsRevision
-                        ? tp("sendNewVersion")
-                        : tp("submitDelivery")}
-                </button>
               ) : null}
             </div>
           );
           return (
-            <div key={row.id} className={cn("p-4", isExpanded && "bg-indigo-50/40")}>
+            <div key={row.id} className={cn("p-4", isOpen && "bg-indigo-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{campaign.name}</p>
-                  <p className="mt-0.5 mb-0 text-[11px] text-slate-400">{campaign.company?.name || tp("partnerCompany")}</p>
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
@@ -1803,32 +2087,23 @@ function ActiveCampaignsTable({
                   {applicationLabel(row.application_status)}
                 </span>
                 <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(deliveryStatus))}>
-                  {needsRevision ? <AlertTriangle size={11} /> : null}
-                  {deliveryPending ? <Hourglass size={11} /> : null}
+                  <DeliveryStatusIcon state={deliveryStatus} />
                   {deliveryLabel(deliveryStatus)}
                 </span>
               </div>
               <div className="mt-3">{actions}</div>
-              {isExpanded ? (
-                <div className="mt-3 overflow-hidden rounded-2xl border border-indigo-100 bg-white">
-                  <CreatorCampaignSubmissionPanel
-                    key={row.id}
-                    campaign={campaign}
-                    row={row}
-                    onClose={onCloseSubmission}
-                    onSubmitted={() => void reloadMyCampaigns()}
-                  />
-                </div>
-              ) : null}
             </div>
           );
         })}
+            </div>
+          </div>
+        ))}
       </div>
       <div className="hidden lg:block">
         <table className="w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-indigo-100 bg-indigo-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
-              <th className="p-3.5 pl-5">{tp("colCampaignCompany")}</th>
+              <th className="p-3.5 pl-5">{tp("colCampaign")}</th>
               <th className="p-3.5">{tp("colCache")}</th>
               <th className="p-3.5">{tp("colDeadline")}</th>
               <th className="p-3.5">{tp("colApplicationStatus")}</th>
@@ -1836,25 +2111,28 @@ function ActiveCampaignsTable({
               <th className="p-3.5 pr-5 text-right">{tp("colActions")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 font-medium">
-            {approvedCampaigns.map(({ campaign, row }) => {
-              const isExpanded = expandedSubmissionId === row.id;
-              const deliveryStatus = row.script_status === "revision" || row.video_status === "revision"
-                ? "revision"
-                : row.delivery_status;
-              const needsPublishLink = deliveryStatus === "approved";
+          <tbody className="font-medium">
+            {groups.map((group) => (
+              <Fragment key={`cd-${group.key}`}>
+                <tr>
+                  <td colSpan={6} className="p-0">
+                    <CompanyGroupHeader
+                      name={group.name}
+                      count={group.rows.length}
+                      logoUrl={group.logoUrl}
+                      countLabel={tp(group.rows.length === 1 ? "companyCampaignCountOne" : "companyCampaignCount", { count: group.rows.length })}
+                      tone="indigo"
+                    />
+                  </td>
+                </tr>
+            {group.rows.map(({ campaign, row, deliveryStatus }) => {
+              const isOpen = expandedSubmissionId === row.id;
               const isPublished = deliveryStatus === "published";
-              const deliveryPending = !deliveryStatus || deliveryStatus === "pending" || deliveryStatus === "waiting";
-              const needsRevision = deliveryStatus === "revision";
 
               return (
-                <Fragment key={row.id}>
-                  <tr className={cn("transition-colors hover:bg-indigo-50/30", isExpanded && "bg-indigo-50/50")}>
+                <tr key={row.id} className={cn("transition-colors hover:bg-indigo-50/30", isOpen && "bg-indigo-50/50")}>
                     <td className="p-3.5 pl-5">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
-                        <span className="text-[10px] text-slate-400">{campaign.company?.name || tp("partnerCompany")}</span>
-                      </div>
+                      <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
                     </td>
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
@@ -1873,8 +2151,7 @@ function ActiveCampaignsTable({
                     </td>
                     <td className="p-3.5">
                       <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(deliveryStatus))}>
-                        {needsRevision ? <AlertTriangle size={11} /> : null}
-                        {deliveryPending ? <Hourglass size={11} /> : null}
+                        <DeliveryStatusIcon state={deliveryStatus} />
                         {deliveryLabel(deliveryStatus)}
                       </span>
                     </td>
@@ -1896,66 +2173,33 @@ function ActiveCampaignsTable({
                           >
                             <ExternalLink size={13} /> {tp("viewPublishedPost")}
                           </a>
-                        ) : !isPublished ? (
-                          <button
-                            type="button"
-                            onClick={() => openSubmission(row.id)}
-                            className={cn(
-                              "inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-none px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all",
-                              needsPublishLink
-                                ? isExpanded
-                                  ? "bg-slate-800 text-white hover:bg-slate-900"
-                                  : "bg-emerald-600 text-white hover:bg-emerald-700"
-                                : needsRevision
-                                  ? isExpanded
-                                    ? "bg-slate-800 text-white hover:bg-slate-900"
-                                    : "bg-amber-500 text-white hover:bg-amber-600"
-                                  : isExpanded
-                                    ? "bg-slate-800 text-white hover:bg-slate-900"
-                                    : "bg-brand-primary text-white hover:bg-indigo-600",
-                            )}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp size={13} />
-                            ) : needsPublishLink ? (
-                              <Link2 size={13} />
-                            ) : needsRevision ? (
-                              <AlertTriangle size={13} />
-                            ) : (
-                              <Send size={13} />
-                            )}
-                            {isExpanded
-                              ? tp("closeSubmission")
-                              : needsPublishLink
-                                ? tp("insertContentLink")
-                                : needsRevision
-                                  ? tp("sendNewVersion")
-                                  : tp("submitDelivery")}
-                          </button>
                         ) : null}
                       </div>
                     </td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className="bg-slate-50/70">
-                      <td colSpan={6} className="border-b border-indigo-100 p-0">
-                        <CreatorCampaignSubmissionPanel
-                          key={row.id}
-                          campaign={campaign}
-                          row={row}
-                          onClose={onCloseSubmission}
-                          onSubmitted={() => void reloadMyCampaigns()}
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
+                </tr>
               );
             })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
+    {openCampaign ? (
+      <CampaignBriefingModal
+        campaign={openCampaign.campaign}
+        row={openCampaign.row}
+        onClose={onCloseSubmission}
+        onSubmitted={() => {
+          onCloseSubmission();
+          void reloadMyCampaigns();
+        }}
+        tp={tp}
+      />
+    ) : null}
+    </>
   );
 }
 

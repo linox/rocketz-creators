@@ -78,6 +78,8 @@ export type DeliveryInboxItem = {
   stageTotal?: 1 | 2 | null;
   /** YYYY-MM for recurring pautas (distinguishes 2/2 of Aug vs Sep). */
   period?: string | null;
+  /** Recurring content_type / campaign delivery type, e.g. reel */
+  formatKey?: string | null;
 };
 
 export type InboxFolder =
@@ -323,7 +325,8 @@ function buildCampaignStageItem(
   return {
     id,
     title: campaign.name,
-    formatLabel: isScript ? "script" : formatLabel,
+    formatLabel,
+    formatKey: formatLabel.toLowerCase() || null,
     creatorId: String(row.creator_id),
     creatorName,
     creatorPhoto: row.creator?.photo_url,
@@ -436,7 +439,6 @@ function buildPlanningStageItem(
     { resubmission },
   );
   const fileUrl = isScript ? null : (item.media_url || item.submission_url || null);
-  const titleBase = namedPlanningTitle(item.title) || formatLabel;
   const history = (item.submission_versions ?? []).filter((entry) => entry.stage === stage);
   const versions: DeliveryVersion[] = history.length > 0
     ? history.map((entry) => ({
@@ -483,8 +485,9 @@ function buildPlanningStageItem(
 
   return {
     id,
-    title: titleBase,
-    formatLabel: isScript ? "script" : formatLabel,
+    title: namedPlanningTitle(item.title),
+    formatLabel: item.content_type || "UGC",
+    formatKey: item.content_type || null,
     creatorId: String(item.creator_id),
     creatorName,
     creatorPhoto: item.creator?.photo_url,

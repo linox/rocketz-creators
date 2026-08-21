@@ -6,12 +6,14 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class AdminUserController extends Controller
 {
+    public function __construct(private readonly PermissionService $permissions) {}
     public function index(): JsonResponse
     {
         $users = User::query()->where('role', UserRole::Admin)->latest()->get();
@@ -33,8 +35,9 @@ class AdminUserController extends Controller
             'password' => $data['password'],
             'role' => UserRole::Admin,
         ]);
+        $this->permissions->grantDefaults($user);
 
-        return response()->json(['data' => new UserResource($user)], 201);
+        return response()->json(['data' => new UserResource($user->load('permissionGrants'))], 201);
     }
 
     public function destroy(User $adminUser): JsonResponse

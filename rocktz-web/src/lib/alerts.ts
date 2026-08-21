@@ -11,8 +11,10 @@ function base() {
     heightAuto: false,
     customClass: {
       popup: "rounded-3xl font-sans",
-      title: "text-slate-900",
+      title: "text-slate-900 font-extrabold",
+      htmlContainer: "text-slate-600",
       confirmButton: "rounded-xl px-5 py-2.5 font-bold",
+      cancelButton: "rounded-xl px-5 py-2.5 font-bold",
     },
   };
 }

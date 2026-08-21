@@ -11,24 +11,71 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  FileText,
   Heart,
   Layers,
   Megaphone,
+  Plus,
   Repeat,
   Sparkles,
   Users,
+  X,
 } from "lucide-react";
+import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
+import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { api } from "@/lib/api";
-import { alertApiError, alertSuccess } from "@/lib/alerts";
+import { isPendingAgency } from "@/lib/agency-approval";
+import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import type { Campaign, Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
 type DashTab = "overview" | "campaigns" | "recurring" | "favorites";
+
+type PendingApproval = {
+  key: string;
+  source: "campaign" | "recurring";
+  stage: "script" | "video" | "recurring";
+  title: string;
+  creatorName: string;
+  creatorPhoto?: string | null;
+  participationId?: number;
+  planningId?: number;
+  href: string;
+  demandStatus: string;
+  approvalStatus: string;
+  script?: string | null;
+  videoUrl?: string | null;
+  videoFileSize?: number | null;
+};
+
+function demandStatusTone(status: string) {
+  if (status === "approved" || status === "published" || status === "finished") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  if (status === "review" || status === "production" || status === "in_production" || status === "approval") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+  if (status === "revision" || status === "rejected") {
+    return "border-rose-200 bg-rose-50 text-rose-800";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function approvalStatusTone(status: string) {
+  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "revision") return "border-rose-200 bg-rose-50 text-rose-800";
+  if (status === "submitted" || status === "sent") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function hasApprovalMaterial(item: PendingApproval) {
+  return Boolean(item.script?.trim() || item.videoUrl?.trim());
+}
 
 function isActiveCampaign(status: string) {
   return status === "briefing" || status === "selection" || status === "production";
@@ -51,6 +98,7 @@ function CompanyDashboardInner() {
   const [tab, setTab] = useState<DashTab>("overview");
   const [loading, setLoading] = useState(true);
   const [favSearch, setFavSearch] = useState("");
+  const [materialItem, setMaterialItem] = useState<PendingApproval | null>(null);
 
   const companyId = isAdmin
     ? (queryCompanyId || companies[0]?.id || 0)
@@ -93,6 +141,35 @@ function CompanyDashboardInner() {
     () => recurring.filter((contract) => contract.status === "active"),
     [recurring],
   );
+  const pendingAgencyCampaigns = useMemo(
+    () => campaigns.filter((campaign) => isPendingAgency(campaign.status)),
+    [campaigns],
+  );
+  const pendingAgencyRecurring = useMemo(
+    () => recurring.filter((contract) => isPendingAgency(contract.status)),
+    [recurring],
+  );
+  const pendingAgencyCount = pendingAgencyCampaigns.length + pendingAgencyRecurring.length;
+
+  async function approveAgencyCampaign(campaign: Campaign) {
+    try {
+      await api.approveCampaignAgency(campaign.id);
+      await alertSuccess(t("campaigns.approvedAgency"));
+      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: "briefing" } : item)));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function approveAgencyRecurring(contract: RecurringContract) {
+    try {
+      await api.approveRecurringAgency(contract.id);
+      await alertSuccess(t("recurring.approvedAgency"));
+      setRecurring((current) => current.map((item) => (item.id === contract.id ? { ...item, status: "active" } : item)));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
 
   const allApplications = useMemo(
     () => campaigns.flatMap((campaign) => (campaign.applications ?? []).map((row) => ({ campaign, row }))),
@@ -126,27 +203,24 @@ function CompanyDashboardInner() {
     return sum + (Number(campaign.total_budget) || 0);
   }, 0);
 
-  const recurringMonthly = activeRecurring.reduce((sum, contract) => {
-    if (contract.monthly_fee) return sum + Number(contract.monthly_fee);
-    return sum + (contract.creators ?? []).reduce((inner, row) => inner + (Number(row.monthly_cache ?? row.monthly_fee) || 0), 0);
-  }, 0);
+  const contractMonthlyValue = (contract: RecurringContract) => {
+    if (contract.monthly_fee) return Number(contract.monthly_fee);
+    return (contract.creators ?? []).reduce((inner, row) => inner + (Number(row.monthly_cache ?? row.monthly_fee) || 0), 0);
+  };
+
+  const recurringMonthly = activeRecurring.reduce((sum, contract) => sum + contractMonthlyValue(contract), 0);
 
   const pendingApprovals = useMemo(() => {
-    const items: {
-      key: string;
-      source: "campaign" | "recurring";
-      stage: "script" | "video" | "recurring";
-      title: string;
-      creatorName: string;
-      creatorPhoto?: string | null;
-      participationId?: number;
-      planningId?: number;
-      href: string;
-    }[] = [];
+    const items: PendingApproval[] = [];
 
     for (const { campaign, row } of allApplications) {
       const name = row.creator?.artistic_name || row.creator?.full_name || "—";
       const staged = (campaign.approval_flow || "script_and_video") === "script_and_video";
+      const material = {
+        script: row.content?.script ?? null,
+        videoUrl: row.content?.video_url ?? null,
+        videoFileSize: row.content?.video_file_size ?? null,
+      };
       if (row.script_status === "submitted" || row.script_status === "revision"
         || (row.delivery_status === "sent" && row.content?.script && !row.content?.video_url && row.script_status !== "approved")) {
         items.push({
@@ -158,6 +232,9 @@ function CompanyDashboardInner() {
           creatorPhoto: row.creator?.photo_url,
           participationId: row.id,
           href: `/campaigns/${campaign.id}?tab=entregas`,
+          demandStatus: row.delivery_status || campaign.status,
+          approvalStatus: row.script_status || "submitted",
+          ...material,
         });
       }
       const scriptReady = staged ? row.script_status === "approved" : true;
@@ -172,6 +249,9 @@ function CompanyDashboardInner() {
           creatorPhoto: row.creator?.photo_url,
           participationId: row.id,
           href: `/campaigns/${campaign.id}?tab=entregas`,
+          demandStatus: row.delivery_status || campaign.status,
+          approvalStatus: row.video_status || row.delivery_status || "submitted",
+          ...material,
         });
       }
     }
@@ -180,6 +260,10 @@ function CompanyDashboardInner() {
       for (const item of (contract.items ?? []) as PlanningItem[]) {
         const staged = (item.approval_flow || "script_and_video") === "script_and_video";
         const name = item.creator?.artistic_name || item.creator?.full_name || "—";
+        const material = {
+          script: item.script ?? null,
+          videoUrl: item.media_url || item.submission_url || null,
+        };
         if (item.script_status === "submitted" || item.script_status === "revision") {
           items.push({
             key: `recurring-script-${item.id}`,
@@ -190,6 +274,9 @@ function CompanyDashboardInner() {
             creatorPhoto: item.creator?.photo_url,
             planningId: item.id,
             href: `/campaign-deliveries?tab=recurring`,
+            demandStatus: item.status,
+            approvalStatus: item.script_status || "submitted",
+            ...material,
           });
         }
         const scriptReady = staged ? item.script_status === "approved" : true;
@@ -206,6 +293,9 @@ function CompanyDashboardInner() {
             creatorPhoto: item.creator?.photo_url,
             planningId: item.id,
             href: `/campaign-deliveries?tab=recurring`,
+            demandStatus: item.status,
+            approvalStatus: item.video_status || "submitted",
+            ...material,
           });
         } else if (!staged && item.status === "review" && item.script_status !== "submitted" && item.video_status !== "submitted") {
           items.push({
@@ -217,6 +307,9 @@ function CompanyDashboardInner() {
             creatorPhoto: item.creator?.photo_url,
             planningId: item.id,
             href: `/recurring/${contract.id}`,
+            demandStatus: item.status,
+            approvalStatus: item.video_status || item.script_status || item.status,
+            ...material,
           });
         }
       }
@@ -231,7 +324,28 @@ function CompanyDashboardInner() {
     ? favorites.filter((creator) => `${creator.artistic_name} ${creator.full_name}`.toLowerCase().includes(favQuery))
     : favorites);
 
-  async function approvePending(item: (typeof pendingApprovals)[number]) {
+  function demandStatusLabel(status: string) {
+    if (status === "sent") return t("campaignDetail.inReview");
+    if (status === "pending") return t("campaignDetail.waiting");
+    if (status === "revision") return t("campaignDetail.adjustments");
+    return t(`status.${status}`, { defaultValue: status });
+  }
+
+  function approvalStatusLabel(status: string) {
+    if (status === "submitted" || status === "sent") return t("companyDash.overview.approvalWaiting");
+    if (status === "revision") return t("companyDash.overview.approvalRevision");
+    return t(`status.${status}`, { defaultValue: t("status.pending") });
+  }
+
+  async function openMaterial(item: PendingApproval) {
+    if (!hasApprovalMaterial(item)) {
+      await alertWarning(t("companyDash.overview.noMaterialTitle"), t("companyDash.overview.noMaterial"));
+      return;
+    }
+    setMaterialItem(item);
+  }
+
+  async function approvePending(item: PendingApproval) {
     try {
       if (item.participationId) {
         if (item.stage === "script") {
@@ -476,7 +590,7 @@ function CompanyDashboardInner() {
             ) : (
               <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {pendingApprovals.map((item) => (
-                  <div key={item.key} className="flex min-w-0 flex-col justify-between gap-3 overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50 p-4 shadow-xs">
+                  <div key={item.key} className="flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50 p-4 shadow-xs">
                     <div className="flex min-w-0 flex-col gap-2">
                       <span className={cn(
                         "w-fit max-w-full truncate rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase",
@@ -487,17 +601,45 @@ function CompanyDashboardInner() {
                         {item.stage === "script" ? t("companyDash.overview.stageScript") : item.stage === "video" ? t("companyDash.overview.stageVideo") : t("companyDash.overview.stageRecurring")}
                       </span>
                       <h4 className="m-0 truncate text-xs font-bold text-slate-900">{item.title}</h4>
-                      <div className="mt-1 flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <UserAvatar src={item.creatorPhoto} name={item.creatorName} size="custom" shape="circle" className="h-6 w-6 shrink-0 border border-slate-200" textClassName="text-[10px]" />
                         <span className="truncate text-xs font-semibold text-slate-700">@{item.creatorName}</span>
                       </div>
+                      <div className="mt-1 flex flex-col gap-1.5 rounded-lg border border-slate-200/80 bg-white p-2.5">
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.demandStatus")}</span>
+                          <span className={cn("max-w-[60%] truncate rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", demandStatusTone(item.demandStatus))}>
+                            {demandStatusLabel(item.demandStatus)}
+                          </span>
+                        </div>
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.approvalStatus")}</span>
+                          <span className={cn("max-w-[60%] truncate rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", approvalStatusTone(item.approvalStatus))}>
+                            {approvalStatusLabel(item.approvalStatus)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 border-t border-slate-200/60 pt-2">
-                      <Link href={item.href} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold whitespace-nowrap text-slate-700 hover:bg-slate-100">
-                        {t("companyDash.overview.review")}
+                    <div className="grid grid-cols-1 gap-2 border-t border-slate-200/60 pt-3 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => void openMaterial(item)}
+                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] font-bold whitespace-nowrap text-slate-700 hover:bg-slate-100"
+                      >
+                        <FileText size={12} className="shrink-0" /> {t("companyDash.overview.viewMaterial")}
+                      </button>
+                      <Link
+                        href={item.href}
+                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] font-bold whitespace-nowrap text-slate-700 hover:bg-slate-100"
+                      >
+                        <Eye size={12} className="shrink-0" /> {t("companyDash.overview.review")}
                       </Link>
-                      <button type="button" onClick={() => void approvePending(item)} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold whitespace-nowrap text-white hover:bg-emerald-700">
-                        <CheckCircle2 size={11} className="shrink-0" /> {t("companyDash.overview.approve")}
+                      <button
+                        type="button"
+                        onClick={() => void approvePending(item)}
+                        className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-[11px] font-bold whitespace-nowrap text-white hover:bg-emerald-700"
+                      >
+                        <CheckCircle2 size={12} className="shrink-0" /> {t("companyDash.overview.approve")}
                       </button>
                     </div>
                   </div>
@@ -507,6 +649,45 @@ function CompanyDashboardInner() {
           </div>
 
           <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:gap-8">
+            {pendingAgencyCount > 0 ? (
+              <div className="lg:col-span-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+                <div className="mb-3 flex items-start gap-2">
+                  <Clock size={16} className="mt-0.5 shrink-0 text-amber-700" />
+                  <div>
+                    <h3 className="m-0 text-xs font-black tracking-wider text-amber-950 uppercase">{t("companyDash.agencyPending.title", { count: pendingAgencyCount })}</h3>
+                    <p className="m-0 mt-1 text-[11px] font-medium text-amber-900">{t("companyDash.agencyPending.hint")}</p>
+                  </div>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {pendingAgencyCampaigns.map((campaign) => (
+                    <div key={`camp-${campaign.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2.5">
+                      <Link href={`/campaigns/${campaign.id}`} className="min-w-0 truncate text-xs font-bold text-slate-800 hover:text-brand-primary">
+                        {campaign.name}
+                        <span className="ml-2 text-[10px] font-semibold text-amber-700">{t("companyDash.agencyPending.campaign")}</span>
+                      </Link>
+                      {isAdmin ? (
+                        <button type="button" onClick={() => void approveAgencyCampaign(campaign)} className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white uppercase hover:bg-emerald-700">
+                          {t("companyDash.agencyPending.approve")}
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {pendingAgencyRecurring.map((contract) => (
+                    <div key={`rec-${contract.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2.5">
+                      <Link href={`/recurring/${contract.id}`} className="min-w-0 truncate text-xs font-bold text-slate-800 hover:text-brand-primary">
+                        {contract.title}
+                        <span className="ml-2 text-[10px] font-semibold text-amber-700">{t("companyDash.agencyPending.recurring")}</span>
+                      </Link>
+                      {isAdmin ? (
+                        <button type="button" onClick={() => void approveAgencyRecurring(contract)} className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white uppercase hover:bg-emerald-700">
+                          {t("companyDash.agencyPending.approve")}
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <SectionCard
               icon={<Megaphone size={18} className="shrink-0 text-indigo-600" />}
               title={t("companyDash.overview.activeCampaignsTitle", { count: activeCampaigns.length })}
@@ -566,7 +747,7 @@ function CompanyDashboardInner() {
                       <p className="mt-1 truncate text-[10px] text-slate-400">
                         {t("companyDash.overview.creatorsAllocated", { count: contract.creators?.length ?? 0 })}
                         {" · "}
-                        {t("companyDash.overview.monthFee", { value: formatCurrency(Number(contract.monthly_fee) || 0) })}
+                        {t("companyDash.overview.monthFee", { value: formatCurrency(contractMonthlyValue(contract)) })}
                       </p>
                     </Link>
                   ))}
@@ -578,6 +759,14 @@ function CompanyDashboardInner() {
       ) : null}
 
       {tab === "campaigns" ? (
+        <div className="min-w-0 space-y-4">
+          {user.role === "company" || isAdmin ? (
+            <div className="flex justify-end">
+              <Link href="/campaigns?new=true" className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600">
+                <Plus size={14} /> {t("companyDash.campaignsTab.new")}
+              </Link>
+            </div>
+          ) : null}
         <div className="grid min-w-0 gap-4 md:grid-cols-2">
           {campaigns.length === 0 ? <EmptyDashed className="md:col-span-2">{t("companyDash.campaignsTab.empty")}</EmptyDashed> : null}
           {campaigns.map((campaign) => (
@@ -592,10 +781,18 @@ function CompanyDashboardInner() {
             </Link>
           ))}
         </div>
+        </div>
       ) : null}
 
       {tab === "recurring" ? (
         <div className="min-w-0 space-y-3">
+          {user.role === "company" || isAdmin ? (
+            <div className="flex justify-end">
+              <Link href="/recurring" className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600">
+                <Plus size={14} /> {t("companyDash.recurringTab.new")}
+              </Link>
+            </div>
+          ) : null}
           {recurring.length === 0 ? <EmptyDashed>{t("companyDash.recurringTab.empty")}</EmptyDashed> : null}
           {recurring.map((row) => (
             <Link key={row.id} href={`/recurring/${row.id}`} className="block min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-purple-300">
@@ -606,7 +803,7 @@ function CompanyDashboardInner() {
                 </span>
               </div>
               <p className="mt-2 truncate text-xs text-slate-500">
-                {t("companyDash.recurringTab.monthFee", { value: formatCurrency(Number(row.monthly_fee) || 0) })}
+                {t("companyDash.recurringTab.monthFee", { value: formatCurrency(contractMonthlyValue(row)) })}
               </p>
             </Link>
           ))}
@@ -674,6 +871,46 @@ function CompanyDashboardInner() {
             </div>
           </div>
         </div>
+      ) : null}
+      {materialItem ? (
+        <AppModal onClose={() => setMaterialItem(null)} zIndexClassName="z-[110]" panelClassName="max-w-2xl">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <div className="min-w-0">
+              <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.materialTitle")}</p>
+              <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{materialItem.title}</h3>
+              <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">@{materialItem.creatorName}</p>
+            </div>
+            <button type="button" onClick={() => setMaterialItem(null)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
+            {materialItem.script?.trim() ? (
+              <div>
+                <p className="mb-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.stageScript")}</p>
+                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">{materialItem.script}</pre>
+              </div>
+            ) : null}
+            {materialItem.videoUrl?.trim() ? (
+              <div>
+                <p className="mb-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.stageVideo")}</p>
+                <CampaignSubmittedVideo videoUrl={materialItem.videoUrl} fileSize={materialItem.videoFileSize} compact />
+              </div>
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+            <Link
+              href={materialItem.href}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              onClick={() => setMaterialItem(null)}
+            >
+              <Eye size={13} /> {t("companyDash.overview.review")}
+            </Link>
+            <button type="button" onClick={() => setMaterialItem(null)} className="rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-600">
+              {t("companyDash.overview.closeMaterial")}
+            </button>
+          </div>
+        </AppModal>
       ) : null}
     </div>
   );

@@ -27,6 +27,7 @@ import {
   FileText,
   Gift,
   Handshake,
+  History,
   Image as ImageIcon,
   Instagram,
   Layers,
@@ -35,7 +36,9 @@ import {
   Megaphone,
   MessageCircle,
   Package,
+  Play,
   Plus,
+  ScrollText,
   Search,
   Sparkles,
   ThumbsUp,
@@ -51,10 +54,12 @@ import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { api } from "@/lib/api";
+import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
-import type { Campaign, CampaignCreator, Company, Creator } from "@/lib/types";
+import { campaignCreatorDeliveryState, type ContentDeliveryState } from "@/lib/content-delivery-status";
+import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
@@ -66,6 +71,7 @@ type CreatorLayout = "split" | "grid";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+  pending_agency: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200" },
   briefing: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
   selection: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
   approval: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
@@ -122,31 +128,134 @@ function formatRange(start: string | null | undefined, end: string | null | unde
   return fmt(start || end || "");
 }
 
-function deliveryLabel(status: string | null | undefined, t: (key: string) => string, mode: "list" | "detail" = "list") {
-  if (status === "published") return t("campaignDetail.published");
-  if (status === "approved") return t("campaignDetail.approved");
-  if (status === "revision") return t("campaignDetail.adjustments");
-  if (status === "sent") return mode === "detail" ? t("campaignDetail.received") : t("campaignDetail.inReview");
+function deliveryLabel(state: ContentDeliveryState, t: (key: string) => string, mode: "list" | "detail" = "list") {
+  if (state === "published") return t("campaignDetail.published");
+  if (state === "approved") return t("campaignDetail.approved");
+  if (state === "scriptRevision") return t("campaignDetail.scriptRevisionStatus");
+  if (state === "videoRevision") return t("campaignDetail.videoRevisionStatus");
+  if (state === "revision") return t("campaignDetail.adjustments");
+  if (state === "scriptReview") return t("campaignDetail.scriptReviewStatus");
+  if (state === "videoReview") return t("campaignDetail.videoReviewStatus");
+  if (state === "scriptApproved") return t("campaignDetail.scriptApprovedStatus");
+  if (state === "sent") return mode === "detail" ? t("campaignDetail.received") : t("campaignDetail.inReview");
   return t("campaignDetail.waiting");
 }
 
-function deliveryClass(status: string | null | undefined) {
-  if (status === "published") return "text-emerald-700";
-  if (status === "approved") return "text-indigo-700";
-  if (status === "revision") return "text-rose-700";
-  if (status === "sent") return "text-amber-700";
+function deliveryClass(state: ContentDeliveryState) {
+  if (state === "published") return "text-emerald-700";
+  if (state === "approved" || state === "scriptApproved") return "text-indigo-700";
+  if (state === "scriptRevision" || state === "videoRevision" || state === "revision") return "text-rose-700";
+  if (state === "scriptReview" || state === "videoReview" || state === "sent") return "text-amber-700";
   return "text-slate-500";
 }
 
 function hasSubmittedMaterial(row: CampaignCreator) {
   const content = row.content;
+  if (content?.script?.trim()) return true;
   if (content?.video_url?.trim()) return true;
   if (content?.image_url?.trim()) return true;
   const status = row.delivery_status;
   if (status === "sent" || status === "revision" || status === "approved" || status === "published") return true;
+  const scriptStatus = row.script_status;
+  if (scriptStatus === "submitted" || scriptStatus === "revision" || scriptStatus === "approved") return true;
   const videoStatus = row.video_status;
   if (videoStatus === "submitted" || videoStatus === "revision" || videoStatus === "approved") return true;
   return false;
+}
+
+type CampaignHistoryEntry = {
+  kind: "revision" | "submitted";
+  stage: string;
+  note?: string;
+  at?: string;
+  version?: number;
+};
+
+function campaignChangeHistory(row: CampaignCreator): CampaignHistoryEntry[] {
+  const entries: CampaignHistoryEntry[] = [];
+  const stored = (row.content?.revision_history ?? []).filter((entry: RevisionHistoryEntry) => entry.note?.trim());
+  for (const entry of stored) {
+    entries.push({
+      kind: "revision",
+      stage: entry.stage,
+      note: entry.note.trim(),
+      at: entry.requested_at,
+    });
+  }
+  if (stored.length === 0) {
+    if (row.script_feedback?.trim()) {
+      entries.push({ kind: "revision", stage: "script", note: row.script_feedback.trim() });
+    }
+    if (row.video_feedback?.trim()) {
+      entries.push({ kind: "revision", stage: "video", note: row.video_feedback.trim() });
+    }
+    const details = row.revision_details?.trim();
+    if (details && !entries.some((entry) => entry.note === details)) {
+      const stage = row.script_status === "revision" && !row.content?.video_url?.trim() ? "script" : "video";
+      entries.push({ kind: "revision", stage, note: details });
+    }
+  }
+  for (const version of row.content?.submission_versions ?? []) {
+    entries.push({
+      kind: "submitted",
+      stage: version.stage,
+      at: version.submitted_at,
+      version: version.version,
+    });
+  }
+  return entries.sort((a, b) => {
+    const ta = a.at ? +new Date(a.at) : 0;
+    const tb = b.at ? +new Date(b.at) : 0;
+    return tb - ta;
+  });
+}
+
+function campaignScriptVersions(row: CampaignCreator) {
+  const current = row.content?.script?.trim() || "";
+  const byVersion = new Map<number, { version: number; script: string; submittedAt?: string }>();
+  for (const entry of row.content?.submission_versions ?? []) {
+    if (entry.stage !== "script") continue;
+    const script = (entry.script || "").trim();
+    if (!script) continue;
+    byVersion.set(entry.version, { version: entry.version, script, submittedAt: entry.submitted_at });
+  }
+  const currentVersion = row.content?.script_version
+    || (byVersion.size ? Math.max(...byVersion.keys()) : current ? 1 : 0);
+  if (current && ![...byVersion.values()].some((entry) => entry.script === current)) {
+    byVersion.set(currentVersion || 1, {
+      version: currentVersion || 1,
+      script: current,
+      submittedAt: row.script_submitted_at ?? undefined,
+    });
+  }
+  return [...byVersion.values()].sort((a, b) => b.version - a.version);
+}
+
+function campaignVideoVersions(row: CampaignCreator) {
+  const currentUrl = row.content?.video_url?.trim() || "";
+  const byVersion = new Map<number, { version: number; url: string; submittedAt?: string; fileSize?: number | null }>();
+  for (const entry of row.content?.submission_versions ?? []) {
+    if (entry.stage !== "video") continue;
+    const url = (entry.video_url || entry.media_url || entry.submission_url || "").trim();
+    if (!url) continue;
+    byVersion.set(entry.version, {
+      version: entry.version,
+      url,
+      submittedAt: entry.submitted_at,
+      fileSize: entry.video_file_size,
+    });
+  }
+  const currentVersion = row.content?.video_version
+    || (byVersion.size ? Math.max(...byVersion.keys()) : currentUrl ? 1 : 0);
+  if (currentUrl && ![...byVersion.values()].some((entry) => entry.url === currentUrl)) {
+    byVersion.set(currentVersion || 1, {
+      version: currentVersion || 1,
+      url: currentUrl,
+      submittedAt: row.video_submitted_at ?? undefined,
+      fileSize: row.content?.video_file_size,
+    });
+  }
+  return [...byVersion.values()].sort((a, b) => b.version - a.version);
 }
 
 function needsAgencyAttention(row: CampaignCreator) {
@@ -251,6 +360,7 @@ function DetailInner() {
   const isCreator = user.role === "creator";
   const ownCreatorId = user.creator?.id ?? null;
   const canManage = user.role === "admin" || user.role === "company";
+  const canChangeStatus = user.role === "admin" || Boolean(user.can_publish_without_approval);
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
@@ -270,6 +380,9 @@ function DetailInner() {
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [scriptPreviewOpen, setScriptPreviewOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [watchingVideoUrl, setWatchingVideoUrl] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -383,9 +496,13 @@ function DetailInner() {
 
   const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
   const selectedCreator = selected?.creator;
+  const selectedDeliveryState = selected ? campaignCreatorDeliveryState(selected, campaign.approval_flow) : null;
 
   useEffect(() => {
     setPublishedLinkDraft(selected?.content?.published_link || "");
+    setScriptPreviewOpen(false);
+    setHistoryOpen(false);
+    setWatchingVideoUrl(null);
   }, [selected?.id, selected?.content?.published_link]);
 
   const statusCounts = useMemo(() => {
@@ -480,6 +597,17 @@ function DetailInner() {
     await patch(row, { application_status: "pending", rejection_reason: "" });
   }
 
+  async function approveAgency() {
+    if (!campaign) return;
+    try {
+      await api.approveCampaignAgency(campaign.id);
+      await load();
+      await alertSuccess(t("campaignDetail.approvedAgency"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   async function changeStatus(status: string) {
     if (!campaign) return;
     try {
@@ -562,7 +690,7 @@ function DetailInner() {
       await api.updateCampaign(campaign.id, {
         name: editForm.name,
         company_id: isAdmin ? Number(editForm.company_id) : undefined,
-        status: editForm.status,
+        status: canChangeStatus ? editForm.status : undefined,
         objective: editForm.objective,
         approval_flow: editForm.approval_flow,
         total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
@@ -755,7 +883,7 @@ function DetailInner() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-            {canManage ? (
+            {canChangeStatus && !isPendingAgency(campaign.status) ? (
               <Select2Field
                 theme="light"
                 searchable={false}
@@ -766,7 +894,9 @@ function DetailInner() {
                 triggerClassName={cn("h-auto min-h-0 py-2 text-xs font-extrabold shadow-xs", statusCfg.bg, statusCfg.text, statusCfg.border)}
               />
             ) : (
-              <span className={cn("rounded-xl border px-3 py-2 text-xs font-extrabold", statusCfg.bg, statusCfg.text, statusCfg.border)}>{t(STATUS_LABEL[campaign.status as (typeof STATUSES)[number]] ?? "deliveries.statusBriefing")}</span>
+              <span className={cn("rounded-xl border px-3 py-2 text-xs font-extrabold", statusCfg.bg, statusCfg.text, statusCfg.border)}>
+                {isPendingAgency(campaign.status) ? t("status.pending_agency") : t(STATUS_LABEL[campaign.status as (typeof STATUSES)[number]] ?? "deliveries.statusBriefing")}
+              </span>
             )}
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-extrabold text-indigo-700">
               <FileText size={13} />
@@ -781,6 +911,11 @@ function DetailInner() {
                 <Edit3 size={14} /> {t("campaignDetail.edit")}
               </button>
             ) : null}
+            {isAdmin && isPendingAgency(campaign.status) ? (
+              <button type="button" onClick={() => void approveAgency()} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-emerald-700">
+                <CheckCircle2 size={14} /> {t("campaignDetail.approveAgency")}
+              </button>
+            ) : null}
             {isAdmin ? (
               <button type="button" onClick={() => void removeCampaign()} title={t("campaignDetail.deleteTitle")} className="rounded-xl border border-transparent p-2 text-slate-400 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
                 <Trash2 size={16} />
@@ -788,6 +923,18 @@ function DetailInner() {
             ) : null}
           </div>
         </div>
+
+        {isPendingAgency(campaign.status) ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2 text-amber-900">
+              <Clock size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="m-0 text-xs font-black tracking-wider uppercase">{t("campaignDetail.awaitingAgency")}</p>
+                <p className="m-0 mt-1 text-[11px] font-medium leading-snug">{t("campaignDetail.awaitingAgencyHint")}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {campaign.objective ? (
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3.5 text-xs leading-relaxed font-medium text-slate-600">
@@ -1058,6 +1205,7 @@ function DetailInner() {
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
                     const needsAttention = needsAgencyAttention(row);
                     const showAttentionTag = creatorFilter === "all" && needsAttention;
+                    const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
 
                     if (creatorLayout === "grid") {
                       return (
@@ -1065,7 +1213,13 @@ function DetailInner() {
                           key={row.id}
                           className={cn(
                             "group relative flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
-                            needsAttention ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70" : row.delivery_status === "pending" || row.delivery_status === "revision" ? "border-rose-200/80" : row.delivery_status === "published" || row.delivery_status === "approved" ? "border-emerald-200/80" : "border-slate-200",
+                            needsAttention
+                              ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70"
+                              : deliveryState === "waiting" || deliveryState === "scriptRevision" || deliveryState === "videoRevision" || deliveryState === "revision"
+                                ? "border-rose-200/80"
+                                : deliveryState === "published" || deliveryState === "approved"
+                                  ? "border-emerald-200/80"
+                                  : "border-slate-200",
                           )}
                         >
                           {showAttentionTag ? (
@@ -1081,8 +1235,8 @@ function DetailInner() {
                             <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
                           ) : null}
                           <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
-                          <span className={cn("mt-1.5 rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(row.delivery_status), "border-slate-200 bg-slate-50")}>
-                            {deliveryLabel(row.delivery_status, t)}
+                          <span className={cn("mt-1.5 rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(deliveryState), "border-slate-200 bg-slate-50")}>
+                            {deliveryLabel(deliveryState, t)}
                           </span>
                           <button
                             type="button"
@@ -1150,7 +1304,7 @@ function DetailInner() {
                           </div>
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryStatus")}</span>
-                            <span className={cn("mt-0.5 truncate font-black", deliveryClass(row.delivery_status))}>{deliveryLabel(row.delivery_status, t)}</span>
+                            <span className={cn("mt-0.5 truncate font-black", deliveryClass(deliveryState))}>{deliveryLabel(deliveryState, t)}</span>
                           </div>
                         </div>
                         {expanded ? (
@@ -1263,8 +1417,10 @@ function DetailInner() {
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.contentStatus")}</span>
                     <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span className={cn("truncate text-xs font-black uppercase", deliveryClass(selected.delivery_status))}>{deliveryLabel(selected.delivery_status, t, "detail")}</span>
-                      {selected.delivery_status === "approved" ? (
+                      {selectedDeliveryState ? (
+                        <span className={cn("truncate text-xs font-black uppercase", deliveryClass(selectedDeliveryState))}>{deliveryLabel(selectedDeliveryState, t, "detail")}</span>
+                      ) : null}
+                      {selectedDeliveryState === "approved" ? (
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-emerald-800 uppercase">
                           {t("campaignDetail.contentApprovedTag")}
                         </span>
@@ -1276,69 +1432,92 @@ function DetailInner() {
                 {hasSubmittedMaterial(selected) ? (
                   <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
                     {(selected.content?.script?.trim() || selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
-                      <div className={cn("grid grid-cols-1 items-start gap-6", selected.content?.script?.trim() && (selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? "md:grid-cols-2" : "")}>
-                        {selected.content?.script?.trim() ? (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                              <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                                <FileText size={13} className="text-brand-primary" /> {t("campaignDetail.scriptTitle")}
-                              </span>
+                      <div className="flex flex-col gap-3">
+                        <span className="text-[10px] font-black tracking-wider text-slate-700 uppercase">{t("campaignDetail.submittedMaterialTitle")}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {selected.content?.script?.trim() ? (
+                            <button
+                              type="button"
+                              onClick={() => setScriptPreviewOpen(true)}
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-bold whitespace-nowrap text-brand-primary transition-colors hover:border-indigo-200 hover:bg-white"
+                            >
+                              <ScrollText size={13} />
+                              {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url)
+                                ? t("campaignDetail.viewScriptForApproval")
+                                : t("campaignDetail.viewScript")}
+                              {selected.content?.script_version ? (
+                                <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-extrabold text-indigo-700">
+                                  {t("campaignDetail.scriptVersion", { n: selected.content.script_version })}
+                                </span>
+                              ) : null}
+                            </button>
+                          ) : null}
+                          {selected.content?.video_url?.trim() ? (
+                            <CampaignSubmittedVideo
+                              compact
+                              className="w-auto"
+                              videoUrl={selected.content.video_url}
+                              fileSize={selected.content.video_file_size}
+                            />
+                          ) : selected.script_status === "approved" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                              <Video size={13} /> {t("campaignDetail.waitingVideo")}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setHistoryOpen(true)}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold whitespace-nowrap text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-brand-primary"
+                          >
+                            <History size={13} /> {t("campaignDetail.revisionHistory")}
+                          </button>
+                        </div>
+                        {campaignVideoVersions(selected).length > 1 ? (
+                          <div className="flex flex-col gap-1.5">
+                            <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("campaignDetail.videoVersionsTitle")}</p>
+                            {campaignVideoVersions(selected).map((version) => (
                               <button
+                                key={`campaign-v${version.version}`}
                                 type="button"
-                                onClick={async () => {
-                                  await navigator.clipboard.writeText(selected.content?.script || "");
-                                  await alertSuccess(t("campaignDetail.copied"));
-                                }}
-                                className="flex items-center gap-1 text-[10px] font-bold text-brand-primary hover:underline"
+                                onClick={() => setWatchingVideoUrl(version.url)}
+                                className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:border-indigo-200 hover:bg-white"
                               >
-                                <Copy size={11} /> {t("campaignDetail.copy")}
+                                <Play size={11} fill="currentColor" />
+                                {t("campaignDetail.scriptVersion", { n: version.version })}
+                                {version.submittedAt ? (
+                                  <span className="font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleString(locale)}</span>
+                                ) : null}
                               </button>
-                            </div>
-                            <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-700">{selected.content.script}</div>
+                            ))}
                           </div>
                         ) : null}
-                        {(selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                                  <Video size={13} className="text-brand-primary" /> {t("campaignDetail.mediaTitle")}
-                                </span>
-                                {selected.delivery_status === "approved" ? (
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-emerald-800 uppercase">
-                                    {t("campaignDetail.contentApprovedTag")}
-                                  </span>
-                                ) : null}
-                              </span>
+                        {selected.content?.image_url ? (
+                          <a href={selected.content.image_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
+                            <span className="truncate">{selected.content.image_url}</span>
+                            <ExternalLink size={12} />
+                          </a>
+                        ) : null}
+                        {selected.content?.published_link ? (
+                          <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                            <div className="flex items-center gap-2 truncate">
+                              <Sparkles size={16} className="shrink-0 text-emerald-600" />
+                              <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
                             </div>
-                            {selected.content?.video_url ? (
-                              <CampaignSubmittedVideo
-                                key={selected.id}
-                                videoUrl={selected.content.video_url}
-                                fileSize={selected.content.video_file_size}
-                              />
-                            ) : null}
-                            {selected.content?.image_url ? (
-                              <a href={selected.content.image_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
-                                <span className="truncate">{selected.content.image_url}</span>
-                                <ExternalLink size={12} />
-                              </a>
-                            ) : null}
-                            {selected.content?.published_link ? (
-                              <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                                <div className="flex items-center gap-2 truncate">
-                                  <Sparkles size={16} className="shrink-0 text-emerald-600" />
-                                  <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
-                                </div>
-                                <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
-                                  {t("campaignDetail.viewPost")} ↗
-                                </a>
-                              </div>
-                            ) : null}
+                            <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
+                              {t("campaignDetail.viewPost")} ↗
+                            </a>
                           </div>
                         ) : null}
                       </div>
-                    ) : null}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setHistoryOpen(true)}
+                        className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold whitespace-nowrap text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-brand-primary"
+                      >
+                        <History size={13} /> {t("campaignDetail.revisionHistory")}
+                      </button>
+                    )}
                     {selected.notes ? (
                       <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
                         <strong className="mb-0.5 block">{t("campaignDetail.creatorNotes")}</strong>
@@ -1842,9 +2021,9 @@ function DetailInner() {
 
       <AnimatePresence>
         {addOpen ? (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setAddOpen(false)} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+          <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setAddOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
                 <div>
                   <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.addCreatorTitle")}</h2>
@@ -1882,9 +2061,9 @@ function DetailInner() {
 
       <AnimatePresence>
         {imageOpen ? (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setImageOpen(false)} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex w-full max-w-xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+          <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setImageOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
                 <div>
                   <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.changeCover")}</h2>
@@ -1908,9 +2087,9 @@ function DetailInner() {
 
       <AnimatePresence>
         {editOpen ? (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditOpen(false)} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+          <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setEditOpen(false)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
                 <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.editCampaignTitle")}</h2>
                 <button type="button" onClick={() => setEditOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
@@ -1928,10 +2107,21 @@ function DetailInner() {
                       <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value })} />
                     </div>
                   ) : null}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.colStatus")}</label>
-                    <Select2Field theme="light" searchable={false} value={editForm.status} options={STATUSES.map((status) => ({ value: status, label: t(STATUS_LABEL[status]) }))} onChange={(value) => setEditForm({ ...editForm, status: value })} />
-                  </div>
+                  {canChangeStatus ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.colStatus")}</label>
+                      <Select2Field
+                        theme="light"
+                        searchable={false}
+                        value={editForm.status}
+                        options={(isPendingAgency(editForm.status) ? ["pending_agency", ...STATUSES] : [...STATUSES]).map((status) => ({
+                          value: status,
+                          label: status === "pending_agency" ? t("status.pending_agency") : t(STATUS_LABEL[status as (typeof STATUSES)[number]]),
+                        }))}
+                        onChange={(value) => setEditForm({ ...editForm, status: value })}
+                      />
+                    </div>
+                  ) : null}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget")}</label>
                     <input type="number" step="0.01" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.total_budget} onChange={(event) => setEditForm({ ...editForm, total_budget: event.target.value })} />
@@ -2076,9 +2266,9 @@ function DetailInner() {
 
       <AnimatePresence>
         {editing ? (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditing(null)} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative z-10 my-auto flex w-full max-w-lg flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl">
+          <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setEditing(null)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-[#E2E8F0] p-5">
                 <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.editCreatorTitle")}</h2>
                 <button type="button" onClick={() => setEditing(null)} className="p-1 font-bold text-slate-400">✕</button>
@@ -2100,9 +2290,9 @@ function DetailInner() {
 
       <AnimatePresence>
         {rejectModal.row ? (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setRejectModal({ row: null, reason: "" })} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 my-auto flex w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="app-modal-overlay fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRejectModal({ row: null, reason: "" })} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="app-modal-panel relative z-10 my-auto flex w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
@@ -2138,6 +2328,150 @@ function DetailInner() {
           </div>
         ) : null}
       </AnimatePresence>
+
+      {scriptPreviewOpen && selected?.content?.script?.trim() ? (
+        <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4">
+          <div className="app-modal-panel flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-slate-900">{t("campaignDetail.scriptPreviewTitle")}</h3>
+                {selectedCreator ? (
+                  <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">@{selectedCreator.artistic_name}</p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(selected.content?.script || "");
+                    await alertSuccess(t("campaignDetail.copied"));
+                  }}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-3 py-1.5 text-[11px] font-bold text-brand-primary hover:bg-indigo-50"
+                >
+                  <Copy size={12} /> {t("campaignDetail.copy")}
+                </button>
+                <button type="button" onClick={() => setScriptPreviewOpen(false)} className="cursor-pointer rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {campaignScriptVersions(selected).map((version, index) => (
+                <div key={`script-v${version.version}`} className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-indigo-700 uppercase">
+                      {t("campaignDetail.scriptVersion", { n: version.version })}
+                    </span>
+                    {index === 0 ? (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-extrabold text-emerald-800 uppercase">
+                        {t("campaignDetail.currentVersion")}
+                      </span>
+                    ) : null}
+                    {version.submittedAt ? (
+                      <span className="text-[10px] font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleString(locale)}</span>
+                    ) : null}
+                  </div>
+                  <p className="m-0 rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-slate-700">{version.script}</p>
+                </div>
+              ))}
+            </div>
+            {canManage && selected.delivery_status !== "approved" && selected.delivery_status !== "published" && (selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url)) ? (
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 p-4">
+                <button type="button" onClick={() => setScriptPreviewOpen(false)} className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("close")}</button>
+                <button
+                  type="button"
+                  disabled={updatingId !== null}
+                  onClick={() => {
+                    setScriptPreviewOpen(false);
+                    void patch(selected, { script_status: "approved", script_feedback: "" });
+                  }}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveScript")}
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-end border-t border-slate-100 p-4">
+                <button type="button" onClick={() => setScriptPreviewOpen(false)} className="cursor-pointer rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-600">{tc("close")}</button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {watchingVideoUrl ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
+          <button type="button" className="absolute inset-0" aria-label={t("campaignDetail.closeVideoPlayer")} onClick={() => setWatchingVideoUrl(null)} />
+          <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl">
+            <video src={watchingVideoUrl} controls autoPlay className="max-h-[80vh] w-full" />
+            <button
+              type="button"
+              onClick={() => setWatchingVideoUrl(null)}
+              className="absolute top-3 right-3 cursor-pointer rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-slate-800"
+            >
+              {t("campaignDetail.closeVideoPlayer")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {historyOpen && selected ? (
+        <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="app-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-brand-primary">
+                  <History size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-black text-slate-900">{t("campaignDetail.revisionHistoryTitle")}</h3>
+                  {selectedCreator ? (
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">@{selectedCreator.artistic_name}</p>
+                  ) : null}
+                </div>
+              </div>
+              <button type="button" onClick={() => setHistoryOpen(false)} className="cursor-pointer rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto p-5">
+              {campaignChangeHistory(selected).length ? (
+                campaignChangeHistory(selected).map((entry, index) => (
+                  <div key={`${entry.kind}-${entry.at || "n"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                      <span className={cn(
+                        "rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase",
+                        entry.stage === "script" ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-rose-200 bg-rose-50 text-rose-700",
+                      )}>
+                        {entry.stage === "script" ? t("campaignDetail.revisionHistoryScript") : t("campaignDetail.revisionHistoryVideo")}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-extrabold text-slate-600 uppercase">
+                        {entry.kind === "submitted" ? t("campaignDetail.historySubmitted") : t("campaignDetail.historyRevision")}
+                      </span>
+                      {entry.version ? (
+                        <span className="text-[10px] font-extrabold text-slate-500">{t("campaignDetail.scriptVersion", { n: entry.version })}</span>
+                      ) : null}
+                      {entry.at ? (
+                        <span className="text-[10px] font-semibold text-slate-400">{new Date(entry.at).toLocaleString(locale)}</span>
+                      ) : null}
+                    </div>
+                    {entry.note ? (
+                      <p className="m-0 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{entry.note}</p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="m-0 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs font-medium text-slate-500">
+                  {t("campaignDetail.revisionHistoryEmpty")}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-slate-100 p-4">
+              <button type="button" onClick={() => setHistoryOpen(false)} className="cursor-pointer rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-600">{tc("close")}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

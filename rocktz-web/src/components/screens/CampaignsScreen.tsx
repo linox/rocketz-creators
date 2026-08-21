@@ -33,6 +33,7 @@ import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
@@ -40,9 +41,10 @@ import type { Campaign, CampaignCreator, Company } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
-const ACTIVE_STATUSES = ["briefing", "selection", "production", "published"] as const;
+const ACTIVE_STATUSES = ["pending_agency", "briefing", "selection", "production", "published"] as const;
 
 const STATUS_PILL: Record<string, string> = {
+  pending_agency: "bg-amber-50 text-amber-800 border-amber-200",
   briefing: "bg-blue-50 text-blue-600 border-blue-100",
   selection: "bg-purple-50 text-purple-600 border-purple-100",
   production: "bg-indigo-50 text-indigo-600 border-indigo-100",
@@ -105,11 +107,15 @@ function CampaignCard({
   finished,
   dateLabel,
   formatCurrency,
+  isAdmin,
+  onApprove,
 }: {
   campaign: Campaign;
   finished?: boolean;
   dateLabel: string;
   formatCurrency: (value?: number | null) => string;
+  isAdmin?: boolean;
+  onApprove?: (campaign: Campaign) => void;
 }) {
   const { t } = useTranslation("app");
   const companyName = campaign.company?.name || t("campaigns.client");
@@ -192,6 +198,12 @@ function CampaignCard({
           </div>
         ) : null}
 
+        {isPendingAgency(campaign.status) ? (
+          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-900">
+            {t("campaigns.awaitingAgencyHint")}
+          </div>
+        ) : null}
+
         <div className="mt-auto space-y-2.5 pt-2">
           <div className="flex items-center gap-2.5 text-xs text-[#64748B]">
             <Calendar size={13} className="shrink-0 text-slate-400" />
@@ -213,7 +225,7 @@ function CampaignCard({
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-[#F1F5F9] bg-[#F8FAFC] px-5 py-3.5">
+      <div className="flex items-center justify-between gap-2 border-t border-[#F1F5F9] bg-[#F8FAFC] px-5 py-3.5">
         {finished ? (
           <span className="text-[11px] font-medium text-slate-400">{t("campaigns.completed")}</span>
         ) : (
@@ -221,9 +233,23 @@ function CampaignCard({
             <Users size={14} /> {t("campaigns.casting")}
           </Link>
         )}
-        <Link href={`/campaigns/${campaign.id}`} className={cn("text-[11px] font-bold tracking-wider uppercase hover:underline", finished ? "text-slate-700 hover:text-brand-primary" : "text-brand-primary")}>
-          {finished ? t("campaigns.viewReport") : t("campaigns.manage")} →
-        </Link>
+        <div className="flex items-center gap-2">
+          {isAdmin && isPendingAgency(campaign.status) && onApprove ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                onApprove(campaign);
+              }}
+              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black tracking-wider text-white uppercase hover:bg-emerald-700"
+            >
+              {t("campaigns.approveAgency")}
+            </button>
+          ) : null}
+          <Link href={`/campaigns/${campaign.id}`} className={cn("text-[11px] font-bold tracking-wider uppercase hover:underline", finished ? "text-slate-700 hover:text-brand-primary" : "text-brand-primary")}>
+            {finished ? t("campaigns.viewReport") : t("campaigns.manage")} →
+          </Link>
+        </div>
       </div>
     </motion.article>
   );
@@ -305,6 +331,16 @@ function CampaignsInner() {
     try {
       await api.resetCampaigns();
       await alertSuccess(t("campaigns.resetSuccess"), t("campaigns.resetSuccessBody"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function approveAgencyCampaign(campaign: Campaign) {
+    try {
+      await api.approveCampaignAgency(campaign.id);
+      await alertSuccess(t("campaigns.approvedAgency"));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -467,6 +503,8 @@ function CampaignsInner() {
                   campaign={campaign}
                   dateLabel={formatRange(campaign.start_date, campaign.end_date, locale, t)}
                   formatCurrency={formatCurrency}
+                  isAdmin={isAdmin}
+                  onApprove={approveAgencyCampaign}
                 />
               ))}
             </div>

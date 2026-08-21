@@ -86,4 +86,9 @@ class Campaign extends Model
     {
         return $this->hasMany(Notification::class);
     }
+
+    public function isPendingAgency(): bool
+    {
+        return $this->status === CampaignStatus::PendingAgency;
+    }
 }

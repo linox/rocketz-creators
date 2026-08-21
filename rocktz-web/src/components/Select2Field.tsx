@@ -129,7 +129,7 @@ export function Select2Field({
             role="listbox"
             style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
             className={cn(
-              "fixed z-[200] flex flex-col overflow-hidden rounded-xl border shadow-xl",
+              "fixed z-[400] flex flex-col overflow-hidden rounded-xl border shadow-xl",
               dark ? "border-white/10 bg-[#111827] text-slate-100" : "border-slate-200 bg-white text-slate-900",
             )}
           >
@@ -163,7 +163,11 @@ export function Select2Field({
                           "flex w-full px-3 py-2 text-left text-sm",
                           active ? "bg-purple-600 text-white" : dark ? "text-slate-200 hover:bg-purple-600 hover:text-white" : "text-slate-800 hover:bg-purple-600 hover:text-white",
                         )}
-                        onClick={() => pick(option.value)}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          pick(option.value);
+                        }}
                       >
                         {option.label}
                       </button>

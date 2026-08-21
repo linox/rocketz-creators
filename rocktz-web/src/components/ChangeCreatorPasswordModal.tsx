@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, KeyRound, Mail, Sparkles, X } from "lucide-react";
+import { AppModal } from "@/components/AppModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { PasswordField } from "@/components/PasswordField";
 import { api } from "@/lib/api";
@@ -79,9 +80,8 @@ export function ChangeCreatorPasswordModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+    <AppModal onClose={onClose} panelClassName="max-w-lg">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 font-bold text-brand-primary">
               <KeyRound size={20} />
@@ -174,7 +174,6 @@ export function ChangeCreatorPasswordModal({
             {tc("close")}
           </button>
         </div>
-      </div>
-    </div>
+    </AppModal>
   );
 }

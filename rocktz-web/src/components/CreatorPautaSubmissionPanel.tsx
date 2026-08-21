@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CheckCircle2, RefreshCw, Send, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, UploadCloud } from "lucide-react";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -40,6 +40,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
   const [script, setScript] = useState(item.script || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [publishedUrl, setPublishedUrl] = useState(item.published_url || "");
   const [submitting, setSubmitting] = useState(false);
 
   const currentVideoVersion = item.video_version ?? 0;
@@ -49,8 +50,25 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const scriptChanged = script.trim() !== (item.script || "").trim();
   const requiresNewVideoFile = videoRevision;
   const requiresScriptChange = scriptRevision;
+  const awaitingPublishUrl = item.status === "approved" || (flow === "live_link" && item.status !== "published");
+  const alreadyPublished = item.status === "published";
 
-  if (done || flow === "live_link") return null;
+  async function submitPublishedUrl() {
+    if (!publishedUrl.trim()) {
+      await alertWarning(tp("materialRequiredTitle"), tp("publishedLinkRequired"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.updatePlanningItem(item.id, { published_url: publishedUrl.trim() });
+      await alertSuccess(tp("publishedLinkSent"));
+      onSubmitted();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function submit() {
     if (canSubmitScript) {
@@ -122,6 +140,48 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     : videoRevision
       ? (item.video_feedback || item.feedback_note || "")
       : "";
+
+  if (alreadyPublished) {
+    return item.published_url ? (
+      <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        <p className="m-0 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">{tp("publishedLinkLabel")}</p>
+        <a href={item.published_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+          <Link2 size={13} /> {item.published_url}
+        </a>
+      </div>
+    ) : null;
+  }
+
+  if (awaitingPublishUrl) {
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("approvedPublishHint")}</p>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("publishedLinkLabel")}</label>
+          <input
+            type="url"
+            placeholder={tp("publishedLinkPh")}
+            value={publishedUrl}
+            onChange={(event) => setPublishedUrl(event.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={submitting || !publishedUrl.trim()}
+          onClick={() => void submitPublishedUrl()}
+          className={cn(
+            "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+            submitting || !publishedUrl.trim() ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
+          )}
+        >
+          <Link2 size={14} /> {tp("sendPublishedLink")}
+        </button>
+      </div>
+    );
+  }
+
+  if (done || flow === "live_link") return null;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">

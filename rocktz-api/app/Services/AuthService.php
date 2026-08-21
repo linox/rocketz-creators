@@ -120,7 +120,7 @@ class AuthService
      */
     public function issueToken(User $user): array
     {
-        $user->load(['creator', 'company']);
+        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
         $token = $user->createToken('auth')->plainTextToken;
 
         return [

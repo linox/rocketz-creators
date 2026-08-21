@@ -37,12 +37,12 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
   }
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onCancel} />
+    <div className="app-modal-overlay fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel} />
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="app-modal-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\CompanyStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CompanyResource;
@@ -12,6 +13,7 @@ use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,10 @@ use Illuminate\Validation\Rule;
 
 class CompanyController extends Controller
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly PermissionService $permissions,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -176,6 +181,7 @@ class CompanyController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
+            'can_publish_without_approval' => ['sometimes', 'boolean'],
         ]);
 
         $row = DB::transaction(function () use ($data, $company) {
@@ -186,14 +192,42 @@ class CompanyController extends Controller
                 'role' => UserRole::Company,
             ]);
 
-            return CompanyUser::query()->create([
+            $row = CompanyUser::query()->create([
                 'user_id' => $user->id,
                 'company_id' => $company->id,
                 'status' => $company->status,
+                'can_publish_without_approval' => (bool) ($data['can_publish_without_approval'] ?? false),
             ]);
+
+            $this->permissions->sync(
+                $user,
+                $row->can_publish_without_approval ? [Permission::CampaignsPublishWithoutApproval->value] : [],
+            );
+
+            return $row;
         });
 
         return response()->json(['data' => $row->load('user')], 201);
+    }
+
+    public function updateUser(Request $request, Company $company, CompanyUser $companyUser): JsonResponse
+    {
+        if ($companyUser->company_id !== $company->id) {
+            return response()->json(['message' => __('auth.forbidden')], 404);
+        }
+
+        $data = $request->validate([
+            'can_publish_without_approval' => ['required', 'boolean'],
+        ]);
+        $companyUser->update($data);
+        if ($companyUser->user) {
+            $this->permissions->sync(
+                $companyUser->user,
+                $companyUser->can_publish_without_approval ? [Permission::CampaignsPublishWithoutApproval->value] : [],
+            );
+        }
+
+        return response()->json(['data' => $companyUser->fresh()->load('user')]);
     }
 
     public function destroyUser(Company $company, CompanyUser $companyUser): JsonResponse

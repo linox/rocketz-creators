@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
+import { mediaPublicUrl } from "@/lib/media-playback";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "custom";
 type AvatarShape = "circle" | "rounded-lg" | "rounded-xl" | "rounded-2xl" | "square";
@@ -76,10 +77,11 @@ export function UserAvatar({
   shape?: AvatarShape;
 }) {
   const [hasError, setHasError] = useState(false);
+  const resolvedSrc = mediaPublicUrl(src);
 
   useEffect(() => {
     setHasError(false);
-  }, [src]);
+  }, [resolvedSrc]);
 
   const sizeConfig = SIZE_MAP[size];
   const box = cn(
@@ -89,7 +91,7 @@ export function UserAvatar({
     className,
   );
 
-  if (!src || hasError) {
+  if (!resolvedSrc || hasError) {
     return (
       <div className={cn(box, getAvatarGradient(name), "font-bold tracking-tight shadow-xs")} title={name || alt || "Usuário"}>
         <span className={cn("font-extrabold uppercase", textClassName || sizeConfig.text)}>{getInitials(name)}</span>
@@ -101,7 +103,7 @@ export function UserAvatar({
     <div className={box} title={name || alt || "Usuário"}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={resolvedSrc}
         alt={alt || name || "Avatar"}
         onError={() => setHasError(true)}
         className="h-full w-full object-cover"

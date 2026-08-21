@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import {
   AlertCircle,
-  Building2,
   Calendar,
   CheckCircle2,
   Clock,
@@ -25,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -349,8 +349,9 @@ function AvailableInner() {
                   {campaign.image_url ? <img src={campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                   <div className="absolute top-3 left-3">
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
-                      <Building2 size={11} className="text-indigo-300" /> {campaign.company?.name || t("available.partnerBrand")}
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 py-1 pr-2.5 pl-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
+                      <UserAvatar src={campaign.company?.logo_url} name={campaign.company?.name || t("available.partnerBrand")} size="custom" shape="rounded-lg" className="h-5 w-5 border border-white/20" textClassName="text-[8px]" />
+                      {campaign.company?.name || t("available.partnerBrand")}
                     </span>
                   </div>
                   <div className="absolute top-3 right-3">
@@ -398,8 +399,9 @@ function AvailableInner() {
                 <div className="relative h-56 shrink-0 overflow-hidden bg-slate-900 lg:h-auto lg:w-80">
                   {campaign.image_url ? <img src={campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
                   <div className="absolute top-4 left-4">
-                    <span className="inline-flex w-fit items-center gap-1 rounded-lg border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
-                      <Building2 size={11} className="text-indigo-300" /> {campaign.company?.name || t("available.partnerBrand")}
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 py-1 pr-2.5 pl-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
+                      <UserAvatar src={campaign.company?.logo_url} name={campaign.company?.name || t("available.partnerBrand")} size="custom" shape="rounded-lg" className="h-5 w-5 border border-white/20" textClassName="text-[8px]" />
+                      {campaign.company?.name || t("available.partnerBrand")}
                     </span>
                   </div>
                 </div>

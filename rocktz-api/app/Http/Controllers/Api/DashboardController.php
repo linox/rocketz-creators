@@ -92,7 +92,7 @@ class DashboardController extends Controller
 
         return [
             'campaigns' => (clone $campaigns)->count(),
-            'running_campaigns' => (clone $campaigns)->where('status', '!=', CampaignStatus::Finished)->count(),
+            'running_campaigns' => (clone $campaigns)->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency])->count(),
             'total_campaign_value' => (float) (clone $campaigns)->sum('total_budget'),
             'pending_applications' => CampaignCreator::query()
                 ->whereHas('campaign', fn ($q) => $q->where('company_id', $companyId))

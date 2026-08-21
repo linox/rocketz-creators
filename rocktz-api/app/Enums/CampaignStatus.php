@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum CampaignStatus: string
 {
+    case PendingAgency = 'pending_agency';
     case Briefing = 'briefing';
     case Selection = 'selection';
     case Approval = 'approval';

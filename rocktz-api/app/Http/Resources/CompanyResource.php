@@ -39,6 +39,7 @@ class CompanyResource extends JsonResource
                 'email' => $companyUser->user?->email,
                 'name' => $companyUser->user?->name,
                 'status' => $companyUser->status?->value,
+                'can_publish_without_approval' => (bool) $companyUser->can_publish_without_approval,
             ])),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

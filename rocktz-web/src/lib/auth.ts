@@ -7,6 +7,8 @@ export type AuthUser = {
   locale?: string;
   role: UserRole;
   avatar_url?: string | null;
+  permissions?: string[];
+  can_publish_without_approval?: boolean;
   creator?: {
     id: number;
     full_name: string;
@@ -57,3 +59,10 @@ export function homePathForUser(user: AuthUser): string {
 }
 
 export const AUTH_COOKIE = "rocktz_token";
+
+export function userHasPermission(user: AuthUser | null | undefined, slug: string) {
+  if (!user) return false;
+  if (user.role !== "admin" && user.role !== "company") return false;
+  if (user.role === "admin" && (!user.permissions || user.permissions.length === 0)) return true;
+  return (user.permissions ?? []).includes(slug);
+}

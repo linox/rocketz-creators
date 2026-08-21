@@ -6,17 +6,31 @@ export function isPlayableVideoSize(size?: number | null) {
   return !size || size <= PLAYER_MAX_BYTES;
 }
 
-export function mediaDownloadUrl(url: string): string {
+function uploadsRelativePath(url: string): string | null {
   try {
-    const path = new URL(url).pathname;
+    const parsed = new URL(url, "http://localhost");
     const marker = "/uploads/";
-    if (path.includes(marker)) {
-      const relative = path.split(marker)[1];
-      const base = getApiUrl().replace(/\/api\/?$/, "");
-      return `${base}/downloads/${relative}`;
-    }
+    if (!parsed.pathname.includes(marker)) return null;
+    return `${parsed.pathname.split(marker)[1] ?? ""}${parsed.search}`;
   } catch {
-    /* ignore */
+    return null;
   }
-  return url;
+}
+
+function mediaOrigin(): string {
+  return getApiUrl().replace(/\/api\/?$/, "");
+}
+
+export function mediaPublicUrl(url?: string | null): string | null {
+  if (!url?.trim()) return null;
+  const raw = url.trim();
+  const relative = uploadsRelativePath(raw);
+  if (!relative) return raw;
+  return `${mediaOrigin()}/uploads/${relative}`;
+}
+
+export function mediaDownloadUrl(url: string): string {
+  const relative = uploadsRelativePath(url);
+  if (!relative) return url;
+  return `${mediaOrigin()}/downloads/${relative}`;
 }

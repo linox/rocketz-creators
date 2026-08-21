@@ -47,12 +47,16 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
+import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
+import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
+import { itemHasPautaBriefing, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -84,6 +88,25 @@ const QUOTA_FIELDS = [
   ["live_tiktok", "quotaLiveTiktok"],
   ["live_youtube", "quotaLiveYoutube"],
 ] as const;
+
+const QUOTA_PILLS: { keys: string[]; type: string; labelKey: string }[] = [
+  { keys: ["reels", "reel"], type: "reel", labelKey: "quotaReel" },
+  { keys: ["stories", "story"], type: "story", labelKey: "quotaStory" },
+  { keys: ["posts", "post"], type: "post", labelKey: "quotaPost" },
+  { keys: ["tiktok", "tiktoks"], type: "tiktok", labelKey: "quotaTiktok" },
+  { keys: ["youtube"], type: "youtube", labelKey: "quotaYoutube" },
+  { keys: ["live", "lives"], type: "live", labelKey: "quotaLive" },
+  { keys: ["live_instagram"], type: "live_instagram", labelKey: "quotaLiveInstagram" },
+  { keys: ["live_tiktok"], type: "live_tiktok", labelKey: "quotaLiveTiktok" },
+  { keys: ["live_youtube"], type: "live_youtube", labelKey: "quotaLiveYoutube" },
+  { keys: ["pinterest", "pins"], type: "pinterest", labelKey: "quotaPinterest" },
+  { keys: ["blog", "artigos", "articles"], type: "blog", labelKey: "quotaBlog" },
+  { keys: ["podcast", "podcasts"], type: "podcast", labelKey: "quotaPodcast" },
+  { keys: ["unboxing", "unboxings"], type: "unboxing", labelKey: "quotaUnboxing" },
+  { keys: ["ugc", "ugcs"], type: "ugc", labelKey: "quotaUgc" },
+  { keys: ["event", "events"], type: "event", labelKey: "quotaEvent" },
+  { keys: ["other", "outro"], type: "other", labelKey: "quotaOther" },
+];
 
 const TYPE_STYLE: Record<string, { bg: string; text: string; border: string; icon: LucideIcon }> = {
   reel: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-100", icon: Film },
@@ -119,7 +142,7 @@ const EMPTY_PAUTA = {
   title: "",
   content_type: "reel",
   planned_date: "",
-  briefing: "",
+  briefing: emptyPautaBriefing(),
   script: "",
   references: "",
   live_link: "",
@@ -220,8 +243,22 @@ function contractMonths(start?: string | null, end?: string | null) {
   return Math.max(1, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1);
 }
 
+function quotaValue(deliverables: Record<string, number> | undefined, keys: string[]) {
+  return keys.reduce((sum, key) => sum + Number(deliverables?.[key] || 0), 0);
+}
+
+function quotaEntries(deliverables?: Record<string, number>) {
+  return QUOTA_PILLS
+    .map((pill) => ({ ...pill, count: quotaValue(deliverables, pill.keys) }))
+    .filter((pill) => pill.count > 0);
+}
+
 function quotaTotal(deliverables?: Record<string, number>) {
-  return Object.values(deliverables || {}).reduce((sum, value) => sum + (typeof value === "number" ? Number(value) : 0), 0);
+  return quotaEntries(deliverables).reduce((sum, pill) => sum + pill.count, 0);
+}
+
+function itemMatchesQuota(item: PlanningItem, keys: string[], type: string) {
+  return item.content_type === type || keys.includes(item.content_type);
 }
 
 function creatorCost(row: ContractCreator) {
@@ -290,8 +327,7 @@ function isMaterialNewVersion(item: PlanningItem) {
 
 function isAwaitingBriefing(item: PlanningItem) {
   if (isLivePauta(item.content_type)) return false;
-  const briefing = item.briefing || item.briefing_note;
-  return item.status === "planned" && !briefing?.trim();
+  return item.status === "planned" && !itemHasPautaBriefing(item);
 }
 
 function itemNeedsApproval(item: PlanningItem) {
@@ -576,7 +612,7 @@ function DetailInner() {
         title: namedPautaTitle(item.title),
         content_type: item.content_type || "reel",
         planned_date: item.planned_date || "",
-        briefing: item.briefing || item.briefing_note || "",
+        briefing: parsePautaBriefing(item),
         script: item.script || "",
         references: item.references || "",
         live_link: item.published_url || "",
@@ -585,7 +621,7 @@ function DetailInner() {
       });
     } else {
       setEditingPauta(null);
-      setPautaForm({ ...EMPTY_PAUTA, planned_date: `${selectedMonth}-01` });
+      setPautaForm({ ...EMPTY_PAUTA, planned_date: `${selectedMonth}-01`, briefing: emptyPautaBriefing() });
     }
     setPautaModal(true);
   }
@@ -682,7 +718,7 @@ function DetailInner() {
     event.preventDefault();
     if (!contract) return;
     const live = isLivePauta(pautaForm.content_type);
-    if (!pautaCreatorId || !pautaForm.title.trim() || !pautaForm.content_type || !pautaForm.planned_date || (!live && !pautaForm.briefing.trim())) {
+    if (!pautaCreatorId || !pautaForm.title.trim() || !pautaForm.content_type || !pautaForm.planned_date || (!live && !pautaBriefingHasContent(pautaForm.briefing))) {
       await alertWarning(tc("alerts.incompleteTitle"), live ? t("recurringDetail.pautaLiveIncompleteText") : t("recurringDetail.pautaIncompleteText"));
       return;
     }
@@ -692,7 +728,8 @@ function DetailInner() {
       content_type: pautaForm.content_type,
       planned_date: pautaForm.planned_date,
       month: pautaForm.planned_date.slice(0, 7),
-      briefing: pautaForm.briefing.trim() || null,
+      briefing: pautaBriefingSummary(pautaForm.briefing),
+      briefing_fields: pautaForm.briefing,
       script: live ? null : pautaForm.script.trim() || null,
       references: live ? null : pautaForm.references.trim() || null,
       status: live && pautaForm.live_link.trim() ? "published" : pautaForm.status,
@@ -725,6 +762,17 @@ function DetailInner() {
       await api.deleteRecurring(contract.id);
       await alertSuccess(t("recurringDetail.deleted"));
       router.push("/campaign-deliveries/?tab=recurring");
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function approveAgency() {
+    if (!contract) return;
+    try {
+      await api.approveRecurringAgency(contract.id);
+      await alertSuccess(t("recurringDetail.approvedAgency"));
+      load();
     } catch (err) {
       await alertApiError(err);
     }
@@ -872,7 +920,13 @@ function DetailInner() {
     );
   }
 
-  const statusLabel = contract.status === "active" ? t("recurringDetail.activeProject") : contract.status === "paused" ? t("recurringDetail.paused") : t("recurringDetail.finished");
+  const statusLabel = isPendingAgency(contract.status)
+    ? t("recurringDetail.pendingAgency")
+    : contract.status === "active"
+      ? t("recurringDetail.activeProject")
+      : contract.status === "paused"
+        ? t("recurringDetail.paused")
+        : t("recurringDetail.finished");
   const viewingVideoVersions = viewingPauta ? pautaVideoVersions(viewingPauta) : [];
 
   return (
@@ -883,6 +937,11 @@ function DetailInner() {
         </Link>
         {canManage ? (
           <div className="flex items-center gap-2">
+            {isAdmin && isPendingAgency(contract.status) ? (
+              <button type="button" onClick={() => void approveAgency()} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                <CheckCircle2 size={14} /> {t("recurringDetail.approveAgency")}
+              </button>
+            ) : null}
             {isAdmin ? (
               <button type="button" onClick={onDeleteProject} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-500 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
                 <Trash2 size={14} /> {t("recurringDetail.deleteProject")}
@@ -901,12 +960,21 @@ function DetailInner() {
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-2.5">
               <span className="rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider text-brand-primary uppercase">{contract.company?.name}</span>
-              <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider uppercase", contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-700")}>
+              <span className={cn(
+                "rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider uppercase",
+                contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : isPendingAgency(contract.status) ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-slate-200 bg-slate-100 text-slate-700",
+              )}>
                 {contract.status === "active" ? "● " : ""}{statusLabel}
               </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">{contract.title}</h1>
             {contract.objective ? <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">{contract.objective}</p> : null}
+            {isPendingAgency(contract.status) ? (
+              <p className="mt-2 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900">{t("recurringDetail.awaitingAgencyHint")}</p>
+            ) : null}
           </div>
         </div>
 
@@ -1054,6 +1122,7 @@ function DetailInner() {
                 {filteredCreators.map((row) => {
                   const info = profile(row);
                   const stats = summary(row);
+                  const deliveries = quotaEntries(row.monthly_deliverables);
                   const selected = selectedRow?.creator_id === row.creator_id;
                   const expanded = expandedIds.includes(row.creator_id);
                   const handle = info.socials.instagram ? `@${info.socials.instagram.replace(/^@/, "")}` : null;
@@ -1236,22 +1305,50 @@ function DetailInner() {
                             </div>
                           </div>
                         </div>
-                        {expanded ? (
-                          <div className="space-y-3 border-t border-slate-100 pt-3">
-                            <div className="space-y-1.5">
-                              <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.quotas")}</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {quotaTotal(row.monthly_deliverables) === 0 ? <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{t("recurringDetail.noQuota")}</span> : Object.entries(row.monthly_deliverables || {}).filter(([, n]) => Number(n) > 0).map(([key, n]) => (
-                                  <span key={key} className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">{n} {key}</span>
-                                ))}
-                              </div>
-                            </div>
-                            {canManage ? (
-                              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
-                                <button type="button" onClick={(e) => { e.stopPropagation(); openCreatorModal(row); }} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200"><Edit3 size={12} /> {t("recurringDetail.editContract")}</button>
-                                {isAdmin ? <button type="button" onClick={(e) => { e.stopPropagation(); void onRemoveCreator(row); }} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100"><Trash2 size={12} /> {t("recurringDetail.remove")}</button> : null}
-                              </div>
-                            ) : null}
+                        <div className="space-y-1.5 border-t border-slate-100 pt-2.5">
+                          <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.quotas")}</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {deliveries.length === 0 ? (
+                              <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{t("recurringDetail.noQuota")}</span>
+                            ) : deliveries.map((pill) => {
+                              const typeItems = stats.items.filter((item) => itemMatchesQuota(item, pill.keys, pill.type));
+                              const generated = typeItems.length;
+                              const done = typeItems.filter((item) => isDone(item.status) || (isLivePauta(item.content_type) && Boolean(item.published_url))).length;
+                              const awaiting = typeItems.filter(isAwaitingBriefing).length;
+                              const style = TYPE_STYLE[pill.type] || TYPE_STYLE.other;
+                              const Icon = style.icon;
+                              const complete = done >= pill.count;
+                              const missingSlots = generated < pill.count;
+                              return (
+                                <span
+                                  key={pill.type}
+                                  title={awaiting > 0
+                                    ? t("recurringDetail.quotaAwaiting")
+                                    : missingSlots
+                                      ? t("recurringDetail.quotaMissing")
+                                      : t(`recurring.shortFormats.${pill.type}`, { defaultValue: pill.type })}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-extrabold whitespace-nowrap",
+                                    complete
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                      : missingSlots || awaiting > 0
+                                        ? "border-orange-200 bg-orange-50 text-orange-800"
+                                        : cn(style.bg, style.text, style.border),
+                                  )}
+                                >
+                                  <Icon size={12} />
+                                  <span>{t(`recurring.shortFormats.${pill.type}`, { defaultValue: pill.type })}</span>
+                                  <span className="tabular-nums opacity-80">{t("recurringDetail.quotaProgress", { done: generated, total: pill.count })}</span>
+                                  {complete ? <CheckCircle2 size={11} /> : null}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {expanded && canManage ? (
+                          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); openCreatorModal(row); }} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200"><Edit3 size={12} /> {t("recurringDetail.editContract")}</button>
+                            {isAdmin ? <button type="button" onClick={(e) => { e.stopPropagation(); void onRemoveCreator(row); }} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100"><Trash2 size={12} /> {t("recurringDetail.remove")}</button> : null}
                           </div>
                         ) : null}
                       </div>
@@ -1433,7 +1530,7 @@ function DetailInner() {
                       const style = TYPE_STYLE[item.content_type] || TYPE_STYLE.other;
                       const Icon = style.icon;
                       const done = isDone(item.status);
-                      const briefing = item.briefing || item.briefing_note;
+                      const briefing = itemHasPautaBriefing(item);
                       const live = isLivePauta(item.content_type);
                       const videoUrl = pautaVideoUrl(item);
                       const videoVersions = pautaVideoVersions(item);
@@ -1742,7 +1839,7 @@ function DetailInner() {
                           <div className="flex items-center pt-1 text-[11px] text-slate-500">
                             <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} className="shrink-0 text-slate-400" /> {deadline}</span>
                           </div>
-                          {isCreator && !live && !awaitingBriefing ? (
+                          {isCreator && !awaitingBriefing ? (
                             <CreatorPautaSubmissionPanel item={item} onSubmitted={() => void load()} />
                           ) : null}
                         </div>
@@ -1918,10 +2015,13 @@ function DetailInner() {
               </button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-6 text-sm">
-              {viewingPauta.briefing || viewingPauta.briefing_note ? (
-                <div id="pauta-view-briefing" className={cn(viewingPautaFocus === "briefing" && "rounded-2xl ring-2 ring-indigo-200 ring-offset-2")}>
-                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.pautaBriefingLabel")}</span>
-                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingPauta.briefing || viewingPauta.briefing_note}</p>
+              {itemHasPautaBriefing(viewingPauta) ? (
+                <div id="pauta-view-briefing">
+                  <PautaBriefingView
+                    item={viewingPauta}
+                    title={t("recurringDetail.pautaBriefingLabel")}
+                    highlight={viewingPautaFocus === "briefing"}
+                  />
                 </div>
               ) : null}
               {viewingPauta.script ? (
@@ -1979,6 +2079,14 @@ function DetailInner() {
                   ) : (
                     <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingPauta.references}</p>
                   )}
+                </div>
+              ) : null}
+              {viewingPauta.published_url ? (
+                <div>
+                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-emerald-700 uppercase">{t("recurringDetail.publishedUrlLabel")}</span>
+                  <a href={viewingPauta.published_url} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
+                    <ExternalLink size={12} className="shrink-0" /> {viewingPauta.published_url}
+                  </a>
                 </div>
               ) : null}
             </div>
@@ -2062,8 +2170,8 @@ function DetailInner() {
       ) : null}
 
       {reviseModal.item ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="app-modal-panel relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
@@ -2121,8 +2229,8 @@ function DetailInner() {
       ) : null}
 
       {revisionHistoryItem ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="app-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-brand-primary">
@@ -2321,12 +2429,10 @@ function DetailInner() {
                   <span>{isLivePauta(pautaForm.content_type) ? t("recurringDetail.pautaBriefingOptional") : `${t("recurringDetail.pautaBriefing")} *`}</span>
                   {!isLivePauta(pautaForm.content_type) ? <span className="text-[10px] font-normal text-slate-400">{t("recurringDetail.pautaBriefingHint")}</span> : null}
                 </label>
-                <textarea
-                  rows={3}
+                <PautaBriefingFieldsForm
                   value={pautaForm.briefing}
-                  onChange={(e) => setPautaForm({ ...pautaForm, briefing: e.target.value })}
-                  placeholder={isLivePauta(pautaForm.content_type) ? t("recurringDetail.pautaLiveBriefingPh") : t("recurringDetail.pautaBriefingPh")}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs outline-none focus:border-brand-primary"
+                  onChange={(briefing) => setPautaForm({ ...pautaForm, briefing })}
+                  optional={isLivePauta(pautaForm.content_type)}
                 />
               </div>
 

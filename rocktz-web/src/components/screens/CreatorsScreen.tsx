@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, KeyRound, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
+import { CheckCircle2, Clock, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { Select2Field } from "@/components/Select2Field";
@@ -34,6 +34,9 @@ const CATEGORIES = [
   "UGC Content",
 ];
 
+const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
+type CatalogLayout = "list" | "grid";
+
 const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "Beleza", photo_url: "" };
 
 const FILTER_TRIGGER =
@@ -46,6 +49,43 @@ function metricValue(metrics: Record<string, number> | undefined, keys: string[]
     if (value) return value;
   }
   return 0;
+}
+
+function creatorRecurringContracts(creator: Creator, recurringContracts: RecurringContract[]) {
+  return recurringContracts.filter(
+    (contract) => contract.status === "active" && contract.creators?.some((row) => row.creator_id === creator.id),
+  );
+}
+
+function creatorMonthlyEarnings(creator: Creator, contracts: RecurringContract[]) {
+  return contracts.reduce((sum, contract) => {
+    const row = contract.creators?.find((item) => item.creator_id === creator.id);
+    return sum + Number(row?.monthly_cache ?? row?.monthly_fee ?? 0);
+  }, 0);
+}
+
+function CreatorFeeValue({
+  creator,
+  contracts,
+}: {
+  creator: Creator;
+  contracts: RecurringContract[];
+}) {
+  const { t } = useTranslation("app");
+  const { formatCurrency } = usePrivacy();
+  const monthly = creatorMonthlyEarnings(creator, contracts);
+  if (contracts.length > 0) {
+    return (
+      <>
+        {formatCurrency(monthly)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perMonth")}</span>
+      </>
+    );
+  }
+  return (
+    <>
+      {formatCurrency(creator.pricing?.reel || 0)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
+    </>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -82,10 +122,8 @@ function CreatorCard({
   onChangePassword: (creator: Creator) => void;
 }) {
   const { t } = useTranslation("app");
-  const { formatCurrency, formatNumber } = usePrivacy();
-  const creatorContracts = recurringContracts.filter(
-    (contract) => contract.status === "active" && contract.creators?.some((row) => row.creator_id === creator.id),
-  );
+  const { formatNumber } = usePrivacy();
+  const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
 
   return (
     <motion.article
@@ -196,13 +234,152 @@ function CreatorCard({
 
       <div className="mt-2 flex items-center justify-between border-t border-[#F1F5F9] pt-4">
         <div className="text-[13px] font-bold text-[#0F172A]">
-          {formatCurrency(creator.pricing?.reel || 0)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
+          <CreatorFeeValue creator={creator} contracts={creatorContracts} />
         </div>
         <Link
           href={`/creators/${creator.id}`}
           className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
         >
           {t("creators.view")}
+        </Link>
+      </div>
+    </motion.article>
+  );
+}
+
+function CreatorListRow({
+  creator,
+  recurringContracts,
+  isAdmin,
+  onApprove,
+  onReject,
+  onChangePassword,
+}: {
+  creator: Creator;
+  recurringContracts: RecurringContract[];
+  isAdmin: boolean;
+  onApprove: (creator: Creator) => void;
+  onReject: (creator: Creator) => void;
+  onChangePassword: (creator: Creator) => void;
+}) {
+  const { t } = useTranslation("app");
+  const { formatNumber } = usePrivacy();
+  const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
+  const followers = formatNumber(metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]));
+  const avgViews = formatNumber(metricValue(creator.metrics, ["avgViews", "avg_views"]));
+  const companyNames = creatorContracts.map((c) => c.company?.name ?? c.title).join(", ");
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "flex flex-col gap-3 rounded-2xl border bg-white p-3.5 transition-all hover:border-brand-primary sm:flex-row sm:items-center sm:gap-4",
+        creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <UserAvatar
+          src={creator.photo_url}
+          name={creator.artistic_name || creator.full_name}
+          size="md"
+          shape="rounded-xl"
+          className="shrink-0 border border-slate-200"
+          textClassName="text-sm"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="m-0 truncate text-sm font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
+            <StatusBadge status={creator.status} />
+            <span
+              className={cn(
+                "rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase",
+                creator.role === "admin" ? "border-purple-200 bg-purple-100 text-purple-800" : "border-blue-200 bg-blue-100 text-blue-800",
+              )}
+            >
+              {creator.role === "admin" ? t("creators.admin") : t("creators.influencer")}
+            </span>
+          </div>
+          {creator.full_name ? (
+            <p className="m-0 truncate text-[11px] font-medium text-slate-500">{creator.full_name}</p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap gap-1">
+            {(creator.categories || []).slice(0, 3).map((cat) => (
+              <span key={cat} className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#64748B] uppercase">
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center sm:gap-5">
+        <div className="flex min-w-[72px] flex-col">
+          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
+          <span className="text-[13px] font-bold text-[#0F172A]">{followers}</span>
+        </div>
+        <div className="flex min-w-[72px] flex-col">
+          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
+          <span className="text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
+        </div>
+        <div className="col-span-2 flex min-w-[120px] flex-col sm:col-span-1 sm:max-w-[160px]">
+          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
+          {creatorContracts.length > 0 ? (
+            <span className="flex items-center gap-1 truncate text-[12px] font-bold text-purple-800" title={companyNames}>
+              <Repeat size={11} className="shrink-0 text-purple-600" />
+              {creatorContracts.length === 1
+                ? (creatorContracts[0].company?.name ?? creatorContracts[0].title)
+                : `${creatorContracts.length} ${t("creators.recurringCompanies")}`}
+            </span>
+          ) : (
+            <span className="text-[12px] font-semibold text-slate-400">—</span>
+          )}
+        </div>
+        <div className="flex min-w-[88px] flex-col">
+          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFee")}</span>
+          <span className="text-[13px] font-bold text-[#0F172A]">
+            <CreatorFeeValue creator={creator} contracts={creatorContracts} />
+          </span>
+        </div>
+      </div>
+
+      {creator.status === "review" && isAdmin ? (
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onApprove(creator)}
+            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 sm:flex-none"
+          >
+            <CheckCircle2 size={13} />
+            {t("creators.approve")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onReject(creator)}
+            className="flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"
+          >
+            {t("creators.reject")}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#F1F5F9] pt-3 sm:border-0 sm:pt-0">
+        {isAdmin ? (
+          <button
+            type="button"
+            title={t("creators.changePassword")}
+            onClick={() => onChangePassword(creator)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
+          >
+            <KeyRound size={14} />
+          </button>
+        ) : null}
+        <Link
+          href={`/creators/${creator.id}`}
+          className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
+        >
+          {t("creators.viewShort")}
         </Link>
       </div>
     </motion.article>
@@ -227,6 +404,7 @@ function CreatorsInner() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
+  const [layout, setLayout] = useState<CatalogLayout>("list");
 
   const categoryOptions = useMemo(
     () => [{ value: "all", label: t("creators.allCategories").toUpperCase() }, ...CATEGORIES.map((cat) => ({ value: cat, label: cat.toUpperCase() }))],
@@ -263,6 +441,24 @@ function CreatorsInner() {
     if (params.get("filters") === "true") setShowAdvancedFilters(true);
     if (params.get("status")) setStatusFilter(params.get("status") ?? "all");
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+      if (stored === "list" || stored === "grid") setLayout(stored);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function changeLayout(next: CatalogLayout) {
+    setLayout(next);
+    try {
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const pendingCount = creators.filter((c) => c.status === "review").length;
   const activeCount = creators.filter((c) => c.status === "active").length;
@@ -361,8 +557,29 @@ function CreatorsInner() {
           <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("creators.title")}</h1>
           <p className="mt-1 text-[14px] text-[#64748B]">{t("creators.subtitle")}</p>
         </div>
-        {isAdmin ? (
-          <div className="flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center">
+        <div className="flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex items-center self-start rounded-xl border border-slate-200 bg-slate-50 p-0.5 sm:self-auto">
+            <button
+              type="button"
+              onClick={() => changeLayout("list")}
+              title={t("creators.layoutListHint")}
+              aria-label={t("creators.layoutListHint")}
+              className={cn("inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-bold whitespace-nowrap", layout === "list" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-white")}
+            >
+              <LayoutList size={13} className="shrink-0" /> <span className="hidden sm:inline">{t("creators.layoutList")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => changeLayout("grid")}
+              title={t("creators.layoutGridHint")}
+              aria-label={t("creators.layoutGridHint")}
+              className={cn("inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-bold whitespace-nowrap", layout === "grid" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-white")}
+            >
+              <LayoutGrid size={13} className="shrink-0" /> <span className="hidden sm:inline">{t("creators.layoutGrid")}</span>
+            </button>
+          </div>
+          {isAdmin ? (
+            <>
             <button
               type="button"
               onClick={resetCasting}
@@ -380,8 +597,9 @@ function CreatorsInner() {
               <Plus size={18} />
               {t("creators.new")}
             </button>
-          </div>
-        ) : null}
+            </>
+          ) : null}
+        </div>
       </header>
 
       <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
@@ -506,18 +724,30 @@ function CreatorsInner() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {filtered.map((creator) => (
-          <CreatorCard
-            key={creator.id}
-            creator={creator}
-            recurringContracts={recurringContracts}
-            isAdmin={isAdmin}
-            onApprove={approve}
-            onReject={reject}
-            onChangePassword={setPasswordCreator}
-          />
-        ))}
+      <div className={cn(layout === "grid" ? "grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4" : "flex flex-col gap-2.5")}>
+        {filtered.map((creator) =>
+          layout === "grid" ? (
+            <CreatorCard
+              key={creator.id}
+              creator={creator}
+              recurringContracts={recurringContracts}
+              isAdmin={isAdmin}
+              onApprove={approve}
+              onReject={reject}
+              onChangePassword={setPasswordCreator}
+            />
+          ) : (
+            <CreatorListRow
+              key={creator.id}
+              creator={creator}
+              recurringContracts={recurringContracts}
+              isAdmin={isAdmin}
+              onApprove={approve}
+              onReject={reject}
+              onChangePassword={setPasswordCreator}
+            />
+          ),
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -531,9 +761,9 @@ function CreatorsInner() {
       ) : null}
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-          <button type="button" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalOpen(false)} aria-label={tc("close")} />
-          <div className="relative z-10 my-auto flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
+        <div className="app-modal-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+          <button type="button" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setModalOpen(false)} aria-label={tc("close")} />
+          <div className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white p-5 sm:p-6">
               <h2 className="text-xl font-bold text-[#0F172A]">{t("creators.modalTitle")}</h2>
               <button type="button" onClick={() => setModalOpen(false)} className="p-1 font-bold text-slate-400 hover:text-slate-700">

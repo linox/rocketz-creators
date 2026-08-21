@@ -20,10 +20,12 @@ use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
 use App\Services\NotificationService;
+use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class CampaignController extends Controller
@@ -62,7 +64,7 @@ class CampaignController extends Controller
 
         $query = Campaign::query()
             ->with(['company', 'briefing', 'deliverable', 'campaignCreators'])
-            ->where('status', '!=', CampaignStatus::Finished);
+            ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
             $query->where('is_secret', false);
@@ -98,11 +100,18 @@ class CampaignController extends Controller
             return $campaign;
         });
 
-        return response()->json(['data' => new CampaignResource($campaign->load(['company', 'briefing', 'deliverable']))], 201);
+        $campaign->load(['company', 'briefing', 'deliverable']);
+        if ($campaign->isPendingAgency()) {
+            $this->notifyAgencyReview($campaign);
+        }
+
+        return response()->json(['data' => new CampaignResource($campaign)], 201);
     }
 
     public function update(Request $request, Campaign $campaign): JsonResponse
     {
+        $this->assertCanManage($request, $campaign);
+        $previousStatus = $campaign->status;
         $data = $this->validatedCampaign($request, false);
         if (
             array_key_exists('company_id', $data)
@@ -124,7 +133,21 @@ class CampaignController extends Controller
             }
         });
 
-        return response()->json(['data' => new CampaignResource($campaign->fresh()->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']))]);
+        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']);
+        $this->notifyReleasedIfNeeded($campaign, $previousStatus);
+
+        return response()->json(['data' => new CampaignResource($campaign)]);
+    }
+
+    public function approveAgency(Request $request, Campaign $campaign): JsonResponse
+    {
+        abort_unless($campaign->isPendingAgency(), 422, __('auth.agency_approval_not_pending'));
+        $previousStatus = $campaign->status;
+        $campaign->update(['status' => CampaignStatus::Briefing]);
+        $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']);
+        $this->notifyReleasedIfNeeded($campaign, $previousStatus);
+
+        return response()->json(['data' => new CampaignResource($campaign)]);
     }
 
     public function destroy(Campaign $campaign): JsonResponse
@@ -148,6 +171,7 @@ class CampaignController extends Controller
         $creator = $user->creator;
         abort_unless($creator, 403, __('auth.creators_only_apply'));
         abort_unless($creator->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
+        abort_if($campaign->isPendingAgency(), 403, __('auth.campaign_awaiting_agency'));
         abort_unless(
             $creator->contractAcceptances()->exists(),
             403,
@@ -235,6 +259,30 @@ class CampaignController extends Controller
         $campaignCreator->unsetRelation('content');
         $campaignCreator->load('content');
 
+        if (Schema::hasColumn('campaign_creator_contents', 'revision_history')) {
+            if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Revision)) {
+                $content = $campaignCreator->content
+                    ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
+                RevisionHistory::append(
+                    $content,
+                    'script',
+                    (string) ($data['script_feedback'] ?? $data['revision_details'] ?? ''),
+                );
+                $content->save();
+            }
+
+            if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Revision)) {
+                $content = $campaignCreator->content
+                    ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
+                RevisionHistory::append(
+                    $content,
+                    'video',
+                    (string) ($data['video_feedback'] ?? $data['revision_details'] ?? ''),
+                );
+                $content->save();
+            }
+        }
+
         if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
             $content = $campaignCreator->content
                 ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
@@ -275,6 +323,13 @@ class CampaignController extends Controller
             'delivery_type' => ['nullable', 'string'],
         ]);
 
+        $existing = CampaignCreator::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('creator_id', $data['creator_id'])
+            ->first();
+        $shouldNotify = $existing === null
+            || $existing->application_status !== ApplicationStatus::Approved;
+
         $row = CampaignCreator::query()->updateOrCreate(
             ['campaign_id' => $campaign->id, 'creator_id' => $data['creator_id']],
             [
@@ -286,6 +341,16 @@ class CampaignController extends Controller
                 'delivery_status' => DeliveryStatus::Pending,
             ],
         );
+
+        if ($shouldNotify && ! $campaign->isPendingAgency()) {
+            $this->notifications->notifyCreator((int) $data['creator_id'], [
+                'campaign_id' => $campaign->id,
+                'title' => __('auth.campaign_assigned_title'),
+                'message' => __('auth.campaign_assigned', ['name' => $campaign->name]),
+                'type' => NotificationType::Approval,
+                'link' => '/creators/'.$data['creator_id'].'?tab=campaigns',
+            ]);
+        }
 
         return response()->json(['data' => new CampaignCreatorResource($row->load('creator'))], 201);
     }
@@ -325,7 +390,15 @@ class CampaignController extends Controller
             abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
             Company::assertApproved((int) $data['company_id']);
         }
-        $data['status'] ??= CampaignStatus::Briefing;
+        if (! $user->canPublishWithoutApproval()) {
+            if ($creating) {
+                $data['status'] = CampaignStatus::PendingAgency;
+            } else {
+                unset($data['status']);
+            }
+        } else {
+            $data['status'] ??= CampaignStatus::Briefing;
+        }
         $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
 
         return $data;
@@ -340,10 +413,11 @@ class CampaignController extends Controller
             UserRole::Admin => $query,
             UserRole::Company => $query->where('company_id', $user->companyUser?->company_id),
             UserRole::Creator => $user->creator?->status === CreatorStatus::Active
-                ? $query->where(function ($builder) use ($user) {
-                    $builder->where('is_secret', false)
-                        ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
-                })
+                ? $query->where('status', '!=', CampaignStatus::PendingAgency)
+                    ->where(function ($builder) use ($user) {
+                        $builder->where('is_secret', false)
+                            ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+                    })
                 : $query->whereRaw('1 = 0'),
             default => $query->whereRaw('1=0'),
         };
@@ -359,12 +433,64 @@ class CampaignController extends Controller
             return;
         }
         if ($user->role === UserRole::Creator) {
+            abort_if($campaign->isPendingAgency(), 403, __('auth.campaign_awaiting_agency'));
             abort_unless($user->creator?->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
             if (! $campaign->is_secret || $campaign->campaignCreators()->where('creator_id', $user->creator?->id)->exists()) {
                 return;
             }
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    private function assertCanManage(Request $request, Campaign $campaign): void
+    {
+        $user = $request->user();
+        if ($user->role === UserRole::Admin) {
+            return;
+        }
+        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $campaign->company_id) {
+            return;
+        }
+        abort(403, __('auth.forbidden'));
+    }
+
+    private function notifyAgencyReview(Campaign $campaign): void
+    {
+        $this->notifications->notifyAdmins(
+            __('auth.agency_review_campaign_title'),
+            __('auth.agency_review_campaign', ['name' => $campaign->name]),
+            NotificationType::Approval,
+            '/campaigns/'.$campaign->id,
+            ['campaign_id' => $campaign->id],
+        );
+    }
+
+    private function notifyReleasedIfNeeded(Campaign $campaign, mixed $previousStatus): void
+    {
+        $wasPending = $previousStatus === CampaignStatus::PendingAgency
+            || $previousStatus === CampaignStatus::PendingAgency->value;
+        if (! $wasPending || $campaign->isPendingAgency()) {
+            return;
+        }
+
+        $this->notifications->notifyCompany((int) $campaign->company_id, [
+            'campaign_id' => $campaign->id,
+            'title' => __('auth.agency_approved_campaign_title'),
+            'message' => __('auth.agency_approved_campaign', ['name' => $campaign->name]),
+            'type' => NotificationType::Approval,
+            'link' => '/campaigns/'.$campaign->id,
+        ]);
+
+        $campaign->loadMissing('campaignCreators');
+        foreach ($campaign->campaignCreators as $row) {
+            $this->notifications->notifyCreator((int) $row->creator_id, [
+                'campaign_id' => $campaign->id,
+                'title' => __('auth.campaign_assigned_title'),
+                'message' => __('auth.campaign_assigned', ['name' => $campaign->name]),
+                'type' => NotificationType::Approval,
+                'link' => '/creators/'.$row->creator_id.'?tab=campaigns',
+            ]);
+        }
     }
 
     private function defaultCreatorAmount(Campaign $campaign): float

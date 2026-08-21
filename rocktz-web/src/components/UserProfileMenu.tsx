@@ -24,6 +24,7 @@ import {
 import { motion } from "motion/react";
 import { UserAvatar } from "@/components/UserAvatar";
 import type { AuthUser, UserRole } from "@/lib/auth";
+import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
 
@@ -263,8 +264,8 @@ export function UserProfileMenu({
           </>
         ) : null}
 
-        {role === "admin" ? (
-          <Link href="/admin-users" onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
+        {role === "admin" && userHasPermission(user, "users.manage") ? (
+          <Link href="/users" onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
             <div className="flex items-center gap-2.5">
               <Users size={15} className="text-indigo-600" />
               <span>{t("teamUsers")}</span>

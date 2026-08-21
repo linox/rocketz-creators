@@ -8,6 +8,7 @@ import {
   Calendar,
   CalendarCheck,
   Camera,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
@@ -38,11 +39,15 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
+import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
+import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
+import { emptyPautaBriefing, itemHasPautaBriefing, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
 import type { Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -108,7 +113,7 @@ const EMPTY_CONTENT = {
   content_type: "reel",
   title: "",
   description: "",
-  briefing: "",
+  briefing: emptyPautaBriefing(),
   planned_date: "",
   month: "",
 };
@@ -178,6 +183,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const canManage = user.role === "admin" || user.role === "company";
   const isAdmin = user.role === "admin";
   const isCreator = user.role === "creator";
+  const canPublishWithoutApproval = user.role === "admin" || Boolean(user.can_publish_without_approval);
 
   const [contracts, setContracts] = useState<RecurringContract[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -294,7 +300,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         content_type: opts.item.content_type || "reel",
         title: /\s+\d+\/\d+$/.test((opts.item.title || "").trim()) ? "" : (opts.item.title || ""),
         description: opts.item.description || "",
-        briefing: opts.item.briefing || opts.item.briefing_note || "",
+        briefing: parsePautaBriefing(opts.item),
         planned_date: opts.item.planned_date || "",
         month: opts.item.month || selectedMonth,
       });
@@ -306,6 +312,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         creator_id: opts?.creatorId ? String(opts.creatorId) : "",
         planned_date: opts?.date || "",
         month: opts?.date?.slice(0, 7) || selectedMonth,
+        briefing: emptyPautaBriefing(),
       });
     }
     setContentModal(true);
@@ -340,17 +347,27 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       objective: contractForm.objective || null,
       start_date: contractForm.start_date || null,
       end_date: contractForm.end_date || null,
-      status: contractForm.status,
+      status: canPublishWithoutApproval ? contractForm.status : undefined,
     };
     try {
       if (editingContract) {
         await api.updateRecurring(editingContract.id, body);
         await alertSuccess(t("recurring.updated"));
       } else {
-        await api.createRecurring(body);
-        await alertSuccess(t("recurring.created"));
+        const created = await api.createRecurring(body);
+        await alertSuccess(created.data.status === "pending_agency" ? t("recurring.createdPending") : t("recurring.created"));
       }
       setContractModal(false);
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function approveAgencyContract(contract: RecurringContract) {
+    try {
+      await api.approveRecurringAgency(contract.id);
+      await alertSuccess(t("recurring.approvedAgency"));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -368,7 +385,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       content_type: contentForm.content_type,
       title: contentForm.title,
       description: contentForm.description || null,
-      briefing: contentForm.briefing || null,
+      briefing: pautaBriefingSummary(contentForm.briefing),
+      briefing_fields: contentForm.briefing,
       planned_date: contentForm.planned_date || null,
       month: contentForm.month || selectedMonth,
     };
@@ -573,7 +591,13 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         <div className="min-w-0 flex-1">
                           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                             <span className="max-w-full truncate rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-black tracking-wider text-brand-primary uppercase">{contract.company?.name || t("campaigns.company")}</span>
-                            <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase", contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-600")}>
+                            <span className={cn(
+                              "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
+                              contract.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : contract.status === "paused" ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : isPendingAgency(contract.status) ? "border-amber-300 bg-amber-50 text-amber-900"
+                                : "border-slate-200 bg-slate-100 text-slate-600",
+                            )}>
                               {contract.status === "active" ? "● " : ""}
                               {t(`status.${contract.status}`, { defaultValue: contract.status })}
                             </span>
@@ -592,6 +616,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         </div>
                         {canManage ? (
                           <div className="flex shrink-0 items-center gap-1">
+                            {isAdmin && isPendingAgency(contract.status) ? (
+                              <button type="button" onClick={() => void approveAgencyContract(contract)} className="cursor-pointer rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-black tracking-wider text-white uppercase hover:bg-emerald-700" title={t("recurring.approveAgency")}>
+                                <CheckCircle2 size={12} />
+                              </button>
+                            ) : null}
                             <button type="button" onClick={() => openContractModal(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" title={t("recurring.edit")}>
                               <Edit3 size={16} />
                             </button>
@@ -777,9 +806,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                                 {item.title}
                               </button>
                               {item.description ? <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{item.description}</p> : null}
-                              {item.briefing || item.briefing_note || item.script || item.references ? (
+                              {itemHasPautaBriefing(item) || item.script || item.references ? (
                                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                                  {item.briefing || item.briefing_note ? (
+                                  {itemHasPautaBriefing(item) ? (
                                     <button type="button" onClick={() => setViewingItem(item)} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold whitespace-nowrap text-slate-700 hover:border-indigo-200 hover:text-brand-primary">
                                       <FileText size={11} /> {t("recurringDetail.viewBriefing")}
                                     </button>
@@ -1043,16 +1072,18 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                     onChange={(e) => setContractForm({ ...contractForm, monthly_fee: e.target.value })}
                   />
                 </label>
+                {canPublishWithoutApproval ? (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.contractStatus")}</span>
                   <Select2Field
                     theme="light"
                     value={contractForm.status}
-                    options={CONTRACT_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))}
+                    options={(isPendingAgency(contractForm.status) ? ["pending_agency", ...CONTRACT_STATUSES] : [...CONTRACT_STATUSES]).map((status) => ({ value: status, label: t(`status.${status}`) }))}
                     onChange={(value) => setContractForm({ ...contractForm, status: value })}
                     triggerClassName="h-10 rounded-xl px-3.5 text-xs font-bold text-slate-800"
                   />
                 </label>
+                ) : null}
               </div>
               {editingContract ? (
                 <>
@@ -1126,7 +1157,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               <input className="mt-1 h-11 w-full rounded-xl border px-4 text-sm font-semibold" placeholder={t("recurringDetail.pautaTitlePh")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
             </label>
             <label className="text-xs font-bold text-slate-500">{t("recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
-            <textarea className="min-h-24 w-full rounded-xl border px-4 py-3" placeholder={t("recurring.contentBriefing")} value={contentForm.briefing} onChange={(e) => setContentForm({ ...contentForm, briefing: e.target.value })} />
+            <PautaBriefingFieldsForm
+              value={contentForm.briefing}
+              onChange={(briefing) => setContentForm({ ...contentForm, briefing })}
+              optional
+            />
             <div className="flex gap-2">
               <button type="button" onClick={() => setContentModal(false)} className="flex-1 rounded-xl border py-3 font-bold">{tc("cancel")}</button>
               <button className="flex-1 rounded-xl bg-brand-primary py-3 font-bold text-white">{tc("save")}</button>
@@ -1174,11 +1209,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             </div>
             <div className="max-h-[70vh] space-y-4 overflow-y-auto p-6 text-sm text-slate-600">
               {viewingItem.description ? <p>{viewingItem.description}</p> : null}
-              {viewingItem.briefing || viewingItem.briefing_note ? (
-                <div>
-                  <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.pautaBriefingLabel")}</span>
-                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingItem.briefing || viewingItem.briefing_note}</p>
-                </div>
+              {itemHasPautaBriefing(viewingItem) ? (
+                <PautaBriefingView item={viewingItem} title={t("recurringDetail.pautaBriefingLabel")} />
               ) : null}
               {viewingItem.script ? (
                 <div>

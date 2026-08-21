@@ -190,7 +190,7 @@ export function CreateCampaignModal({
     }
     setSaving(true);
     try {
-      await api.createCampaign({
+      const created = await api.createCampaign({
         name: name.trim(),
         company_id: isAdmin ? Number(companyId) : defaultCompanyId,
         start_date: startDate,
@@ -217,7 +217,7 @@ export function CreateCampaignModal({
         },
         briefing,
       });
-      await alertSuccess(t("campaigns.created"));
+      await alertSuccess(created.data.status === "pending_agency" ? t("campaigns.createdPending") : t("campaigns.created"));
       reset();
       onClose();
       onCreated();

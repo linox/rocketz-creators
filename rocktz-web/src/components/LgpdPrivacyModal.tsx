@@ -11,8 +11,8 @@ export function LgpdPrivacyModal() {
   if (!lgpdOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4" onClick={closeLgpd}>
-      <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+    <div className="app-modal-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={closeLgpd}>
+      <div className="app-modal-panel w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{t("lgpd.law")}</p>

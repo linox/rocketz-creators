@@ -10,13 +10,9 @@ import {
   ChevronRight,
   Download,
   ExternalLink,
-  FileText,
   Filter,
-  Film,
-  Image as ImageIcon,
   Inbox,
   LayoutList,
-  Link2,
   Maximize2,
   MessageSquare,
   Play,
@@ -41,7 +37,6 @@ import {
   matchesFolder,
   persistDeliveryArchived,
   persistDeliveryViewed,
-  type DeliveryContentType,
   type DeliveryInboxItem,
   type DeliveryStatus,
   type DeliveryVersion,
@@ -51,14 +46,6 @@ import {
   type InboxViewMode,
 } from "@/lib/delivery-inbox";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
-
-function contentIcon(type: DeliveryContentType) {
-  if (type === "script" || type === "caption") return FileText;
-  if (type === "image" || type === "carousel") return ImageIcon;
-  if (type === "link") return Link2;
-  if (type === "file") return Archive;
-  return Film;
-}
 
 function statusTone(status: DeliveryStatus) {
   switch (status) {
@@ -256,6 +243,7 @@ function DeliveriesInboxInner() {
           item.sourceName,
           item.title,
           item.formatLabel,
+          item.formatKey,
         ].join(" ").toLowerCase().includes(term);
       })
       .filter((item) => {
@@ -818,6 +806,24 @@ function Chip({
   );
 }
 
+function inboxHeading(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
+  const named = item.title.trim();
+  if (named) return named;
+  const key = item.formatKey || item.formatLabel;
+  const short = t(`recurring.shortFormats.${key}`, { defaultValue: "" });
+  if (short) return String(short);
+  return t(`deliveries.inbox.content.${item.contentType}`);
+}
+
+function inboxStageLabel(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
+  if (!item.stagePart || !item.stageTotal) return null;
+  return t("deliveries.inbox.stageCompact", {
+    part: item.stagePart,
+    total: item.stageTotal,
+    label: item.approvalStage === "script" ? t("deliveries.inbox.stageScript") : t("deliveries.inbox.stageVideo"),
+  });
+}
+
 function InboxRow({
   item,
   active,
@@ -837,14 +843,16 @@ function InboxRow({
 }) {
   const unread = isUnread(item);
   const actionNeeded = needsAction(item);
-  const Icon = contentIcon(item.contentType);
+  const heading = inboxHeading(item, t);
+  const stage = inboxStageLabel(item, t);
+  const period = formatInboxPeriod(item.period, locale);
   return (
     <div
       className={cn(
         "relative flex cursor-pointer gap-2 border-b border-slate-100 px-2 py-2.5 transition hover:bg-slate-50",
         active && "bg-indigo-50/70",
         unread && "bg-violet-50/70",
-        actionNeeded && !active && "bg-amber-50/50",
+        actionNeeded && !active && "bg-amber-50/40",
         actionNeeded && "border-l-[3px] border-l-amber-500 pl-[5px]",
       )}
       onClick={onOpen}
@@ -875,39 +883,16 @@ function InboxRow({
         </div>
         <p className="m-0 truncate text-[10px] text-slate-500">
           {item.companyName} · {item.sourceName}
-          {item.period ? ` · ${formatInboxPeriod(item.period, locale)}` : ""}
+          {period ? ` · ${period}` : ""}
         </p>
-        <p className={cn("m-0 truncate text-[12px] text-slate-900", unread || actionNeeded ? "font-extrabold" : "font-semibold")}>{item.title}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {item.period ? (
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-slate-600 uppercase">
-              {formatInboxPeriod(item.period, locale)}
-            </span>
-          ) : null}
-          {item.stagePart && item.stageTotal ? (
-            <span className="rounded-full border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-extrabold text-indigo-700 uppercase">
-              {t("deliveries.inbox.stagePart", {
-                part: item.stagePart,
-                total: item.stageTotal,
-                label: item.approvalStage === "script" ? t("deliveries.inbox.stageScript") : t("deliveries.inbox.stageVideo"),
-              })}
-            </span>
-          ) : null}
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500">
-            <Icon size={11} /> {t(`deliveries.inbox.content.${item.contentType}`)} · V{item.currentVersion}
-          </span>
+        <p className={cn("m-0 truncate text-[13px] text-slate-900", unread || actionNeeded ? "font-extrabold" : "font-semibold")}>{heading}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+          {stage ? <span className="font-bold text-indigo-700">{stage}</span> : null}
+          <span className="font-semibold text-slate-500">V{item.currentVersion}</span>
           <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(item.status))}>
             {t(`deliveries.inbox.status.${item.status}`)}
           </span>
-          {actionNeeded ? (
-            <span className="rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900 uppercase">
-              {t("deliveries.inbox.needsActionBadge")}
-            </span>
-          ) : null}
         </div>
-        {actionNeeded ? (
-          <p className="mt-1 mb-0 text-[10px] font-semibold text-amber-800">{t("deliveries.inbox.needsActionHint")}</p>
-        ) : null}
       </div>
     </div>
   );
@@ -958,6 +943,12 @@ function ReadingPane({
 }) {
   const images = version.imageUrls ?? (version.thumbnailUrl || version.fileUrl ? [version.thumbnailUrl || version.fileUrl!] : []);
   const isVertical = item.contentType === "video" || item.contentType === "story";
+  const heading = inboxHeading(item, t);
+  const stage = inboxStageLabel(item, t);
+  const period = formatInboxPeriod(item.period, locale);
+  const formatName = item.formatKey
+    ? t(`recurring.shortFormats.${item.formatKey}`, { defaultValue: item.formatLabel })
+    : item.formatLabel;
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -969,33 +960,25 @@ function ReadingPane({
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-[11px] font-semibold text-slate-400">
               {item.companyName} / {item.sourceName}
+              {period ? ` · ${period}` : ""}
             </p>
-            <h2 className="m-0 mt-0.5 text-lg font-black text-slate-900">{item.title}</h2>
+            <h2 className="m-0 mt-0.5 text-lg font-black text-slate-900">{heading}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <UserAvatar src={item.creatorPhoto} name={item.creatorName} size="custom" shape="circle" className="h-7 w-7" textClassName="text-[10px]" />
               <span className="text-xs font-bold text-slate-800">{item.creatorName}</span>
               <span className="text-[11px] text-slate-400">
                 {t("deliveries.inbox.sentAt", { date: new Date(item.createdAt).toLocaleString(locale) })}
               </span>
-              {item.period ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-extrabold text-slate-600 uppercase">
-                  {formatInboxPeriod(item.period, locale)}
+              {stage ? (
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">
+                  {stage}
                 </span>
               ) : null}
-              {item.stagePart && item.stageTotal ? (
-                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700 uppercase">
-                  {t("deliveries.inbox.stagePart", {
-                    part: item.stagePart,
-                    total: item.stageTotal,
-                    label: item.approvalStage === "script" ? t("deliveries.inbox.stageScript") : t("deliveries.inbox.stageVideo"),
-                  })}
-                </span>
-              ) : null}
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                {formatName} · V{item.currentVersion}
+              </span>
               <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", statusTone(item.status))}>
                 {t(`deliveries.inbox.status.${item.status}`)}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                {item.sourceType === "campaign" ? t("deliveries.inbox.typeCampaign") : t("deliveries.inbox.typeRecurring")}
               </span>
             </div>
           </div>
@@ -1165,7 +1148,7 @@ function ReadingPane({
               <Detail label={t("deliveries.inbox.detailSource")} value={item.sourceName} />
               <Detail label={t("deliveries.inbox.detailCreator")} value={item.creatorName} />
               <Detail label={t("deliveries.inbox.detailType")} value={item.sourceType === "campaign" ? t("deliveries.inbox.typeCampaign") : t("deliveries.inbox.typeRecurring")} />
-              <Detail label={t("deliveries.inbox.detailFormat")} value={item.formatLabel} />
+              <Detail label={t("deliveries.inbox.detailFormat")} value={item.formatKey ? String(t(`recurring.shortFormats.${item.formatKey}`, { defaultValue: item.formatLabel })) : item.formatLabel} />
               <Detail label={t("deliveries.inbox.detailSent")} value={new Date(item.createdAt).toLocaleString(locale)} />
               <Detail label={t("deliveries.inbox.detailDeadline")} value={item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"} />
               <Detail label={t("deliveries.inbox.detailPublish")} value={item.publicationDate ? new Date(item.publicationDate).toLocaleDateString(locale) : "—"} />
@@ -1230,7 +1213,7 @@ function TableView({
                 <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggle(item.id)} className="accent-indigo-600" />
               </td>
               <td className="px-3 py-2 font-bold text-slate-900">
-                {item.title}
+                {inboxHeading(item, t)}
                 {item.period ? <span className="ml-1 font-semibold text-slate-400">{formatInboxPeriod(item.period, locale)}</span> : null}
               </td>
               <td className="px-3 py-2">{item.creatorName}</td>

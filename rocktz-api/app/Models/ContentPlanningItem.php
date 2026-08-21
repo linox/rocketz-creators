@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'description',
     'briefing_note',
     'briefing',
+    'briefing_fields',
     'references',
     'script',
     'caption',
@@ -69,6 +70,7 @@ class ContentPlanningItem extends Model
             'video_version' => 'integer',
             'submission_versions' => 'array',
             'revision_history' => 'array',
+            'briefing_fields' => 'array',
             'submitted_at' => 'datetime',
             'reviewed_at' => 'datetime',
         ];

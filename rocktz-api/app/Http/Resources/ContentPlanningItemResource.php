@@ -26,6 +26,7 @@ class ContentPlanningItemResource extends JsonResource
             'company' => $this->whenLoaded('company', fn () => $this->company ? [
                 'id' => $this->company->id,
                 'name' => $this->company->name,
+                'logo_url' => $this->company->logo_url,
             ] : null),
             'month' => $this->month,
             'content_type' => $this->content_type?->value,
@@ -33,6 +34,7 @@ class ContentPlanningItemResource extends JsonResource
             'description' => $this->description,
             'briefing_note' => $this->briefing_note,
             'briefing' => $this->briefing,
+            'briefing_fields' => $this->briefing_fields ?? [],
             'references' => $this->references,
             'script' => $this->script,
             'caption' => $this->caption,
