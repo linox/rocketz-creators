@@ -34,5 +34,9 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="SCRAPECREATORS_API_KEY" value=""/>
+        <env name="YOUTUBE_API_KEY" value=""/>
+        <env name="SOCIAL_METRICS_CACHE_HOURS" value="24"/>
+        <env name="SOCIAL_METRICS_FETCH_DELAY_MS" value="0"/>
     </php>
 </phpunit>

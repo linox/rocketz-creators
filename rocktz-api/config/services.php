@@ -41,4 +41,12 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback'),
     ],
 
+    'social' => [
+        'cache_hours' => (int) env('SOCIAL_METRICS_CACHE_HOURS', 24),
+        'fetch_delay_ms' => (int) env('SOCIAL_METRICS_FETCH_DELAY_MS', 400),
+        'scrape_creators_key' => env('SCRAPECREATORS_API_KEY'),
+        'scrape_creators_url' => env('SCRAPECREATORS_URL', 'https://api.scrapecreators.com'),
+        'youtube_api_key' => env('YOUTUBE_API_KEY'),
+    ],
+
 ];

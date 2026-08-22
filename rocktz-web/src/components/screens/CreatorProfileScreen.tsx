@@ -38,6 +38,8 @@ import {
   Video,
   X,
   Youtube,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { itemHasPautaBriefing } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
@@ -482,6 +484,7 @@ function ProfileInner() {
   const [acceptsExchange, setAcceptsExchange] = useState(false);
   const [acceptsPaidTraffic, setAcceptsPaidTraffic] = useState(false);
   const [acceptsExclusivity, setAcceptsExclusivity] = useState(false);
+  const [syncingNetwork, setSyncingNetwork] = useState<NetworkKey | "all" | null>(null);
 
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
@@ -541,6 +544,74 @@ function ProfileInner() {
 
   function patchPrice(key: keyof PriceForm, value: string) {
     setPrices((current) => ({ ...current, [key]: value }));
+  }
+
+  function networkHandlePayload(key: Exclude<NetworkKey, "kwai">) {
+    if (key === "instagram") return instagramHandle(networks.instagram.handle);
+    if (key === "tiktok") return formatTikTok(networks.tiktok.handle).replace(/^@+/, "");
+    return formatYouTube(networks.youtube.handle).replace(/^@+/, "");
+  }
+
+  async function syncNetwork(key: Exclude<NetworkKey, "kwai">) {
+    if (!creator) return;
+    const handle = networkHandlePayload(key);
+    if (!handle) {
+      await alertWarning(tp("fetchNetworkNeedHandleTitle"), tp("fetchNetworkNeedHandle"));
+      return;
+    }
+
+    setSyncingNetwork(key);
+    try {
+      const response = await api.syncCreatorSocial(creator.id, { network: key, handle });
+      if (!response.data) return;
+      setCreator(response.data);
+      hydrate(response.data);
+      const result = response.sync?.[key];
+      if (!result?.ok) {
+        await alertWarning(tc("alerts.couldNotFinish"), result?.message || tp("fetchNetworkFail"));
+        return;
+      }
+      await alertSuccess(tp("fetchNetworkSuccessTitle"), result.cached ? tp("fetchNetworkCached") : tp("fetchNetworkSuccess"));
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSyncingNetwork(null);
+    }
+  }
+
+  async function syncAllNetworks() {
+    if (!creator) return;
+    const handles = {
+      instagram: networkHandlePayload("instagram"),
+      tiktok: networkHandlePayload("tiktok"),
+      youtube: networkHandlePayload("youtube"),
+    };
+    if (!handles.instagram && !handles.tiktok && !handles.youtube) {
+      await alertWarning(tp("fetchNetworkNeedHandleTitle"), tp("fetchNetworkNeedHandle"));
+      return;
+    }
+
+    setSyncingNetwork("all");
+    try {
+      const response = await api.syncCreatorSocial(creator.id, { handles });
+      if (!response.data) return;
+      setCreator(response.data);
+      hydrate(response.data);
+      const failed = Object.values(response.sync ?? {}).filter((item) => !item.ok);
+      const cached = Object.values(response.sync ?? {}).every((item) => !item.ok || item.cached);
+      if (failed.length > 0) {
+        await alertWarning(
+          tp("fetchNetworkPartialTitle"),
+          failed.map((item) => item.message).filter(Boolean).join(" ") || tp("fetchNetworkPartial"),
+        );
+      } else {
+        await alertSuccess(tp("fetchNetworkSuccessTitle"), cached ? tp("fetchNetworkCached") : tp("fetchNetworkSuccess"));
+      }
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSyncingNetwork(null);
+    }
   }
 
   async function load() {
@@ -1131,9 +1202,20 @@ function ProfileInner() {
               </div>
 
               <div className="flex flex-col gap-4">
-                <div>
-                  <h3 className="text-lg font-bold text-[#0F172A]">{tp("networksSection")}</h3>
-                  <p className="mt-1 text-[12px] text-[#64748B]">{tp("networksSectionHint")}</p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-[#0F172A]">{tp("networksSection")}</h3>
+                    <p className="mt-1 text-[12px] text-[#64748B]">{tp("networksSectionHint")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void syncAllNetworks()}
+                    disabled={syncingNetwork !== null}
+                    className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 text-xs font-bold text-brand-primary hover:bg-brand-primary/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {syncingNetwork === "all" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {syncingNetwork === "all" ? tp("fetchingNetworkData") : tp("fetchAllNetworkData")}
+                  </button>
                 </div>
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <NetworkCard
@@ -1151,6 +1233,8 @@ function ProfileInner() {
                   engagement={networks.instagram.engagement}
                   onEngagement={(value) => patchNetwork("instagram", { engagement: formatPercentInput(value) })}
                   followersLabel={tp("followers")}
+                  onFetch={() => void syncNetwork("instagram")}
+                  fetching={syncingNetwork === "instagram" || syncingNetwork === "all"}
                   prices={[
                     { label: tp("priceStory"), value: prices.story, onChange: (value) => patchPrice("story", value) },
                     { label: tp("priceReels"), value: prices.reel, onChange: (value) => patchPrice("reel", value) },
@@ -1172,6 +1256,8 @@ function ProfileInner() {
                   engagement={networks.tiktok.engagement}
                   onEngagement={(value) => patchNetwork("tiktok", { engagement: formatPercentInput(value) })}
                   followersLabel={tp("followers")}
+                  onFetch={() => void syncNetwork("tiktok")}
+                  fetching={syncingNetwork === "tiktok" || syncingNetwork === "all"}
                   prices={[{ label: tp("priceTiktok"), value: prices.tiktok, onChange: (value) => patchPrice("tiktok", value) }]}
                 />
                 <NetworkCard
@@ -1189,6 +1275,8 @@ function ProfileInner() {
                   engagement={networks.youtube.engagement}
                   onEngagement={(value) => patchNetwork("youtube", { engagement: formatPercentInput(value) })}
                   followersLabel={tp("subscribers")}
+                  onFetch={() => void syncNetwork("youtube")}
+                  fetching={syncingNetwork === "youtube" || syncingNetwork === "all"}
                   prices={[{ label: tp("priceYoutube"), value: prices.youtube, onChange: (value) => patchPrice("youtube", value) }]}
                 />
                 <NetworkCard
@@ -1828,7 +1916,7 @@ function ActiveRecurringWorksTable({
                     onClick={() => openRow(key)}
                     className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
                   >
-                    <Eye size={13} /> {tp("viewBriefing")}
+                    <Eye size={13} /> {deliveryStatus === "approved" ? tp("sendPublishedLink") : tp("viewBriefing")}
                   </button>
                 ) : (
                   <Link
@@ -1885,7 +1973,7 @@ function ActiveRecurringWorksTable({
                         onClick={() => openRow(key)}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
                       >
-                        <Eye size={13} /> {tp("viewBriefing")}
+                        <Eye size={13} /> {deliveryStatus === "approved" ? tp("sendPublishedLink") : tp("viewBriefing")}
                       </button>
                     ) : (
                       <Link
@@ -2269,6 +2357,8 @@ function NetworkCard({
   onEngagement,
   followersLabel,
   prices,
+  onFetch,
+  fetching,
 }: {
   title: string;
   icon: typeof Instagram;
@@ -2285,6 +2375,8 @@ function NetworkCard({
   onEngagement: (value: string) => void;
   followersLabel: string;
   prices: { label: string; value: string; onChange: (value: string) => void }[];
+  onFetch?: () => void;
+  fetching?: boolean;
 }) {
   const { t: tp } = useTranslation("profile");
   return (
@@ -2297,19 +2389,33 @@ function NetworkCard({
       </div>
       <div className="flex flex-col gap-4">
         <Field label={handleLabel}>
-          <input className={inputClass} value={handle} onChange={(event) => onHandle(event.target.value)} placeholder={handlePlaceholder} />
+          <div className={cn("flex flex-col gap-2", onFetch ? "sm:flex-row" : "")}>
+            <input className={inputClass} value={handle} onChange={(event) => onHandle(event.target.value)} placeholder={handlePlaceholder} />
+            {onFetch ? (
+              <button
+                type="button"
+                onClick={onFetch}
+                disabled={fetching || !handle.trim()}
+                className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {fetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {fetching ? tp("fetchingNetworkData") : tp("fetchNetworkData")}
+              </button>
+            ) : null}
+          </div>
         </Field>
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("metricsTitle")}</p>
+          {onFetch ? <p className="text-[11px] text-slate-500">{tp("metricsLockedHint")}</p> : null}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label={followersLabel}>
-              <input inputMode="numeric" className={inputClass} value={followers} onChange={(event) => onFollowers(event.target.value)} />
+              <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="numeric" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={followers} onChange={(event) => onFollowers(event.target.value)} />
             </Field>
             <Field label={tp("avgViews")}>
-              <input inputMode="numeric" className={inputClass} value={views} onChange={(event) => onViews(event.target.value)} />
+              <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="numeric" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={views} onChange={(event) => onViews(event.target.value)} />
             </Field>
             <Field label={tp("engagementPct")}>
-              <input inputMode="decimal" className={inputClass} value={engagement} onChange={(event) => onEngagement(event.target.value)} />
+              <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="decimal" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={engagement} onChange={(event) => onEngagement(event.target.value)} />
             </Field>
           </div>
         </div>

@@ -43,6 +43,8 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::post('creators/{creator}/portfolio', [CreatorController::class, 'storePortfolio']);
     Route::delete('creators/{creator}/portfolio/{video}', [CreatorController::class, 'destroyPortfolio']);
     Route::post('creators/{creator}/contract', [CreatorController::class, 'acceptContract']);
+    Route::post('creators/{creator}/social-sync', [CreatorController::class, 'syncSocials'])->middleware('throttle:20,1');
+    Route::get('creators/{creator}/social-sync', [CreatorController::class, 'socialSyncStatus'])->middleware('throttle:60,1');
 
     Route::get('companies', [CompanyController::class, 'index']);
     Route::get('companies/{company}', [CompanyController::class, 'show']);
@@ -52,11 +54,15 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::get('campaigns', [CampaignController::class, 'index']);
     Route::get('campaigns/available', [CampaignController::class, 'available']);
     Route::get('campaigns/{campaign}', [CampaignController::class, 'show']);
+    Route::post('campaigns/{campaign}/post-metrics-sync', [CampaignController::class, 'syncPostMetrics'])->middleware('throttle:10,1');
+    Route::get('campaigns/{campaign}/post-metrics-sync', [CampaignController::class, 'postMetricsStatus'])->middleware('throttle:60,1');
     Route::post('campaigns/{campaign}/apply', [CampaignController::class, 'apply']);
     Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
 
     Route::get('recurring-contracts', [RecurringContractController::class, 'index']);
     Route::get('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'show']);
+    Route::post('recurring-contracts/{recurringContract}/post-metrics-sync', [RecurringContractController::class, 'syncPostMetrics'])->middleware('throttle:10,1');
+    Route::get('recurring-contracts/{recurringContract}/post-metrics-sync', [RecurringContractController::class, 'postMetricsStatus'])->middleware('throttle:60,1');
     Route::patch('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'updateItem']);
 
     Route::get('notifications', [NotificationController::class, 'index']);

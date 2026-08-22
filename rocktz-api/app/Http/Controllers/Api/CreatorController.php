@@ -8,10 +8,13 @@ use App\Enums\NotificationType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
+use App\Jobs\SyncCreatorSocialsJob;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\SocialMetricsService;
 use App\Support\Geo;
+use App\Support\MetricsSyncStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -181,6 +184,79 @@ class CreatorController extends Controller
         }
 
         return response()->json(['data' => new CreatorResource($creator->fresh()->load(['user', 'portfolioVideos']))]);
+    }
+
+    public function syncSocials(Request $request, Creator $creator): JsonResponse
+    {
+        $this->authorizeCreator($request, $creator);
+
+        $data = $request->validate([
+            'network' => ['nullable', Rule::in(SocialMetricsService::NETWORKS)],
+            'handle' => ['nullable', 'string', 'max:255'],
+            'handles' => ['nullable', 'array'],
+            'handles.instagram' => ['nullable', 'string', 'max:255'],
+            'handles.tiktok' => ['nullable', 'string', 'max:255'],
+            'handles.youtube' => ['nullable', 'string', 'max:255'],
+            'force' => ['sometimes', 'boolean'],
+        ]);
+
+        $handles = $data['handles'] ?? [];
+        if (($data['network'] ?? null) && array_key_exists('handle', $data)) {
+            $handles[$data['network']] = $data['handle'];
+        }
+
+        $network = $data['network'] ?? null;
+        $key = MetricsSyncStatus::creatorKey($creator->id, $network);
+
+        if (! MetricsSyncStatus::busy($key)) {
+            MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
+            $job = new SyncCreatorSocialsJob(
+                $creator->id,
+                $network,
+                $handles,
+                (bool) ($data['force'] ?? false),
+            );
+            if (app()->runningUnitTests()) {
+                dispatch_sync($job);
+            } else {
+                dispatch($job)->afterResponse();
+            }
+        }
+
+        return $this->socialSyncJobResponse($creator, $key);
+    }
+
+    public function socialSyncStatus(Request $request, Creator $creator): JsonResponse
+    {
+        $this->authorizeCreator($request, $creator);
+
+        $network = $request->string('network')->toString() ?: null;
+        $key = MetricsSyncStatus::creatorKey($creator->id, $network);
+
+        return $this->socialSyncJobResponse($creator, $key);
+    }
+
+    private function socialSyncJobResponse(Creator $creator, string $key): JsonResponse
+    {
+        $state = MetricsSyncStatus::get($key) ?? ['status' => MetricsSyncStatus::QUEUED];
+        $status = (string) ($state['status'] ?? MetricsSyncStatus::QUEUED);
+
+        if ($status === MetricsSyncStatus::FAILED) {
+            return response()->json([
+                'status' => $status,
+                'message' => $state['message'] ?? __('auth.social_profile_unavailable'),
+            ], 422);
+        }
+
+        if ($status !== MetricsSyncStatus::DONE) {
+            return response()->json(['status' => $status], 202);
+        }
+
+        return response()->json([
+            'status' => $status,
+            'data' => new CreatorResource($creator->fresh()->load(['user', 'portfolioVideos'])),
+            'sync' => $state['sync'] ?? [],
+        ]);
     }
 
     public function approve(Creator $creator): JsonResponse

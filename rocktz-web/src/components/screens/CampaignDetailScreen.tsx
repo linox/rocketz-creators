@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowUpRight,
+  BarChart3,
   Calendar,
   CalendarCheck,
   Camera,
@@ -53,6 +54,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { CampaignMetricsPanel } from "@/components/CampaignMetricsPanel";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -65,7 +67,7 @@ import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
-type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro";
+type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro" | "metricas";
 type CreatorFilter = "all" | "attention" | "owing" | "delivered" | "no_demand";
 type AppFilter = "all" | "pending" | "approved" | "rejected";
 type CreatorLayout = "split" | "grid";
@@ -447,6 +449,7 @@ function DetailInner() {
     if (param === "selection" || param === "candidaturas") setTab("candidaturas");
     if (param === "briefing") setTab("briefing");
     if (param === "financeiro") setTab("financeiro");
+    if (param === "metricas") setTab("metricas");
   }, [id, isAdmin]);
 
   useEffect(() => {
@@ -492,7 +495,7 @@ function DetailInner() {
   }, [displayCreators, selectedId]);
 
   useEffect(() => {
-    if (isCreator && (tab === "candidaturas" || tab === "financeiro")) setTab("entregas");
+    if (isCreator && (tab === "candidaturas" || tab === "financeiro" || tab === "metricas")) setTab("entregas");
   }, [isCreator, tab]);
 
   const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
@@ -839,6 +842,7 @@ function DetailInner() {
           ["entregas", Video, t("campaignDetail.tabDeliveries"), String(approvedCreators.length), "bg-indigo-600 text-white"] as const,
           ["candidaturas", Users, t("campaignDetail.tabCasting"), pendingAppCount > 0 ? (pendingAppCount > 1 ? t("campaignDetail.pendingBadgeMany", { count: pendingAppCount }) : t("campaignDetail.pendingBadge", { count: pendingAppCount })) : String(applications.length), pendingAppCount > 0 ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600"] as const,
           ["briefing", FileText, t("campaignDetail.tabBriefing"), "", ""] as const,
+          ["metricas", BarChart3, t("campaignDetail.tabMetrics"), "", ""] as const,
           ["financeiro", DollarSign, t("campaignDetail.tabFinance"), "", ""] as const,
         ]
   );
@@ -1957,6 +1961,16 @@ function DetailInner() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {!isCreator && tab === "metricas" ? (
+        <CampaignMetricsPanel
+          campaign={campaign}
+          rows={approvedCreators}
+          locale={locale}
+          formatNumber={formatNumber}
+          onCampaign={setCampaign}
+        />
       ) : null}
 
       {!isCreator && tab === "financeiro" ? (

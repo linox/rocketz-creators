@@ -12,12 +12,14 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ContentPlanningItemResource;
 use App\Http\Resources\RecurringContractResource;
+use App\Jobs\SyncRecurringPostMetricsJob;
 use App\Models\Company;
 use App\Models\ContentPlanningItem;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Services\NotificationService;
 use App\Support\Geo;
+use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Database\Eloquent\Builder;
@@ -63,6 +65,74 @@ class RecurringContractController extends Controller
         $this->loadVisibleRelations($request, $recurringContract);
 
         return response()->json(['data' => new RecurringContractResource($recurringContract)]);
+    }
+
+    public function syncPostMetrics(Request $request, RecurringContract $recurringContract): JsonResponse
+    {
+        $this->assertCanManage($request, $recurringContract);
+
+        $data = $request->validate([
+            'force' => ['sometimes', 'boolean'],
+            'month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'content_planning_item_id' => ['nullable', 'integer'],
+        ]);
+
+        $month = $data['month'] ?? null;
+        $itemId = isset($data['content_planning_item_id']) ? (int) $data['content_planning_item_id'] : null;
+        $key = MetricsSyncStatus::recurringKey($recurringContract->id, $month, $itemId);
+
+        if (! MetricsSyncStatus::busy($key)) {
+            MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
+            $job = new SyncRecurringPostMetricsJob(
+                $recurringContract->id,
+                $month,
+                $itemId,
+                (bool) ($data['force'] ?? false),
+            );
+            if (app()->runningUnitTests()) {
+                dispatch_sync($job);
+            } else {
+                dispatch($job)->afterResponse();
+            }
+        }
+
+        return $this->postMetricsJobResponse($recurringContract, $key);
+    }
+
+    public function postMetricsStatus(Request $request, RecurringContract $recurringContract): JsonResponse
+    {
+        $this->assertCanManage($request, $recurringContract);
+
+        $month = $request->string('month')->toString() ?: null;
+        $itemId = $request->integer('content_planning_item_id') ?: null;
+        $key = MetricsSyncStatus::recurringKey($recurringContract->id, $month, $itemId);
+
+        return $this->postMetricsJobResponse($recurringContract, $key);
+    }
+
+    private function postMetricsJobResponse(RecurringContract $contract, string $key): JsonResponse
+    {
+        $state = MetricsSyncStatus::get($key) ?? ['status' => MetricsSyncStatus::QUEUED];
+        $status = (string) ($state['status'] ?? MetricsSyncStatus::QUEUED);
+
+        if ($status === MetricsSyncStatus::FAILED) {
+            return response()->json([
+                'status' => $status,
+                'message' => $state['message'] ?? __('auth.post_metrics_unavailable'),
+            ], 422);
+        }
+
+        if ($status !== MetricsSyncStatus::DONE) {
+            return response()->json(['status' => $status], 202);
+        }
+
+        $this->loadVisibleRelations(request(), $contract);
+
+        return response()->json([
+            'status' => $status,
+            'data' => new RecurringContractResource($contract),
+            'sync' => $state['sync'] ?? [],
+        ]);
     }
 
     public function store(Request $request): JsonResponse

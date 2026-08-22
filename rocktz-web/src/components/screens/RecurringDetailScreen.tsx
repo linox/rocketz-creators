@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   Calendar,
   CalendarCheck,
   Camera,
@@ -49,6 +50,7 @@ import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
+import { RecurringMetricsPanel } from "@/components/RecurringMetricsPanel";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
@@ -68,7 +70,7 @@ type QuotaCategory = "owing" | "completed" | "no_demand";
 type StatusFilter = "all" | "pending_approval" | "missing_pautas" | QuotaCategory;
 type UpdateKind = "new_version" | "pending_approval" | null;
 type RibbonKind = "new_version" | "pending_approval" | "missing_pautas" | "owing" | "completed";
-type ViewTab = "creators" | "calendar";
+type ViewTab = "creators" | "calendar" | "metrics";
 type CreatorLayout = "split" | "grid";
 type PautaViewSection = "briefing" | "script" | "references" | "video";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
@@ -331,6 +333,16 @@ function isAwaitingBriefing(item: PlanningItem) {
   return item.status === "planned" && !itemHasPautaBriefing(item);
 }
 
+function isPublished(item: PlanningItem) {
+  return item.status === "published" || Boolean(item.published_url?.trim());
+}
+
+function isAwaitingPublishedLink(item: PlanningItem) {
+  if (isPublished(item) || isAwaitingBriefing(item)) return false;
+  if (isLivePauta(item.content_type)) return true;
+  return item.status === "approved" || item.video_status === "approved";
+}
+
 function itemNeedsApproval(item: PlanningItem) {
   return needsScriptApproval(item) || needsVideoApproval(item);
 }
@@ -375,7 +387,7 @@ function DetailInner() {
   const router = useRouter();
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
-  const { formatCurrency: formatCurrencyRaw } = usePrivacy();
+  const { formatCurrency: formatCurrencyRaw, formatNumber } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const id = usePathname().split("/").filter(Boolean).pop() ?? "";
   const canManage = user.role === "admin" || user.role === "company";
@@ -584,8 +596,8 @@ function DetailInner() {
   const selectedRow = allocated.find((row) => row.creator_id === selectedCreatorId) || filteredCreators[0] || allocated[0];
   const selectedInfo = selectedRow ? profile(selectedRow) : null;
   const selectedSummary = selectedRow ? summary(selectedRow) : null;
-  const selectedPautas = selectedRow ? selectedSummary!.items.filter((item) => (showCompleted ? true : !isDone(item.status))) : [];
-  const completedPautas = selectedSummary?.items.filter((item) => isDone(item.status)).length || 0;
+  const selectedPautas = selectedRow ? selectedSummary!.items.filter((item) => (showCompleted ? true : !isPublished(item))) : [];
+  const completedPautas = selectedSummary?.items.filter((item) => isPublished(item)).length || 0;
 
   const fee = Number(contract?.monthly_fee || 0);
   const cost = allocated.reduce((sum, row) => sum + creatorCost(row), 0);
@@ -717,6 +729,21 @@ function DetailInner() {
       await alertApiError(err);
     } finally {
       setGeneratingDemands(false);
+    }
+  }
+
+  async function onSavePublishedLink(item: PlanningItem, url: string) {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.publishedLinkRequired"));
+      return;
+    }
+    try {
+      await api.updatePlanningItem(item.id, { published_url: trimmed });
+      await alertSuccess(t("recurringDetail.publishedLinkSaved"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
     }
   }
 
@@ -1048,6 +1075,11 @@ function DetailInner() {
           <button type="button" onClick={() => setView("calendar")} className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all", view === "calendar" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
             <Calendar size={14} /> {t("recurringDetail.tabCalendar")}
           </button>
+          {!isCreator ? (
+            <button type="button" onClick={() => setView("metrics")} className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all", view === "metrics" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
+              <BarChart3 size={14} /> {t("recurringDetail.tabMetrics")}
+            </button>
+          ) : null}
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-[11px] font-bold tracking-wider text-slate-400 uppercase sm:inline">{t("recurringDetail.refMonth")}</span>
             <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"><ChevronLeft size={14} /></button>
@@ -1578,7 +1610,9 @@ function DetailInner() {
                                 ? "border-violet-200 bg-violet-50/30"
                                 : awaitingBriefing
                                   ? "border-orange-300 bg-orange-50/40"
-                                  : "border-slate-200",
+                                  : isAwaitingPublishedLink(item)
+                                    ? "border-emerald-200 bg-emerald-50/20"
+                                    : "border-slate-200",
                         )}>
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -1599,7 +1633,9 @@ function DetailInner() {
                                           ? "border-violet-200 bg-violet-50 text-violet-800"
                                           : awaitingBriefing
                                             ? "border-orange-200 bg-orange-50 text-orange-800"
-                                            : "border-slate-200 bg-slate-100 text-slate-700",
+                                            : isAwaitingPublishedLink(item)
+                                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                              : "border-slate-200 bg-slate-100 text-slate-700",
                                   )}>
                                     {awaitingBriefing
                                       ? t("recurringDetail.awaitingBriefing")
@@ -1617,6 +1653,8 @@ function DetailInner() {
                                               ? t("recurringDetail.videoPendingBadge")
                                             : item.script_status === "approved" && item.video_status !== "approved" && item.video_status !== "submitted" && item.video_status !== "revision"
                                               ? t("recurringDetail.waitingVideoBadge")
+                                            : isAwaitingPublishedLink(item)
+                                              ? t("recurringDetail.awaitingPublishedLink")
                                               : t(`recurring.itemStatus.${item.status}`, { defaultValue: item.status })}
                                   </span>
                                   {!live && item.approval_flow !== "video_only" ? (
@@ -1863,6 +1901,32 @@ function DetailInner() {
                           {isCreator && !awaitingBriefing ? (
                             <CreatorPautaSubmissionPanel item={item} onSubmitted={() => void load()} />
                           ) : null}
+                          {!isCreator && !live && isAwaitingPublishedLink(item) ? (
+                            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                              <span className="text-[10px] font-bold tracking-wider text-emerald-800 uppercase">{t("campaignDetail.publishedLinkLabel")}</span>
+                              <p className="m-0 text-[11px] font-medium text-emerald-800">{t("campaignDetail.publishedLinkHint")}</p>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <input
+                                  type="url"
+                                  value={liveLinkDraft[item.id] ?? item.published_url ?? ""}
+                                  onChange={(e) => setLiveLinkDraft((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                  placeholder={t("campaignDetail.publishedLinkPh")}
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void onSavePublishedLink(item, liveLinkDraft[item.id] ?? item.published_url ?? "")}
+                                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white hover:bg-emerald-700"
+                                >
+                                  {t("recurringDetail.savePublishedLink")}
+                                </button>
+                              </div>
+                            </div>
+                          ) : !isCreator && !live && item.published_url ? (
+                            <a href={item.published_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+                              <ExternalLink size={12} className="shrink-0" /> {item.published_url}
+                            </a>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -1874,7 +1938,9 @@ function DetailInner() {
             )}
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {view === "calendar" ? (
         <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900"><CalendarCheck size={18} className="text-brand-primary" /> {t("recurringDetail.calendarTitle", { title: contract.title })}</h3>
@@ -1925,7 +1991,19 @@ function DetailInner() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
+
+      {!isCreator && view === "metrics" ? (
+        <RecurringMetricsPanel
+          contract={contract}
+          items={items}
+          month={selectedMonth}
+          onMonthChange={setSelectedMonth}
+          locale={locale}
+          formatNumber={formatNumber}
+          onContract={setContract}
+        />
+      ) : null}
 
       {creatorModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4 app-modal-overlay">

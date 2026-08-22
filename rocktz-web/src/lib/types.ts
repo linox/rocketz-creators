@@ -39,6 +39,18 @@ export type Creator = {
   contract_acceptance?: { id: number; status: string; accepted_at: string | null; full_name: string } | null;
 };
 
+export type SocialSyncResult = {
+  ok: boolean;
+  cached?: boolean;
+  handle?: string;
+  followers?: number | null;
+  views?: number | null;
+  engagement?: number | null;
+  message?: string;
+};
+
+export type MetricsJobStatus = "queued" | "running" | "done" | "failed";
+
 export type Company = {
   id: number;
   name: string;
@@ -83,6 +95,29 @@ export type Campaign = {
   deliverables?: Record<string, string | number | null> | null;
   applications?: CampaignCreator[];
   pending_applications?: number;
+};
+
+export type PostMetrics = {
+  network?: string | null;
+  url?: string | null;
+  likes?: number | null;
+  comments?: number | null;
+  views?: number | null;
+  shares?: number | null;
+  engagement?: number | null;
+  synced_at?: number | null;
+};
+
+export type PostMetricsSyncResult = {
+  ok: boolean;
+  cached?: boolean;
+  network?: string;
+  likes?: number | null;
+  comments?: number | null;
+  views?: number | null;
+  shares?: number | null;
+  engagement?: number | null;
+  message?: string;
 };
 
 export type CampaignCreator = {
@@ -134,6 +169,8 @@ export type CampaignCreator = {
     video_version?: number;
     submission_versions?: SubmissionVersionEntry[];
     revision_history?: RevisionHistoryEntry[];
+    story_prints?: unknown[];
+    metrics?: PostMetrics;
   } | null;
 };
 
@@ -230,6 +267,7 @@ export type PlanningItem = {
   submission_url: string | null;
   media_url: string | null;
   published_url: string | null;
+  metrics?: PostMetrics;
   submission_notes: string | null;
   feedback_note: string | null;
   submitted_at?: string | null;

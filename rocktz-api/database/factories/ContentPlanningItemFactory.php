@@ -45,6 +45,7 @@ class ContentPlanningItemFactory extends Factory
             'script_submitted_at' => null,
             'video_submitted_at' => null,
             'published_url' => null,
+            'metrics' => [],
             'media_url' => null,
             'submission_url' => null,
             'submission_notes' => null,

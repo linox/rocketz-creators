@@ -50,8 +50,9 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const scriptChanged = script.trim() !== (item.script || "").trim();
   const requiresNewVideoFile = videoRevision;
   const requiresScriptChange = scriptRevision;
-  const awaitingPublishUrl = item.status === "approved" || (flow === "live_link" && item.status !== "published");
-  const alreadyPublished = item.status === "published";
+  const alreadyPublished = item.status === "published" && Boolean(item.published_url?.trim());
+  const materialApproved = item.status === "approved" || item.video_status === "approved";
+  const awaitingPublishUrl = !alreadyPublished && (materialApproved || flow === "live_link");
 
   async function submitPublishedUrl() {
     if (!publishedUrl.trim()) {

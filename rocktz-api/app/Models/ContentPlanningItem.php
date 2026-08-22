@@ -40,6 +40,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'submission_versions',
     'revision_history',
     'published_url',
+    'metrics',
     'media_url',
     'submission_url',
     'submission_notes',
@@ -71,6 +72,7 @@ class ContentPlanningItem extends Model
             'submission_versions' => 'array',
             'revision_history' => 'array',
             'briefing_fields' => 'array',
+            'metrics' => 'array',
             'submitted_at' => 'datetime',
             'reviewed_at' => 'datetime',
         ];

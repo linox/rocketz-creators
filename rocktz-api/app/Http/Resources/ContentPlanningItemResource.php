@@ -52,6 +52,7 @@ class ContentPlanningItemResource extends JsonResource
             'submission_versions' => $this->submission_versions ?? [],
             'revision_history' => $this->revision_history ?? [],
             'published_url' => $this->published_url,
+            'metrics' => $this->metrics ?? [],
             'media_url' => $this->media_url,
             'submission_url' => $this->submission_url,
             'submission_notes' => $this->submission_notes,

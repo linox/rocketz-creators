@@ -30,34 +30,44 @@ import profilePt from "@/i18n/locales/pt-BR/profile.json";
 
 const NAMESPACES = ["common", "auth", "landing", "nav", "profile", "app"] as const;
 
+const RESOURCES = {
+  "pt-BR": {
+    common: commonPt,
+    auth: authPt,
+    landing: landingPt,
+    nav: navPt,
+    profile: profilePt,
+    app: appPt,
+  },
+  en: {
+    common: commonEn,
+    auth: authEn,
+    landing: landingEn,
+    nav: navEn,
+    profile: profileEn,
+    app: appEn,
+  },
+  es: {
+    common: commonEs,
+    auth: authEs,
+    landing: landingEs,
+    nav: navEs,
+    profile: profileEs,
+    app: appEs,
+  },
+} as const;
+
+function syncResources() {
+  for (const [lng, namespaces] of Object.entries(RESOURCES)) {
+    for (const [ns, data] of Object.entries(namespaces)) {
+      i18n.addResourceBundle(lng, ns, data, true, true);
+    }
+  }
+}
+
 if (!i18n.isInitialized) {
   i18n.use(initReactI18next).init({
-    resources: {
-      "pt-BR": {
-        common: commonPt,
-        auth: authPt,
-        landing: landingPt,
-        nav: navPt,
-        profile: profilePt,
-        app: appPt,
-      },
-      en: {
-        common: commonEn,
-        auth: authEn,
-        landing: landingEn,
-        nav: navEn,
-        profile: profileEn,
-        app: appEn,
-      },
-      es: {
-        common: commonEs,
-        auth: authEs,
-        landing: landingEs,
-        nav: navEs,
-        profile: profileEs,
-        app: appEs,
-      },
-    },
+    resources: RESOURCES,
     lng: DEFAULT_LOCALE,
     fallbackLng: "en",
     supportedLngs: [...LOCALES],
@@ -67,6 +77,8 @@ if (!i18n.isInitialized) {
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
   });
+} else {
+  syncResources();
 }
 
 if (typeof window === "undefined") {

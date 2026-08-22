@@ -7,20 +7,22 @@ use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\NotificationType;
 use App\Enums\PaymentStatus;
 use App\Enums\SignatureStatus;
-use App\Enums\NotificationType;
 use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignCreatorResource;
 use App\Http\Resources\CampaignResource;
+use App\Jobs\SyncCampaignPostMetricsJob;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
 use App\Services\NotificationService;
 use App\Support\Geo;
+use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Http\JsonResponse;
@@ -89,6 +91,71 @@ class CampaignController extends Controller
         $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
+    }
+
+    public function syncPostMetrics(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->assertCanManage($request, $campaign);
+
+        $data = $request->validate([
+            'force' => ['sometimes', 'boolean'],
+            'campaign_creator_id' => ['nullable', 'integer'],
+        ]);
+
+        $campaignCreatorId = isset($data['campaign_creator_id']) ? (int) $data['campaign_creator_id'] : null;
+        $key = MetricsSyncStatus::campaignKey($campaign->id, $campaignCreatorId);
+
+        if (! MetricsSyncStatus::busy($key)) {
+            MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
+            $job = new SyncCampaignPostMetricsJob(
+                $campaign->id,
+                $campaignCreatorId,
+                (bool) ($data['force'] ?? false),
+            );
+            if (app()->runningUnitTests()) {
+                dispatch_sync($job);
+            } else {
+                dispatch($job)->afterResponse();
+            }
+        }
+
+        return $this->postMetricsJobResponse($campaign, $key);
+    }
+
+    public function postMetricsStatus(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->assertCanManage($request, $campaign);
+
+        $campaignCreatorId = $request->integer('campaign_creator_id') ?: null;
+        $key = MetricsSyncStatus::campaignKey($campaign->id, $campaignCreatorId);
+
+        return $this->postMetricsJobResponse($campaign, $key);
+    }
+
+    private function postMetricsJobResponse(Campaign $campaign, string $key): JsonResponse
+    {
+        $state = MetricsSyncStatus::get($key) ?? ['status' => MetricsSyncStatus::QUEUED];
+        $status = (string) ($state['status'] ?? MetricsSyncStatus::QUEUED);
+
+        if ($status === MetricsSyncStatus::FAILED) {
+            return response()->json([
+                'status' => $status,
+                'message' => $state['message'] ?? __('auth.post_metrics_unavailable'),
+            ], 422);
+        }
+
+        if ($status !== MetricsSyncStatus::DONE) {
+            return response()->json(['status' => $status], 202);
+        }
+
+        $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
+
+        return response()->json([
+            'status' => $status,
+            'data' => new CampaignResource($campaign),
+            'sync' => $state['sync'] ?? [],
+        ]);
     }
 
     public function store(Request $request): JsonResponse
