@@ -47,6 +47,7 @@ return [
     'upload_failed' => 'No fue posible guardar el archivo en el servidor. Inténtalo de nuevo.',
     'creators_only_apply' => 'Solo los creadores pueden postularse.',
     'creator_must_be_approved' => 'Tu registro debe ser confirmado por curaduría para acceder a las campañas.',
+    'invite_code_invalid' => 'Código de invitación inválido o de una empresa aún no aprobada.',
     'creator_must_accept_contract' => 'Debes firmar el contrato de uso de imagen para postularte a las campañas.',
     'campaign_country_restricted' => 'Esta campaña no está disponible en tu país.',
     'social_handle_required' => 'Indica el usuario o el enlace del canal para buscar los datos.',

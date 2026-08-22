@@ -72,6 +72,80 @@ class DomainApiTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
+    public function test_company_can_list_active_creators_and_filter_by_country(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->first();
+        $token = $company->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)->getJson('/api/creators')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.artistic_name', 'Ana UGC');
+
+        Creator::factory()->active()->create([
+            'country' => 'US',
+            'state' => 'CA',
+            'artistic_name' => 'Maya Cast',
+        ]);
+
+        $this->withToken($token)->getJson('/api/creators?country=US')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.country', 'US')
+            ->assertJsonPath('data.0.artistic_name', 'Maya Cast');
+
+        $this->withToken($token)->getJson('/api/creators?country=US&state=CA')->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->withToken($token)->getJson('/api/creators?country=US&state=NY')->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_company_can_approve_invited_creator_and_cannot_approve_others(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyId = $companyUser->companyUser?->company_id;
+        $token = $companyUser->createToken('auth')->plainTextToken;
+
+        $invited = Creator::factory()->review()->create([
+            'invited_by_company_id' => $companyId,
+            'artistic_name' => 'Convite Aurora',
+        ]);
+        $other = Creator::query()->where('status', CreatorStatus::Review)->whereNull('invited_by_company_id')->firstOrFail();
+
+        $this->withToken($token)->getJson('/api/creators')->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Convite Aurora']);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$other->id}/approve")
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$invited->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'active');
+    }
+
+    public function test_company_can_rotate_creator_invite_code(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company = $companyUser->company;
+        $token = $companyUser->createToken('auth')->plainTextToken;
+        $previous = $company->creator_invite_code;
+
+        $this->withToken($token)
+            ->postJson("/api/companies/{$company->id}/invite-code")
+            ->assertOk()
+            ->assertJsonPath('data.id', $company->id);
+
+        $this->assertNotSame($previous, $company->fresh()->creator_invite_code);
+        $this->assertNotEmpty($company->fresh()->creator_invite_code);
+    }
+
     public function test_company_can_create_campaign_without_sending_company_id(): void
     {
         $this->seed();

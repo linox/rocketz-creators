@@ -27,6 +27,11 @@ class CompanyResource extends JsonResource
             'logo_url' => $this->logo_url,
             'objective' => $this->objective,
             'status' => $this->status?->value,
+            'creator_invite_code' => $this->when(
+                $request->user()?->role?->value === 'admin'
+                    || $request->user()?->companyUser?->company_id === $this->id,
+                $this->creator_invite_code,
+            ),
             'contacts' => $this->whenLoaded('contacts', fn () => $this->contacts->map(fn ($contact) => [
                 'id' => $contact->id,
                 'name' => $contact->name,

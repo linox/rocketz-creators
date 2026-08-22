@@ -7,7 +7,6 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import {
   countryOptions,
   currencyOptions,
-  DEFAULT_COUNTRY,
   DEFAULT_CURRENCY,
   regionOptions,
 } from "@/lib/geo";
@@ -26,6 +25,7 @@ export function CountrySelect({
   placeholder,
   className,
   triggerClassName,
+  emptyLabel,
 }: {
   theme?: Theme;
   value: string;
@@ -33,9 +33,13 @@ export function CountrySelect({
   placeholder?: string;
   className?: string;
   triggerClassName?: string;
+  emptyLabel?: string;
 }) {
   const locale = useGeoLocale();
-  const options = useMemo<Select2Option[]>(() => countryOptions(locale), [locale]);
+  const options = useMemo<Select2Option[]>(() => {
+    const list = countryOptions(locale);
+    return emptyLabel ? [{ value: "all", label: emptyLabel }, ...list] : list;
+  }, [locale, emptyLabel]);
 
   return (
     <Select2Field
@@ -60,6 +64,7 @@ export function RegionSelect({
   className,
   triggerClassName,
   disabled,
+  emptyLabel,
 }: {
   theme?: Theme;
   country: string;
@@ -69,15 +74,19 @@ export function RegionSelect({
   className?: string;
   triggerClassName?: string;
   disabled?: boolean;
+  emptyLabel?: string;
 }) {
   const locale = useGeoLocale();
-  const options = useMemo<Select2Option[]>(() => regionOptions(country || DEFAULT_COUNTRY, locale), [country, locale]);
+  const options = useMemo<Select2Option[]>(() => {
+    const list = country && country !== "all" ? regionOptions(country, locale) : [];
+    return emptyLabel ? [{ value: "all", label: emptyLabel }, ...list] : list;
+  }, [country, locale, emptyLabel]);
 
   return (
     <Select2Field
       theme={theme}
       searchable
-      disabled={disabled || options.length === 0}
+      disabled={disabled || options.filter((option) => option.value !== "all").length === 0}
       placeholder={placeholder}
       value={value}
       options={options}

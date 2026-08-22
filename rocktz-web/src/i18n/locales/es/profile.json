@@ -25,6 +25,8 @@
   "awaitingAdminTitle": "Creador esperando aprobación de registro",
   "awaitingCreatorTitle": "Registro en análisis de curaduría",
   "awaitingAdminBody": "Este influenciador se registró en el sitio y necesita la aprobación del administrador para activar el perfil y las candidaturas.",
+  "awaitingAdminInvitedBody": "Este creador usó el código de {{company}}. La agencia o la marca pueden autorizar el registro.",
+  "awaitingCompanyBody": "Este creador usó el código de tu marca. Autoriza para liberar el perfil en campañas.",
   "awaitingCreatorBody": "Ya puedes completar todo tu perfil y enviar videos de portafolio. La aprobación de curaduría libera campañas y marcas.",
   "approveCreator": "Aprobar creador",
   "rejectTitle": "Rechazar creador",

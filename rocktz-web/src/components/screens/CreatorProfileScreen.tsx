@@ -48,7 +48,6 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
-import { CreatorContractRequiredBanner } from "@/components/CreatorContractRequiredBanner";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
@@ -74,6 +73,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromPath } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { userCanModerateCreator } from "@/lib/auth";
 
 type RecurringWorkRow = {
   key: string;
@@ -488,6 +488,7 @@ function ProfileInner() {
 
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
+  const canModerateCreator = creator ? userCanModerateCreator(user, creator) : false;
 
   function hydrate(data: Creator) {
     setFullName(data.full_name);
@@ -946,11 +947,19 @@ function ProfileInner() {
           <div className="flex items-center gap-3.5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm"><Clock size={22} /></div>
             <div>
-              <h4 className="m-0 text-sm font-bold text-amber-950">{agencyView ? tp("awaitingAdminTitle") : tp("awaitingCreatorTitle")}</h4>
-              <p className="mt-0.5 max-w-xl text-xs text-amber-800">{agencyView ? tp("awaitingAdminBody") : tp("awaitingCreatorBody")}</p>
+              <h4 className="m-0 text-sm font-bold text-amber-950">{agencyView || canModerateCreator ? tp("awaitingAdminTitle") : tp("awaitingCreatorTitle")}</h4>
+              <p className="mt-0.5 max-w-xl text-xs text-amber-800">
+                {canModerateCreator && !agencyView
+                  ? tp("awaitingCompanyBody")
+                  : agencyView && creator.invited_by_company?.name
+                    ? tp("awaitingAdminInvitedBody", { company: creator.invited_by_company.name })
+                    : agencyView
+                      ? tp("awaitingAdminBody")
+                      : tp("awaitingCreatorBody")}
+              </p>
             </div>
           </div>
-          {agencyView ? (
+          {canModerateCreator ? (
             <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
               <button type="button" onClick={async () => { try { await api.approveCreator(creator.id); await alertSuccess(tp("approved")); load(); } catch (err) { await alertApiError(err); } }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 sm:flex-none">
                 <Check size={16} /> {tp("approveCreator")}
@@ -961,13 +970,9 @@ function ProfileInner() {
         </div>
       ) : null}
 
-      {canEdit && !creator.contract_acceptance ? (
-        <CreatorContractRequiredBanner onSign={() => setContractOpen(true)} />
-      ) : null}
-
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center md:gap-4">
         <div className="flex flex-col gap-4">
-          {isAdmin ? (
+          {isAdmin || user.role === "company" ? (
             <Link href="/creators" className="flex items-center gap-2 text-[12px] font-bold tracking-wider text-[#64748B] uppercase transition-colors hover:text-brand-primary">
               <ArrowLeft size={14} /> {tp("backToCasting")}
             </Link>

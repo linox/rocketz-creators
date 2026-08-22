@@ -80,13 +80,14 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::delete('recurring-contracts/{recurringContract}/creators/{recurringContractCreator}', [RecurringContractController::class, 'detachCreator']);
         Route::post('recurring-contracts/{recurringContract}/items', [RecurringContractController::class, 'storeItem']);
         Route::delete('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'destroyItem']);
+        Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
+        Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
+        Route::post('companies/{company}/invite-code', [CompanyController::class, 'rotateInviteCode']);
     });
 
     Route::middleware('role:admin')->group(function () {
         Route::middleware('permission:creators.moderate')->group(function () {
             Route::post('creators', [CreatorController::class, 'store']);
-            Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
-            Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
         });
 
         Route::middleware('permission:companies.moderate')->group(function () {

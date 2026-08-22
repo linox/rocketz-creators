@@ -168,6 +168,20 @@ class CompanyController extends Controller
         return response()->json(['data' => new CompanyResource($company->fresh())]);
     }
 
+    public function rotateInviteCode(Request $request, Company $company): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
+            return response()->json(['message' => __('auth.forbidden')], 403);
+        }
+
+        $company->rotateInviteCode();
+
+        return response()->json([
+            'data' => new CompanyResource($company->fresh()->load(['contacts', 'favoriteCreators'])),
+        ]);
+    }
+
     public function reject(Request $request, Company $company): JsonResponse
     {
         $company->update(['status' => CompanyStatus::Rejected]);

@@ -47,6 +47,7 @@ return [
     'upload_failed' => 'Could not save the file on the server. Try again.',
     'creators_only_apply' => 'Only creators can apply.',
     'creator_must_be_approved' => 'Your signup must be confirmed by curatorship before you can access campaigns.',
+    'invite_code_invalid' => 'Invalid invite code, or the company is not approved yet.',
     'creator_must_accept_contract' => 'You must sign the image usage agreement before applying to campaigns.',
     'campaign_country_restricted' => 'This campaign is not available in your country.',
     'social_handle_required' => 'Enter the username or channel link to fetch the stats.',

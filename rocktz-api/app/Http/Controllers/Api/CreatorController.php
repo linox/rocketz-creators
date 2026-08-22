@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\CreatorStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
@@ -28,12 +29,19 @@ class CreatorController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Creator::query()->with(['user', 'portfolioVideos']);
+        $query = Creator::query()->with(['user', 'portfolioVideos', 'invitedByCompany']);
 
         if ($user->role === UserRole::Creator) {
             $query->where('id', $user->creator?->id);
         } elseif ($user->role === UserRole::Company) {
-            $query->where('status', CreatorStatus::Active);
+            $companyId = $user->companyUser?->company_id;
+            $query->where(function ($builder) use ($companyId) {
+                $builder->where('status', CreatorStatus::Active)
+                    ->orWhere(function ($inner) use ($companyId) {
+                        $inner->where('invited_by_company_id', $companyId)
+                            ->whereIn('status', [CreatorStatus::Review, CreatorStatus::Rejected]);
+                    });
+            });
         }
 
         if ($status = $request->string('status')->toString()) {
@@ -52,6 +60,14 @@ class CreatorController extends Controller
             $query->whereJsonContains('categories', $category);
         }
 
+        if ($country = $request->string('country')->toString()) {
+            $query->where('country', Geo::normalizeCountry($country));
+        }
+
+        if ($state = $request->string('state')->toString()) {
+            $query->where('state', Geo::normalizeRegion($state));
+        }
+
         $creators = $query->latest()->get();
 
         return response()->json(['data' => CreatorResource::collection($creators)]);
@@ -66,10 +82,13 @@ class CreatorController extends Controller
         }
 
         if ($user->role === UserRole::Company && $creator->status !== CreatorStatus::Active) {
-            return response()->json(['message' => __('auth.profile_unavailable')], 403);
+            $invited = $creator->invited_by_company_id && $creator->invited_by_company_id === $user->companyUser?->company_id;
+            if (! $invited) {
+                return response()->json(['message' => __('auth.profile_unavailable')], 403);
+            }
         }
 
-        $creator->load(['user', 'portfolioVideos', 'contractAcceptances' => fn ($q) => $q->latest()]);
+        $creator->load(['user', 'portfolioVideos', 'contractAcceptances' => fn ($q) => $q->latest(), 'invitedByCompany']);
 
         return response()->json(['data' => new CreatorResource($creator)]);
     }
@@ -259,8 +278,10 @@ class CreatorController extends Controller
         ]);
     }
 
-    public function approve(Creator $creator): JsonResponse
+    public function approve(Request $request, Creator $creator): JsonResponse
     {
+        $this->authorizeCreatorModeration($request, $creator);
+
         $creator->update(['status' => CreatorStatus::Active]);
         if ($creator->user_id) {
             $this->notifications->send([
@@ -279,6 +300,8 @@ class CreatorController extends Controller
 
     public function reject(Request $request, Creator $creator): JsonResponse
     {
+        $this->authorizeCreatorModeration($request, $creator);
+
         $creator->update([
             'status' => CreatorStatus::Rejected,
             'internal_notes' => trim($creator->internal_notes."\n".$request->string('reason')),
@@ -393,5 +416,25 @@ class CreatorController extends Controller
             return;
         }
         abort_unless($user->role === UserRole::Creator && $user->creator?->id === $creator->id, 403, __('auth.forbidden'));
+    }
+
+    private function authorizeCreatorModeration(Request $request, Creator $creator): void
+    {
+        $user = $request->user();
+
+        if ($user->role === UserRole::Admin) {
+            abort_unless($user->hasPermission(Permission::CreatorsModerate), 403, __('auth.forbidden_permission'));
+
+            return;
+        }
+
+        abort_unless(
+            $user->role === UserRole::Company
+                && $creator->status === CreatorStatus::Review
+                && $creator->invited_by_company_id
+                && $creator->invited_by_company_id === $user->companyUser?->company_id,
+            403,
+            __('auth.forbidden'),
+        );
     }
 }

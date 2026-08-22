@@ -87,6 +87,7 @@
   "creators": {
     "title": "Casting de creadores",
     "subtitle": "Gestiona y descubre talentos para tus campañas",
+    "subtitleCompany": "Descubre talentos para tus campañas",
     "new": "Nuevo creador",
     "reset": "Vaciar casting",
     "search": "Buscar por nombre o arroba...",
@@ -123,6 +124,8 @@
     "invalidCpf": "Ingresa un CPF válido (000.000.000-00).",
     "modalTitle": "Nuevo creador",
     "allCategories": "Todas las categorías",
+    "allCountries": "Todos los países",
+    "allRegions": "Todas las regiones",
     "allStatus": "Todos los estados",
     "statusReview": "En análisis / esperando aprobación",
     "admin": "Admin",
@@ -146,6 +149,8 @@
     "maxPricePh": "Ej: 5000",
     "awaitingApproval": "Esperando aprobación",
     "awaitingHint": "Registrado en el sitio. Aprueba para liberar el perfil en campañas.",
+    "awaitingHintCompany": "Este creador usó el código de tu marca. Autoriza para liberar el perfil.",
+    "awaitingHintInvited": "Se registró con el código de {{company}}. La agencia también puede autorizar.",
     "followers": "Seguidores",
     "avgViews": "Media de views",
     "perReel": "/ reel",
@@ -159,6 +164,7 @@
     "clearFilters": "Limpiar filtros",
     "empty": "Ningún creador encontrado",
     "emptyHint": "Prueba a ajustar los filtros o registrar un nuevo creador.",
+    "emptyHintCompany": "Prueba a ajustar los filtros de búsqueda, país o región.",
     "fullName": "Nombre completo",
     "artisticName": "Nombre artístico / @",
     "artisticPh": "ej: juliana.fit",
@@ -912,6 +918,23 @@
       "approve": "Aprobar empresa",
       "approvedOk": "Empresa aprobada con éxito."
     },
+    "inviteCode": {
+      "title": "Código para registro de creadores",
+      "hint": "Envía este código a creadores. Quien se registre con él puede ser autorizado por ti.",
+      "pendingHint": "El código queda visible ahora y pasa a valer cuando la empresa sea aprobada.",
+      "copy": "Copiar código",
+      "copied": "Código copiado",
+      "copyFailTitle": "No se pudo copiar",
+      "copyFail": "Copia el código manualmente.",
+      "regenerate": "Generar nuevo código",
+      "regenerateTitle": "¿Generar un nuevo código?",
+      "regenerateText": "El código actual dejará de valer. Los creadores que aún no se registraron necesitarán el nuevo.",
+      "regenerateConfirm": "Generar nuevo",
+      "regenerated": "Nuevo código generado",
+      "pendingTitle": "Creadores esperando tu autorización ({{count}})",
+      "pendingEmpty": "Ningún creador se registró con tu código todavía.",
+      "viewCasting": "Ver en el casting"
+    },
     "kpi": {
       "budgetLabel": "Presupuesto contratado",
       "budgetHint": "En todas las campañas",
@@ -997,6 +1020,7 @@
       "searchPh": "Buscar en casting favorito...",
       "empty": "Ningún creador favorito aún.",
       "browse": "Explorar creadores",
+      "viewCatalog": "Ver casting completo",
       "favor": "Añadir a favoritos",
       "unfavorite": "Quitar favorito"
     }

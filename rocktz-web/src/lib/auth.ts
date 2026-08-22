@@ -38,6 +38,7 @@ export type AuthUser = {
     city?: string | null;
     country?: string | null;
     currency?: string | null;
+    creator_invite_code?: string | null;
   } | null;
 };
 
@@ -69,4 +70,13 @@ export function userHasPermission(user: AuthUser | null | undefined, slug: strin
   if (user.role !== "admin" && user.role !== "company") return false;
   if (user.role === "admin" && (!user.permissions || user.permissions.length === 0)) return true;
   return (user.permissions ?? []).includes(slug);
+}
+
+export function userCanModerateCreator(
+  user: { role?: string | null; company?: { id?: number | null } | null } | null | undefined,
+  creator: { status?: string | null; invited_by_company_id?: number | null },
+) {
+  if (creator.status !== "review") return false;
+  if (user?.role === "admin") return true;
+  return user?.role === "company" && Boolean(creator.invited_by_company_id) && creator.invited_by_company_id === user.company?.id;
 }

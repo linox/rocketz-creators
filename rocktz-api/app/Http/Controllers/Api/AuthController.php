@@ -277,6 +277,7 @@ class AuthController extends Controller
                 'pricing' => [],
                 'status' => CreatorStatus::Review,
                 'internal_notes' => 'Auto-cadastrado via Google.',
+                'invited_by_company_id' => Company::findActiveByInviteCode($request->input('invite_code'))?->id,
             ]);
         });
     }

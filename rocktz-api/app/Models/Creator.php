@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'internal_notes',
     'status',
     'can_access_all_countries',
+    'invited_by_company_id',
 ])]
 class Creator extends Model
 {
@@ -67,6 +68,11 @@ class Creator extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function invitedByCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'invited_by_company_id');
     }
 
     public function portfolioVideos(): HasMany

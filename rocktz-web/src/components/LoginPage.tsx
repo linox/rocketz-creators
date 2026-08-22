@@ -59,6 +59,7 @@ export function LoginPage() {
     currency: DEFAULT_CURRENCY,
     password: "",
     password_confirmation: "",
+    invite_code: "",
     lgpd_accepted: false,
   });
 
@@ -162,6 +163,7 @@ export function LoginPage() {
         state: form.state,
         password: form.password,
         password_confirmation: form.password_confirmation,
+        invite_code: form.invite_code.trim() || undefined,
         lgpd_accepted: form.lgpd_accepted,
       });
       return;
@@ -254,6 +256,9 @@ export function LoginPage() {
                 value={form.password_confirmation}
                 onChange={(e) => update("password_confirmation", e.target.value)}
               />
+              {userType === "creator" ? (
+                <input className={`${fieldClass} uppercase`} placeholder={ta("fields.inviteCodePh")} value={form.invite_code} onChange={(e) => update("invite_code", e.target.value.toUpperCase())} />
+              ) : null}
               <label className="flex items-start gap-2 text-xs text-slate-400">
                 <input type="checkbox" checked={form.lgpd_accepted} onChange={(e) => update("lgpd_accepted", e.target.checked)} />
                 {ta("lgpdLogin")}

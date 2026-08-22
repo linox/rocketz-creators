@@ -385,6 +385,7 @@ export function LandingPage() {
     email: "",
     password: "",
     password_confirmation: "",
+    invite_code: "",
     lgpd_accepted: false,
   });
 
@@ -522,6 +523,7 @@ export function LandingPage() {
     await submitJson("/auth/register/creator", {
       ...creator,
       instagram: instagramHandle(creator.instagram),
+      invite_code: creator.invite_code.trim() || undefined,
     });
   }
 
@@ -1207,6 +1209,15 @@ export function LandingPage() {
                         </ModalField>
                         <ModalField label={ta("fields.confirmYourPassword")} required>
                           <PasswordField placeholder={ta("repeatPassword")} autoComplete="new-password" inputClassName={modalInput} value={creator.password_confirmation} onChange={(e) => setCreator({ ...creator, password_confirmation: e.target.value })} />
+                        </ModalField>
+                        <ModalField label={ta("fields.inviteCode")}>
+                          <input
+                            placeholder={ta("fields.inviteCodePh")}
+                            className={`${modalInput} uppercase`}
+                            value={creator.invite_code}
+                            onChange={(e) => setCreator({ ...creator, invite_code: e.target.value.toUpperCase() })}
+                          />
+                          <p className="m-0 mt-1 text-[11px] text-slate-500">{ta("fields.inviteCodeHint")}</p>
                         </ModalField>
                         <label className="flex cursor-pointer items-start gap-2.5 pt-2">
                           <input type="checkbox" checked={creator.lgpd_accepted} onChange={(e) => setCreator({ ...creator, lgpd_accepted: e.target.checked })} className="mt-1 rounded text-purple-600" />

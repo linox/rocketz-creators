@@ -82,6 +82,55 @@ class AuthTest extends TestCase
             'country' => 'BR',
             'currency' => 'BRL',
         ]);
+
+        $this->assertNotEmpty(
+            \App\Models\Company::query()->where('name', 'Marca Teste')->value('creator_invite_code')
+        );
+    }
+
+    public function test_creator_can_register_with_company_invite_code(): void
+    {
+        $company = \App\Models\Company::factory()->active()->create([
+            'creator_invite_code' => 'AB3DK7MQ',
+        ]);
+
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Lia Costa',
+            'artistic_name' => 'liacosta',
+            'email' => 'lia@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999998888',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'instagram' => 'liacosta',
+            'invite_code' => 'ab3d-k7mq',
+            'lgpd_accepted' => true,
+        ])->assertCreated()
+            ->assertJsonPath('user.creator.status', 'review');
+
+        $this->assertDatabaseHas('creators', [
+            'artistic_name' => 'liacosta',
+            'invited_by_company_id' => $company->id,
+        ]);
+    }
+
+    public function test_creator_register_rejects_invalid_invite_code(): void
+    {
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Lia Costa',
+            'artistic_name' => 'liacosta',
+            'email' => 'lia@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999998888',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'instagram' => 'liacosta',
+            'invite_code' => 'INVALID1',
+            'lgpd_accepted' => true,
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.invite_code.0', __('auth.invite_code_invalid'));
     }
 
     public function test_seeded_admin_can_login(): void

@@ -8,6 +8,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Copy,
   DollarSign,
   Eye,
   EyeOff,
@@ -16,6 +17,7 @@ import {
   Layers,
   Megaphone,
   Plus,
+  RefreshCw,
   Repeat,
   Sparkles,
   Users,
@@ -28,7 +30,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
-import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatLocation, moneyCurrency } from "@/lib/geo";
 import { usePrivacy } from "@/lib/privacy";
@@ -122,7 +124,7 @@ function CompanyDashboardInner() {
       api.company(companyId).then((res) => setCompany(res.data)),
       api.campaigns().then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
       api.recurring().then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
-      api.creators("?status=active").then((res) => setCreators(res.data)),
+      api.creators().then((res) => setCreators(res.data)),
     ])
       .catch(alertApiError)
       .finally(() => setLoading(false));
@@ -321,7 +323,10 @@ function CompanyDashboardInner() {
     return items;
   }, [allApplications, recurring, t]);
 
-  const favorites = creators.filter((creator) => company?.favorite_creator_ids?.includes(creator.id));
+  const favorites = creators.filter((creator) => creator.status === "active" && company?.favorite_creator_ids?.includes(creator.id));
+  const pendingInviteCreators = creators.filter(
+    (creator) => creator.status === "review" && creator.invited_by_company_id === company?.id,
+  );
   const favQuery = favSearch.trim().toLowerCase();
   const favoriteList = (favQuery
     ? favorites.filter((creator) => `${creator.artistic_name} ${creator.full_name}`.toLowerCase().includes(favQuery))
@@ -338,6 +343,30 @@ function CompanyDashboardInner() {
     if (status === "submitted" || status === "sent") return t("companyDash.overview.approvalWaiting");
     if (status === "revision") return t("companyDash.overview.approvalRevision");
     return t(`status.${status}`, { defaultValue: t("status.pending") });
+  }
+
+  async function copyInviteCode() {
+    if (!company?.creator_invite_code) return;
+    try {
+      await navigator.clipboard.writeText(company.creator_invite_code);
+      await alertSuccess(t("companyDash.inviteCode.copied"));
+    } catch {
+      await alertWarning(t("companyDash.inviteCode.copyFailTitle"), t("companyDash.inviteCode.copyFail"));
+    }
+  }
+
+  async function rotateInviteCode() {
+    if (!company) return;
+    if (!(await alertConfirm(t("companyDash.inviteCode.regenerateTitle"), t("companyDash.inviteCode.regenerateText"), t("companyDash.inviteCode.regenerateConfirm")))) {
+      return;
+    }
+    try {
+      const res = await api.rotateCompanyInviteCode(company.id);
+      setCompany(res.data);
+      await alertSuccess(t("companyDash.inviteCode.regenerated"));
+    } catch (err) {
+      await alertApiError(err);
+    }
   }
 
   async function openMaterial(item: PendingApproval) {
@@ -438,6 +467,24 @@ function CompanyDashboardInner() {
           </div>
         ) : null}
       </header>
+
+      <div className="flex min-w-0 flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
+        <div className="min-w-0">
+          <p className="m-0 text-[10px] font-extrabold tracking-wider text-indigo-600 uppercase">{t("companyDash.inviteCode.title")}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-indigo-900/80">{company.status === "pending" ? t("companyDash.inviteCode.pendingHint") : t("companyDash.inviteCode.hint")}</p>
+        </div>
+        <div className="flex min-w-0 items-center gap-2 sm:w-[280px]">
+          <code className="flex-1 truncate rounded-lg border border-indigo-200 bg-white px-3 py-2 text-center text-sm font-black tracking-[0.18em] text-slate-900">
+            {company.creator_invite_code || "—"}
+          </code>
+          <button type="button" onClick={copyInviteCode} title={t("companyDash.inviteCode.copy")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50">
+            <Copy size={15} />
+          </button>
+          <button type="button" onClick={rotateInviteCode} title={t("companyDash.inviteCode.regenerate")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50">
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </div>
 
       {company.status === "pending" ? (
         <div className="flex min-w-0 flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl border-2 border-amber-400/60 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-amber-500/10 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
@@ -570,6 +617,49 @@ function CompanyDashboardInner() {
               hint={t("companyDash.overview.publishedPlannedHint")}
             />
             <MetricMini icon={DollarSign} iconClass="bg-amber-50 text-amber-600" label={t("companyDash.overview.investmentLabel")} value={formatCurrency(campaignBudget + recurringMonthly, moneyCurrency(company))} hint={t("companyDash.overview.investmentHint")} />
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-2xl border border-amber-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex min-w-0 flex-col justify-between gap-2 border-b border-amber-100 pb-3 sm:flex-row sm:items-center">
+              <h3 className="m-0 truncate text-sm font-black tracking-wider text-slate-900 uppercase">
+                {t("companyDash.inviteCode.pendingTitle", { count: pendingInviteCreators.length })}
+              </h3>
+              <Link href="/creators?status=review" className="text-[11px] font-bold text-brand-primary hover:underline">
+                {t("companyDash.inviteCode.viewCasting")}
+              </Link>
+            </div>
+            {pendingInviteCreators.length === 0 ? (
+              <p className="m-0 text-sm text-slate-500">{t("companyDash.inviteCode.pendingEmpty")}</p>
+            ) : (
+              <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+                {pendingInviteCreators.map((creator) => (
+                  <article key={creator.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                    <Link href={`/creators/${creator.id}`} className="flex min-w-0 items-center gap-3">
+                      <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-10 w-10 shrink-0" textClassName="text-xs" />
+                      <div className="min-w-0">
+                        <h4 className="m-0 truncate text-sm font-bold text-slate-900">@{creator.artistic_name}</h4>
+                        <p className="m-0 truncate text-[11px] text-slate-500">{creator.full_name}</p>
+                      </div>
+                    </Link>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700"
+                      onClick={async () => {
+                        try {
+                          await api.approveCreator(creator.id);
+                          setCreators((current) => current.map((row) => (row.id === creator.id ? { ...row, status: "active" } : row)));
+                          await alertSuccess(t("creators.approved"));
+                        } catch (err) {
+                          await alertApiError(err);
+                        }
+                      }}
+                    >
+                      {t("creators.approve")}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -815,23 +905,29 @@ function CompanyDashboardInner() {
 
       {tab === "favorites" ? (
         <div className="flex min-w-0 flex-col gap-4">
-          <input
-            value={favSearch}
-            onChange={(e) => setFavSearch(e.target.value)}
-            placeholder={t("companyDash.favoritesTab.searchPh")}
-            className="h-11 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-brand-primary"
-          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <input
+              value={favSearch}
+              onChange={(e) => setFavSearch(e.target.value)}
+              placeholder={t("companyDash.favoritesTab.searchPh")}
+              className="h-11 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-brand-primary"
+            />
+            <Link href="/creators" className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-primary px-4 text-xs font-bold text-white shadow-sm hover:bg-indigo-600">
+              <Users size={14} />
+              {t("companyDash.favoritesTab.viewCatalog")}
+            </Link>
+          </div>
           <div className="grid min-w-0 gap-4 md:grid-cols-2">
             {favoriteList.length === 0 ? <EmptyDashed className="md:col-span-2">{t("companyDash.favoritesTab.empty")}</EmptyDashed> : null}
             {favoriteList.map((creator) => (
               <article key={creator.id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex min-w-0 items-center gap-3">
+                <Link href={`/creators/${creator.id}`} className="flex min-w-0 items-center gap-3">
                   <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-12 w-12 shrink-0" textClassName="text-sm" />
                   <div className="min-w-0">
                     <h3 className="m-0 truncate font-black text-slate-900">@{creator.artistic_name}</h3>
                     <p className="m-0 truncate text-sm text-slate-500">{formatLocation(locale, creator) || "—"}</p>
                   </div>
-                </div>
+                </Link>
                 <button
                   type="button"
                   className="mt-3 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold whitespace-nowrap text-white"
@@ -850,11 +946,19 @@ function CompanyDashboardInner() {
             ))}
           </div>
           <div className="min-w-0 border-t border-slate-100 pt-4">
-            <h4 className="mb-3 truncate text-xs font-extrabold tracking-wider text-slate-500 uppercase">{t("companyDash.favoritesTab.browse")}</h4>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="m-0 truncate text-xs font-extrabold tracking-wider text-slate-500 uppercase">{t("companyDash.favoritesTab.browse")}</h4>
+              <Link href="/creators" className="text-[11px] font-bold text-brand-primary hover:underline">
+                {t("companyDash.favoritesTab.viewCatalog")}
+              </Link>
+            </div>
             <div className="grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {creators.filter((creator) => !company.favorite_creator_ids?.includes(creator.id)).slice(0, 12).map((creator) => (
+              {creators.filter((creator) => creator.status === "active" && !company.favorite_creator_ids?.includes(creator.id)).slice(0, 12).map((creator) => (
                 <article key={creator.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="m-0 truncate text-sm font-bold">@{creator.artistic_name}</h3>
+                  <Link href={`/creators/${creator.id}`} className="block min-w-0">
+                    <h3 className="m-0 truncate text-sm font-bold text-slate-900 hover:text-brand-primary">@{creator.artistic_name}</h3>
+                    <p className="m-0 mt-0.5 truncate text-[11px] text-slate-500">{formatLocation(locale, creator) || "—"}</p>
+                  </Link>
                   <button
                     type="button"
                     className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold whitespace-nowrap text-slate-700 hover:bg-slate-50"

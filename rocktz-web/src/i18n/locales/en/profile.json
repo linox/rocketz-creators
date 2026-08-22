@@ -25,6 +25,8 @@
   "awaitingAdminTitle": "Creator awaiting signup approval",
   "awaitingCreatorTitle": "Signup under review",
   "awaitingAdminBody": "This influencer signed up on the site and needs admin approval before the profile and applications are activated.",
+  "awaitingAdminInvitedBody": "This creator used the {{company}} code. The agency or the brand can authorize the signup.",
+  "awaitingCompanyBody": "This creator used your brand code. Authorize to release the profile for campaigns.",
   "awaitingCreatorBody": "You can already complete your full profile and upload portfolio videos. Curator approval unlocks campaigns and brands.",
   "approveCreator": "Approve creator",
   "rejectTitle": "Reject creator",

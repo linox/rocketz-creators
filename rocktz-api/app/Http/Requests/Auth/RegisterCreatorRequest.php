@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Company;
 use App\Support\Geo;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -16,6 +17,9 @@ class RegisterCreatorRequest extends FormRequest
     {
         $this->merge([
             'country' => Geo::normalizeCountry($this->input('country') ?: Geo::DEFAULT_COUNTRY),
+            'invite_code' => $this->filled('invite_code')
+                ? Company::normalizeInviteCode((string) $this->input('invite_code'))
+                : null,
         ]);
     }
 
@@ -37,6 +41,14 @@ class RegisterCreatorRequest extends FormRequest
             'state' => Geo::regionRules($country),
             'instagram' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],
+            'invite_code' => ['nullable', 'string', 'max:16', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! filled($value)) {
+                    return;
+                }
+                if (! Company::findActiveByInviteCode((string) $value)) {
+                    $fail(__('auth.invite_code_invalid'));
+                }
+            }],
             'lgpd_accepted' => ['accepted'],
             'locale' => ['nullable', 'string', 'in:pt-BR,en,es'],
         ];

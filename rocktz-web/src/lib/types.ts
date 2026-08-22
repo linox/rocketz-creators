@@ -26,6 +26,8 @@ export type Creator = {
   internal_notes?: string | null;
   status: string;
   can_access_all_countries?: boolean;
+  invited_by_company_id?: number | null;
+  invited_by_company?: { id: number; name: string } | null;
   portfolio?: {
     id: number;
     title: string;
@@ -69,6 +71,7 @@ export type Company = {
   contacts?: { id: number; name: string; role: string | null; email: string | null; whatsapp: string | null }[];
   favorite_creator_ids?: number[];
   users?: { id: number; email: string | null; name: string | null; status: string | null; can_publish_without_approval?: boolean }[];
+  creator_invite_code?: string | null;
 };
 
 export type Campaign = {

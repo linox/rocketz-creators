@@ -87,6 +87,7 @@
   "creators": {
     "title": "Creator casting",
     "subtitle": "Manage and discover talent for your campaigns",
+    "subtitleCompany": "Discover talent for your campaigns",
     "new": "New creator",
     "reset": "Reset casting",
     "search": "Search by name or handle...",
@@ -123,6 +124,8 @@
     "invalidCpf": "Enter a valid CPF (000.000.000-00).",
     "modalTitle": "New creator",
     "allCategories": "All categories",
+    "allCountries": "All countries",
+    "allRegions": "All regions",
     "allStatus": "All statuses",
     "statusReview": "In review / awaiting approval",
     "admin": "Admin",
@@ -146,6 +149,8 @@
     "maxPricePh": "e.g. 5000",
     "awaitingApproval": "Awaiting approval",
     "awaitingHint": "Signed up on the site. Approve to make this profile available for campaigns.",
+    "awaitingHintCompany": "This creator used your brand code. Authorize to release the profile.",
+    "awaitingHintInvited": "Signed up with the {{company}} code. The agency can also authorize.",
     "followers": "Followers",
     "avgViews": "Avg. views",
     "perReel": "/ reel",
@@ -159,6 +164,7 @@
     "clearFilters": "Clear filters",
     "empty": "No creators found",
     "emptyHint": "Try adjusting your filters or adding a new creator.",
+    "emptyHintCompany": "Try adjusting your search, country or region filters.",
     "fullName": "Full name",
     "artisticName": "Artistic name / @",
     "artisticPh": "e.g. juliana.fit",
@@ -912,6 +918,23 @@
       "approve": "Approve company",
       "approvedOk": "Company approved successfully."
     },
+    "inviteCode": {
+      "title": "Creator signup code",
+      "hint": "Send this code to creators. Anyone who signs up with it can be authorized by you.",
+      "pendingHint": "The code is visible now and becomes valid after the company is approved.",
+      "copy": "Copy code",
+      "copied": "Code copied",
+      "copyFailTitle": "Could not copy",
+      "copyFail": "Copy the code manually.",
+      "regenerate": "Generate new code",
+      "regenerateTitle": "Generate a new code?",
+      "regenerateText": "The current code will stop working. Creators who have not signed up yet will need the new one.",
+      "regenerateConfirm": "Generate new",
+      "regenerated": "New code generated",
+      "pendingTitle": "Creators awaiting your authorization ({{count}})",
+      "pendingEmpty": "No creator has signed up with your code yet.",
+      "viewCasting": "View in casting"
+    },
     "kpi": {
       "budgetLabel": "Contracted budget",
       "budgetHint": "Across all campaigns",
@@ -997,6 +1020,7 @@
       "searchPh": "Search favorite casting...",
       "empty": "No favorited creators yet.",
       "browse": "Browse creators",
+      "viewCatalog": "View full casting",
       "favor": "Add favorite",
       "unfavorite": "Remove favorite"
     }

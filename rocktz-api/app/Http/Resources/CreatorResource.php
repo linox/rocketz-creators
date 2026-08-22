@@ -42,6 +42,11 @@ class CreatorResource extends JsonResource
             'internal_notes' => $this->when($request->user()?->role?->value === 'admin', $this->internal_notes),
             'status' => $this->status?->value,
             'can_access_all_countries' => (bool) $this->can_access_all_countries,
+            'invited_by_company_id' => $this->invited_by_company_id,
+            'invited_by_company' => $this->whenLoaded('invitedByCompany', fn () => $this->invitedByCompany ? [
+                'id' => $this->invitedByCompany->id,
+                'name' => $this->invitedByCompany->name,
+            ] : null),
             'portfolio' => $this->whenLoaded('portfolioVideos', fn () => $this->portfolioVideos->map(fn ($video) => [
                 'id' => $video->id,
                 'title' => $video->title,

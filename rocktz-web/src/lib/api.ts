@@ -65,6 +65,7 @@ export const api = {
   updateCompany: (id: number, body: unknown) => laravelFetch<Item<Company>>(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   approveCompany: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/approve`, { method: "POST" }),
   rejectCompany: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/reject`, { method: "POST" }),
+  rotateCompanyInviteCode: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/invite-code`, { method: "POST" }),
   toggleFavorite: (companyId: number, creatorId: number) => laravelFetch<Item<Company>>(`/companies/${companyId}/favorites/${creatorId}`, { method: "POST" }),
   createCompanyUser: (companyId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users`, { method: "POST", body: JSON.stringify(body) }),
   updateCompanyUser: (companyId: number, userId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }),

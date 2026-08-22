@@ -64,6 +64,7 @@ class AuthService
                 'accepts_exclusivity' => false,
                 'internal_notes' => 'Auto-cadastrado via plataforma.',
                 'status' => CreatorStatus::Review,
+                'invited_by_company_id' => Company::findActiveByInviteCode($data['invite_code'] ?? null)?->id,
             ]);
 
             $this->recordLgpdConsent($user, $request);

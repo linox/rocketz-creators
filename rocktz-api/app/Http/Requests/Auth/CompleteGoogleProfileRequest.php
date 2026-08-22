@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Company;
 use App\Support\Geo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,6 +20,9 @@ class CompleteGoogleProfileRequest extends FormRequest
         $this->merge([
             'country' => $country,
             'currency' => Geo::normalizeCurrency($this->input('currency') ?: Geo::defaultCurrency($country)),
+            'invite_code' => $this->filled('invite_code')
+                ? Company::normalizeInviteCode((string) $this->input('invite_code'))
+                : null,
         ]);
     }
 
@@ -43,6 +47,14 @@ class CompleteGoogleProfileRequest extends FormRequest
             'segment' => ['nullable', 'string', 'max:120'],
             'objective' => ['nullable', 'string', 'max:2000'],
             'cnpj' => ['nullable', 'string', 'max:20'],
+            'invite_code' => ['nullable', 'string', 'max:16', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! filled($value) || $this->input('type') !== 'creator') {
+                    return;
+                }
+                if (! Company::findActiveByInviteCode((string) $value)) {
+                    $fail(__('auth.invite_code_invalid'));
+                }
+            }],
             'lgpd_accepted' => ['accepted'],
             'locale' => ['nullable', 'string', 'in:pt-BR,en,es'],
         ];

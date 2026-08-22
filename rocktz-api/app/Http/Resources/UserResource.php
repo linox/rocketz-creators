@@ -66,6 +66,7 @@ class UserResource extends JsonResource
                     'city' => $this->company->city,
                     'country' => $this->company->country,
                     'currency' => $this->company->currency,
+                    'creator_invite_code' => $this->company->creator_invite_code,
                 ];
             }),
         ];

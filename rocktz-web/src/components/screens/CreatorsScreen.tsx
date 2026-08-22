@@ -13,11 +13,12 @@ import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatCPF, isValidCPF, isValidEmail } from "@/lib/masks";
-import { DEFAULT_COUNTRY, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency } from "@/lib/geo";
+import { DEFAULT_COUNTRY, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { userCanModerateCreator } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const CATEGORIES = [
@@ -112,6 +113,7 @@ function CreatorCard({
   creator,
   recurringContracts,
   isAdmin,
+  canModerate,
   onApprove,
   onReject,
   onChangePassword,
@@ -119,6 +121,7 @@ function CreatorCard({
   creator: Creator;
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
+  canModerate: boolean;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
@@ -177,13 +180,19 @@ function CreatorCard({
           ) : null}
         </div>
 
-        {creator.status === "review" && isAdmin ? (
+        {creator.status === "review" && canModerate ? (
           <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
             <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
               <Clock size={13} className="shrink-0 text-amber-600" />
               <span>{t("creators.awaitingApproval")}</span>
             </div>
-            <p className="m-0 text-[11px] leading-snug text-amber-800">{t("creators.awaitingHint")}</p>
+            <p className="m-0 text-[11px] leading-snug text-amber-800">
+              {isAdmin && creator.invited_by_company?.name
+                ? t("creators.awaitingHintInvited", { company: creator.invited_by_company.name })
+                : isAdmin
+                  ? t("creators.awaitingHint")
+                  : t("creators.awaitingHintCompany")}
+            </p>
             <div className="mt-1 flex items-center gap-2">
               <button
                 type="button"
@@ -255,6 +264,7 @@ function CreatorListRow({
   creator,
   recurringContracts,
   isAdmin,
+  canModerate,
   onApprove,
   onReject,
   onChangePassword,
@@ -262,6 +272,7 @@ function CreatorListRow({
   creator: Creator;
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
+  canModerate: boolean;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
@@ -350,7 +361,7 @@ function CreatorListRow({
         </div>
       </div>
 
-      {creator.status === "review" && isAdmin ? (
+      {creator.status === "review" && canModerate ? (
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -397,11 +408,14 @@ function CreatorsInner() {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const isAdmin = user.role === "admin";
+  const isCompany = user.role === "company";
   const [creators, setCreators] = useState<Creator[]>([]);
   const [recurringContracts, setRecurringContracts] = useState<RecurringContract[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [countryFilter, setCountryFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [minFollowers, setMinFollowers] = useState("");
   const [maxFollowers, setMaxFollowers] = useState("");
@@ -482,13 +496,18 @@ function CreatorsInner() {
       const matchesCategory =
         categoryFilter === "all" ||
         (creator.categories || []).some((cat) => cat.toLowerCase() === categoryFilter.toLowerCase());
+      const matchesCountry = countryFilter === "all" || normalizeCountry(creator.country) === countryFilter;
+      const matchesRegion =
+        countryFilter === "all" ||
+        regionFilter === "all" ||
+        normalizeRegion(creator.state) === regionFilter;
       const matchesMinFollowers = !minFollowers || followers >= Number(minFollowers);
       const matchesMaxFollowers = !maxFollowers || followers <= Number(maxFollowers);
       const matchesMinPrice = !minPrice || reel >= Number(minPrice);
       const matchesMaxPrice = !maxPrice || reel <= Number(maxPrice);
-      return matchesSearch && matchesStatus && matchesCategory && matchesMinFollowers && matchesMaxFollowers && matchesMinPrice && matchesMaxPrice;
+      return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesMinPrice && matchesMaxPrice;
     });
-  }, [creators, search, statusFilter, categoryFilter, minFollowers, maxFollowers, minPrice, maxPrice]);
+  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice]);
 
   async function approve(creator: Creator) {
     if (!(await alertConfirm(t("creators.approveTitle"), t("creators.approveText", { name: creator.artistic_name })))) return;
@@ -571,7 +590,7 @@ function CreatorsInner() {
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{t("creators.title")}</h1>
-          <p className="mt-1 text-[14px] text-[#64748B]">{t("creators.subtitle")}</p>
+          <p className="mt-1 text-[14px] text-[#64748B]">{isCompany ? t("creators.subtitleCompany") : t("creators.subtitle")}</p>
         </div>
         <div className="flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center">
           <div className="flex items-center self-start rounded-xl border border-slate-200 bg-slate-50 p-0.5 sm:self-auto">
@@ -618,6 +637,7 @@ function CreatorsInner() {
         </div>
       </header>
 
+      {isAdmin || isCompany ? (
       <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
         <button
           type="button"
@@ -651,6 +671,7 @@ function CreatorsInner() {
           <CheckCircle2 size={13} />
           {t("creators.activeCount", { count: activeCount })}
         </button>
+        {isAdmin ? (
         <button
           type="button"
           onClick={() => setStatusFilter("paused")}
@@ -661,7 +682,9 @@ function CreatorsInner() {
         >
           {t("creators.paused")}
         </button>
+        ) : null}
       </div>
+      ) : null}
 
       <div className="flex flex-col items-center gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-6 shadow-sm lg:flex-row">
         <div className="relative w-full flex-1">
@@ -684,13 +707,45 @@ function CreatorsInner() {
             className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
-          <Select2Field
+          {isAdmin ? (
+            <Select2Field
+              theme="light"
+              searchable={false}
+              value={statusFilter}
+              options={statusOptions}
+              onChange={setStatusFilter}
+              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              triggerClassName={FILTER_TRIGGER}
+            />
+          ) : isCompany ? (
+            <Select2Field
+              theme="light"
+              searchable={false}
+              value={statusFilter}
+              options={statusOptions.filter((option) => option.value === "all" || option.value === "active" || option.value === "review")}
+              onChange={setStatusFilter}
+              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              triggerClassName={FILTER_TRIGGER}
+            />
+          ) : null}
+          <CountrySelect
             theme="light"
-            searchable={false}
-            value={statusFilter}
-            options={statusOptions}
-            onChange={setStatusFilter}
-            className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+            value={countryFilter}
+            emptyLabel={t("creators.allCountries").toUpperCase()}
+            onChange={(country) => {
+              setCountryFilter(country);
+              setRegionFilter("all");
+            }}
+            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
+          <RegionSelect
+            theme="light"
+            country={countryFilter}
+            value={regionFilter}
+            emptyLabel={t("creators.allRegions").toUpperCase()}
+            onChange={setRegionFilter}
+            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
         </div>
@@ -748,6 +803,7 @@ function CreatorsInner() {
               creator={creator}
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
+              canModerate={userCanModerateCreator(user, creator)}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}
@@ -758,6 +814,7 @@ function CreatorsInner() {
               creator={creator}
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
+              canModerate={userCanModerateCreator(user, creator)}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}
@@ -772,7 +829,7 @@ function CreatorsInner() {
             <Users size={32} />
           </div>
           <h3 className="text-lg font-bold text-slate-800">{t("creators.empty")}</h3>
-          <p className="max-w-xs text-slate-500">{t("creators.emptyHint")}</p>
+          <p className="max-w-xs text-slate-500">{isCompany ? t("creators.emptyHintCompany") : t("creators.emptyHint")}</p>
         </div>
       ) : null}
 
