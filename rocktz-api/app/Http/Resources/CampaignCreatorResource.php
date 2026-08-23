@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\CreatorPrivacy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -18,9 +19,9 @@ class CampaignCreatorResource extends JsonResource
             'campaign_id' => $this->campaign_id,
             'creator_id' => $this->creator_id,
             'creator' => $this->whenLoaded('creator', function () use ($request) {
+                $canSeePersonal = CreatorPrivacy::canViewPersonalData($request->user(), (int) $this->creator->id);
                 $creator = [
                     'id' => $this->creator->id,
-                    'full_name' => $this->creator->full_name,
                     'artistic_name' => $this->creator->artistic_name,
                     'photo_url' => $this->creator->photo_url,
                     'status' => $this->creator->status?->value,
@@ -29,8 +30,13 @@ class CampaignCreatorResource extends JsonResource
                     'state' => $this->creator->state,
                 ];
 
-                if (in_array($request->user()?->role?->value, ['admin', 'company'], true)) {
+                if ($canSeePersonal) {
+                    $creator['full_name'] = $this->creator->full_name;
                     $creator['whatsapp'] = $this->creator->whatsapp;
+                }
+
+                if (in_array($request->user()?->role?->value, ['admin', 'company'], true)) {
+                    $creator['pix_key'] = $this->creator->pix_key;
                     $creator['categories'] = $this->creator->categories ?? [];
                     $creator['metrics'] = $this->creator->metrics ?? [];
                     $creator['pricing'] = $this->creator->pricing ?? [];
@@ -52,6 +58,7 @@ class CampaignCreatorResource extends JsonResource
             'post_date' => $this->post_date?->toDateString(),
             'delivery_status' => $this->delivery_status?->value,
             'payment_status' => $this->payment_status?->value,
+            'payment_date' => $this->payment_date?->toDateString(),
             'notes' => $this->notes,
             'application_status' => $this->application_status?->value,
             'rejection_reason' => $this->rejection_reason,

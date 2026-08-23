@@ -101,6 +101,92 @@ class DomainApiTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    public function test_company_sees_creators_without_personal_or_contact_data(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $token = $company->createToken('auth')->plainTextToken;
+        $ana = Creator::query()
+            ->whereHas('user', fn ($query) => $query->where('email', 'ana.creator@rocketz.test'))
+            ->firstOrFail();
+
+        $this->withToken($token)
+            ->getJson("/api/creators/{$ana->id}")
+            ->assertOk()
+            ->assertJsonPath('data.artistic_name', 'Ana UGC')
+            ->assertJsonPath('data.socials.instagram', '@ana.ugc')
+            ->assertJsonPath('data.city', 'São Paulo')
+            ->assertJsonMissingPath('data.email')
+            ->assertJsonMissingPath('data.whatsapp')
+            ->assertJsonMissingPath('data.cpf')
+            ->assertJsonMissingPath('data.document')
+            ->assertJsonMissingPath('data.pix_key')
+            ->assertJsonMissingPath('data.bank_details')
+            ->assertJsonMissingPath('data.full_name')
+            ->assertJsonMissingPath('data.birth_date')
+            ->assertJsonMissingPath('data.contract_acceptance');
+
+        $this->withToken($token)
+            ->getJson('/api/creators')
+            ->assertOk()
+            ->assertJsonMissingPath('data.0.email')
+            ->assertJsonMissingPath('data.0.whatsapp')
+            ->assertJsonMissingPath('data.0.full_name');
+
+        $this->withToken($token)
+            ->patchJson("/api/creators/{$ana->id}", ['whatsapp' => '11988887777'])
+            ->assertForbidden();
+
+        $row = CampaignCreator::query()
+            ->where('creator_id', $ana->id)
+            ->whereHas('campaign', fn ($query) => $query->where('company_id', $company->companyUser?->company_id))
+            ->firstOrFail();
+        $application = collect($this->withToken($token)
+            ->getJson("/api/campaigns/{$row->campaign_id}")
+            ->assertOk()
+            ->json('data.applications'))
+            ->firstWhere('creator_id', $ana->id);
+
+        $this->assertNotNull($application);
+        $this->assertSame('Ana UGC', $application['creator']['artistic_name']);
+        $this->assertSame('@ana.ugc', $application['creator']['socials']['instagram'] ?? null);
+        $this->assertArrayNotHasKey('whatsapp', $application['creator']);
+        $this->assertArrayNotHasKey('full_name', $application['creator']);
+    }
+
+    public function test_admin_still_sees_creator_personal_and_contact_data(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $ana = Creator::query()
+            ->whereHas('user', fn ($query) => $query->where('email', 'ana.creator@rocketz.test'))
+            ->firstOrFail();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->getJson("/api/creators/{$ana->id}")
+            ->assertOk()
+            ->assertJsonPath('data.email', 'ana.creator@rocketz.test')
+            ->assertJsonPath('data.full_name', 'Ana Beatriz Oliveira')
+            ->assertJsonPath('data.whatsapp', '+55 11 98888-1001')
+            ->assertJsonPath('data.cpf', '123.456.789-00');
+    }
+
+    public function test_creator_can_see_own_personal_data(): void
+    {
+        $this->seed();
+
+        $creator = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+
+        $this->withToken($creator->createToken('auth')->plainTextToken)
+            ->getJson("/api/creators/{$creator->creator->id}")
+            ->assertOk()
+            ->assertJsonPath('data.email', 'ana.creator@rocketz.test')
+            ->assertJsonPath('data.full_name', 'Ana Beatriz Oliveira')
+            ->assertJsonPath('data.whatsapp', '+55 11 98888-1001');
+    }
+
     public function test_company_can_approve_invited_creator_and_cannot_approve_others(): void
     {
         $this->seed();
@@ -218,6 +304,54 @@ class DomainApiTest extends TestCase
         $this->assertTrue(collect($availableAfter)->contains(fn ($row) => (int) $row['id'] === (int) $id));
     }
 
+    public function test_admin_can_set_agency_fee_percent_when_approving_campaign(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyToken = $company->createToken('auth')->plainTextToken;
+        $id = $this->withToken($companyToken)
+            ->postJson('/api/campaigns', [
+                'name' => 'Campanha com Fee',
+                'total_budget' => 10000,
+                'creator_cache' => 800,
+                'agency_fee_percent' => 50,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.agency_fee_percent', 20)
+            ->assertJsonPath('data.agency_fee', 2000)
+            ->json('data.id');
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $this->withoutToken()->actingAs($admin, 'sanctum')
+            ->postJson("/api/campaigns/{$id}/approve-agency", ['agency_fee_percent' => 15])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'briefing')
+            ->assertJsonPath('data.agency_fee_percent', 15)
+            ->assertJsonPath('data.agency_fee', 1500)
+            ->assertJsonPath('data.creators_budget', 8500);
+    }
+
+    public function test_admin_can_update_agency_fee_percent_after_campaign_is_online(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $campaign = Campaign::factory()->published()->create([
+            'total_budget' => 10000,
+            ...Campaign::feeSplit(10000, 20),
+        ]);
+
+        $this->withToken($token)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['agency_fee_percent' => 25])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'published')
+            ->assertJsonPath('data.agency_fee_percent', 25)
+            ->assertJsonPath('data.agency_fee', 2500)
+            ->assertJsonPath('data.creators_budget', 7500);
+    }
+
     public function test_company_creates_recurring_pending_until_agency_or_privilege(): void
     {
         $this->seed();
@@ -289,7 +423,7 @@ class DomainApiTest extends TestCase
         $this->seed();
 
         $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
-        $pendingCompany = \App\Models\Company::query()->where('email', 'pending.empresa@rocketz.test')->firstOrFail();
+        $pendingCompany = Company::query()->where('email', 'pending.empresa@rocketz.test')->firstOrFail();
         $token = $admin->createToken('auth')->plainTextToken;
 
         $this->withToken($token)
@@ -339,11 +473,11 @@ class DomainApiTest extends TestCase
             'email' => 'sem.contrato@rocketz.test',
             'password' => 'password',
         ]);
-        $creator = \App\Models\Creator::factory()->create([
+        $creator = Creator::factory()->create([
             'user_id' => $user->id,
             'full_name' => 'Sem Contrato',
             'artistic_name' => 'Sem Contrato',
-            'status' => \App\Enums\CreatorStatus::Active,
+            'status' => CreatorStatus::Active,
         ]);
         $this->assertFalse($creator->contractAcceptances()->exists());
 

@@ -19,8 +19,9 @@ class CampaignFactory extends Factory
      */
     public function definition(): array
     {
-        $creatorsBudget = fake()->randomFloat(2, 3000, 25000);
-        $agencyFee = round($creatorsBudget * 0.2, 2);
+        $totalBudget = fake()->randomFloat(2, 3600, 30000);
+        $percent = Campaign::DEFAULT_AGENCY_FEE_PERCENT;
+        $split = Campaign::feeSplit($totalBudget, $percent);
 
         return [
             'company_id' => Company::factory()->active(),
@@ -28,10 +29,11 @@ class CampaignFactory extends Factory
             'objective' => fake()->sentence(),
             'start_date' => fake()->dateTimeBetween('-1 month', '+1 month')->format('Y-m-d'),
             'end_date' => fake()->dateTimeBetween('+1 month', '+4 months')->format('Y-m-d'),
-            'total_budget' => $creatorsBudget + $agencyFee,
-            'agency_fee' => $agencyFee,
-            'creators_budget' => $creatorsBudget,
-            'creator_cache' => $creatorsBudget,
+            'total_budget' => $totalBudget,
+            'agency_fee' => $split['agency_fee'],
+            'agency_fee_percent' => $split['agency_fee_percent'],
+            'creators_budget' => $split['creators_budget'],
+            'creator_cache' => $split['creators_budget'],
             'currency' => 'BRL',
             'status' => CampaignStatus::Briefing,
             'image_url' => fake()->boolean(50) ? 'https://placehold.co/800x600?text=Campaign' : null,

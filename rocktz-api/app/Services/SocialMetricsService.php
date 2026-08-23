@@ -203,17 +203,16 @@ class SocialMetricsService
         };
         $query['cache_max_age'] = '1d';
 
-        $json = $this->requestJson(
-            rtrim($this->scrapeCreatorsUrl(), '/').$path.'?'.http_build_query($query),
-            ['x-api-key' => $this->scrapeCreatorsKey()],
-        );
+        $json = $this->scrapeCreatorsGet($path, $query);
 
-        return match ($network) {
+        $snapshot = match ($network) {
             'instagram' => $this->snapshotFromInstagramPayload($handle, $json),
             'tiktok' => $this->snapshotFromTikTokPayload($handle, $json),
             'youtube' => $this->snapshotFromYouTubePayload($handle, $json),
             default => throw new SocialMetricsException(__('auth.social_network_unsupported')),
         };
+
+        return $this->fillMissingFromScrapeCreators($snapshot);
     }
 
     /**
@@ -229,33 +228,11 @@ class SocialMetricsService
         $followers = SocialNumbers::intOrNull(
             data_get($user, 'edge_followed_by.count')
                 ?? data_get($user, 'follower_count')
+                ?? data_get($user, 'followerCount')
                 ?? data_get($json, 'follower_count')
         );
 
-        $views = [];
-        $likes = [];
-        $timeline = data_get($user, 'edge_owner_to_timeline_media.edges', []);
-        $reels = data_get($user, 'edge_felix_video_timeline.edges', []);
-        $edges = array_merge(is_array($timeline) ? $timeline : [], is_array($reels) ? $reels : []);
-        if ($edges !== []) {
-            foreach ($edges as $edge) {
-                $node = is_array($edge) ? ($edge['node'] ?? $edge) : [];
-                if (! is_array($node)) {
-                    continue;
-                }
-                $view = SocialNumbers::intOrNull($node['video_view_count'] ?? $node['videoPlayCount'] ?? $node['play_count'] ?? null);
-                if ($view) {
-                    $views[] = $view;
-                }
-                $like = SocialNumbers::intOrNull(
-                    data_get($node, 'edge_liked_by.count') ?? data_get($node, 'edge_media_preview_like.count')
-                );
-                $comments = SocialNumbers::intOrNull(data_get($node, 'edge_media_to_comment.count')) ?? 0;
-                if ($like !== null) {
-                    $likes[] = $like + $comments;
-                }
-            }
-        }
+        [$views, $likes] = $this->instagramMediaTotals($user, $json);
 
         if ($followers === null) {
             throw new SocialMetricsException(__('auth.social_profile_unavailable'));
@@ -275,17 +252,20 @@ class SocialMetricsService
      */
     private function snapshotFromTikTokPayload(string $handle, array $json): SocialSnapshot
     {
-        $stats = data_get($json, 'stats', data_get($json, 'userInfo.stats', []));
+        $stats = data_get($json, 'stats', data_get($json, 'userInfo.stats', data_get($json, 'statsV2', [])));
         $user = data_get($json, 'user', data_get($json, 'userInfo.user', []));
         $followers = SocialNumbers::intOrNull(is_array($stats) ? ($stats['followerCount'] ?? $stats['follower_count'] ?? null) : null);
-        $hearts = SocialNumbers::intOrNull(is_array($stats) ? ($stats['heartCount'] ?? $stats['heart'] ?? null) : null);
-        $videos = SocialNumbers::intOrNull(is_array($stats) ? ($stats['videoCount'] ?? null) : null);
+        $hearts = SocialNumbers::intOrNull(is_array($stats) ? ($stats['heartCount'] ?? $stats['heart'] ?? $stats['heart_count'] ?? null) : null);
+        $videos = SocialNumbers::intOrNull(is_array($stats) ? ($stats['videoCount'] ?? $stats['video_count'] ?? null) : null);
 
         $plays = [];
-        $items = data_get($json, 'itemList', data_get($json, 'items', []));
+        $items = data_get($json, 'itemList', data_get($json, 'items', data_get($json, 'aweme_list', [])));
         if (is_array($items)) {
             foreach ($items as $item) {
-                $play = SocialNumbers::intOrNull(data_get($item, 'stats.playCount') ?? data_get($item, 'playCount'));
+                if (! is_array($item)) {
+                    continue;
+                }
+                $play = $this->mediaViewCount($item);
                 if ($play) {
                     $plays[] = $play;
                 }
@@ -393,6 +373,7 @@ class SocialMetricsService
     private function parseYouTubeHtml(string $handle, string $html): SocialSnapshot
     {
         $subscribers = SocialNumbers::parseCompact($this->matchFirst($html, [
+            '/"aboutChannelViewModel":\{[^}]*"subscriberCountText":"([^"]+)"/',
             '/"subscriberCountText":"([^"]+)"/',
             '/"subscriberCountText":\{"simpleText":"([^"]+)"/',
             '/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"/',
@@ -401,6 +382,7 @@ class SocialMetricsService
         ]));
 
         $totalViews = SocialNumbers::parseCompact($this->matchFirst($html, [
+            '/"aboutChannelViewModel":\{[^}]*"viewCountText":"([^"]+)"/',
             '/"viewCountText":"([^"]+)"/',
             '/"viewCountText":\{"simpleText":"([^"]+)"/',
         ])) ?? SocialNumbers::intOrNull($this->matchFirst($html, [
@@ -408,6 +390,7 @@ class SocialMetricsService
         ]));
 
         $videos = SocialNumbers::parseCompact($this->matchFirst($html, [
+            '/"aboutChannelViewModel":\{[^}]*"videoCountText":"([^"]+)"/',
             '/"videoCountText":"([^"]+)"/',
             '/"videosCountText":\{"simpleText":"([^"]+)"/',
             '/"videoCountText":\{"simpleText":"([^"]+)"/',
@@ -446,7 +429,14 @@ class SocialMetricsService
         if ($response->successful()) {
             $json = $response->json();
             if (is_array($json) && data_get($json, 'data.user')) {
-                return $this->snapshotFromInstagramPayload($handle, $json);
+                $snapshot = $this->snapshotFromInstagramPayload($handle, $json);
+                if ($snapshot->views === null) {
+                    $snapshot = $snapshot->fillMissing(
+                        views: SocialNumbers::average($this->viewCountsFromText((string) $response->body())),
+                    );
+                }
+
+                return $snapshot;
             }
 
             $fromHtml = $this->snapshotFromInstagramHtml($handle, (string) $response->body());
@@ -484,12 +474,20 @@ class SocialMetricsService
             return null;
         }
 
+        $likes = $this->intMatches($html, [
+            '/"edge_liked_by"\s*:\s*\{\s*"count"\s*:\s*(\d+)/',
+            '/"edge_media_preview_like"\s*:\s*\{\s*"count"\s*:\s*(\d+)/',
+            '/"like_count"\s*:\s*(\d+)/',
+        ]);
+
         return new SocialSnapshot(
             network: 'instagram',
             handle: $handle,
             followers: $followers,
-            views: null,
-            engagement: null,
+            views: SocialNumbers::average($this->viewCountsFromText($html)),
+            engagement: $likes === []
+                ? null
+                : SocialNumbers::engagementPercent((int) round(array_sum($likes) / count($likes)), $followers, 1),
         );
     }
 
@@ -555,10 +553,13 @@ class SocialMetricsService
                     $hearts = SocialNumbers::intOrNull($stats['heartCount'] ?? $stats['heart'] ?? null);
                     $videos = SocialNumbers::intOrNull($stats['videoCount'] ?? null);
                 }
-                $items = is_array($info) ? ($info['itemList'] ?? []) : [];
+                $items = is_array($info) ? ($info['itemList'] ?? $info['items'] ?? []) : [];
                 if (is_array($items)) {
                     foreach ($items as $item) {
-                        $play = SocialNumbers::intOrNull(data_get($item, 'stats.playCount') ?? data_get($item, 'playCount'));
+                        if (! is_array($item)) {
+                            continue;
+                        }
+                        $play = $this->mediaViewCount($item);
                         if ($play) {
                             $plays[] = $play;
                         }
@@ -592,6 +593,218 @@ class SocialMetricsService
             followers: $followers,
             views: SocialNumbers::average($plays),
             engagement: SocialNumbers::engagementPercent($hearts, $followers, $videos),
+        );
+    }
+
+    private function fillMissingFromScrapeCreators(SocialSnapshot $snapshot): SocialSnapshot
+    {
+        if ($snapshot->views !== null && $snapshot->engagement !== null) {
+            return $snapshot;
+        }
+
+        try {
+            return match ($snapshot->network) {
+                'instagram' => $this->fillInstagramFromPosts($snapshot),
+                'tiktok' => $this->fillTikTokFromVideos($snapshot),
+                default => $snapshot,
+            };
+        } catch (SocialMetricsException) {
+            return $snapshot;
+        }
+    }
+
+    private function fillInstagramFromPosts(SocialSnapshot $snapshot): SocialSnapshot
+    {
+        $json = $this->scrapeCreatorsGet('/v2/instagram/user/posts', ['handle' => $snapshot->handle]);
+        [$views, $likes] = $this->instagramMediaTotals([], $json);
+
+        return $snapshot->fillMissing(
+            views: SocialNumbers::average($views),
+            engagement: $likes === [] || $snapshot->followers === null
+                ? null
+                : SocialNumbers::engagementPercent((int) round(array_sum($likes) / count($likes)), $snapshot->followers, 1),
+        );
+    }
+
+    private function fillTikTokFromVideos(SocialSnapshot $snapshot): SocialSnapshot
+    {
+        $json = $this->scrapeCreatorsGet('/v3/tiktok/profile/videos', [
+            'handle' => $snapshot->handle,
+            'region' => 'US',
+        ]);
+
+        $plays = [];
+        $items = data_get($json, 'aweme_list', data_get($json, 'itemList', data_get($json, 'items', [])));
+        if (is_array($items)) {
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $play = $this->mediaViewCount($item);
+                if ($play) {
+                    $plays[] = $play;
+                }
+            }
+        }
+
+        return $snapshot->fillMissing(views: SocialNumbers::average($plays));
+    }
+
+    /**
+     * @param  array<string, mixed>  $user
+     * @param  array<string, mixed>  $json
+     * @return array{0: list<int>, 1: list<int>}
+     */
+    private function instagramMediaTotals(array $user, array $json): array
+    {
+        $views = [];
+        $likes = [];
+
+        foreach ($this->instagramMediaNodes($user, $json) as $node) {
+            $view = $this->mediaViewCount($node);
+            if ($view) {
+                $views[] = $view;
+            }
+
+            $like = SocialNumbers::intOrNull(
+                data_get($node, 'edge_liked_by.count')
+                    ?? data_get($node, 'edge_media_preview_like.count')
+                    ?? $node['like_count']
+                    ?? $node['likeCount']
+                    ?? null
+            );
+            $comments = SocialNumbers::intOrNull(
+                data_get($node, 'edge_media_to_comment.count')
+                    ?? $node['comment_count']
+                    ?? $node['commentCount']
+                    ?? null
+            ) ?? 0;
+            if ($like !== null) {
+                $likes[] = $like + $comments;
+            }
+        }
+
+        return [$views, $likes];
+    }
+
+    /**
+     * @param  array<string, mixed>  $user
+     * @param  array<string, mixed>  $json
+     * @return list<array<string, mixed>>
+     */
+    private function instagramMediaNodes(array $user, array $json): array
+    {
+        $nodes = [];
+        $sources = [
+            data_get($user, 'edge_owner_to_timeline_media.edges', []),
+            data_get($user, 'edge_felix_video_timeline.edges', []),
+            data_get($json, 'items', []),
+            data_get($json, 'posts', []),
+        ];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach ($source as $edge) {
+                $node = is_array($edge) ? ($edge['node'] ?? $edge) : null;
+                if (! is_array($node)) {
+                    continue;
+                }
+                $nodes[] = $node;
+                $children = data_get($node, 'edge_sidecar_to_children.edges', $node['carousel_media'] ?? []);
+                if (is_array($children)) {
+                    foreach ($children as $child) {
+                        $childNode = is_array($child) ? ($child['node'] ?? $child) : null;
+                        if (is_array($childNode)) {
+                            $nodes[] = $childNode;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $nodes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function mediaViewCount(array $node): ?int
+    {
+        return SocialNumbers::intOrNull(
+            $node['video_play_count']
+                ?? $node['video_view_count']
+                ?? $node['videoPlayCount']
+                ?? $node['ig_play_count']
+                ?? $node['play_count']
+                ?? $node['playCount']
+                ?? $node['view_count']
+                ?? $node['viewCount']
+                ?? data_get($node, 'stats.playCount')
+                ?? data_get($node, 'stats.play_count')
+                ?? data_get($node, 'statistics.play_count')
+                ?? data_get($node, 'statistics.playCount')
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function viewCountsFromText(string $text): array
+    {
+        foreach ([
+            '/"video_play_count"\s*:\s*"?(\d+)/',
+            '/"video_view_count"\s*:\s*"?(\d+)/',
+            '/"ig_play_count"\s*:\s*"?(\d+)/',
+            '/"play_count"\s*:\s*"?(\d+)/',
+            '/"playCount"\s*:\s*"?(\d+)/',
+        ] as $pattern) {
+            $counts = $this->intMatches($text, [$pattern]);
+            if ($counts !== []) {
+                return $counts;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  list<string>  $patterns
+     * @return list<int>
+     */
+    private function intMatches(string $text, array $patterns): array
+    {
+        $counts = [];
+        foreach ($patterns as $pattern) {
+            if (! preg_match_all($pattern, $text, $matches)) {
+                continue;
+            }
+            foreach ($matches[1] as $value) {
+                $number = SocialNumbers::intOrNull($value);
+                if ($number) {
+                    $counts[] = $number;
+                }
+            }
+            if ($counts !== []) {
+                return $counts;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  array<string, scalar>  $query
+     * @return array<string, mixed>
+     */
+    private function scrapeCreatorsGet(string $path, array $query): array
+    {
+        $query['cache_max_age'] = $query['cache_max_age'] ?? '1d';
+
+        return $this->requestJson(
+            rtrim($this->scrapeCreatorsUrl(), '/').$path.'?'.http_build_query($query),
+            ['x-api-key' => $this->scrapeCreatorsKey()],
         );
     }
 

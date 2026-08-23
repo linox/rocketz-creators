@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\CompanyLandingController;
 use App\Http\Controllers\Api\CreatorController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
@@ -14,6 +15,9 @@ use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
+
+Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic']);
+Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track'])->middleware('throttle:60,1');
 
 Route::prefix('auth')->group(function () {
     Route::post('register/creator', [AuthController::class, 'registerCreator']);
@@ -36,6 +40,7 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::post('media', [MediaController::class, 'store']);
     Route::get('dashboard', DashboardController::class);
+    Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);
 
     Route::get('creators', [CreatorController::class, 'index']);
     Route::get('creators/{creator}', [CreatorController::class, 'show']);
@@ -83,6 +88,13 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
         Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
         Route::post('companies/{company}/invite-code', [CompanyController::class, 'rotateInviteCode']);
+        Route::get('companies/{company}/landing', [CompanyLandingController::class, 'show']);
+        Route::patch('companies/{company}/landing', [CompanyLandingController::class, 'update']);
+        Route::post('companies/{company}/landing/publish', [CompanyLandingController::class, 'publish']);
+        Route::post('companies/{company}/landing/disable', [CompanyLandingController::class, 'disable']);
+        Route::get('companies/{company}/landing/signups', [CompanyLandingController::class, 'signups']);
+        Route::get('companies/{company}/landing/signups/{signup}', [CompanyLandingController::class, 'showSignup']);
+        Route::patch('companies/{company}/landing/signups/{signup}', [CompanyLandingController::class, 'updateSignup']);
     });
 
     Route::middleware('role:admin')->group(function () {

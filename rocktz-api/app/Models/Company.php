@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'name',
@@ -126,6 +127,16 @@ class Company extends Model
     public function invitedCreators(): HasMany
     {
         return $this->hasMany(Creator::class, 'invited_by_company_id');
+    }
+
+    public function landingPage(): HasOne
+    {
+        return $this->hasOne(CompanyLandingPage::class);
+    }
+
+    public function landingSignups(): HasMany
+    {
+        return $this->hasMany(CompanyLandingSignup::class);
     }
 
     public static function assertApproved(?int $companyId): void

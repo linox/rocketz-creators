@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { homePathForUser } from "@/lib/auth";
+import { attachLandingOrigin } from "@/lib/landing-origin";
 import { clearToken, fetchMe, setToken } from "@/lib/laravel";
 import { useTranslation } from "react-i18next";
 
@@ -20,7 +21,8 @@ function GoogleCallback() {
 
     setToken(token);
     fetchMe()
-      .then((user) => {
+      .then(async (user) => {
+        await attachLandingOrigin(user);
         if (params.get("signup") === "1" && user.role === "creator" && user.creator?.id) {
           router.replace(`/creators/${user.creator.id}?tab=portfolio`);
           return;

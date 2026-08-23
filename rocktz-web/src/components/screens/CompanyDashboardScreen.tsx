@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
+import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -34,7 +35,7 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { formatLocation, moneyCurrency } from "@/lib/geo";
 import { usePrivacy } from "@/lib/privacy";
-import type { Campaign, Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
+import type { Campaign, Company, CompanyLandingPage, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
@@ -100,10 +101,12 @@ function CompanyDashboardInner() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [recurring, setRecurring] = useState<RecurringContract[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
+  const [landing, setLanding] = useState<CompanyLandingPage | null>(null);
   const [tab, setTab] = useState<DashTab>("overview");
   const [loading, setLoading] = useState(true);
   const [favSearch, setFavSearch] = useState("");
   const [materialItem, setMaterialItem] = useState<PendingApproval | null>(null);
+  const [approvingCampaign, setApprovingCampaign] = useState<Campaign | null>(null);
 
   const companyId = isAdmin
     ? (queryCompanyId || companies[0]?.id || 0)
@@ -125,6 +128,7 @@ function CompanyDashboardInner() {
       api.campaigns().then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
       api.recurring().then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
       api.creators().then((res) => setCreators(res.data)),
+      api.companyLanding(companyId).then((res) => setLanding(res.data)).catch(() => setLanding(null)),
     ])
       .catch(alertApiError)
       .finally(() => setLoading(false));
@@ -157,13 +161,7 @@ function CompanyDashboardInner() {
   const pendingAgencyCount = pendingAgencyCampaigns.length + pendingAgencyRecurring.length;
 
   async function approveAgencyCampaign(campaign: Campaign) {
-    try {
-      await api.approveCampaignAgency(campaign.id);
-      await alertSuccess(t("campaigns.approvedAgency"));
-      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: "briefing" } : item)));
-    } catch (err) {
-      await alertApiError(err);
-    }
+    setApprovingCampaign(campaign);
   }
 
   async function approveAgencyRecurring(contract: RecurringContract) {
@@ -329,7 +327,7 @@ function CompanyDashboardInner() {
   );
   const favQuery = favSearch.trim().toLowerCase();
   const favoriteList = (favQuery
-    ? favorites.filter((creator) => `${creator.artistic_name} ${creator.full_name}`.toLowerCase().includes(favQuery))
+    ? favorites.filter((creator) => `${creator.artistic_name} ${creator.full_name ?? ""} ${Object.values(creator.socials || {}).join(" ")}`.toLowerCase().includes(favQuery))
     : favorites);
 
   function demandStatusLabel(status: string) {
@@ -486,6 +484,27 @@ function CompanyDashboardInner() {
         </div>
       </div>
 
+      <div className="flex min-w-0 flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-violet-100 bg-violet-50/70 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
+        <div className="min-w-0">
+          <p className="m-0 text-[10px] font-extrabold tracking-wider text-violet-700 uppercase">{t("companyLanding.title")}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-violet-950/80">
+            {t("companyLanding.metrics.signups")}: {landing?.metrics?.signups_completed ?? 0}
+            {" · "}
+            {t("status.pending")}: {landing?.metrics?.pending ?? 0}
+            {" · "}
+            {t("companyLanding.metrics.approved")}: {landing?.metrics?.approved ?? 0}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={isAdmin ? `/company-landing?companyId=${companyId}` : "/company-landing"} className="rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white hover:bg-violet-800">
+            {t("companyLanding.title")}
+          </Link>
+          <Link href={isAdmin ? `/company-landing/signups?companyId=${companyId}` : "/company-landing/signups"} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-[11px] font-bold text-violet-800">
+            {t("companyLanding.viewSignups")}
+          </Link>
+        </div>
+      </div>
+
       {company.status === "pending" ? (
         <div className="flex min-w-0 flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl border-2 border-amber-400/60 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-amber-500/10 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
           <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
@@ -638,7 +657,7 @@ function CompanyDashboardInner() {
                       <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-10 w-10 shrink-0" textClassName="text-xs" />
                       <div className="min-w-0">
                         <h4 className="m-0 truncate text-sm font-bold text-slate-900">@{creator.artistic_name}</h4>
-                        <p className="m-0 truncate text-[11px] text-slate-500">{creator.full_name}</p>
+                        {creator.full_name ? <p className="m-0 truncate text-[11px] text-slate-500">{creator.full_name}</p> : null}
                       </div>
                     </Link>
                     <button
@@ -978,6 +997,16 @@ function CompanyDashboardInner() {
             </div>
           </div>
         </div>
+      ) : null}
+      {approvingCampaign ? (
+        <ApproveAgencyCampaignModal
+          campaign={approvingCampaign}
+          onClose={() => setApprovingCampaign(null)}
+          onApproved={(updated) => {
+            setApprovingCampaign(null);
+            setCampaigns((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+          }}
+        />
       ) : null}
       {materialItem ? (
         <AppModal onClose={() => setMaterialItem(null)} zIndexClassName="z-[110]" panelClassName="max-w-2xl">

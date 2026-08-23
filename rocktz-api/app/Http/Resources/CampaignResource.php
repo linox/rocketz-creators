@@ -33,6 +33,7 @@ class CampaignResource extends JsonResource
             'end_date' => $this->end_date?->toDateString(),
             'total_budget' => $isCreator ? null : ($this->total_budget !== null ? (float) $this->total_budget : null),
             'agency_fee' => $isCreator ? null : ($this->agency_fee !== null ? (float) $this->agency_fee : null),
+            'agency_fee_percent' => $isCreator ? null : ($this->agency_fee_percent !== null ? (float) $this->agency_fee_percent : null),
             'creators_budget' => $isCreator ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
             'creator_cache' => $this->creator_cache !== null ? (float) $this->creator_cache : null,
             'currency' => $this->currency ?: $this->company?->currency,

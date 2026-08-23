@@ -10,6 +10,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
 use App\Jobs\SyncCreatorSocialsJob;
+use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\NotificationService;
@@ -49,10 +50,14 @@ class CreatorController extends Controller
         }
 
         if ($search = $request->string('q')->toString()) {
-            $query->where(function ($builder) use ($search) {
-                $builder->where('full_name', 'like', "%{$search}%")
-                    ->orWhere('artistic_name', 'like', "%{$search}%")
-                    ->orWhere('city', 'like', "%{$search}%");
+            $canSearchPersonal = $user->role !== UserRole::Company;
+            $query->where(function ($builder) use ($search, $canSearchPersonal) {
+                $builder->where('artistic_name', 'like', "%{$search}%")
+                    ->orWhere('city', 'like', "%{$search}%")
+                    ->orWhere('socials', 'like', "%{$search}%");
+                if ($canSearchPersonal) {
+                    $builder->orWhere('full_name', 'like', "%{$search}%");
+                }
             });
         }
 
@@ -82,8 +87,13 @@ class CreatorController extends Controller
         }
 
         if ($user->role === UserRole::Company && $creator->status !== CreatorStatus::Active) {
-            $invited = $creator->invited_by_company_id && $creator->invited_by_company_id === $user->companyUser?->company_id;
-            if (! $invited) {
+            $companyId = $user->companyUser?->company_id;
+            $invited = $creator->invited_by_company_id && $creator->invited_by_company_id === $companyId;
+            $fromLanding = $companyId && CompanyLandingSignup::query()
+                ->where('company_id', $companyId)
+                ->where('creator_id', $creator->id)
+                ->exists();
+            if (! $invited && ! $fromLanding) {
                 return response()->json(['message' => __('auth.profile_unavailable')], 403);
             }
         }
@@ -149,7 +159,8 @@ class CreatorController extends Controller
     public function update(Request $request, Creator $creator): JsonResponse
     {
         $user = $request->user();
-        if ($user->role === UserRole::Creator && $user->creator?->id !== $creator->id) {
+        $isSelf = $user->role === UserRole::Creator && $user->creator?->id === $creator->id;
+        if ($user->role !== UserRole::Admin && ! $isSelf) {
             return response()->json(['message' => __('auth.forbidden')], 403);
         }
 

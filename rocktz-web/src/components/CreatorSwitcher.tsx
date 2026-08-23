@@ -90,7 +90,7 @@ export function CreatorSwitcher({
                 >
                   <span>
                     <span className="font-bold">@{creator.artistic_name}</span>
-                    <span className="block text-[11px] text-slate-500">{creator.full_name}</span>
+                    {creator.full_name ? <span className="block text-[11px] text-slate-500">{creator.full_name}</span> : null}
                   </span>
                 </button>
               ))}
@@ -133,7 +133,7 @@ export function CreatorSwitcher({
               >
                 <span>
                   <span className="font-bold">@{creator.artistic_name}</span>
-                  <span className="block text-[11px] text-slate-500">{creator.full_name}</span>
+                  {creator.full_name ? <span className="block text-[11px] text-slate-500">{creator.full_name}</span> : null}
                 </span>
               </button>
             ))}

@@ -30,6 +30,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CampaignController extends Controller
 {
@@ -214,8 +215,17 @@ class CampaignController extends Controller
     public function approveAgency(Request $request, Campaign $campaign): JsonResponse
     {
         abort_unless($campaign->isPendingAgency(), 422, __('auth.agency_approval_not_pending'));
+        $data = $request->validate([
+            'agency_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
         $previousStatus = $campaign->status;
-        $campaign->update(['status' => CampaignStatus::Briefing]);
+        $percent = array_key_exists('agency_fee_percent', $data) && $data['agency_fee_percent'] !== null
+            ? (float) $data['agency_fee_percent']
+            : (float) ($campaign->agency_fee_percent ?? Campaign::DEFAULT_AGENCY_FEE_PERCENT);
+        $campaign->update([
+            'status' => CampaignStatus::Briefing,
+            ...Campaign::feeSplit((float) $campaign->total_budget, $percent),
+        ]);
         $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
 
@@ -297,6 +307,7 @@ class CampaignController extends Controller
             'amount' => ['nullable', 'numeric'],
             'delivery_type' => ['nullable', 'string'],
             'payment_status' => ['nullable', Rule::enum(PaymentStatus::class)],
+            'payment_date' => ['nullable', 'date', 'required_if:payment_status,scheduled'],
             'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
             'delivery_date' => ['nullable', 'date'],
             'script' => ['nullable', 'string'],
@@ -323,6 +334,21 @@ class CampaignController extends Controller
         }
         if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Submitted)) {
             $data['video_submitted_at'] = now();
+        }
+
+        $nextPayment = $data['payment_status'] ?? null;
+        $nextPaymentValue = $nextPayment instanceof PaymentStatus ? $nextPayment->value : $nextPayment;
+        if ($nextPaymentValue !== null) {
+            abort_unless(in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true), 403);
+        }
+        if (in_array($nextPaymentValue, [PaymentStatus::Paid->value, PaymentStatus::Scheduled->value], true)
+            && ! $this->contentReadyForPayment($campaignCreator, $data)) {
+            throw ValidationException::withMessages([
+                'payment_status' => __('auth.payment_requires_approved_content'),
+            ]);
+        }
+        if ($nextPaymentValue === PaymentStatus::Paid->value && empty($data['payment_date'])) {
+            $data['payment_date'] = now()->toDateString();
         }
 
         $campaignCreator->fill($data)->save();
@@ -447,6 +473,7 @@ class CampaignController extends Controller
             'end_date' => ['nullable', 'date'],
             'total_budget' => ['nullable', 'numeric'],
             'agency_fee' => ['nullable', 'numeric'],
+            'agency_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'creators_budget' => ['nullable', 'numeric'],
             'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter')), 'nullable', 'numeric', 'min:0'],
             'status' => ['nullable', Rule::enum(CampaignStatus::class)],
@@ -482,9 +509,45 @@ class CampaignController extends Controller
         } else {
             $data['status'] ??= CampaignStatus::Briefing;
         }
-        $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
+        if ($creating) {
+            $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
+        }
 
-        return $data;
+        return $this->withAgencyFeeSplit(
+            $data,
+            $creating ? null : $request->route('campaign'),
+            $user,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withAgencyFeeSplit(array $data, mixed $existing, mixed $user): array
+    {
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $isAdmin = $user?->role === UserRole::Admin;
+        if (! $isAdmin) {
+            unset($data['agency_fee_percent'], $data['agency_fee']);
+        }
+
+        $shouldSplit = $campaign === null
+            || array_key_exists('agency_fee_percent', $data)
+            || array_key_exists('total_budget', $data);
+
+        if (! $shouldSplit) {
+            return $data;
+        }
+
+        $percent = $isAdmin && array_key_exists('agency_fee_percent', $data) && $data['agency_fee_percent'] !== null
+            ? (float) $data['agency_fee_percent']
+            : (float) ($campaign?->agency_fee_percent ?? Campaign::DEFAULT_AGENCY_FEE_PERCENT);
+        $budget = array_key_exists('total_budget', $data)
+            ? (float) ($data['total_budget'] ?? 0)
+            : (float) ($campaign?->total_budget ?? 0);
+
+        return array_merge($data, Campaign::feeSplit($budget, $percent));
     }
 
     private function scoped(Request $request)
@@ -711,5 +774,37 @@ class CampaignController extends Controller
                 ['creator_id' => $creatorId, 'campaign_id' => $campaignId],
             );
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function contentReadyForPayment(CampaignCreator $row, array $data): bool
+    {
+        $delivery = $data['delivery_status'] ?? $row->delivery_status;
+        $deliveryValue = $delivery instanceof DeliveryStatus ? $delivery->value : (string) ($delivery ?? '');
+        if (in_array($deliveryValue, [DeliveryStatus::Approved->value, DeliveryStatus::Published->value], true)) {
+            return true;
+        }
+
+        $row->loadMissing('campaign');
+        $flow = $row->campaign?->approval_flow;
+        $flowValue = $flow instanceof ApprovalFlowType ? $flow->value : (string) ($flow ?? ApprovalFlowType::ScriptAndVideo->value);
+
+        $script = $data['script_status'] ?? $row->script_status;
+        $scriptValue = $script instanceof StageApprovalStatus ? $script->value : (string) ($script ?? '');
+        $video = $data['video_status'] ?? $row->video_status;
+        $videoValue = $video instanceof StageApprovalStatus ? $video->value : (string) ($video ?? '');
+
+        $scriptApproved = $scriptValue === StageApprovalStatus::Approved->value;
+        $videoApproved = $videoValue === StageApprovalStatus::Approved->value;
+        $scriptOnly = $flowValue === ApprovalFlowType::ScriptOnly->value;
+        $staged = $flowValue !== ApprovalFlowType::VideoOnly->value;
+
+        if ($videoApproved && (! $staged || $scriptApproved || $scriptOnly)) {
+            return true;
+        }
+
+        return $scriptOnly && $scriptApproved;
     }
 }

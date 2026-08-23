@@ -19,6 +19,7 @@ use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
 use App\Support\Geo;
 use Illuminate\Http\JsonResponse;
@@ -280,5 +281,15 @@ class AuthController extends Controller
                 'invited_by_company_id' => Company::findActiveByInviteCode($request->input('invite_code'))?->id,
             ]);
         });
+
+        if ($type === 'creator' && filled($request->input('landing_slug'))) {
+            $user->load('creator');
+            if ($user->creator) {
+                app(CompanyLandingService::class)->attributeCreator(
+                    (string) $request->input('landing_slug'),
+                    $user->creator,
+                );
+            }
+        }
     }
 }

@@ -52,5 +52,7 @@
   "tabRecurring": "Recurring",
   "tabDeliveries": "Inbox",
   "tabAvailable": "Campaigns",
-  "tabPanel": "Panel"
+  "tabPanel": "Panel",
+  "companyLanding": "Landing page",
+  "companyLandingSignups": "Landing signups"
 }

@@ -589,7 +589,7 @@ function DetailInner() {
       const term = search.trim().toLowerCase();
       if (!term) return true;
       const info = profile(row);
-      return [info.artistic_name, info.full_name, info.socials.instagram, info.city, info.state, info.country, info.categories.join(" ")].join(" ").toLowerCase().includes(term);
+      return [info.artistic_name, info.full_name, Object.values(info.socials).join(" "), info.city, info.state, info.country, info.categories.join(" ")].join(" ").toLowerCase().includes(term);
     })
     .sort((a, b) => profile(a).artistic_name.localeCompare(profile(b).artistic_name, locale, { sensitivity: "base" }));
 

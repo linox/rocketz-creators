@@ -7,6 +7,8 @@ import {
   LOCALE_STORAGE_KEY,
   LOCALES,
   normalizeLocale,
+  pickLocaleFromLanguages,
+  readComputerLanguages,
   type AppLocale,
 } from "@/i18n/locales";
 import appEn from "@/i18n/locales/en/app.json";
@@ -93,17 +95,11 @@ export function detectClientLocale(): AppLocale {
   if (stored) {
     return normalizeLocale(stored);
   }
-  return normalizeLocale(navigator.language);
+  return pickLocaleFromLanguages(readComputerLanguages());
 }
 
 export function getAppLocale(): AppLocale {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored) {
-      return normalizeLocale(stored);
-    }
-  }
-  return normalizeLocale(i18n.resolvedLanguage ?? i18n.language ?? DEFAULT_LOCALE);
+  return detectClientLocale();
 }
 
 export async function setAppLocale(locale: AppLocale) {

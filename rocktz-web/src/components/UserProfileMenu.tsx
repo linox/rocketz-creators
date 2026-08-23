@@ -45,8 +45,8 @@ type UserProfileMenuProps = {
   user: AuthUser;
   role: UserRole;
   userData: ProfileMenuData;
-  onOpenEditProfile: () => void;
-  onOpenLgpdModal: () => void;
+  onOpenEditProfile?: () => void;
+  onOpenLgpdModal?: () => void;
   onOpenContractModal?: () => void;
   onLogout: () => void;
   variant?: "header" | "sidebar";
@@ -219,19 +219,21 @@ export function UserProfileMenu({
         ) : null}
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 bg-white p-3">
-        <button
-          type="button"
-          onClick={() => {
-            setIsOpen(false);
-            onOpenEditProfile();
-          }}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 transition-all hover:bg-indigo-600 active:scale-[0.98]"
-        >
-          <Edit3 size={15} />
-          <span>{t("editMyProfile")}</span>
-        </button>
-      </div>
+      {onOpenEditProfile ? (
+        <div className="shrink-0 border-b border-slate-100 bg-white p-3">
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              onOpenEditProfile();
+            }}
+            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 transition-all hover:bg-indigo-600 active:scale-[0.98]"
+          >
+            <Edit3 size={15} />
+            <span>{t("editMyProfile")}</span>
+          </button>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
         {role === "creator" && user.creator?.id ? (
@@ -300,19 +302,21 @@ export function UserProfileMenu({
           </button>
         ) : null}
 
-        <button
-          type="button"
-          onClick={() => {
-            setIsOpen(false);
-            onOpenLgpdModal();
-          }}
-          className="flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
-        >
-          <div className="flex min-w-0 items-center gap-2.5">
-            <ShieldCheck size={15} className="shrink-0 text-emerald-600" />
-            <span className="truncate">{t("lgpdProtection")}</span>
-          </div>
-        </button>
+        {onOpenLgpdModal ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              onOpenLgpdModal();
+            }}
+            className="flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <ShieldCheck size={15} className="shrink-0 text-emerald-600" />
+              <span className="truncate">{t("lgpdProtection")}</span>
+            </div>
+          </button>
+        ) : null}
       </div>
 
       <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-2">
@@ -346,15 +350,17 @@ export function UserProfileMenu({
             </div>
           </div>
           <div className="mt-2 flex items-center gap-1.5 border-t border-white/15 pt-2">
-            <button
-              type="button"
-              onClick={onOpenEditProfile}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-white/15 px-2 py-1.5 text-[11px] font-bold text-white shadow-xs transition-all hover:bg-white/25"
-              title={t("editProfileTitle")}
-            >
-              <Edit3 size={13} />
-              <span>{t("editProfile")}</span>
-            </button>
+            {onOpenEditProfile ? (
+              <button
+                type="button"
+                onClick={onOpenEditProfile}
+                className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-white/15 px-2 py-1.5 text-[11px] font-bold text-white shadow-xs transition-all hover:bg-white/25"
+                title={t("editProfileTitle")}
+              >
+                <Edit3 size={13} />
+                <span>{t("editProfile")}</span>
+              </button>
+            ) : null}
             <button type="button" onClick={onLogout} className="cursor-pointer rounded-lg p-1.5 text-rose-200 transition-colors hover:bg-rose-500/30 hover:text-white" title={t("logoutAccount")}>
               <LogOut size={14} />
             </button>

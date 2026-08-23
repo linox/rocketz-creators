@@ -490,8 +490,9 @@ function CreatorsInner() {
       const reel = Number(creator.pricing?.reel || 0);
       const matchesSearch =
         !term ||
+        (creator.artistic_name || "").toLowerCase().includes(term) ||
         (creator.full_name || "").toLowerCase().includes(term) ||
-        (creator.artistic_name || "").toLowerCase().includes(term);
+        Object.values(creator.socials || {}).some((handle) => String(handle || "").toLowerCase().includes(term));
       const matchesStatus = statusFilter === "all" || creator.status === statusFilter;
       const matchesCategory =
         categoryFilter === "all" ||

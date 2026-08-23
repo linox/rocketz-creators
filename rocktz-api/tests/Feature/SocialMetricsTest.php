@@ -167,6 +167,134 @@ HTML, 200),
             ->assertJsonPath('data.socials.instagram', 'mihpocket');
     }
 
+    public function test_instagram_reads_video_play_count_as_avg_views(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'larissamilene']);
+
+        Http::fake([
+            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+                'data' => [
+                    'user' => [
+                        'username' => 'larissamilene',
+                        'edge_followed_by' => ['count' => 1155],
+                        'edge_owner_to_timeline_media' => [
+                            'edges' => [
+                                ['node' => [
+                                    'video_play_count' => 4200,
+                                    'edge_liked_by' => ['count' => 90],
+                                    'edge_media_to_comment' => ['count' => 10],
+                                ]],
+                                ['node' => [
+                                    'video_play_count' => 1800,
+                                    'edge_liked_by' => ['count' => 40],
+                                    'edge_media_to_comment' => ['count' => 5],
+                                ]],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@larissamilene',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.followers', 1155)
+            ->assertJsonPath('sync.instagram.views', 3000)
+            ->assertJsonPath('data.metrics.instagram_views', 3000);
+    }
+
+    public function test_instagram_html_extracts_play_counts(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'demo']);
+
+        Http::fake([
+            'https://www.instagram.com/*' => Http::response(
+                '<html><head><meta property="og:description" content="12.3K Followers, 200 Following, 80 Posts" /></head><body>"video_play_count":8000 "video_play_count":4000</body></html>',
+                200
+            ),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@demo',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.followers', 12300)
+            ->assertJsonPath('sync.instagram.views', 6000);
+    }
+
+    public function test_scrapecreators_fills_instagram_views_from_posts(): void
+    {
+        config()->set('services.social.scrape_creators_key', 'test-key');
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'demo']);
+
+        Http::fake([
+            'https://api.scrapecreators.com/v1/instagram/profile*' => Http::response([
+                'user' => [
+                    'username' => 'demo',
+                    'edge_followed_by' => ['count' => 25116],
+                ],
+            ], 200),
+            'https://api.scrapecreators.com/v2/instagram/user/posts*' => Http::response([
+                'items' => [
+                    ['play_count' => 4000, 'like_count' => 100, 'comment_count' => 10],
+                    ['ig_play_count' => 2000, 'like_count' => 50, 'comment_count' => 5],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => 'demo',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.followers', 25116)
+            ->assertJsonPath('sync.instagram.views', 3000);
+    }
+
+    public function test_scrapecreators_fills_tiktok_views_from_videos(): void
+    {
+        config()->set('services.social.scrape_creators_key', 'test-key');
+        [$creator, $token] = $this->creatorWithToken(['tiktok' => 'demo']);
+
+        Http::fake([
+            'https://api.scrapecreators.com/v1/tiktok/profile*' => Http::response([
+                'user' => ['uniqueId' => 'demo'],
+                'stats' => [
+                    'followerCount' => 15000,
+                    'heartCount' => 90000,
+                    'videoCount' => 30,
+                ],
+                'itemList' => [],
+            ], 200),
+            'https://api.scrapecreators.com/v3/tiktok/profile/videos*' => Http::response([
+                'aweme_list' => [
+                    ['statistics' => ['play_count' => 2000]],
+                    ['statistics' => ['play_count' => 1000]],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'tiktok',
+                'handle' => '@demo',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.tiktok.followers', 15000)
+            ->assertJsonPath('sync.tiktok.views', 1500);
+    }
+
     public function test_second_sync_uses_cache_without_http(): void
     {
         [$creator, $token] = $this->creatorWithToken(['youtube' => 'demo']);

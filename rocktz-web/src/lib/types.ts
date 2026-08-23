@@ -1,20 +1,20 @@
 export type Creator = {
   id: number;
-  user_id: number | null;
+  user_id?: number | null;
   role?: string | null;
-  full_name: string;
+  full_name?: string | null;
   artistic_name: string;
   photo_url: string | null;
-  whatsapp: string | null;
+  whatsapp?: string | null;
   email?: string | null;
   city: string | null;
   country?: string | null;
   state: string | null;
   bio: string | null;
-  document: string | null;
-  cpf: string | null;
-  pix_key: string | null;
-  bank_details: string | null;
+  document?: string | null;
+  cpf?: string | null;
+  pix_key?: string | null;
+  bank_details?: string | null;
   socials: Record<string, string>;
   metrics: Record<string, number>;
   categories: string[];
@@ -28,6 +28,13 @@ export type Creator = {
   can_access_all_countries?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
+  landing_review?: {
+    id: number;
+    status: string;
+    source?: string;
+    reviewed_at?: string | null;
+    created_at?: string | null;
+  } | null;
   portfolio?: {
     id: number;
     title: string;
@@ -74,6 +81,55 @@ export type Company = {
   creator_invite_code?: string | null;
 };
 
+export type CompanyLandingPage = {
+  id: number;
+  company_id: number;
+  company?: { id: number; name: string; logo_url: string | null; status: string } | null;
+  slug: string;
+  display_name: string;
+  logo_url: string | null;
+  banner_url: string | null;
+  title: string | null;
+  description: string | null;
+  cta_text: string | null;
+  primary_color: string;
+  button_color: string;
+  background_color: string;
+  website_url: string | null;
+  socials: Record<string, string>;
+  status: "draft" | "published" | "disabled" | string;
+  published_at?: string | null;
+  metrics?: CompanyLandingMetrics | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CompanyLandingMetrics = {
+  views: number;
+  cta_clicks: number;
+  signups_started: number;
+  signups_completed: number;
+  pending: number;
+  reviewing: number;
+  analyzed: number;
+  approved: number;
+  rejected: number;
+  conversion_rate: number;
+};
+
+export type CompanyLandingSignup = {
+  id: number;
+  company_id: number;
+  company_landing_page_id: number;
+  creator_id: number;
+  source: string;
+  status: "pending" | "reviewing" | "approved" | "rejected" | string;
+  reviewed_at?: string | null;
+  reviewed_by?: { id: number; name: string } | null;
+  creator?: Creator;
+  created_at?: string | null;
+};
+
 export type Campaign = {
   id: number;
   company_id: number;
@@ -84,6 +140,7 @@ export type Campaign = {
   end_date: string | null;
   total_budget: number | null;
   agency_fee: number | null;
+  agency_fee_percent?: number | null;
   creators_budget: number | null;
   creator_cache?: number | null;
   currency?: string | null;
@@ -129,7 +186,7 @@ export type CampaignCreator = {
   creator_id: number;
   creator?: {
     id: number;
-    full_name: string;
+    full_name?: string | null;
     artistic_name: string;
     photo_url: string | null;
     status: string;
@@ -137,6 +194,7 @@ export type CampaignCreator = {
     country?: string | null;
     state?: string | null;
     whatsapp?: string | null;
+    pix_key?: string | null;
     categories?: string[];
     metrics?: Record<string, number>;
     pricing?: Record<string, number>;
@@ -148,6 +206,7 @@ export type CampaignCreator = {
   delivery_date: string | null;
   delivery_status: string | null;
   payment_status?: string | null;
+  payment_date?: string | null;
   application_status: string | null;
   notes: string | null;
   rejection_reason: string | null;
@@ -212,7 +271,7 @@ export type RecurringContract = {
     creator: {
       id: number;
       artistic_name: string;
-      full_name: string;
+      full_name?: string | null;
       photo_url: string | null;
       city?: string | null;
       country?: string | null;
@@ -236,7 +295,7 @@ export type PlanningItem = {
   company_id?: number;
   company?: { id: number; name: string; logo_url?: string | null } | null;
   creator_id: number;
-  creator?: { id: number; artistic_name: string; full_name: string; photo_url: string | null } | null;
+  creator?: { id: number; artistic_name: string; full_name?: string | null; photo_url: string | null } | null;
   month: string;
   content_type: string;
   title: string;

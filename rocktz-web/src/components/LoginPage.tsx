@@ -12,6 +12,7 @@ import type { AuthPayload } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
 import { laravelFetch, persistAuth } from "@/lib/laravel";
+import { attachLandingOrigin, getLandingOrigin } from "@/lib/landing-origin";
 import {
   DEFAULT_COUNTRY,
   DEFAULT_CURRENCY,
@@ -79,9 +80,12 @@ export function LoginPage() {
       const payload = await laravelFetch<AuthPayload>(path, {
         method: "POST",
         body: JSON.stringify(
-          body && typeof body === "object" ? { ...(body as object), locale: getAppLocale() } : body,
+          body && typeof body === "object"
+            ? { ...(body as object), locale: getAppLocale(), landing_slug: userType === "creator" ? getLandingOrigin() || undefined : undefined }
+            : body,
         ),
       });
+      await attachLandingOrigin(payload.user);
       router.push(persistAuth(payload, mode === "signup" && userType === "creator"));
     } catch (err) {
       await alertApiError(err);
@@ -164,6 +168,7 @@ export function LoginPage() {
         password: form.password,
         password_confirmation: form.password_confirmation,
         invite_code: form.invite_code.trim() || undefined,
+        landing_slug: getLandingOrigin() || undefined,
         lgpd_accepted: form.lgpd_accepted,
       });
       return;

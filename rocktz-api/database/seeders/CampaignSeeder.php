@@ -29,9 +29,8 @@ class CampaignSeeder extends Seeder
             'name' => 'Lançamento Sérum Aurora Glow',
             'objective' => 'Gerar awareness e prova social para o novo sérum.',
             'total_budget' => 18000,
-            'agency_fee' => 3000,
-            'creators_budget' => 15000,
-            'creator_cache' => 15000,
+            ...Campaign::feeSplit(18000, 20),
+            'creator_cache' => 14400,
             'currency' => $aurora->currency,
         ]);
 
@@ -42,9 +41,8 @@ class CampaignSeeder extends Seeder
             'name' => 'Campanha Verão Aurora',
             'objective' => 'Selecionar criadores para a linha verão.',
             'total_budget' => 12000,
-            'agency_fee' => 2000,
-            'creators_budget' => 10000,
-            'creator_cache' => 10000,
+            ...Campaign::feeSplit(12000, 20),
+            'creator_cache' => 9600,
             'currency' => $aurora->currency,
         ]);
 
@@ -63,9 +61,8 @@ class CampaignSeeder extends Seeder
             'name' => 'Rotina Glow 7 dias',
             'objective' => 'Produzir UGC de rotina com o sérum.',
             'total_budget' => 9000,
-            'agency_fee' => 1500,
-            'creators_budget' => 7500,
-            'creator_cache' => 7500,
+            ...Campaign::feeSplit(9000, 20),
+            'creator_cache' => 7200,
             'currency' => $aurora->currency,
         ]);
 
@@ -92,9 +89,8 @@ class CampaignSeeder extends Seeder
             'name' => 'Unboxing Aurora Kit',
             'objective' => 'Campanha encerrada com entrega publicada e paga.',
             'total_budget' => 6500,
-            'agency_fee' => 1000,
-            'creators_budget' => 5500,
-            'creator_cache' => 5500,
+            ...Campaign::feeSplit(6500, 20),
+            'creator_cache' => 5200,
             'currency' => $aurora->currency,
             'start_date' => now()->subMonths(2)->toDateString(),
             'end_date' => now()->subWeeks(2)->toDateString(),

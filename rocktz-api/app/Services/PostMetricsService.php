@@ -274,6 +274,8 @@ class PostMetricsService
     private function parseInstagramViews(string $html): ?int
     {
         return SocialNumbers::intOrNull($this->matchFirst($html, [
+            '/video_play_count\\\\":(\d+)/',
+            '/"video_play_count"\s*:\s*"?(\d+)/',
             '/video_view_count\\\\":(\d+)/',
             '/"video_view_count"\s*:\s*"?(\d+)/',
             '/play_count\\\\":(\d+)/',
@@ -371,7 +373,7 @@ class PostMetricsService
             return [
                 SocialNumbers::intOrNull(data_get($node, 'edge_liked_by.count') ?? data_get($node, 'edge_media_preview_like.count')),
                 SocialNumbers::intOrNull(data_get($node, 'edge_media_to_comment.count')),
-                SocialNumbers::intOrNull($node['video_view_count'] ?? $node['videoPlayCount'] ?? $node['play_count'] ?? null),
+                SocialNumbers::intOrNull($node['video_play_count'] ?? $node['video_view_count'] ?? $node['videoPlayCount'] ?? $node['ig_play_count'] ?? $node['play_count'] ?? null),
             ];
         }
 

@@ -52,5 +52,7 @@
   "tabRecurring": "Recurrentes",
   "tabDeliveries": "Entregas",
   "tabAvailable": "Campañas",
-  "tabPanel": "Panel"
+  "tabPanel": "Panel",
+  "companyLanding": "Landing page",
+  "companyLandingSignups": "Registros de la landing"
 }

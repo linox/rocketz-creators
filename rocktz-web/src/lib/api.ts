@@ -6,6 +6,9 @@ import type {
   Campaign,
   CampaignCreator,
   Company,
+  CompanyLandingPage,
+  CompanyLandingSignup,
+  CompanyLandingMetrics,
   Creator,
   DashboardStats,
   MetricsJobStatus,
@@ -67,6 +70,24 @@ export const api = {
   rejectCompany: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/reject`, { method: "POST" }),
   rotateCompanyInviteCode: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/invite-code`, { method: "POST" }),
   toggleFavorite: (companyId: number, creatorId: number) => laravelFetch<Item<Company>>(`/companies/${companyId}/favorites/${creatorId}`, { method: "POST" }),
+  publicLanding: (slug: string) => laravelFetch<Item<CompanyLandingPage>>(`/landings/${encodeURIComponent(slug)}`),
+  trackLandingEvent: (slug: string, event: "view" | "cta_click" | "signup_started") =>
+    laravelFetch<{ ok: boolean }>(`/landings/${encodeURIComponent(slug)}/events`, { method: "POST", body: JSON.stringify({ event }) }),
+  claimLanding: (slug: string) => laravelFetch<Item<CompanyLandingSignup>>(`/landings/${encodeURIComponent(slug)}/claim`, { method: "POST" }),
+  companyLanding: (companyId: number) => laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`),
+  updateCompanyLanding: (companyId: number, body: unknown) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`, { method: "PATCH", body: JSON.stringify(body) }),
+  publishCompanyLanding: (companyId: number) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing/publish`, { method: "POST" }),
+  disableCompanyLanding: (companyId: number) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing/disable`, { method: "POST" }),
+  companyLandingSignups: (companyId: number, query = "") =>
+    laravelFetch<List<CompanyLandingSignup> & { metrics?: CompanyLandingMetrics }>(`/companies/${companyId}/landing/signups${query}`),
+  updateLandingSignup: (companyId: number, signupId: number, status: string) =>
+    laravelFetch<Item<CompanyLandingSignup>>(`/companies/${companyId}/landing/signups/${signupId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
   createCompanyUser: (companyId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users`, { method: "POST", body: JSON.stringify(body) }),
   updateCompanyUser: (companyId: number, userId: number, body: unknown) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCompanyUser: (companyId: number, userId: number) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "DELETE" }),
@@ -77,7 +98,8 @@ export const api = {
   campaign: (id: number | string) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`),
   createCampaign: (body: unknown) => laravelFetch<Item<Campaign>>("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  approveCampaignAgency: (id: number) => laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST" }),
+  approveCampaignAgency: (id: number, body?: { agency_fee_percent?: number }) =>
+    laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),
   applyCampaign: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/apply`, { method: "POST", body: JSON.stringify(body) }),
   assignCreator: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/assign`, { method: "POST", body: JSON.stringify(body) }),

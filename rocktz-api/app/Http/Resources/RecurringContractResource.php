@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\UserRole;
+use App\Support\CreatorPrivacy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -41,7 +42,9 @@ class RecurringContractResource extends JsonResource
                 'creator' => $row->creator ? [
                     'id' => $row->creator->id,
                     'artistic_name' => $row->creator->artistic_name,
-                    'full_name' => $row->creator->full_name,
+                    'full_name' => CreatorPrivacy::canViewPersonalData($request->user(), (int) $row->creator->id)
+                        ? $row->creator->full_name
+                        : null,
                     'photo_url' => $row->creator->photo_url,
                     'city' => $row->creator->city,
                     'country' => $row->creator->country,

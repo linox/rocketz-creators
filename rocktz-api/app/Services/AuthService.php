@@ -72,6 +72,11 @@ class AuthService
             return $user;
         });
 
+        $user->load('creator');
+        if (filled($data['landing_slug'] ?? null) && $user->creator) {
+            app(CompanyLandingService::class)->attributeCreator((string) $data['landing_slug'], $user->creator);
+        }
+
         return $this->issueToken($user);
     }
 

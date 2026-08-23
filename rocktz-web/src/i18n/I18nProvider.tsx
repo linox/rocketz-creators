@@ -10,6 +10,7 @@ function DocumentLang({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const detected = detectClientLocale();
+    document.documentElement.lang = detected;
     if (detected !== normalizeLocale(instance.language)) {
       void instance.changeLanguage(detected);
     }

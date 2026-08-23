@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Auth;
 
 use App\Models\Company;
+use App\Models\CompanyLandingPage;
+use App\Services\CompanyLandingService;
 use App\Support\Geo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -22,6 +24,9 @@ class CompleteGoogleProfileRequest extends FormRequest
             'currency' => Geo::normalizeCurrency($this->input('currency') ?: Geo::defaultCurrency($country)),
             'invite_code' => $this->filled('invite_code')
                 ? Company::normalizeInviteCode((string) $this->input('invite_code'))
+                : null,
+            'landing_slug' => $this->filled('landing_slug')
+                ? CompanyLandingPage::normalizeSlug((string) $this->input('landing_slug'))
                 : null,
         ]);
     }
@@ -53,6 +58,16 @@ class CompleteGoogleProfileRequest extends FormRequest
                 }
                 if (! Company::findActiveByInviteCode((string) $value)) {
                     $fail(__('auth.invite_code_invalid'));
+                }
+            }],
+            'landing_slug' => ['nullable', 'string', 'max:64', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! filled($value) || $this->input('type') !== 'creator') {
+                    return;
+                }
+                try {
+                    app(CompanyLandingService::class)->publishedBySlug((string) $value);
+                } catch (\Throwable) {
+                    $fail(__('auth.landing_unavailable'));
                 }
             }],
             'lgpd_accepted' => ['accepted'],

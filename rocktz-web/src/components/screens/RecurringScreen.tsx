@@ -232,7 +232,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   }, [contracts]);
 
   const knownCreators = useMemo(() => {
-    const map = new Map<number, { id: number; artistic_name: string; full_name: string; photo_url: string | null }>();
+    const map = new Map<number, { id: number; artistic_name: string; full_name?: string | null; photo_url: string | null }>();
     for (const creator of creators) {
       map.set(creator.id, creator);
     }

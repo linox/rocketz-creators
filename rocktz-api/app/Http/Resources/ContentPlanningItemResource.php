@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\CreatorPrivacy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,7 +21,9 @@ class ContentPlanningItemResource extends JsonResource
             'creator' => $this->whenLoaded('creator', fn () => $this->creator ? [
                 'id' => $this->creator->id,
                 'artistic_name' => $this->creator->artistic_name,
-                'full_name' => $this->creator->full_name,
+                'full_name' => CreatorPrivacy::canViewPersonalData($request->user(), (int) $this->creator->id)
+                    ? $this->creator->full_name
+                    : null,
                 'photo_url' => $this->creator->photo_url,
             ] : null),
             'company' => $this->whenLoaded('company', fn () => $this->company ? [

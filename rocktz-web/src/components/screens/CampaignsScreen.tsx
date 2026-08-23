@@ -29,6 +29,7 @@ import {
   Video,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -271,6 +272,7 @@ function CampaignsInner() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [materialFilter, setMaterialFilter] = useState("all");
   const [open, setOpen] = useState(false);
+  const [approvingCampaign, setApprovingCampaign] = useState<Campaign | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState<Record<number, string>>({});
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -332,16 +334,6 @@ function CampaignsInner() {
     try {
       await api.resetCampaigns();
       await alertSuccess(t("campaigns.resetSuccess"), t("campaigns.resetSuccessBody"));
-      load();
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
-  async function approveAgencyCampaign(campaign: Campaign) {
-    try {
-      await api.approveCampaignAgency(campaign.id);
-      await alertSuccess(t("campaigns.approvedAgency"));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -505,7 +497,7 @@ function CampaignsInner() {
                   dateLabel={formatRange(campaign.start_date, campaign.end_date, locale, t)}
                   formatCurrency={formatCurrency}
                   isAdmin={isAdmin}
-                  onApprove={approveAgencyCampaign}
+                  onApprove={setApprovingCampaign}
                 />
               ))}
             </div>
@@ -624,7 +616,7 @@ function CampaignsInner() {
                                 <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="circle" className="h-9 w-9 border border-slate-200 shadow-xs" textClassName="text-xs" />
                                 <div>
                                   <span className="block font-bold text-slate-900">{row.creator?.artistic_name || row.creator?.full_name}</span>
-                                  <span className="text-[10px] font-normal text-slate-400">{row.creator?.full_name}</span>
+                                  {row.creator?.full_name ? <span className="text-[10px] font-normal text-slate-400">{row.creator.full_name}</span> : null}
                                 </div>
                               </div>
                             </td>
@@ -819,6 +811,16 @@ function CampaignsInner() {
         defaultCompanyId={user.company?.id}
         onCreated={load}
       />
+      {approvingCampaign ? (
+        <ApproveAgencyCampaignModal
+          campaign={approvingCampaign}
+          onClose={() => setApprovingCampaign(null)}
+          onApproved={() => {
+            setApprovingCampaign(null);
+            load();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

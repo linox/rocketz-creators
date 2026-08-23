@@ -5,7 +5,8 @@
     "forCreators": "Para criadores",
     "howItWorks": "Como funciona",
     "features": "Recursos",
-    "partnerBrands": "Marcas parceiras"
+    "partnerBrands": "Marcas parceiras",
+    "accessPanel": "Acessar painel"
   },
   "hero": {
     "titleBefore": "Conectamos marcas a quem",
@@ -140,5 +141,18 @@
     "terms": "Termos de Uso",
     "privacy": "Privacidade (LGPD)",
     "security": "Segurança da Informação"
+  },
+  "companyLanding": {
+    "defaultTitle": "Faça parte dos creators da {{name}}",
+    "defaultDescription": "Cadastre seu perfil no Creatorz by Rocketz e tenha a oportunidade de participar de campanhas, projetos e ações com a {{name}}.",
+    "defaultCta": "Quero me cadastrar",
+    "poweredBy": "Powered by Creatorz by Rocketz",
+    "alreadyAccount": "Já tem cadastro?",
+    "claimedTitle": "Perfil identificado",
+    "claimedBody": "Registramos que você chegou pela landing da {{name}}. Seu perfil global no Creatorz by Rocketz permanece o mesmo.",
+    "unavailable": "Esta landing page não está disponível.",
+    "loadError": "Não foi possível carregar esta página.",
+    "loading": "Carregando...",
+    "previewBanner": "Pré-visualização — esta página ainda não está publicada para o público"
   }
 }

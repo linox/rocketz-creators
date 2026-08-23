@@ -5,7 +5,8 @@
     "forCreators": "For creators",
     "howItWorks": "How it works",
     "features": "Features",
-    "partnerBrands": "Partner brands"
+    "partnerBrands": "Partner brands",
+    "accessPanel": "Access panel"
   },
   "hero": {
     "titleBefore": "We connect brands with people who",
@@ -140,5 +141,18 @@
     "terms": "Terms of use",
     "privacy": "Privacy (LGPD)",
     "security": "Information security"
+  },
+  "companyLanding": {
+    "defaultTitle": "Join {{name}} creators",
+    "defaultDescription": "Create your profile on Creatorz by Rocketz and get the chance to join campaigns, projects and actions with {{name}}.",
+    "defaultCta": "I want to sign up",
+    "poweredBy": "Powered by Creatorz by Rocketz",
+    "alreadyAccount": "Already registered?",
+    "claimedTitle": "Profile identified",
+    "claimedBody": "We recorded that you arrived through the {{name}} landing page. Your global Creatorz by Rocketz profile stays the same.",
+    "unavailable": "This landing page is not available.",
+    "loadError": "Could not load this page.",
+    "loading": "Loading...",
+    "previewBanner": "Preview — this page is not public yet"
   }
 }

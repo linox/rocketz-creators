@@ -35,19 +35,19 @@ import {
   Youtube,
 } from "lucide-react";
 import { PasswordField } from "@/components/PasswordField";
-import { Select2Field } from "@/components/Select2Field";
-import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
+import { CreatorSignupForm } from "@/components/CreatorSignupForm";
+import { CountrySelect, CurrencySelect } from "@/components/GeoSelectFields";
 import { RocketzLogo } from "@/components/RocketzLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { UserProfileMenu } from "@/components/UserProfileMenu";
 import { alertApiError, alertWarning } from "@/lib/alerts";
-import type { AuthPayload } from "@/lib/auth";
+import { homePathForUser, type AuthPayload, type AuthUser } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
-import { laravelFetch, persistAuth } from "@/lib/laravel";
+import { clearToken, fetchMe, getToken, laravelFetch, logoutRequest, persistAuth } from "@/lib/laravel";
+import { attachLandingOrigin, getLandingOrigin } from "@/lib/landing-origin";
 import {
-  formatInstagram,
   formatWhatsApp,
-  instagramHandle,
   isValidEmail,
   isValidWhatsApp,
   passwordError,
@@ -56,10 +56,8 @@ import {
   DEFAULT_COUNTRY,
   DEFAULT_CURRENCY,
   defaultCurrencyForCountry,
-  hasRegions,
   isValidCountry,
   isValidCurrency,
-  isValidRegion,
 } from "@/lib/geo";
 import { useTranslation } from "react-i18next";
 
@@ -80,16 +78,6 @@ const benefitCardDefs = [
   { icon: Video, titleKey: "benefits.contentTitle", textKey: "benefits.contentText" },
   { icon: TrendingUp, titleKey: "benefits.resultsTitle", textKey: "benefits.resultsText" },
   { icon: Users, titleKey: "benefits.scaleTitle", textKey: "benefits.scaleText" },
-] as const;
-
-const creatorCategoryValues = [
-  "UGC Content",
-  "Influenciador",
-  "Ator / Apresentador",
-  "Moda & Beleza",
-  "Fitness & Saúde",
-  "Gastronomia",
-  "Tecnologia & Games",
 ] as const;
 
 const modalInput =
@@ -259,6 +247,20 @@ function StackedBenefitCard({
   );
 }
 
+function profileMenuData(user: AuthUser) {
+  return {
+    fullName: user.creator?.full_name || user.company?.name || user.name,
+    artisticName: user.creator?.artistic_name,
+    photoUrl: user.creator?.photo_url || user.company?.logo_url || user.avatar_url,
+    email: user.email,
+    phone: user.creator?.whatsapp || user.company?.whatsapp || undefined,
+    instagram: user.creator?.socials?.instagram,
+    city: user.creator?.city || user.company?.city || undefined,
+    state: user.creator?.state || undefined,
+    country: user.creator?.country || user.company?.country || undefined,
+  };
+}
+
 function AudienceCards({
   onCompany,
   onCreator,
@@ -370,24 +372,9 @@ export function LandingPage() {
   };
   const [modal, setModal] = useState<Modal>("none");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [creatorStep, setCreatorStep] = useState(1);
   const [loading, setLoading] = useState(false);
-
-  const [creator, setCreator] = useState({
-    full_name: "",
-    artistic_name: "",
-    instagram: "",
-    category: "UGC Content",
-    whatsapp: "",
-    city: "",
-    country: DEFAULT_COUNTRY,
-    state: "",
-    email: "",
-    password: "",
-    password_confirmation: "",
-    invite_code: "",
-    lgpd_accepted: false,
-  });
+  const [sessionUser, setSessionUser] = useState<AuthUser | null>(null);
+  const [checkingSession, setCheckingSession] = useState(false);
 
   const [company, setCompany] = useState({
     name: "",
@@ -404,11 +391,6 @@ export function LandingPage() {
   });
 
   const [login, setLogin] = useState({ email: "", password: "" });
-  const categoryLabels = t("auth:categories", { returnObjects: true }) as Record<string, string>;
-  const creatorCategoryOptions = creatorCategoryValues.map((value) => ({
-    value,
-    label: categoryLabels[value] ?? value,
-  }));
 
   const reduceMotion = useReducedMotion();
   const heroRef = useRef<HTMLElement>(null);
@@ -451,6 +433,42 @@ export function LandingPage() {
     };
   }, [modal]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSession() {
+      if (!getToken()) return;
+
+      if (!cancelled) setCheckingSession(true);
+
+      try {
+        const user = await fetchMe();
+        if (!cancelled) setSessionUser(user);
+      } catch {
+        clearToken();
+      } finally {
+        if (!cancelled) setCheckingSession(false);
+      }
+    }
+
+    void loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function goToPanel() {
+    if (!sessionUser) return;
+    setMobileOpen(false);
+    router.push(homePathForUser(sessionUser));
+  }
+
+  async function onLogout() {
+    setMobileOpen(false);
+    await logoutRequest();
+    setSessionUser(null);
+  }
+
   function scrollTo(id: string) {
     setMobileOpen(false);
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -465,6 +483,7 @@ export function LandingPage() {
           body && typeof body === "object" ? { ...(body as object), locale: getAppLocale() } : body,
         ),
       });
+      await attachLandingOrigin(payload.user);
       router.push(persistAuth(payload, path === "/auth/register/creator"));
     } catch (err) {
       await alertApiError(err);
@@ -473,58 +492,8 @@ export function LandingPage() {
     }
   }
 
-  async function goCreatorStep(next: number) {
-    if (creatorStep === 1) {
-      if (!creator.full_name.trim() || !creator.artistic_name.trim() || instagramHandle(creator.instagram).length < 2) {
-        await alertWarning(tc("alerts.incompleteTitle"), ta("creatorIncomplete"));
-        return;
-      }
-      if (!creator.category) {
-        await alertWarning(ta("styleRequiredTitle"), ta("styleRequired"));
-        return;
-      }
-    }
-    if (creatorStep === 2) {
-      if (!isValidWhatsApp(creator.whatsapp)) {
-        await alertWarning(tc("alerts.invalidWhatsappTitle"), tc("alerts.invalidWhatsapp"));
-        return;
-      }
-      if (!creator.city.trim()) {
-        await alertWarning(tc("alerts.cityRequiredTitle"), tc("alerts.cityRequired"));
-        return;
-      }
-      if (!isValidCountry(creator.country)) {
-        await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
-        return;
-      }
-      if (hasRegions(creator.country) && !isValidRegion(creator.country, creator.state)) {
-        await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
-        return;
-      }
-    }
-    setCreatorStep(next);
-  }
-
-  async function onCreatorSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!isValidEmail(creator.email)) {
-      await alertWarning(tc("alerts.invalidEmailTitle"), ta("invalidEmailCreate"));
-      return;
-    }
-    const passwordIssue = passwordError(creator.password, creator.password_confirmation);
-    if (passwordIssue) {
-      await alertWarning(tc("alerts.invalidPasswordTitle"), tc(`password.${passwordIssue}`));
-      return;
-    }
-    if (!creator.lgpd_accepted) {
-      await alertWarning(tc("alerts.lgpdTitle"), tc("alerts.lgpdRequired"));
-      return;
-    }
-    await submitJson("/auth/register/creator", {
-      ...creator,
-      instagram: instagramHandle(creator.instagram),
-      invite_code: creator.invite_code.trim() || undefined,
-    });
+  function openCreator() {
+    setModal("creator");
   }
 
   async function onCompanySubmit(event: FormEvent) {
@@ -574,11 +543,6 @@ export function LandingPage() {
     await promptAndSendPasswordReset(login.email);
   }
 
-  function openCreator() {
-    setCreatorStep(1);
-    setModal("creator");
-  }
-
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-x-clip bg-[#FDFDFE] font-sans text-slate-900 antialiased selection:bg-purple-600 selection:text-white">
       <motion.header
@@ -606,15 +570,38 @@ export function LandingPage() {
           </nav>
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
             <LanguageSwitcher theme="light" />
-            <button onClick={() => setModal("login")} className="hidden h-10 items-center px-3 text-sm font-semibold text-slate-700 hover:text-purple-600 sm:inline-flex">
-              {ta("login")}
-            </button>
-            <button
-              onClick={() => openCreator()}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-purple-600 px-3 text-xs font-bold text-white transition-colors hover:bg-purple-700 sm:px-4 sm:text-sm"
-            >
-              {ta("signUp")} <ArrowRight size={14} className="hidden sm:inline" />
-            </button>
+            {sessionUser ? (
+              <>
+                <button
+                  type="button"
+                  onClick={goToPanel}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-purple-600 px-3 text-xs font-bold text-white transition-colors hover:bg-purple-700 sm:px-4 sm:text-sm"
+                >
+                  {tl("nav.accessPanel")} <ArrowRight size={14} className="hidden sm:inline" />
+                </button>
+                <UserProfileMenu
+                  user={sessionUser}
+                  role={sessionUser.role}
+                  userData={profileMenuData(sessionUser)}
+                  onLogout={onLogout}
+                  variant="header"
+                />
+              </>
+            ) : checkingSession ? (
+              <div className="h-10 w-36 shrink-0" aria-hidden />
+            ) : (
+              <>
+                <button onClick={() => setModal("login")} className="hidden h-10 items-center px-3 text-sm font-semibold text-slate-700 hover:text-purple-600 sm:inline-flex">
+                  {ta("login")}
+                </button>
+                <button
+                  onClick={() => openCreator()}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-purple-600 px-3 text-xs font-bold text-white transition-colors hover:bg-purple-700 sm:px-4 sm:text-sm"
+                >
+                  {ta("signUp")} <ArrowRight size={14} className="hidden sm:inline" />
+                </button>
+              </>
+            )}
             <button className="rounded-xl p-2 text-slate-700 lg:hidden" onClick={() => setMobileOpen((value) => !value)}>
               {mobileOpen ? <X /> : <Menu />}
             </button>
@@ -638,12 +625,31 @@ export function LandingPage() {
                   {link.label}
                 </button>
               ))}
-              <button
-                onClick={() => { setMobileOpen(false); setModal("login"); }}
-                className="rounded-lg px-2 py-2.5 text-left hover:bg-purple-50 hover:text-purple-700 sm:hidden"
-              >
-                {ta("login")}
-              </button>
+              {sessionUser ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={goToPanel}
+                    className="rounded-lg px-2 py-2.5 text-left hover:bg-purple-50 hover:text-purple-700 sm:hidden"
+                  >
+                    {tl("nav.accessPanel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onLogout(); }}
+                    className="rounded-lg px-2 py-2.5 text-left text-rose-600 hover:bg-rose-50"
+                  >
+                    {t("nav:logoutAccount")}
+                  </button>
+                </>
+              ) : !checkingSession ? (
+                <button
+                  onClick={() => { setMobileOpen(false); setModal("login"); }}
+                  className="rounded-lg px-2 py-2.5 text-left hover:bg-purple-50 hover:text-purple-700 sm:hidden"
+                >
+                  {ta("login")}
+                </button>
+              ) : null}
             </div>
           </nav>
         ) : null}
@@ -1116,125 +1122,14 @@ export function LandingPage() {
               ) : null}
 
               {modal === "creator" ? (
-                <>
-                  <div className="mb-6 pr-8">
-                    <span className="rounded-full border border-purple-100 bg-purple-50 px-2.5 py-1 text-[10px] font-black tracking-wider text-purple-600 uppercase">
-                      {ta("castingOfficial")}
-                    </span>
-                    <h3 className="mt-2 text-2xl font-black text-slate-950">{ta("wantCreatorTitle")}</h3>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {ta("creatorStepHint", { step: creatorStep })}
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                      <div className={`h-1.5 flex-1 rounded-full ${creatorStep >= 1 ? "bg-purple-600" : "bg-slate-100"}`} />
-                      <div className={`h-1.5 flex-1 rounded-full ${creatorStep >= 2 ? "bg-purple-600" : "bg-slate-100"}`} />
-                      <div className={`h-1.5 flex-1 rounded-full ${creatorStep >= 3 ? "bg-purple-600" : "bg-slate-100"}`} />
-                    </div>
-                  </div>
-                  <form className="space-y-4" noValidate onSubmit={onCreatorSubmit}>
-                    {creatorStep === 1 ? (
-                      <>
-                        <ModalField label={ta("fields.fullName")} required>
-                          <input placeholder={ta("fields.fullNamePh")} autoComplete="name" className={modalInput} value={creator.full_name} onChange={(e) => setCreator({ ...creator, full_name: e.target.value })} />
-                        </ModalField>
-                        <ModalField label={ta("fields.artisticName")} required>
-                          <input placeholder={ta("fields.artisticNamePh")} className={modalInput} value={creator.artistic_name} onChange={(e) => setCreator({ ...creator, artistic_name: e.target.value })} />
-                        </ModalField>
-                        <ModalField label={ta("fields.instagram")} required>
-                          <div className="relative">
-                            <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">@</span>
-                            <input
-                              placeholder={ta("fields.instagramPh")}
-                              className={`${modalInput} pl-8`}
-                              value={instagramHandle(creator.instagram)}
-                              onChange={(e) => setCreator({ ...creator, instagram: formatInstagram(e.target.value) })}
-                            />
-                          </div>
-                        </ModalField>
-                        <ModalField label={ta("fields.style")} required>
-                          <Select2Field
-                            theme="light"
-                            placeholder={ta("fields.stylePh")}
-                            searchable
-                            value={creator.category}
-                            options={creatorCategoryOptions}
-                            onChange={(value) => setCreator({ ...creator, category: value })}
-                          />
-                        </ModalField>
-                        <button type="button" onClick={() => goCreatorStep(2)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-700">
-                          {tc("next")} <ArrowRight size={16} />
-                        </button>
-                      </>
-                    ) : creatorStep === 2 ? (
-                      <>
-                        <ModalField label={ta("fields.whatsapp")} required>
-                          <input placeholder={ta("fields.whatsappPh")} inputMode="tel" autoComplete="tel" className={modalInput} value={creator.whatsapp} onChange={(e) => setCreator({ ...creator, whatsapp: formatWhatsApp(e.target.value) })} />
-                        </ModalField>
-                        <div className="grid grid-cols-1 gap-3">
-                          <ModalField label={ta("fields.country")} required>
-                            <CountrySelect
-                              theme="light"
-                              placeholder={ta("fields.countryPh")}
-                              value={creator.country}
-                              onChange={(value) => setCreator({ ...creator, country: value, state: "" })}
-                            />
-                          </ModalField>
-                          <ModalField label={ta("fields.region")} required>
-                            <RegionSelect
-                              theme="light"
-                              country={creator.country}
-                              placeholder={ta("fields.regionPh")}
-                              value={creator.state}
-                              onChange={(value) => setCreator({ ...creator, state: value })}
-                            />
-                          </ModalField>
-                          <ModalField label={ta("fields.city")} required>
-                            <input placeholder={ta("fields.cityPh")} autoComplete="address-level2" className={modalInput} value={creator.city} onChange={(e) => setCreator({ ...creator, city: e.target.value })} />
-                          </ModalField>
-                        </div>
-                        <div className="flex items-center gap-3 pt-2">
-                          <button type="button" onClick={() => setCreatorStep(1)} className="w-1/3 rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200">{tc("back")}</button>
-                          <button type="button" onClick={() => goCreatorStep(3)} className="flex w-2/3 items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-700">
-                            {tc("next")} <ArrowRight size={16} />
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <ModalField label={ta("fields.bestEmail")} required>
-                          <input type="email" placeholder={ta("fields.emailPh")} autoComplete="email" className={modalInput} value={creator.email} onChange={(e) => setCreator({ ...creator, email: e.target.value })} />
-                        </ModalField>
-                        <ModalField label={ta("fields.createPassword")} required>
-                          <PasswordField placeholder={ta("minChars")} autoComplete="new-password" inputClassName={modalInput} value={creator.password} onChange={(e) => setCreator({ ...creator, password: e.target.value })} />
-                        </ModalField>
-                        <ModalField label={ta("fields.confirmYourPassword")} required>
-                          <PasswordField placeholder={ta("repeatPassword")} autoComplete="new-password" inputClassName={modalInput} value={creator.password_confirmation} onChange={(e) => setCreator({ ...creator, password_confirmation: e.target.value })} />
-                        </ModalField>
-                        <ModalField label={ta("fields.inviteCode")}>
-                          <input
-                            placeholder={ta("fields.inviteCodePh")}
-                            className={`${modalInput} uppercase`}
-                            value={creator.invite_code}
-                            onChange={(e) => setCreator({ ...creator, invite_code: e.target.value.toUpperCase() })}
-                          />
-                          <p className="m-0 mt-1 text-[11px] text-slate-500">{ta("fields.inviteCodeHint")}</p>
-                        </ModalField>
-                        <label className="flex cursor-pointer items-start gap-2.5 pt-2">
-                          <input type="checkbox" checked={creator.lgpd_accepted} onChange={(e) => setCreator({ ...creator, lgpd_accepted: e.target.checked })} className="mt-1 rounded text-purple-600" />
-                          <span className="text-[11px] leading-snug text-slate-600">
-                            {ta("lgpdCreator")}
-                          </span>
-                        </label>
-                        <div className="flex items-center gap-3 pt-2">
-                          <button type="button" onClick={() => setCreatorStep(2)} className="w-1/3 rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200">{tc("back")}</button>
-                          <button disabled={loading} className="w-2/3 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white shadow-md shadow-purple-200 hover:bg-purple-700 disabled:opacity-50">
-                            {loading ? ta("creating") : ta("finishSignup")}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </form>
-                </>
+                <CreatorSignupForm
+                  landingSlug={getLandingOrigin()}
+                  onSuccess={(payload) => {
+                    void attachLandingOrigin(payload.user).then(() => {
+                      router.push(persistAuth(payload, true));
+                    });
+                  }}
+                />
               ) : null}
 
               {modal === "company" ? (

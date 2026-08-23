@@ -221,6 +221,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                   <SidebarItem href="/available-campaigns?view=creator" label={t("viewAsCreator")} icon={Sparkles} active={false} onClick={close} />
                   <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                   <SidebarItem href="/company-dashboard" label={t("companyPortal")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
+                  <SidebarItem href="/company-landing" label={t("companyLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
                   <SidebarItem href="/join" label={t("landing")} icon={Globe} active={isJoinActive} onClick={close} />
                 </div>
               </>
@@ -234,6 +235,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
+                <SidebarItem href="/company-landing" label={t("companyLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
                 <SidebarItem href="/join" label={t("viewLanding")} icon={Globe} active={isJoinActive} onClick={close} />
               </>
             ) : (

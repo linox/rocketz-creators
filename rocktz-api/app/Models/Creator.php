@@ -117,6 +117,11 @@ class Creator extends Model
         return $this->hasMany(Notification::class);
     }
 
+    public function landingSignups(): HasMany
+    {
+        return $this->hasMany(CompanyLandingSignup::class);
+    }
+
     public function countryCode(): string
     {
         return Geo::isValidCountry($this->country) ? Geo::normalizeCountry($this->country) : Geo::DEFAULT_COUNTRY;

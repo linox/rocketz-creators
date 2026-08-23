@@ -9,9 +9,11 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowUpRight,
+  Banknote,
   BarChart3,
   Calendar,
   CalendarCheck,
+  CalendarClock,
   Camera,
   Check,
   CheckCircle2,
@@ -51,17 +53,20 @@ import {
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CampaignMetricsPanel } from "@/components/CampaignMetricsPanel";
 import { api } from "@/lib/api";
+import { agencyFeeFromBudget, currentAgencyFeePercent, parseAgencyFeePercent } from "@/lib/agency-fee";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { currencySymbol, moneyCurrency } from "@/lib/geo";
-import { campaignCreatorDeliveryState, type ContentDeliveryState } from "@/lib/content-delivery-status";
+import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -389,6 +394,11 @@ function DetailInner() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [savingFee, setSavingFee] = useState(false);
+  const [agencyFeeDraft, setAgencyFeeDraft] = useState("");
+  const [payModal, setPayModal] = useState<{ row: CampaignCreator; mode: "pay" | "schedule" } | null>(null);
+  const [payDate, setPayDate] = useState("");
   const [imageOpen, setImageOpen] = useState(false);
   const [editing, setEditing] = useState<CampaignCreator | null>(null);
   const [imageUrl, setImageUrl] = useState("");
@@ -400,6 +410,7 @@ function DetailInner() {
     approval_flow: "script_and_video" as "script_and_video" | "video_only" | "script_only",
     total_budget: "",
     creator_cache: "",
+    agency_fee_percent: "",
     start_date: "",
     end_date: "",
     is_secret: false,
@@ -453,6 +464,11 @@ function DetailInner() {
   }, [id, isAdmin]);
 
   useEffect(() => {
+    if (!campaign) return;
+    setAgencyFeeDraft(String(currentAgencyFeePercent(campaign)));
+  }, [campaign?.id, campaign?.agency_fee_percent]);
+
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
       if (stored === "split" || stored === "grid") setCreatorLayout(stored);
@@ -485,6 +501,31 @@ function DetailInner() {
   const pendingAppCount = Math.max(pendingApps.length, campaign?.pending_applications ?? 0);
   const approvedApps = applications.filter((row) => row.application_status === "approved");
   const rejectedApps = applications.filter((row) => row.application_status === "rejected");
+  const financeSummary = useMemo(() => {
+    if (!campaign) return { total: 0, ready: 0, scheduled: 0, paid: 0, readyRows: [] as CampaignCreator[] };
+    let total = 0;
+    let ready = 0;
+    let scheduled = 0;
+    let paid = 0;
+    const readyRows: CampaignCreator[] = [];
+    for (const row of approvedCreators) {
+      const amount = effectiveCreatorFee(row, campaign);
+      total += amount;
+      if (row.payment_status === "paid") {
+        paid += amount;
+        continue;
+      }
+      if (row.payment_status === "scheduled") {
+        scheduled += amount;
+        continue;
+      }
+      if (isApprovedDelivery(campaignCreatorDeliveryState(row, campaign.approval_flow))) {
+        ready += amount;
+        readyRows.push(row);
+      }
+    }
+    return { total, ready, scheduled, paid, readyRows };
+  }, [approvedCreators, campaign]);
 
   useEffect(() => {
     if (displayCreators.length > 0 && (selectedId == null || !displayCreators.some((row) => row.id === selectedId))) {
@@ -526,7 +567,7 @@ function DetailInner() {
   const filteredCreators = useMemo(() => {
     const term = creatorSearch.trim().toLowerCase();
     return displayCreators.filter((row) => {
-      const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${row.delivery_type ?? ""}`.toLowerCase();
+      const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.delivery_type ?? ""}`.toLowerCase();
       if (term && !name.includes(term)) return false;
       const none = hasNoDemand(row);
       if (creatorFilter === "attention") return needsAgencyAttention(row);
@@ -543,7 +584,7 @@ function DetailInner() {
       if (appFilter !== "all" && row.application_status !== appFilter) return false;
       if (!term) return true;
       const niches = (row.creator?.categories ?? []).join(" ");
-      const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
+      const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
       return blob.includes(term);
     });
   }, [applications, appFilter, appSearch]);
@@ -552,8 +593,8 @@ function DetailInner() {
   const castingCost = campaign
     ? approvedCreators.reduce((acc, row) => acc + effectiveCreatorFee(row, campaign), 0)
     : 0;
-  const agencyMargin = totalBudget - castingCost;
-  const marginPercent = totalBudget > 0 ? Math.round((agencyMargin / totalBudget) * 100) : 0;
+  const feePercent = campaign ? currentAgencyFeePercent(campaign) : 0;
+  const agencyMargin = agencyFeeFromBudget(totalBudget, feePercent);
   const endDate = campaign?.end_date ? new Date(`${campaign.end_date}T00:00:00`) : null;
   const daysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
   const specialMode = Boolean(campaign?.is_barter || campaign?.is_direct_contract);
@@ -601,17 +642,6 @@ function DetailInner() {
     await patch(row, { application_status: "pending", rejection_reason: "" });
   }
 
-  async function approveAgency() {
-    if (!campaign) return;
-    try {
-      await api.approveCampaignAgency(campaign.id);
-      await load();
-      await alertSuccess(t("campaignDetail.approvedAgency"));
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
   async function changeStatus(status: string) {
     if (!campaign) return;
     try {
@@ -621,6 +651,92 @@ function DetailInner() {
     } catch (err) {
       await alertApiError(err);
     }
+  }
+
+  async function saveAgencyFee() {
+    if (!campaign) return;
+    const feePercent = parseAgencyFeePercent(agencyFeeDraft);
+    if (feePercent == null) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
+      return;
+    }
+    setSavingFee(true);
+    try {
+      await api.updateCampaign(campaign.id, { agency_fee_percent: feePercent });
+      await load();
+      await alertSuccess(t("campaigns.agencyFeeSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSavingFee(false);
+    }
+  }
+
+  function formatPayDate(value?: string | null) {
+    if (!value) return "";
+    return new Date(`${value}T00:00:00`).toLocaleDateString(locale);
+  }
+
+  function paymentBadge(status?: string | null) {
+    if (status === "paid") return { className: "border-emerald-200 bg-emerald-50 text-emerald-700", label: t("campaignDetail.paid") };
+    if (status === "scheduled") return { className: "border-indigo-200 bg-indigo-50 text-indigo-700", label: t("campaignDetail.scheduled") };
+    return { className: "border-rose-200 bg-rose-50 text-rose-700", label: t("campaignDetail.pending") };
+  }
+
+  async function markPaid(row: CampaignCreator) {
+    if (!campaign) return;
+    if (campaign.is_barter || campaign.is_direct_contract) return;
+    const amount = moneyOrMode(effectiveCreatorFee(row, campaign));
+    const pix = row.creator?.pix_key?.trim();
+    const ok = await alertConfirm(
+      t("campaignDetail.payConfirmTitle"),
+      t("campaignDetail.payConfirmText", {
+        name: row.creator?.artistic_name ?? "",
+        amount,
+        pix: pix || t("campaignDetail.noPix"),
+      }),
+      t("campaignDetail.payNow"),
+    );
+    if (!ok) return;
+    const done = await patch(row, {
+      payment_status: "paid",
+      payment_date: new Date().toISOString().slice(0, 10),
+    });
+    if (done) {
+      setPayModal(null);
+      await alertSuccess(t("campaignDetail.paymentMarked"));
+    }
+  }
+
+  async function schedulePayment(row: CampaignCreator, date: string) {
+    if (!date) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.scheduleDateRequired"));
+      return;
+    }
+    const done = await patch(row, { payment_status: "scheduled", payment_date: date });
+    if (done) {
+      setPayModal(null);
+      await alertSuccess(t("campaignDetail.paymentScheduled"));
+    }
+  }
+
+  async function payAllReady() {
+    if (!campaign || financeSummary.readyRows.length === 0) return;
+    const ok = await alertConfirm(
+      t("campaignDetail.payAllTitle"),
+      t("campaignDetail.payAllText", {
+        count: financeSummary.readyRows.length,
+        amount: moneyOrMode(financeSummary.ready),
+      }),
+      t("campaignDetail.payNow"),
+    );
+    if (!ok) return;
+    const today = new Date().toISOString().slice(0, 10);
+    for (const row of financeSummary.readyRows) {
+      const done = await patch(row, { payment_status: "paid", payment_date: today });
+      if (!done) return;
+    }
+    await alertSuccess(t("campaignDetail.paymentMarked"));
   }
 
   async function removeCampaign() {
@@ -661,6 +777,7 @@ function DetailInner() {
           : "script_and_video",
       total_budget: campaign.total_budget != null ? String(campaign.total_budget) : "",
       creator_cache: campaign.creator_cache != null ? String(campaign.creator_cache) : "",
+      agency_fee_percent: String(currentAgencyFeePercent(campaign)),
       start_date: campaign.start_date || "",
       end_date: campaign.end_date || "",
       is_secret: campaign.is_secret,
@@ -690,6 +807,11 @@ function DetailInner() {
   async function saveCampaign(event: FormEvent) {
     event.preventDefault();
     if (!campaign) return;
+    const feePercent = parseAgencyFeePercent(editForm.agency_fee_percent);
+    if (isAdmin && !editForm.is_barter && feePercent == null) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
+      return;
+    }
     try {
       await api.updateCampaign(campaign.id, {
         name: editForm.name,
@@ -699,6 +821,7 @@ function DetailInner() {
         approval_flow: editForm.approval_flow,
         total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
         creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? Number(editForm.creator_cache) : null,
+        agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
         image_url: imageUrl || null,
@@ -917,7 +1040,7 @@ function DetailInner() {
               </button>
             ) : null}
             {isAdmin && isPendingAgency(campaign.status) ? (
-              <button type="button" onClick={() => void approveAgency()} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-emerald-700">
+              <button type="button" onClick={() => setApproveOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-emerald-700">
                 <CheckCircle2 size={14} /> {t("campaignDetail.approveAgency")}
               </button>
             ) : null}
@@ -1003,8 +1126,11 @@ function DetailInner() {
                     <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiMyFee")}</span>
                   </div>
                   {myParticipation && !campaign.is_barter && Number(myParticipation.amount) > 0 ? (
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", myParticipation.payment_status === "paid" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
-                      {myParticipation.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                      myParticipation.payment_status === "paid" ? "bg-emerald-50 text-emerald-700" : myParticipation.payment_status === "scheduled" ? "bg-indigo-50 text-indigo-700" : "bg-rose-50 text-rose-700",
+                    )}>
+                      {myParticipation.payment_status === "paid" ? t("campaignDetail.paid") : myParticipation.payment_status === "scheduled" ? t("campaignDetail.scheduled") : t("campaignDetail.pending")}
                     </span>
                   ) : null}
                 </div>
@@ -1062,7 +1188,7 @@ function DetailInner() {
                 <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiMargin")}</span>
               </div>
               <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", agencyMargin >= 0 ? "bg-purple-50 text-purple-700" : "bg-rose-50 text-rose-700")}>
-                {specialMode ? t("campaignDetail.kpiPartnership") : t("campaignDetail.kpiFee", { percent: marginPercent })}
+                {specialMode ? t("campaignDetail.kpiPartnership") : t("campaignDetail.kpiFee", { percent: feePercent })}
               </span>
             </div>
             <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{moneyOrMode(agencyMargin)}</span>
@@ -1285,7 +1411,7 @@ function DetailInner() {
                             <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
                             <div className="min-w-0">
                               <span className="block truncate text-xs font-black text-slate-800">@{row.creator?.artistic_name || "criador"}</span>
-                              <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator?.full_name}</span>
+                              {row.creator?.full_name ? <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator.full_name}</span> : null}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
@@ -1320,7 +1446,7 @@ function DetailInner() {
                             </div>
                             <div className="flex items-center justify-between text-slate-500">
                               <span>{t("campaignDetail.payment")}:</span>
-                              <span className={cn("font-bold uppercase", row.payment_status === "paid" ? "text-emerald-600" : "text-rose-600")}>{row.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}</span>
+                              <span className={cn("font-bold uppercase", row.payment_status === "paid" ? "text-emerald-600" : row.payment_status === "scheduled" ? "text-indigo-600" : "text-rose-600")}>{row.payment_status === "paid" ? t("campaignDetail.paid") : row.payment_status === "scheduled" ? t("campaignDetail.scheduled") : t("campaignDetail.pending")}</span>
                             </div>
                             {isAdmin ? (
                               <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5">
@@ -1383,7 +1509,7 @@ function DetailInner() {
                         <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
                       </div>
                       <span className="text-xs font-semibold text-slate-400">
-                        {selectedCreator.full_name} • {selectedCreator.city || t("campaignDetail.brazil")}
+                        {[selectedCreator.full_name, selectedCreator.city || t("campaignDetail.brazil")].filter(Boolean).join(" • ")}
                       </span>
                     </div>
                   </div>
@@ -1766,13 +1892,9 @@ function DetailInner() {
                           </span>
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-                          <span>{row.creator?.full_name || t("campaignDetail.nameUnknown")}</span>
-                          {location ? (
-                            <>
-                              <span className="text-slate-300">•</span>
-                              <span>{location}</span>
-                            </>
-                          ) : null}
+                          {row.creator?.full_name ? <span>{row.creator.full_name}</span> : null}
+                          {row.creator?.full_name && location ? <span className="text-slate-300">•</span> : null}
+                          {location ? <span>{location}</span> : null}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           {niches.slice(0, 3).map((niche) => (
@@ -1819,7 +1941,7 @@ function DetailInner() {
                         <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {waUrl ? (
+                        {isAdmin && waUrl ? (
                           <a href={waUrl} target="_blank" rel="noreferrer" title={t("campaignDetail.whatsappTitle")} className="flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
                             <MessageCircle size={15} />
                           </a>
@@ -1979,12 +2101,62 @@ function DetailInner() {
             <h2 className="text-lg font-black text-slate-900">{t("campaignDetail.financeTitle")}</h2>
             <p className="text-xs text-slate-500">{t("campaignDetail.financeHint")}</p>
           </div>
+          {isAdmin && !campaign.is_barter ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-purple-50/50 p-4 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <AgencyFeePercentField
+                  value={agencyFeeDraft}
+                  onChange={setAgencyFeeDraft}
+                  totalBudget={totalBudget}
+                  formatCurrency={(amount) => formatCurrency(amount, moneyCurrency(campaign))}
+                  disabled={savingFee}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingFee}
+                onClick={() => void saveAgencyFee()}
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-purple-600 px-4 text-xs font-extrabold text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                {savingFee ? tc("saving") : t("campaignDetail.saveAgencyFee")}
+              </button>
+            </div>
+          ) : null}
+          {!campaign.is_barter ? (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.paySummaryTotal")}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{moneyOrMode(financeSummary.total)}</p>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+                <p className="text-[10px] font-black tracking-wider text-emerald-700 uppercase">{t("campaignDetail.paySummaryReady")}</p>
+                <p className="mt-1 text-lg font-black text-emerald-800">{moneyOrMode(financeSummary.ready)}</p>
+              </div>
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+                <p className="text-[10px] font-black tracking-wider text-indigo-700 uppercase">{t("campaignDetail.paySummaryScheduled")}</p>
+                <p className="mt-1 text-lg font-black text-indigo-800">{moneyOrMode(financeSummary.scheduled)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.paySummaryPaid")}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{moneyOrMode(financeSummary.paid)}</p>
+              </div>
+            </div>
+          ) : null}
+          {canManage && financeSummary.readyRows.length > 0 && !campaign.is_barter ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-emerald-800">{t("campaignDetail.payReadyHint", { count: financeSummary.readyRows.length, amount: moneyOrMode(financeSummary.ready) })}</p>
+              <button type="button" onClick={() => void payAllReady()} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-extrabold text-white hover:bg-emerald-700">
+                <Banknote size={14} /> {t("campaignDetail.payAllReady")}
+              </button>
+            </div>
+          ) : null}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black tracking-wider text-slate-500 uppercase">
                   <th className="px-4 py-3">{t("campaignDetail.colCreator")}</th>
                   <th className="px-4 py-3">{t("campaignDetail.colFormat")}</th>
+                  <th className="px-4 py-3">{t("campaignDetail.colContent")}</th>
                   <th className="px-4 py-3">{t("campaignDetail.colFee")}</th>
                   <th className="px-4 py-3">{t("campaignDetail.colContract")}</th>
                   <th className="px-4 py-3">{t("campaignDetail.colPayment")}</th>
@@ -1992,46 +2164,109 @@ function DetailInner() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {approvedCreators.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/70">
-                    <td className="px-4 py-3.5 font-bold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
-                        <span>@{row.creator?.artistic_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 font-medium text-slate-600">{row.delivery_type}</td>
-                    <td className="px-4 py-3.5 font-black text-slate-900">{moneyOrMode(effectiveCreatorFee(row, campaign))}</td>
-                    <td className="px-4 py-3.5">
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.signature_status === "signed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
-                        {row.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.payment_status === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700")}>
-                        {row.payment_status === "paid" ? t("campaignDetail.paid") : t("campaignDetail.pending")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-right">
-                      {canManage ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
-                            setEditing(row);
-                          }}
-                          className="font-bold text-brand-primary hover:underline"
-                        >
-                          {t("campaignDetail.editDelivery")}
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {approvedCreators.map((row) => {
+                  const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
+                  const contentOk = isApprovedDelivery(deliveryState);
+                  const amount = effectiveCreatorFee(row, campaign);
+                  const pay = paymentBadge(row.payment_status);
+                  const unpaid = row.payment_status !== "paid";
+                  const canPay = canManage && contentOk && unpaid && !campaign.is_barter && !campaign.is_direct_contract;
+                  return (
+                    <tr key={row.id} className="hover:bg-slate-50/70">
+                      <td className="px-4 py-3.5 font-bold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
+                          <div className="min-w-0">
+                            <p>@{row.creator?.artistic_name}</p>
+                            {row.creator?.pix_key ? (
+                              <p className="truncate text-[10px] font-semibold text-slate-500">{t("campaignDetail.pixKey")}: {row.creator.pix_key}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 font-medium text-slate-600">{row.delivery_type}</td>
+                      <td className="px-4 py-3.5">
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", contentOk ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                          {deliveryLabel(deliveryState, t)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="font-black text-slate-900">{moneyOrMode(amount)}</p>
+                        {row.payment_status === "scheduled" && row.payment_date ? (
+                          <p className="text-[10px] font-semibold text-indigo-600">{t("campaignDetail.scheduledFor", { date: formatPayDate(row.payment_date) })}</p>
+                        ) : null}
+                        {row.payment_status === "paid" && row.payment_date ? (
+                          <p className="text-[10px] font-semibold text-emerald-600">{t("campaignDetail.paidOn", { date: formatPayDate(row.payment_date) })}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", row.signature_status === "signed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                          {row.signature_status === "signed" ? t("campaignDetail.signed") : t("campaignDetail.pending")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", pay.className)}>{pay.label}</span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-col items-end gap-1.5">
+                          {canPay ? (
+                            <div className="flex flex-wrap justify-end gap-1.5">
+                              <button
+                                type="button"
+                                disabled={updatingId === row.id}
+                                onClick={() => void markPaid(row)}
+                                className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-[10px] font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                <Banknote size={12} /> {t("campaignDetail.payNow")}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={updatingId === row.id}
+                                onClick={() => {
+                                  setPayDate(row.payment_date || new Date().toISOString().slice(0, 10));
+                                  setPayModal({ row, mode: "schedule" });
+                                }}
+                                className="inline-flex h-8 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-[10px] font-extrabold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                              >
+                                <CalendarClock size={12} /> {t("campaignDetail.schedulePayment")}
+                              </button>
+                            </div>
+                          ) : null}
+                          {!contentOk && unpaid && !campaign.is_barter ? (
+                            <p className="max-w-[180px] text-right text-[10px] font-medium text-amber-700">{t("campaignDetail.waitingContentHint")}</p>
+                          ) : null}
+                          {canManage ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                setEditing(row);
+                              }}
+                              className="font-bold text-brand-primary hover:underline"
+                            >
+                              {t("campaignDetail.editDelivery")}
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+      ) : null}
+
+      {approveOpen ? (
+        <ApproveAgencyCampaignModal
+          campaign={campaign}
+          onClose={() => setApproveOpen(false)}
+          onApproved={() => {
+            setApproveOpen(false);
+            void load();
+          }}
+        />
       ) : null}
 
       <AnimatePresence>
@@ -2055,7 +2290,7 @@ function DetailInner() {
                         <UserAvatar src={creator.photo_url} name={creator.artistic_name || creator.full_name} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
                         <div>
                           <p className="text-sm font-black text-slate-900">@{creator.artistic_name}</p>
-                          <p className="text-xs text-slate-500">{creator.full_name}</p>
+                          {creator.full_name ? <p className="text-xs text-slate-500">{creator.full_name}</p> : null}
                         </div>
                       </div>
                       {already ? (
@@ -2145,6 +2380,15 @@ function DetailInner() {
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache")}</label>
                     <input type="number" step="0.01" min="0" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.creator_cache} onChange={(event) => setEditForm({ ...editForm, creator_cache: event.target.value })} />
                   </div>
+                  {isAdmin ? (
+                    <AgencyFeePercentField
+                      value={editForm.agency_fee_percent}
+                      onChange={(value) => setEditForm({ ...editForm, agency_fee_percent: value })}
+                      totalBudget={editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : 0}
+                      formatCurrency={(amount) => formatCurrency(amount, moneyCurrency(campaign))}
+                      disabled={editForm.is_barter}
+                    />
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -2339,6 +2583,63 @@ function DetailInner() {
                   <X size={14} /> {t("campaignDetail.confirmReject")}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {payModal ? (
+          <div className="app-modal-overlay fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setPayModal(null)} aria-label={tc("close")} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="app-modal-panel relative z-10 my-auto flex w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <CalendarClock size={18} />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900">{t("campaignDetail.scheduleModalTitle")}</h3>
+                </div>
+                <button type="button" onClick={() => setPayModal(null)} className="cursor-pointer p-1 text-slate-400 hover:text-slate-700">✕</button>
+              </div>
+              <p className="text-xs text-slate-600">
+                {t("campaignDetail.scheduleModalHint", {
+                  name: payModal.row.creator?.artistic_name ?? "",
+                  amount: moneyOrMode(effectiveCreatorFee(payModal.row, campaign)),
+                })}
+              </p>
+              {payModal.row.creator?.pix_key ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                  {t("campaignDetail.pixKey")}: {payModal.row.creator.pix_key}
+                </p>
+              ) : (
+                <p className="text-xs font-semibold text-amber-700">{t("campaignDetail.noPix")}</p>
+              )}
+              <form
+                noValidate
+                className="flex flex-col gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void schedulePayment(payModal.row, payDate);
+                }}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase" htmlFor="campaign-pay-date">{t("campaignDetail.scheduleDateLabel")}</label>
+                  <input
+                    id="campaign-pay-date"
+                    type="date"
+                    value={payDate}
+                    onChange={(event) => setPayDate(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
+                  <button type="button" onClick={() => setPayModal(null)} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+                  <button type="submit" disabled={updatingId === payModal.row.id} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50">
+                    <CalendarClock size={14} /> {t("campaignDetail.confirmSchedule")}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         ) : null}

@@ -20,6 +20,7 @@ import {
   FileText,
   Filter,
   FolderPlus,
+  Globe,
   Home,
   Hourglass,
   Info,
@@ -52,6 +53,7 @@ import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmission
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { Select2Field } from "@/components/Select2Field";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
 import { api } from "@/lib/api";
@@ -490,8 +492,21 @@ function ProfileInner() {
   const agencyView = isAdmin && viewMode === "agency";
   const canModerateCreator = creator ? userCanModerateCreator(user, creator) : false;
 
+  async function updateLandingReview(status: string) {
+    const companyId = user.company?.id;
+    const signupId = creator?.landing_review?.id;
+    if (!companyId || !signupId) return;
+    try {
+      await api.updateLandingSignup(companyId, signupId, status);
+      await alertSuccess(ta("companyLanding.signups.updated"));
+      await load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   function hydrate(data: Creator) {
-    setFullName(data.full_name);
+    setFullName(data.full_name ?? "");
     setArtisticName(data.artistic_name);
     setWhatsapp(data.whatsapp ?? "");
     setCity(data.city ?? "");
@@ -970,6 +985,26 @@ function ProfileInner() {
         </div>
       ) : null}
 
+      {user.role === "company" && creator.landing_review ? (
+        <div className="flex flex-col gap-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm"><Globe size={20} /></div>
+            <div>
+              <h4 className="m-0 text-sm font-bold text-indigo-950">{ta("companyLanding.signups.bannerTitle")}</h4>
+              <p className="mt-0.5 max-w-xl text-xs text-indigo-800">{ta("companyLanding.signups.bannerBody")}</p>
+              <div className="mt-2">
+                <StatusBadge status={creator.landing_review.status} />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void updateLandingReview("approved")} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">{ta("companyLanding.signups.approve")}</button>
+            <button type="button" onClick={() => void updateLandingReview("reviewing")} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800">{ta("companyLanding.signups.reviewing")}</button>
+            <button type="button" onClick={() => void updateLandingReview("rejected")} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-800">{ta("companyLanding.signups.reject")}</button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center md:gap-4">
         <div className="flex flex-col gap-4">
           {isAdmin || user.role === "company" ? (
@@ -988,7 +1023,7 @@ function ProfileInner() {
                 </span>
               </div>
               <p className="mt-0.5 text-[14px] font-medium text-[#64748B]">
-                {creator.full_name}{formatLocation(locale, creator) ? ` • ${formatLocation(locale, creator)}` : ""}
+                {[creator.full_name, formatLocation(locale, creator)].filter(Boolean).join(" • ")}
               </p>
             </div>
           </div>
@@ -1216,7 +1251,7 @@ function ProfileInner() {
                     type="button"
                     onClick={() => void syncAllNetworks()}
                     disabled={syncingNetwork !== null}
-                    className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 text-xs font-bold text-brand-primary hover:bg-brand-primary/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-3 text-xs font-bold text-brand-primary hover:bg-brand-primary/10 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {syncingNetwork === "all" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     {syncingNetwork === "all" ? tp("fetchingNetworkData") : tp("fetchAllNetworkData")}
@@ -2393,33 +2428,33 @@ function NetworkCard({
         <h4 className="text-sm font-bold text-slate-900">{title}</h4>
       </div>
       <div className="flex flex-col gap-4">
-        <Field label={handleLabel}>
-          <div className={cn("flex flex-col gap-2", onFetch ? "sm:flex-row" : "")}>
+        <div className={cn("flex flex-col gap-2", onFetch ? "sm:flex-row sm:items-end" : "")}>
+          <Field label={handleLabel} className="min-w-0 flex-1">
             <input className={inputClass} value={handle} onChange={(event) => onHandle(event.target.value)} placeholder={handlePlaceholder} />
-            {onFetch ? (
-              <button
-                type="button"
-                onClick={onFetch}
-                disabled={fetching || !handle.trim()}
-                className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {fetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                {fetching ? tp("fetchingNetworkData") : tp("fetchNetworkData")}
-              </button>
-            ) : null}
-          </div>
-        </Field>
+          </Field>
+          {onFetch ? (
+            <button
+              type="button"
+              onClick={onFetch}
+              disabled={fetching || !handle.trim()}
+              className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {fetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {fetching ? tp("fetchingNetworkData") : tp("fetchNetworkData")}
+            </button>
+          ) : null}
+        </div>
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("metricsTitle")}</p>
           {onFetch ? <p className="text-[11px] text-slate-500">{tp("metricsLockedHint")}</p> : null}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label={followersLabel}>
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
+            <Field label={followersLabel} labelClassName="min-h-[2.5rem] leading-tight">
               <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="numeric" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={followers} onChange={(event) => onFollowers(event.target.value)} />
             </Field>
-            <Field label={tp("avgViews")}>
+            <Field label={tp("avgViews")} labelClassName="min-h-[2.5rem] leading-tight">
               <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="numeric" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={views} onChange={(event) => onViews(event.target.value)} />
             </Field>
-            <Field label={tp("engagementPct")}>
+            <Field label={tp("engagementPct")} labelClassName="min-h-[2.5rem] leading-tight">
               <input readOnly={Boolean(onFetch)} tabIndex={onFetch ? -1 : undefined} inputMode="decimal" className={cn(inputClass, onFetch && "cursor-default bg-slate-50 text-slate-700")} value={engagement} onChange={(event) => onEngagement(event.target.value)} />
             </Field>
           </div>
@@ -2600,10 +2635,10 @@ function SocialLinks({ socials, emptyLabel }: { socials?: Record<string, string>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, className, labelClassName }: { label: string; children: ReactNode; className?: string; labelClassName?: string }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{label}</label>
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <label className={cn("text-[11px] font-bold tracking-wider text-[#64748B] uppercase", labelClassName)}>{label}</label>
       {children}
     </div>
   );

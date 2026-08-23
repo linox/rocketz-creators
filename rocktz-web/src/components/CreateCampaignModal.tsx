@@ -17,12 +17,15 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
+import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
+import { DEFAULT_AGENCY_FEE_PERCENT, parseAgencyFeePercent } from "@/lib/agency-fee";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency } from "@/lib/geo";
+import { usePrivacy } from "@/lib/privacy";
 
 type Tab = "geral" | "entregas" | "briefing";
 type Flow = "script_and_video" | "video_only" | "script_only";
@@ -94,6 +97,7 @@ export function CreateCampaignModal({
 }) {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
+  const { formatCurrency } = usePrivacy();
   const [tab, setTab] = useState<Tab>("geral");
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
@@ -102,6 +106,7 @@ export function CreateCampaignModal({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [budget, setBudget] = useState("");
+  const [agencyFeePercent, setAgencyFeePercent] = useState(String(DEFAULT_AGENCY_FEE_PERCENT));
   const [creatorCache, setCreatorCache] = useState("");
   const [isSecret, setIsSecret] = useState(false);
   const [isDirect, setIsDirect] = useState(false);
@@ -143,6 +148,7 @@ export function CreateCampaignModal({
     setStartDate("");
     setEndDate("");
     setBudget("");
+    setAgencyFeePercent(String(DEFAULT_AGENCY_FEE_PERCENT));
     setCreatorCache("");
     setIsSecret(false);
     setIsDirect(false);
@@ -191,6 +197,12 @@ export function CreateCampaignModal({
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
       return;
     }
+    const feePercent = parseAgencyFeePercent(agencyFeePercent);
+    if (isAdmin && !isBarter && feePercent == null) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
+      return;
+    }
     setSaving(true);
     try {
       const created = await api.createCampaign({
@@ -200,6 +212,7 @@ export function CreateCampaignModal({
         end_date: endDate,
         total_budget: isBarter ? 0 : budget ? Number(budget) : null,
         creator_cache: creatorCache ? Number(creatorCache) : null,
+        agency_fee_percent: isAdmin ? feePercent ?? DEFAULT_AGENCY_FEE_PERCENT : undefined,
         image_url: imageUrl || null,
         is_secret: isSecret,
         is_direct_contract: isDirect,
@@ -320,7 +333,7 @@ export function CreateCampaignModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid gap-4 ${isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.creatorCache", { currency })}{!isBarter ? " *" : ""}</label>
                     <input type="number" min="0" step="0.01" placeholder={t("campaigns.creatorCachePh")} disabled={isBarter} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={(e) => setCreatorCache(e.target.value)} />
@@ -333,6 +346,15 @@ export function CreateCampaignModal({
                     </div>
                     <input type="number" placeholder={t("campaigns.budgetPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={budget} onChange={(e) => setBudget(e.target.value)} />
                   </div>
+                  {isAdmin ? (
+                    <AgencyFeePercentField
+                      value={agencyFeePercent}
+                      onChange={setAgencyFeePercent}
+                      totalBudget={isBarter ? 0 : budget ? Number(budget) : 0}
+                      formatCurrency={(amount) => formatCurrency(amount, currency)}
+                      disabled={isBarter}
+                    />
+                  ) : null}
                 </div>
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">

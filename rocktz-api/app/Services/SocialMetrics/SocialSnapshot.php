@@ -68,4 +68,16 @@ class SocialSnapshot
             $cached,
         );
     }
+
+    public function fillMissing(?int $views = null, ?float $engagement = null): self
+    {
+        return new self(
+            $this->network,
+            $this->handle,
+            $this->followers,
+            $this->views ?? $views,
+            $this->engagement ?? $engagement,
+            $this->cached,
+        );
+    }
 }

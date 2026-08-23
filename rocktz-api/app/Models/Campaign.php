@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'end_date',
     'total_budget',
     'agency_fee',
+    'agency_fee_percent',
     'creators_budget',
     'creator_cache',
     'currency',
@@ -34,8 +35,26 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 ])]
 class Campaign extends Model
 {
+    public const DEFAULT_AGENCY_FEE_PERCENT = 20.0;
+
     /** @use HasFactory<CampaignFactory> */
     use HasFactory;
+
+    /**
+     * @return array{agency_fee_percent: float, agency_fee: float, creators_budget: float}
+     */
+    public static function feeSplit(?float $totalBudget, ?float $percent = null): array
+    {
+        $percent = max(0, min(100, $percent ?? self::DEFAULT_AGENCY_FEE_PERCENT));
+        $budget = max(0, (float) $totalBudget);
+        $agencyFee = round($budget * $percent / 100, 2);
+
+        return [
+            'agency_fee_percent' => round($percent, 2),
+            'agency_fee' => $agencyFee,
+            'creators_budget' => round($budget - $agencyFee, 2),
+        ];
+    }
 
     /**
      * @return array<string, string>
@@ -47,6 +66,7 @@ class Campaign extends Model
             'end_date' => 'date',
             'total_budget' => 'decimal:2',
             'agency_fee' => 'decimal:2',
+            'agency_fee_percent' => 'decimal:2',
             'creators_budget' => 'decimal:2',
             'creator_cache' => 'decimal:2',
             'status' => CampaignStatus::class,
