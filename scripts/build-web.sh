@@ -14,8 +14,8 @@ Gera o front estático para cPanel (HTML/JS/CSS, sem Node).
 
 Uso:
   ./scripts/build-web.sh
-  ./scripts/build-web.sh --api https://apicreators.rocketz.me/api --app https://creators.rocketz.me
-  ./scripts/build-web.sh --api https://apicreators.rocketz.me/api --app https://creators.rocketz.me --deploy
+  ./scripts/build-web.sh --api https://api.creatorz.digital/api --app https://creatorz.digital
+  ./scripts/build-web.sh --api https://api.creatorz.digital/api --app https://creatorz.digital --deploy
 
 Opções:
   --api URL   NEXT_PUBLIC_API_URL (API Laravel, com /api no final)

@@ -1,7 +1,7 @@
 # API
 
 Base local: `http://localhost:8000/api`  
-Base produção: `https://apicreators.rocketz.me/api`  
+Base produção: `https://api.creatorz.digital/api`  
 Auth: `Authorization: Bearer {token}` (o front estático envia o token do `localStorage`). Em Apache/cPanel o header `Authorization` às vezes é removido; o front também manda `X-Auth-Token`.
 
 Idioma: o front envia `Accept-Language: pt-BR|en|es` em toda chamada. A API só aceita esses três valores (`pt-BR` vira `pt_BR` no Laravel). Default `pt_BR`.

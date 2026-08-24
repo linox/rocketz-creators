@@ -2,6 +2,8 @@ import { AUTH_COOKIE, homePathForUser, type AuthPayload, type AuthUser } from "@
 import i18n, { getAppLocale } from "@/i18n/config";
 
 const DEFAULT_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+const PRODUCTION_API_URL = "https://api.creatorz.digital/api";
+const PRODUCTION_HOSTS = new Set(["creatorz.digital", "www.creatorz.digital"]);
 
 function isLocalAccessHost(host: string): boolean {
   return (
@@ -20,6 +22,9 @@ export function getApiUrl(): string {
   const host = window.location.hostname;
   if (isLocalAccessHost(host)) {
     return `http://${host}:8000/api`;
+  }
+  if (PRODUCTION_HOSTS.has(host)) {
+    return PRODUCTION_API_URL;
   }
   return DEFAULT_API_URL;
 }

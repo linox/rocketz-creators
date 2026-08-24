@@ -89,11 +89,11 @@ class MediaUploadTest extends TestCase
         $this->withToken($token)
             ->patchJson('/api/auth/me', [
                 'name' => 'Diogo Rocketz',
-                'avatar_url' => 'https://apicreators.rocketz.me/uploads/avatars/foto.jpg',
+                'avatar_url' => 'https://api.creatorz.digital/uploads/avatars/foto.jpg',
             ])
             ->assertOk()
             ->assertJsonPath('user.name', 'Diogo Rocketz')
-            ->assertJsonPath('user.avatar_url', 'https://apicreators.rocketz.me/uploads/avatars/foto.jpg');
+            ->assertJsonPath('user.avatar_url', 'https://api.creatorz.digital/uploads/avatars/foto.jpg');
     }
 
     public function test_html_and_svg_uploads_are_rejected(): void

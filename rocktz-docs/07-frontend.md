@@ -42,7 +42,7 @@ Rotas dinâmicas usam `generateStaticParams` com `{ id: "_" }` ou `{ slug: "_" }
 O browser chama a API Laravel em `NEXT_PUBLIC_API_URL` e guarda o token Sanctum em `localStorage` (`rocktz_token`). Helpers em `src/lib/api.ts` (`api.creators()`, `api.campaign()` etc.).
 
 - Local: `http://localhost:8000/api`
-- Produção: `https://apicreators.rocketz.me/api`
+- Produção: `https://api.creatorz.digital/api`
 
 Callback do Google: `/auth/callback?token=`
 

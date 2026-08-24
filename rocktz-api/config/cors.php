@@ -12,7 +12,8 @@ return [
         $frontend,
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'https://creators.rocketz.me',
+        'https://creatorz.digital',
+        'https://www.creatorz.digital',
     ]))),
 
     'allowed_origins_patterns' => env('APP_ENV') === 'local' ? [

@@ -40,7 +40,7 @@ Na raiz do monorepo:
 Produção (a URL da API entra no HTML na hora do build):
 
 ```bash
-./scripts/build-web.sh --api https://apicreators.rocketz.me/api --app https://seudominio.com.br
+./scripts/build-web.sh --api https://api.creatorz.digital/api --app https://creatorz.digital
 ```
 
 Gera `rocktz-web/dist-cpanel/` e `rocktz-web-cpanel.zip`. Envie o conteúdo de `dist-cpanel` para o `public_html` (com o `.htaccess`).
@@ -48,10 +48,10 @@ Gera `rocktz-web/dist-cpanel/` e `rocktz-web-cpanel.zip`. Envie o conteúdo de `
 No `.env` da API em produção:
 
 ```
-APP_URL=https://apicreators.rocketz.me
-FRONTEND_URL=https://creators.rocketz.me
+APP_URL=https://api.creatorz.digital
+FRONTEND_URL=https://creatorz.digital
 DB_DATABASE=apicreators_db
-GOOGLE_REDIRECT_URI=https://apicreators.rocketz.me/api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://api.creatorz.digital/api/auth/google/callback
 
 MAIL_MAILER=resend
 RESEND_API_KEY=re_xxxxx

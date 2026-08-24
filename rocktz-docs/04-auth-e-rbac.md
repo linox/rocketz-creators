@@ -5,7 +5,7 @@
 - Laravel Sanctum (personal access token)
 - Next.js guarda o token em `localStorage` (`rocktz_token`) e chama a API Laravel direto (export estático para cPanel, sem Node)
 - CORS: `FRONTEND_URL` na API precisa ser a origem do site estático
-- Google OAuth: `GOOGLE_REDIRECT_URI` em produção é `https://apicreators.rocketz.me/api/auth/google/callback`
+- Google OAuth: `GOOGLE_REDIRECT_URI` em produção é `https://api.creatorz.digital/api/auth/google/callback`
 
 ## Endpoints Laravel (`/api/auth`)
 
