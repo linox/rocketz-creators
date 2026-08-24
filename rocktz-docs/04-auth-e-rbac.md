@@ -11,7 +11,7 @@
 
 - `POST /register/creator` — cria user + creator `review` + consentimento LGPD
 - `POST /register/company` — cria user + company `pending` + company_user
-- `POST /login` — e-mail/senha. Se `two_factor_enabled`, responde `{ two_factor_required: true, challenge_token, email_hint }` em vez do token e envia um código de 6 dígitos por e-mail (10 min).
+- `POST /login` — e-mail/senha. Se `two_factor_enabled`, responde `{ two_factor_required: true, challenge_token, email_hint }` em vez do token e envia o código na hora (prioridade, fora da fila). Expira em 10 min.
 - `POST /two-factor/verify` — `{ challenge_token, code }` emite o token Sanctum
 - `POST /two-factor/resend` — reenvia o código (1/min)
 - `POST /two-factor/enable` / `POST /two-factor/confirm` (sanctum) — ativa 2FA após confirmar o código

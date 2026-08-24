@@ -3,10 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\MailTemplateKey;
+use App\Jobs\SendTransactionalMailJob;
 use App\Mail\TransactionalMailable;
 use App\Models\User;
+use App\Services\Mail\TransactionalMailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class TwoFactorAuthTest extends TestCase
@@ -52,7 +55,8 @@ class TwoFactorAuthTest extends TestCase
 
             return $mail->hasTo($user->email)
                 && preg_match('/^\d{6}$/', $code) === 1
-                && $mail->mailMessage->subject === trans('mail.templates.auth.two_factor.subject', [], 'pt_BR');
+                && $mail->mailMessage->subject === app(TransactionalMailService::class)->defaultCopy(MailTemplateKey::TwoFactorCode, 'pt_BR')['subject']
+                && ! str_contains($mail->mailMessage->subject, 'mail.templates');
         });
     }
 
@@ -68,6 +72,27 @@ class TwoFactorAuthTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('user.email', $user->email)
             ->assertJsonStructure(['token', 'user']);
+    }
+
+    public function test_two_factor_email_sends_even_when_queue_is_database(): void
+    {
+        Mail::fake();
+        Queue::fake();
+        config(['queue.default' => 'database']);
+        $user = $this->userWithTwoFactor();
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'secret123',
+        ])->assertOk();
+
+        Mail::assertSent(TransactionalMailable::class);
+        Queue::assertNotPushed(SendTransactionalMailJob::class);
+        $this->assertDatabaseHas('mail_messages', [
+            'email' => $user->email,
+            'template_key' => MailTemplateKey::TwoFactorCode->value,
+            'status' => 'sent',
+        ]);
     }
 
     public function test_resend_is_throttled_within_one_minute(): void

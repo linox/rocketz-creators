@@ -66,11 +66,11 @@ MAIL_SUPPORT_ADDRESS=contato@rocketzmkt.com.br
 
 O domínio do `MAIL_FROM_ADDRESS` precisa estar verificado no Resend. Sem a chave, `POST /auth/forgot-password` responde 503.
 
-Localmente o mailer fica em `log` (`rocktz-api/storage/logs/laravel.log`). E-mails transacionais entram na fila `jobs` (`QUEUE_CONNECTION=database`). Com a API no ar:
+Código 2FA e reset de senha são prioridade: saem **na hora** da requisição (não entram na fila). Os demais e-mails transacionais vão para a fila `default`. Com a API no ar:
 
 ```bash
 cd rocktz-api
-php artisan queue:work
+php artisan queue:work --queue=high,default
 php artisan schedule:work   # local: lembretes a cada hora + alertas admin 08:00
 ```
 

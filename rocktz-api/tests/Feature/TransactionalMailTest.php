@@ -19,6 +19,7 @@ use App\Services\Mail\TransactionalMailService;
 use Database\Seeders\MailTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class TransactionalMailTest extends TestCase
@@ -48,6 +49,27 @@ class TransactionalMailTest extends TestCase
             'template_key' => MailTemplateKey::CreatorRegistered->value,
         ]);
         Mail::assertSent(TransactionalMailable::class);
+    }
+
+    public function test_operational_mail_goes_to_default_queue(): void
+    {
+        Queue::fake();
+
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Maria Silva',
+            'artistic_name' => 'mariasilva',
+            'email' => 'maria@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999999999',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'instagram' => 'mariasilva',
+            'category' => 'UGC Content',
+            'lgpd_accepted' => true,
+        ])->assertCreated();
+
+        Queue::assertPushedOn('default', SendTransactionalMailJob::class);
     }
 
     public function test_company_registration_queues_operational_email(): void
@@ -215,6 +237,17 @@ class TransactionalMailTest extends TestCase
             'template_key' => MailTemplateKey::DemandReminder->value,
             'related_id' => $item->id,
         ]);
+    }
+
+    public function test_default_copy_resolves_dotted_template_keys(): void
+    {
+        $mail = app(TransactionalMailService::class);
+        $copy = $mail->defaultCopy(MailTemplateKey::TwoFactorCode, 'pt_BR');
+
+        $this->assertSame('Código de verificação — Creatorz by Rocketz', $copy['subject']);
+        $this->assertSame('Ir para o login', $copy['cta_label']);
+        $this->assertStringNotContainsString('mail.templates', $copy['body']);
+        $this->assertStringContainsString('10 minutos', $copy['body']);
     }
 
     public function test_queued_reminder_is_cancelled_if_status_changes_before_send(): void

@@ -84,6 +84,19 @@ enum MailTemplateKey: string
         return $this->preferenceFlag() !== null;
     }
 
+    public function isAuthPriority(): bool
+    {
+        return match ($this) {
+            self::PasswordReset, self::TwoFactorCode => true,
+            default => false,
+        };
+    }
+
+    public function queueName(): string
+    {
+        return $this->isAuthPriority() ? 'high' : 'default';
+    }
+
     /**
      * Optional flags that may suppress this template. Operational keys with null cannot be disabled.
      *

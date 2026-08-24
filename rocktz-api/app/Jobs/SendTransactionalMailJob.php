@@ -7,7 +7,6 @@ use App\Enums\DeliveryStatus;
 use App\Enums\MailMessageStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\StageApprovalStatus;
-use App\Mail\TransactionalMailable;
 use App\Models\CampaignCreator;
 use App\Models\ContentPlanningItem;
 use App\Models\MailMessage;
@@ -18,7 +17,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mailer\Exception\HttpTransportException;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
@@ -73,22 +71,8 @@ class SendTransactionalMailJob implements ShouldQueue
             return;
         }
 
-        $viewData = $mail->viewDataFor($message);
-        $message->update([
-            'status' => MailMessageStatus::Processing,
-            'attempts' => $message->attempts + 1,
-        ]);
-
-        $providerId = (string) $message->id;
-
         try {
-            Mail::to($message->email)->send(new TransactionalMailable($message, $viewData));
-            $message->update([
-                'status' => MailMessageStatus::Sent,
-                'sent_at' => now(),
-                'provider_id' => $providerId,
-                'failure_reason' => null,
-            ]);
+            $mail->deliver($message);
         } catch (Throwable $e) {
             $permanent = $this->isPermanent($e);
             $message->update([

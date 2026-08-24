@@ -52,7 +52,7 @@ Resposta de login/register:
 
 Cadastro de criador/empresa e Google complete aceitam `locale` opcional (`pt-BR`, `en`, `es`). Sem o campo, a API usa `Accept-Language` (ou `pt-BR`).
 
-Quando `users.two_factor_enabled` é verdadeiro, o login não devolve `token`. O front pede o código do e-mail e chama `POST /auth/two-factor/verify`. A 2FA é opt-in em `/settings/security`.
+Quando `users.two_factor_enabled` é verdadeiro, o login não devolve `token`. O código sai na hora (fora da fila). O front pede o código do e-mail e chama `POST /auth/two-factor/verify`. A 2FA é opt-in em `/settings/security`.
 
 ## Dashboard
 

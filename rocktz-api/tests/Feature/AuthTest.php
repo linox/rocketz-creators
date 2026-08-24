@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Enums\CompanyStatus;
 use App\Enums\CreatorStatus;
+use App\Enums\MailTemplateKey;
 use App\Enums\UserRole;
 use App\Mail\TransactionalMailable;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Mail\TransactionalMailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -208,9 +210,10 @@ class AuthTest extends TestCase
 
         Mail::assertSent(TransactionalMailable::class, function (TransactionalMailable $mail) use ($user) {
             $cta = (string) ($mail->templateData['ctaUrl'] ?? '');
+            $copy = app(TransactionalMailService::class)->defaultCopy(MailTemplateKey::PasswordReset, 'pt_BR');
 
             return $mail->hasTo($user->email)
-                && $mail->mailMessage->subject === trans('mail.templates.auth.password_reset.subject', [], 'pt_BR')
+                && $mail->mailMessage->subject === $copy['subject']
                 && str_contains($cta, '/reset-password?token=')
                 && str_contains($cta, urlencode($user->email));
         });
@@ -230,9 +233,11 @@ class AuthTest extends TestCase
         ])->assertOk();
 
         Mail::assertSent(TransactionalMailable::class, function (TransactionalMailable $mail) use ($user) {
+            $copy = app(TransactionalMailService::class)->defaultCopy(MailTemplateKey::PasswordReset, 'es');
+
             return $mail->hasTo($user->email)
-                && $mail->mailMessage->subject === trans('mail.templates.auth.password_reset.subject', [], 'es')
-                && $mail->templateData['ctaLabel'] === trans('mail.templates.auth.password_reset.cta', [], 'es');
+                && $mail->mailMessage->subject === $copy['subject']
+                && $mail->templateData['ctaLabel'] === $copy['cta_label'];
         });
     }
 

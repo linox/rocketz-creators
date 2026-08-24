@@ -8,6 +8,7 @@ use App\Enums\MailMessageStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\UserRole;
 use App\Jobs\SendTransactionalMailJob;
+use App\Mail\TransactionalMailable;
 use App\Models\MailMessage;
 use App\Models\MailSetting;
 use App\Models\MailTemplate;
@@ -17,7 +18,9 @@ use App\Support\FrontendUrl;
 use App\Support\MailVariableRenderer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
+use Throwable;
 
 class TransactionalMailService
 {
@@ -73,9 +76,49 @@ class TransactionalMailService
             return $message;
         }
 
-        SendTransactionalMailJob::dispatch($message->id);
+        if ($this->sendsImmediately($key)) {
+            try {
+                $this->deliver($message);
+            } catch (Throwable $e) {
+                report($e);
+                $message->update([
+                    'status' => MailMessageStatus::TemporaryFailed,
+                    'failure_reason' => mb_substr($e->getMessage(), 0, 2000),
+                ]);
+
+                return null;
+            }
+
+            return $message->fresh();
+        }
+
+        SendTransactionalMailJob::dispatch($message->id)->onQueue($key->queueName());
 
         return $message;
+    }
+
+    public function sendsImmediately(MailTemplateKey $key): bool
+    {
+        return $key->isAuthPriority();
+    }
+
+    public function deliver(MailMessage $message): void
+    {
+        $message->loadMissing('user');
+        $viewData = $this->viewDataFor($message);
+        $message->update([
+            'status' => MailMessageStatus::Processing,
+            'attempts' => $message->attempts + 1,
+        ]);
+
+        Mail::to($message->email)->send(new TransactionalMailable($message, $viewData));
+
+        $message->update([
+            'status' => MailMessageStatus::Sent,
+            'sent_at' => now(),
+            'provider_id' => (string) $message->id,
+            'failure_reason' => null,
+        ]);
     }
 
     public function sendingEnabled(): bool
@@ -113,7 +156,7 @@ class TransactionalMailService
             return false;
         }
 
-        if (in_array($key, [MailTemplateKey::PasswordReset, MailTemplateKey::TwoFactorCode], true)) {
+        if ($key->isAuthPriority()) {
             return true;
         }
 
@@ -204,13 +247,14 @@ class TransactionalMailService
      */
     public function defaultCopy(MailTemplateKey $key, string $locale): array
     {
-        $base = 'mail.templates.'.$key->value;
+        $templates = trans('mail.templates', [], $locale);
+        $copy = is_array($templates) ? ($templates[$key->value] ?? []) : [];
 
         return [
-            'subject' => trans($base.'.subject', [], $locale),
-            'greeting' => trans($base.'.greeting', [], $locale),
-            'body' => trans($base.'.body', [], $locale),
-            'cta_label' => trans($base.'.cta', [], $locale),
+            'subject' => (string) ($copy['subject'] ?? ''),
+            'greeting' => (string) ($copy['greeting'] ?? ''),
+            'body' => (string) ($copy['body'] ?? ''),
+            'cta_label' => (string) ($copy['cta'] ?? ''),
         ];
     }
 
@@ -226,11 +270,20 @@ class TransactionalMailService
         }
 
         return [
-            'subject' => $version->subject !== '' ? $version->subject : $defaults['subject'],
-            'greeting' => $version->greeting ?: $defaults['greeting'],
-            'body' => $version->body !== '' ? $version->body : $defaults['body'],
-            'cta_label' => $version->cta_label ?: $defaults['cta_label'],
+            'subject' => $this->storedOrDefault($version->subject, $defaults['subject']),
+            'greeting' => $this->storedOrDefault($version->greeting, $defaults['greeting']),
+            'body' => $this->storedOrDefault($version->body, $defaults['body']),
+            'cta_label' => $this->storedOrDefault($version->cta_label, $defaults['cta_label']),
         ];
+    }
+
+    private function storedOrDefault(?string $stored, string $default): string
+    {
+        if ($stored === null || $stored === '' || str_starts_with($stored, 'mail.templates.')) {
+            return $default;
+        }
+
+        return $stored;
     }
 
     public function unsubscribeUrl(int $userId): string
