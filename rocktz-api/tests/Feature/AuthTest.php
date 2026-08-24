@@ -5,10 +5,11 @@ namespace Tests\Feature;
 use App\Enums\CompanyStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\UserRole;
+use App\Mail\TransactionalMailable;
+use App\Models\Company;
 use App\Models\User;
-use App\Notifications\ResetPasswordNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -84,13 +85,13 @@ class AuthTest extends TestCase
         ]);
 
         $this->assertNotEmpty(
-            \App\Models\Company::query()->where('name', 'Marca Teste')->value('creator_invite_code')
+            Company::query()->where('name', 'Marca Teste')->value('creator_invite_code')
         );
     }
 
     public function test_creator_can_register_with_company_invite_code(): void
     {
-        $company = \App\Models\Company::factory()->active()->create([
+        $company = Company::factory()->active()->create([
             'creator_invite_code' => 'AB3DK7MQ',
         ]);
 
@@ -188,7 +189,7 @@ class AuthTest extends TestCase
 
     public function test_forgot_password_sends_notification_for_existing_user(): void
     {
-        Notification::fake();
+        Mail::fake();
 
         $user = User::factory()->create([
             'email' => 'reset@example.com',
@@ -200,13 +201,43 @@ class AuthTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Se o e-mail existir, enviaremos o link de redefinição.');
 
-        Notification::assertSentTo($user, ResetPasswordNotification::class);
+        $this->assertDatabaseHas('mail_messages', [
+            'email' => 'reset@example.com',
+            'template_key' => 'auth.password_reset',
+        ]);
+
+        Mail::assertSent(TransactionalMailable::class, function (TransactionalMailable $mail) use ($user) {
+            $cta = (string) ($mail->templateData['ctaUrl'] ?? '');
+
+            return $mail->hasTo($user->email)
+                && $mail->mailMessage->subject === trans('mail.templates.auth.password_reset.subject', [], 'pt_BR')
+                && str_contains($cta, '/reset-password?token=')
+                && str_contains($cta, urlencode($user->email));
+        });
+    }
+
+    public function test_forgot_password_delivers_mail_through_mailer(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create([
+            'email' => 'reset.mail@example.com',
+            'locale' => 'es',
+        ]);
+
+        $this->postJson('/api/auth/forgot-password', [
+            'email' => 'reset.mail@example.com',
+        ])->assertOk();
+
+        Mail::assertSent(TransactionalMailable::class, function (TransactionalMailable $mail) use ($user) {
+            return $mail->hasTo($user->email)
+                && $mail->mailMessage->subject === trans('mail.templates.auth.password_reset.subject', [], 'es')
+                && $mail->templateData['ctaLabel'] === trans('mail.templates.auth.password_reset.cta', [], 'es');
+        });
     }
 
     public function test_forgot_password_message_follows_accept_language(): void
     {
-        Notification::fake();
-
         User::factory()->create([
             'email' => 'reset.en@example.com',
         ]);
@@ -257,13 +288,14 @@ class AuthTest extends TestCase
 
     public function test_forgot_password_does_not_leak_unknown_email(): void
     {
-        Notification::fake();
+        Mail::fake();
 
         $this->postJson('/api/auth/forgot-password', [
             'email' => 'nobody@example.com',
         ])->assertOk();
 
-        Notification::assertNothingSent();
+        Mail::assertNothingSent();
+        $this->assertDatabaseCount('mail_messages', 0);
     }
 
     public function test_forgot_password_requires_email(): void

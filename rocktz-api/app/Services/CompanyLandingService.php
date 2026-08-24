@@ -11,6 +11,7 @@ use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
 use App\Models\User;
+use App\Services\Mail\MailNotifier;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -268,5 +269,9 @@ class CompanyLandingService
             'type' => NotificationType::Application,
             'link' => '/creators/'.$creator->id.'?from=landing',
         ]);
+        $page->loadMissing('company');
+        if ($page->company) {
+            app(MailNotifier::class)->landingSignup($page->company, $creator);
+        }
     }
 }

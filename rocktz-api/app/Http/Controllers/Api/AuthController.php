@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Services\AuthService;
 use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
+use App\Services\Mail\MailNotifier;
 use App\Support\Geo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -221,7 +222,14 @@ class AuthController extends Controller
         }
         $this->authService->recordLgpdConsent($user, $request);
 
-        return response()->json($this->authService->issueToken($user->fresh()));
+        $fresh = $user->fresh(['creator', 'company']);
+        if ($data['type'] === 'creator') {
+            app(MailNotifier::class)->creatorRegistered($fresh);
+        } else {
+            app(MailNotifier::class)->companyRegistered($fresh);
+        }
+
+        return response()->json($this->authService->issueToken($fresh));
     }
 
     private function attachGoogleProfile(User $user, string $type, Request $request): void

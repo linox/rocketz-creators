@@ -12,6 +12,7 @@ use App\Models\CompanyUser;
 use App\Models\Consent;
 use App\Models\Creator;
 use App\Models\User;
+use App\Services\Mail\MailNotifier;
 use App\Support\AppLocale;
 use App\Support\Geo;
 use Illuminate\Http\Request;
@@ -77,6 +78,8 @@ class AuthService
             app(CompanyLandingService::class)->attributeCreator((string) $data['landing_slug'], $user->creator);
         }
 
+        app(MailNotifier::class)->creatorRegistered($user->fresh(['creator']));
+
         return $this->issueToken($user);
     }
 
@@ -121,6 +124,8 @@ class AuthService
 
             return $user;
         });
+
+        app(MailNotifier::class)->companyRegistered($user->fresh(['company']));
 
         return $this->issueToken($user);
     }

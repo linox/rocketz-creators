@@ -26,6 +26,7 @@ return [
     'google_no_email' => 'Google did not return an email.',
     'lgpd_required' => 'You must authorize the use of data in accordance with the LGPD.',
     'profile_unavailable' => 'Profile unavailable.',
+    'creator_not_in_company_pool' => 'You can only manage creators who signed up through your landing page or invite.',
     'campaign_removed' => 'Campaign removed.',
     'creator_removed' => 'Creator removed from casting.',
     'recurring_creator_removed' => 'Creator removed from the contract.',

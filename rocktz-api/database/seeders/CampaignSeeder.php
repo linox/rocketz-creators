@@ -9,22 +9,20 @@ use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\CampaignDeliverable;
 use App\Models\Company;
-use App\Models\Creator;
+use Database\Seeders\Concerns\SeedsDemoAccounts;
 use Illuminate\Database\Seeder;
 
 class CampaignSeeder extends Seeder
 {
+    use SeedsDemoAccounts;
+
     public function run(): void
     {
         $aurora = Company::query()->where('name', 'Marca Aurora')->firstOrFail();
-        $ana = Creator::query()
-            ->whereHas('user', fn ($query) => $query->where('email', 'ana.creator@rocketz.test'))
-            ->firstOrFail();
-        $bruno = Creator::query()
-            ->whereHas('user', fn ($query) => $query->where('email', 'bruno.creator@rocketz.test'))
-            ->firstOrFail();
+        $ana = $this->demoCreator(DemoAccounts::CREATOR_ANA);
+        $bruno = $this->demoCreator(DemoAccounts::CREATOR_BRUNO);
 
-        $briefing = Campaign::factory()->briefing()->create([
+        $briefing = $this->ensureCampaign($aurora, 'Lançamento Sérum Aurora Glow', fn () => Campaign::factory()->briefing()->create([
             'company_id' => $aurora->id,
             'name' => 'Lançamento Sérum Aurora Glow',
             'objective' => 'Gerar awareness e prova social para o novo sérum.',
@@ -32,11 +30,10 @@ class CampaignSeeder extends Seeder
             ...Campaign::feeSplit(18000, 20),
             'creator_cache' => 14400,
             'currency' => $aurora->currency,
-        ]);
-
+        ]));
         $this->attachBriefingAndDeliverables($briefing, 'Sérum facial Aurora Glow', 2, 4, 1);
 
-        $selection = Campaign::factory()->selection()->create([
+        $selection = $this->ensureCampaign($aurora, 'Campanha Verão Aurora', fn () => Campaign::factory()->selection()->create([
             'company_id' => $aurora->id,
             'name' => 'Campanha Verão Aurora',
             'objective' => 'Selecionar criadores para a linha verão.',
@@ -44,19 +41,20 @@ class CampaignSeeder extends Seeder
             ...Campaign::feeSplit(12000, 20),
             'creator_cache' => 9600,
             'currency' => $aurora->currency,
-        ]);
-
+        ]));
         $this->attachBriefingAndDeliverables($selection, 'Kit verão Aurora', 1, 3, 1);
 
-        CampaignCreator::factory()->pendingApplication()->create([
-            'campaign_id' => $selection->id,
-            'creator_id' => $bruno->id,
-            'delivery_type' => 'reel',
-            'amount' => 1800,
-            'notes' => 'Quero participar desta campanha e conectar minha audiência à marca.',
-        ]);
+        if (! CampaignCreator::query()->where('campaign_id', $selection->id)->where('creator_id', $bruno->id)->exists()) {
+            CampaignCreator::factory()->pendingApplication()->create([
+                'campaign_id' => $selection->id,
+                'creator_id' => $bruno->id,
+                'delivery_type' => 'reel',
+                'amount' => 1800,
+                'notes' => 'Quero participar desta campanha e conectar minha audiência à marca.',
+            ]);
+        }
 
-        $production = Campaign::factory()->production()->create([
+        $production = $this->ensureCampaign($aurora, 'Rotina Glow 7 dias', fn () => Campaign::factory()->production()->create([
             'company_id' => $aurora->id,
             'name' => 'Rotina Glow 7 dias',
             'objective' => 'Produzir UGC de rotina com o sérum.',
@@ -64,27 +62,34 @@ class CampaignSeeder extends Seeder
             ...Campaign::feeSplit(9000, 20),
             'creator_cache' => 7200,
             'currency' => $aurora->currency,
-        ]);
-
+        ]));
         $this->attachBriefingAndDeliverables($production, 'Rotina de 7 dias com sérum', 3, 5, 0);
 
-        $productionCreator = CampaignCreator::factory()->approved()->create([
-            'campaign_id' => $production->id,
-            'creator_id' => $ana->id,
-            'delivery_type' => 'reel',
-            'amount' => 2500,
-            'script_status' => StageApprovalStatus::Submitted,
-            'script_submitted_at' => now()->subHours(8),
-        ]);
+        $productionCreator = CampaignCreator::query()
+            ->where('campaign_id', $production->id)
+            ->where('creator_id', $ana->id)
+            ->first();
+        if (! $productionCreator) {
+            $productionCreator = CampaignCreator::factory()->approved()->create([
+                'campaign_id' => $production->id,
+                'creator_id' => $ana->id,
+                'delivery_type' => 'reel',
+                'amount' => 2500,
+                'script_status' => StageApprovalStatus::Submitted,
+                'script_submitted_at' => now()->subHours(8),
+            ]);
+        }
 
-        CampaignCreatorContent::factory()->create([
-            'campaign_creator_id' => $productionCreator->id,
-            'script' => 'HOOK: pele cansada de manhã. Mostrar o sérum. Rotina de 3 passos. CTA: cupom AURORA10.',
-            'video_url' => null,
-            'published_link' => null,
-        ]);
+        if (! CampaignCreatorContent::query()->where('campaign_creator_id', $productionCreator->id)->exists()) {
+            CampaignCreatorContent::factory()->create([
+                'campaign_creator_id' => $productionCreator->id,
+                'script' => 'HOOK: pele cansada de manhã. Mostrar o sérum. Rotina de 3 passos. CTA: cupom AURORA10.',
+                'video_url' => null,
+                'published_link' => null,
+            ]);
+        }
 
-        $finished = Campaign::factory()->finished()->create([
+        $finished = $this->ensureCampaign($aurora, 'Unboxing Aurora Kit', fn () => Campaign::factory()->finished()->create([
             'company_id' => $aurora->id,
             'name' => 'Unboxing Aurora Kit',
             'objective' => 'Campanha encerrada com entrega publicada e paga.',
@@ -94,30 +99,47 @@ class CampaignSeeder extends Seeder
             'currency' => $aurora->currency,
             'start_date' => now()->subMonths(2)->toDateString(),
             'end_date' => now()->subWeeks(2)->toDateString(),
-        ]);
-
+        ]));
         $this->attachBriefingAndDeliverables($finished, 'Kit unboxing Aurora', 1, 2, 0);
 
-        $finishedCreator = CampaignCreator::factory()->paidAndSigned()->create([
-            'campaign_id' => $finished->id,
-            'creator_id' => $ana->id,
-            'delivery_type' => 'ugc',
-            'amount' => 2200,
-            'delivery_date' => now()->subWeeks(3)->toDateString(),
-            'post_date' => now()->subWeeks(2)->toDateString(),
-        ]);
+        $finishedCreator = CampaignCreator::query()
+            ->where('campaign_id', $finished->id)
+            ->where('creator_id', $ana->id)
+            ->first();
+        if (! $finishedCreator) {
+            $finishedCreator = CampaignCreator::factory()->paidAndSigned()->create([
+                'campaign_id' => $finished->id,
+                'creator_id' => $ana->id,
+                'delivery_type' => 'ugc',
+                'amount' => 2200,
+                'delivery_date' => now()->subWeeks(3)->toDateString(),
+                'post_date' => now()->subWeeks(2)->toDateString(),
+            ]);
+        }
 
-        CampaignCreatorContent::factory()->create([
-            'campaign_creator_id' => $finishedCreator->id,
-            'script' => 'Unboxing do kit com first impression e CTA.',
-            'video_url' => 'https://example.com/videos/ana-unboxing-aurora.mp4',
-            'published_link' => 'https://instagram.com/p/aurora-unboxing',
-            'metrics' => [
-                'views' => 28400,
-                'likes' => 1920,
-                'comments' => 86,
-            ],
-        ]);
+        if (! CampaignCreatorContent::query()->where('campaign_creator_id', $finishedCreator->id)->exists()) {
+            CampaignCreatorContent::factory()->create([
+                'campaign_creator_id' => $finishedCreator->id,
+                'script' => 'Unboxing do kit com first impression e CTA.',
+                'video_url' => 'https://example.com/videos/ana-unboxing-aurora.mp4',
+                'published_link' => 'https://instagram.com/p/aurora-unboxing',
+                'metrics' => [
+                    'views' => 28400,
+                    'likes' => 1920,
+                    'comments' => 86,
+                ],
+            ]);
+        }
+    }
+
+    private function ensureCampaign(Company $company, string $name, callable $create): Campaign
+    {
+        $existing = Campaign::query()
+            ->where('company_id', $company->id)
+            ->where('name', $name)
+            ->first();
+
+        return $existing ?: $create();
     }
 
     private function attachBriefingAndDeliverables(
@@ -127,27 +149,31 @@ class CampaignSeeder extends Seeder
         int $stories,
         int $tiktok,
     ): void {
-        CampaignBriefing::factory()->create([
-            'campaign_id' => $campaign->id,
-            'product' => $product,
-            'key_message' => 'Pele iluminada com rotina simples.',
-            'must_have' => 'Mostrar o produto na embalagem e na aplicação.',
-            'donts' => 'Não comparar com concorrentes e não prometer resultado clínico.',
-            'cta' => 'Use o cupom AURORA10',
-            'hashtags' => '#AuroraGlow #UGCBrasil',
-            'coupon' => 'AURORA10',
-        ]);
+        if (! CampaignBriefing::query()->where('campaign_id', $campaign->id)->exists()) {
+            CampaignBriefing::factory()->create([
+                'campaign_id' => $campaign->id,
+                'product' => $product,
+                'key_message' => 'Pele iluminada com rotina simples.',
+                'must_have' => 'Mostrar o produto na embalagem e na aplicação.',
+                'donts' => 'Não comparar com concorrentes e não prometer resultado clínico.',
+                'cta' => 'Use o cupom AURORA10',
+                'hashtags' => '#AuroraGlow #UGCBrasil',
+                'coupon' => 'AURORA10',
+            ]);
+        }
 
-        CampaignDeliverable::factory()->create([
-            'campaign_id' => $campaign->id,
-            'summary' => $reels.' reels + '.$stories.' stories',
-            'reels' => $reels,
-            'stories' => $stories,
-            'tiktok' => $tiktok,
-            'ugc' => 1,
-            'posts' => 0,
-            'youtube' => 0,
-            'deadline_days' => 14,
-        ]);
+        if (! CampaignDeliverable::query()->where('campaign_id', $campaign->id)->exists()) {
+            CampaignDeliverable::factory()->create([
+                'campaign_id' => $campaign->id,
+                'summary' => $reels.' reels + '.$stories.' stories',
+                'reels' => $reels,
+                'stories' => $stories,
+                'tiktok' => $tiktok,
+                'ugc' => 1,
+                'posts' => 0,
+                'youtube' => 0,
+                'deadline_days' => 14,
+            ]);
+        }
     }
 }

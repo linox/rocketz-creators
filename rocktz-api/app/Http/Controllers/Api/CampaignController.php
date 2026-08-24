@@ -20,6 +20,7 @@ use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
+use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
@@ -34,7 +35,10 @@ use Illuminate\Validation\ValidationException;
 
 class CampaignController extends Controller
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly MailNotifier $mail,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -176,6 +180,9 @@ class CampaignController extends Controller
         $campaign->load(['company', 'briefing', 'deliverable']);
         if ($campaign->isPendingAgency()) {
             $this->notifyAgencyReview($campaign);
+            $this->mail->campaignPendingAgency($campaign);
+        } else {
+            $this->mail->campaignVisible($campaign);
         }
 
         return response()->json(['data' => new CampaignResource($campaign)], 201);
@@ -289,6 +296,8 @@ class CampaignController extends Controller
             '/campaigns/'.$campaign->id,
             ['campaign_id' => $campaign->id, 'creator_id' => $creator->id],
         );
+
+        $this->mail->creatorApplied($campaign, $creator);
 
         return response()->json(['data' => new CampaignCreatorResource($row->load('creator'))], 201);
     }
@@ -406,7 +415,7 @@ class CampaignController extends Controller
             }
         }
 
-        $campaignCreator->loadMissing(['creator', 'campaign', 'content']);
+        $campaignCreator->loadMissing(['creator.user', 'campaign', 'content']);
         $this->notifyParticipationChange($campaignCreator, $data);
 
         return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
@@ -454,6 +463,11 @@ class CampaignController extends Controller
                 'type' => NotificationType::Approval,
                 'link' => '/creators/'.$data['creator_id'].'?tab=campaigns',
             ]);
+            $row->loadMissing('creator.user');
+            if ($row->creator) {
+                $this->mail->campaignAssigned($campaign->loadMissing('company'), $row->creator);
+                $this->mail->applicationDecided($row, true);
+            }
         }
 
         return response()->json(['data' => new CampaignCreatorResource($row->load('creator'))], 201);
@@ -506,7 +520,7 @@ class CampaignController extends Controller
             } else {
                 unset($data['status']);
             }
-        } else {
+        } elseif ($creating) {
             $data['status'] ??= CampaignStatus::Briefing;
         }
         if ($creating) {
@@ -653,6 +667,8 @@ class CampaignController extends Controller
                 'link' => '/creators/'.$row->creator_id.'?tab=campaigns',
             ]);
         }
+
+        $this->mail->campaignVisible($campaign);
     }
 
     private function defaultCreatorAmount(Campaign $campaign): float
@@ -695,6 +711,13 @@ class CampaignController extends Controller
                 'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
                 'link' => $creatorLink,
             ]);
+            if ($campaignCreator->creator?->user) {
+                $this->mail->applicationDecided(
+                    $campaignCreator,
+                    $approved,
+                    $approved ? null : (($data['rejection_reason'] ?? '') ?: null),
+                );
+            }
         }
 
         if ($script === StageApprovalStatus::Approved->value && ! $materialApproved) {
@@ -705,6 +728,15 @@ class CampaignController extends Controller
                 'type' => NotificationType::Approval,
                 'link' => $creatorLink,
             ]);
+            if ($campaignCreator->creator?->user) {
+                $this->mail->deliveryApproved(
+                    $campaignCreator->creator->user,
+                    $campaignName,
+                    $campaignName,
+                    $creatorLink,
+                    ['campaign_id' => $campaignId, 'creator_id' => $creatorId, 'company_id' => $companyId],
+                );
+            }
         }
 
         if ($materialApproved) {
@@ -715,6 +747,15 @@ class CampaignController extends Controller
                 'type' => NotificationType::Approval,
                 'link' => $creatorLink,
             ]);
+            if ($campaignCreator->creator?->user) {
+                $this->mail->deliveryApproved(
+                    $campaignCreator->creator->user,
+                    $campaignName,
+                    $campaignName,
+                    $creatorLink,
+                    ['campaign_id' => $campaignId, 'creator_id' => $creatorId, 'company_id' => $companyId],
+                );
+            }
         }
 
         if ($script === StageApprovalStatus::Revision->value && ! $videoRevision) {
@@ -726,6 +767,16 @@ class CampaignController extends Controller
                 'type' => NotificationType::DeliveryReview,
                 'link' => $creatorLink,
             ]);
+            if ($campaignCreator->creator?->user) {
+                $this->mail->revisionRequested(
+                    $campaignCreator->creator->user,
+                    $campaignName,
+                    $campaignName,
+                    (string) ($data['script_feedback'] ?? $data['revision_details'] ?? ''),
+                    $creatorLink,
+                    ['campaign_id' => $campaignId, 'creator_id' => $creatorId, 'company_id' => $companyId],
+                );
+            }
         }
 
         if ($videoRevision) {
@@ -737,6 +788,16 @@ class CampaignController extends Controller
                 'type' => NotificationType::DeliveryReview,
                 'link' => $creatorLink,
             ]);
+            if ($campaignCreator->creator?->user) {
+                $this->mail->revisionRequested(
+                    $campaignCreator->creator->user,
+                    $campaignName,
+                    $campaignName,
+                    (string) ($data['video_feedback'] ?? $data['revision_details'] ?? ''),
+                    $creatorLink,
+                    ['campaign_id' => $campaignId, 'creator_id' => $creatorId, 'company_id' => $companyId],
+                );
+            }
         }
 
         if ($companyId && $script === StageApprovalStatus::Submitted->value) {
@@ -755,6 +816,16 @@ class CampaignController extends Controller
                 $companyLink,
                 ['creator_id' => $creatorId, 'campaign_id' => $campaignId],
             );
+            if ($campaignCreator->creator) {
+                $this->mail->deliverySubmitted(
+                    $companyId,
+                    $campaignCreator->creator,
+                    $campaignName,
+                    $companyLink,
+                    ['campaign_id' => $campaignId, 'company_id' => $companyId, 'creator_id' => $creatorId],
+                    $campaignCreator->campaign,
+                );
+            }
         }
 
         if ($companyId && ($video === StageApprovalStatus::Submitted->value || $delivery === DeliveryStatus::Sent->value)) {
@@ -773,6 +844,16 @@ class CampaignController extends Controller
                 $companyLink,
                 ['creator_id' => $creatorId, 'campaign_id' => $campaignId],
             );
+            if ($campaignCreator->creator) {
+                $this->mail->deliverySubmitted(
+                    $companyId,
+                    $campaignCreator->creator,
+                    $campaignName,
+                    $companyLink,
+                    ['campaign_id' => $campaignId, 'company_id' => $companyId, 'creator_id' => $creatorId],
+                    $campaignCreator->campaign,
+                );
+            }
         }
     }
 

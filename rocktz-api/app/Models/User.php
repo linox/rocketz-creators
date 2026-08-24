@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\MailTemplateKey;
 use App\Enums\Permission;
 use App\Enums\UserRole;
-use App\Notifications\ResetPasswordNotification;
+use App\Services\Mail\TransactionalMailService;
 use App\Support\AppLocale;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
@@ -71,6 +72,16 @@ class User extends Authenticatable implements HasLocalePreference
         return $this->hasMany(Notification::class);
     }
 
+    public function notificationPreference(): HasOne
+    {
+        return $this->hasOne(UserNotificationPreference::class);
+    }
+
+    public function mailMessages(): HasMany
+    {
+        return $this->hasMany(MailMessage::class);
+    }
+
     public function permissionGrants(): HasMany
     {
         return $this->hasMany(UserPermission::class);
@@ -95,9 +106,21 @@ class User extends Authenticatable implements HasLocalePreference
         return in_array($slug, $this->permissionSlugs(), true);
     }
 
-    public function sendPasswordResetNotification(#[\SensitiveParameter] $token)
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
     {
-        $this->notify(new ResetPasswordNotification($token));
+        $frontend = rtrim((string) config('app.frontend_url'), '/');
+        $url = $frontend.'/reset-password?token='.$token.'&email='.urlencode($this->email);
+        app(TransactionalMailService::class)->send(
+            MailTemplateKey::PasswordReset,
+            $this,
+            [
+                'cta_url' => $url,
+                'link_plataforma' => $url,
+                'nome_usuario' => $this->name,
+            ],
+            null,
+            'reset:'.substr($token, 0, 12),
+        );
     }
 
     public function preferredLocale(): string

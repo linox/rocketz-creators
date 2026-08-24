@@ -2,17 +2,16 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Enums\UserRole;
+use Database\Seeders\Concerns\SeedsDemoAccounts;
 use Illuminate\Database\Seeder;
 
 class AdminSeeder extends Seeder
 {
+    use SeedsDemoAccounts;
+
     public function run(): void
     {
-        User::factory()->admin()->create([
-            'name' => 'Admin Rocketz',
-            'email' => 'admin@rocketz.test',
-            'password' => 'password',
-        ]);
+        $this->ensureUser(DemoAccounts::ADMIN, UserRole::Admin, 'Admin Rocketz');
     }
 }

@@ -57,7 +57,10 @@ export function Select2Field({
     if (!enableSearch || !term) {
       return options;
     }
-    return options.filter((option) => option.label.toLowerCase().includes(term) || option.value.toLowerCase().includes(term));
+    return options.filter(
+      (option) =>
+        option.label.toLowerCase().includes(term) || (option.value ?? "").toLowerCase().includes(term),
+    );
   }, [enableSearch, options, query]);
 
   function placeMenu() {
@@ -151,10 +154,10 @@ export function Select2Field({
               {filtered.length === 0 ? (
                 <li className="px-3 py-2 text-sm text-slate-400">{t("select2.empty")}</li>
               ) : (
-                filtered.map((option) => {
+                filtered.map((option, index) => {
                   const active = option.value === value;
                   return (
-                    <li key={option.value}>
+                    <li key={option.value ? `${option.value}-${index}` : `option-${index}`}>
                       <button
                         type="button"
                         role="option"

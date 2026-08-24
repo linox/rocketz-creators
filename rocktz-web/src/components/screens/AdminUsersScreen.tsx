@@ -26,6 +26,7 @@ const ADMIN_PERMISSIONS = [
   "campaigns.assign",
   "campaigns.approve_agency",
   "data.reset",
+  "mail.manage",
 ] as const;
 
 const COMPANY_PERMISSIONS = ["campaigns.publish_without_approval"] as const;

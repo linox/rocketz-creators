@@ -12,6 +12,7 @@ use App\Http\Resources\CompanyResource;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\User;
+use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Support\Geo;
@@ -26,6 +27,7 @@ class CompanyController extends Controller
     public function __construct(
         private readonly NotificationService $notifications,
         private readonly PermissionService $permissions,
+        private readonly MailNotifier $mail,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -165,6 +167,8 @@ class CompanyController extends Controller
             }
         });
 
+        $this->mail->companyApproved($company->fresh(['companyUsers.user']));
+
         return response()->json(['data' => new CompanyResource($company->fresh())]);
     }
 
@@ -185,6 +189,7 @@ class CompanyController extends Controller
     public function reject(Request $request, Company $company): JsonResponse
     {
         $company->update(['status' => CompanyStatus::Rejected]);
+        $this->mail->companyRejected($company->fresh(['companyUsers.user']));
 
         return response()->json(['data' => new CompanyResource($company->fresh())]);
     }
@@ -194,6 +199,11 @@ class CompanyController extends Controller
         $user = $request->user();
         if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
             return response()->json(['message' => __('auth.forbidden')], 403);
+        }
+
+        $alreadyFavorited = $company->favoriteCreators()->where('creators.id', $creator->id)->exists();
+        if ($user->role === UserRole::Company && ! $alreadyFavorited && ! $creator->isInCompanyPool((int) $company->id)) {
+            return response()->json(['message' => __('auth.creator_not_in_company_pool')], 403);
         }
 
         $company->favoriteCreators()->toggle([$creator->id]);

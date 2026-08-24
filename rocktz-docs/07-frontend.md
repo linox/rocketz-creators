@@ -5,6 +5,7 @@ Next.js App Router, React 19, Tailwind v4, Inter, tokens do legado (`#6366F1`, s
 ## Rotas
 
 - `/` e `/join` — landing (modal de login com “Esqueci minha senha”; admin autenticado em `/` vê o dashboard)
+- `/l/[slug]` — landing pública da empresa
 - `/login` — login/signup criador ou empresa, Google, esqueci senha
 - `/reset-password` — link enviado por e-mail
 - `/dashboard` — KPIs da agência
@@ -36,7 +37,7 @@ Strings de UI novas entram só via `t('chave')` — nunca hardcoded.
 
 Export estático (`output: "export"`, `trailingSlash`). Sem Node no cPanel.
 
-Rotas dinâmicas usam `generateStaticParams` com `{ id: "_" }`. O Apache em [`scripts/cpanel.htaccess`](../scripts/cpanel.htaccess) reescreve `/creators/{id}`, `/campaigns/{id}` e `/recurring/{id}` para o HTML `_`.
+Rotas dinâmicas usam `generateStaticParams` com `{ id: "_" }` ou `{ slug: "_" }`. O Apache em [`scripts/cpanel.htaccess`](../scripts/cpanel.htaccess) reescreve `/creators/{id}`, `/campaigns/{id}`, `/recurring/{id}` e `/l/{slug}` para o HTML `_`.
 
 O browser chama a API Laravel em `NEXT_PUBLIC_API_URL` e guarda o token Sanctum em `localStorage` (`rocktz_token`). Helpers em `src/lib/api.ts` (`api.creators()`, `api.campaign()` etc.).
 

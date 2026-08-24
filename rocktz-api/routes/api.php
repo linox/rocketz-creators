@@ -8,13 +8,20 @@ use App\Http\Controllers\Api\CompanyLandingController;
 use App\Http\Controllers\Api\CreatorController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\MailMessageController;
+use App\Http\Controllers\Api\MailTemplateController;
+use App\Http\Controllers\Api\MailUnsubscribeController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\RecurringContractController;
+use App\Http\Controllers\Api\ResendWebhookController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
+Route::post('webhooks/resend', ResendWebhookController::class);
+Route::get('mail/unsubscribe/{user}', MailUnsubscribeController::class)->name('mail.unsubscribe')->middleware('signed');
 
 Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic']);
 Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track'])->middleware('throttle:60,1');
@@ -74,6 +81,8 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
     Route::delete('notifications/{notification}', [NotificationController::class, 'destroy']);
+    Route::get('notification-preferences', [NotificationPreferenceController::class, 'show']);
+    Route::patch('notification-preferences', [NotificationPreferenceController::class, 'update']);
 
     Route::middleware('role:admin,company')->group(function () {
         Route::post('campaigns', [CampaignController::class, 'store']);
@@ -133,6 +142,18 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::middleware('permission:campaigns.approve_agency')->group(function () {
             Route::post('campaigns/{campaign}/approve-agency', [CampaignController::class, 'approveAgency']);
             Route::post('recurring-contracts/{recurringContract}/approve-agency', [RecurringContractController::class, 'approveAgency']);
+        });
+
+        Route::middleware('permission:mail.manage')->group(function () {
+            Route::get('mail/templates', [MailTemplateController::class, 'index']);
+            Route::get('mail/templates/{mailTemplate}', [MailTemplateController::class, 'show']);
+            Route::patch('mail/templates/{mailTemplate}', [MailTemplateController::class, 'update']);
+            Route::post('mail/templates/{mailTemplate}/restore', [MailTemplateController::class, 'restore']);
+            Route::post('mail/templates/{mailTemplate}/preview', [MailTemplateController::class, 'preview']);
+            Route::post('mail/templates/{mailTemplate}/test', [MailTemplateController::class, 'test']);
+            Route::get('mail/settings', [MailTemplateController::class, 'settings']);
+            Route::patch('mail/settings', [MailTemplateController::class, 'updateSettings']);
+            Route::get('mail/messages', [MailMessageController::class, 'index']);
         });
 
         Route::middleware('permission:data.reset')->group(function () {

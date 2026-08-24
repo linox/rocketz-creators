@@ -6,6 +6,7 @@ use App\Enums\CreatorStatus;
 use App\Support\Geo;
 use Database\Factories\CreatorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -120,6 +121,38 @@ class Creator extends Model
     public function landingSignups(): HasMany
     {
         return $this->hasMany(CompanyLandingSignup::class);
+    }
+
+    public function scopeInCompanyPool(Builder $query, int $companyId): Builder
+    {
+        return $query->where(function (Builder $builder) use ($companyId) {
+            $builder->where('invited_by_company_id', $companyId)
+                ->orWhereHas('landingSignups', fn (Builder $inner) => $inner->where('company_id', $companyId));
+        });
+    }
+
+    public function isInCompanyPool(int $companyId): bool
+    {
+        if ($this->invited_by_company_id && (int) $this->invited_by_company_id === $companyId) {
+            return true;
+        }
+
+        return $this->landingSignups()->where('company_id', $companyId)->exists();
+    }
+
+    public function isAccessibleByCompany(int $companyId): bool
+    {
+        if ($this->isInCompanyPool($companyId)) {
+            return true;
+        }
+
+        if ($this->campaignCreators()->whereHas('campaign', fn (Builder $query) => $query->where('company_id', $companyId))->exists()) {
+            return true;
+        }
+
+        return $this->recurringContractCreators()
+            ->whereHas('recurringContract', fn (Builder $query) => $query->where('company_id', $companyId))
+            ->exists();
     }
 
     public function countryCode(): string

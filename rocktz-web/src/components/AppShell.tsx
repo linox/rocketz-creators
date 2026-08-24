@@ -11,6 +11,7 @@ import {
   Globe,
   Home,
   LayoutDashboard,
+  Mail,
   Megaphone,
   Menu,
   MoreHorizontal,
@@ -213,6 +214,12 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
+                {userHasPermission(user, "mail.manage") ? (
+                  <>
+                    <SidebarItem href="/mail" label={t("mailTemplates")} icon={Mail} active={isActive("/mail") && !isActive("/mail/log")} onClick={close} />
+                    <SidebarItem href="/mail/log" label={t("mailLog")} icon={Mail} active={isActive("/mail/log")} onClick={close} />
+                  </>
+                ) : null}
                 {userHasPermission(user, "users.manage") ? (
                   <SidebarItem href="/users" label={t("users")} icon={ShieldCheck} active={isActive("/users") || isActive("/admin-users")} onClick={close} />
                 ) : null}

@@ -7,10 +7,22 @@ Connection local: `root` @ `127.0.0.1` (senha vazia)
 
 ## Comando
 
+Local (zera o banco e recria):
+
 ```bash
 cd rocktz-api
 php artisan migrate:fresh --seed
 ```
+
+Produção / QA (não apaga dados; só cria o que faltar):
+
+```bash
+cd rocktz-api
+php artisan migrate --force
+php artisan demo:seed --force
+```
+
+Não use `migrate:fresh` em produção.
 
 ## Contas de teste (senha: `password`)
 

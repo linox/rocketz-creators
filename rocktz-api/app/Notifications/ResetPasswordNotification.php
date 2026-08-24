@@ -16,7 +16,6 @@ class ResetPasswordNotification extends ResetPassword
             : AppLocale::laravelLocale(AppLocale::fromRequest());
 
         return (new MailMessage)
-            ->locale($locale)
             ->subject(trans('auth.mail.reset_subject', [], $locale))
             ->greeting(trans('auth.mail.reset_greeting', [], $locale))
             ->line(trans('auth.mail.reset_line', [], $locale))

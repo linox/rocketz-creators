@@ -157,6 +157,17 @@ export const api = {
   createUser: (body: unknown) => laravelFetch<Item<AuthUser>>("/users", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id: number, body: unknown) => laravelFetch<Item<AuthUser>>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteUser: (id: number) => laravelFetch(`/users/${id}`, { method: "DELETE" }),
+  notificationPreferences: () => laravelFetch<{ data: { opportunities: boolean; campaign_updates: boolean; new_demands: boolean; deadline_reminders: boolean; delivery_updates: boolean; promotional: boolean } }>("/notification-preferences"),
+  updateNotificationPreferences: (body: unknown) => laravelFetch<{ data: { opportunities: boolean; campaign_updates: boolean; new_demands: boolean; deadline_reminders: boolean; delivery_updates: boolean; promotional: boolean } }>("/notification-preferences", { method: "PATCH", body: JSON.stringify(body) }),
+  mailTemplates: () => laravelFetch<{ data: Array<{ id: number; key: string; audience: string; category: string; enabled: boolean; reminder_offsets: number[] | null; required_variables: string[]; variables: string[] }>; sending: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/templates"),
+  mailTemplate: (id: number) => laravelFetch<{ data: { id: number; key: string; audience: string; category: string; enabled: boolean; reminder_offsets: number[] | null; required_variables: string[]; variables: string[]; current: Record<string, { subject: string; greeting: string; body: string; cta_label: string }> } }>(`/mail/templates/${id}`),
+  updateMailTemplate: (id: number, body: unknown) => laravelFetch(`/mail/templates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  restoreMailTemplate: (id: number, locale: string) => laravelFetch(`/mail/templates/${id}/restore`, { method: "POST", body: JSON.stringify({ locale }) }),
+  previewMailTemplate: (id: number) => laravelFetch<{ html: string }>(`/mail/templates/${id}/preview`, { method: "POST" }),
+  testMailTemplate: (id: number) => laravelFetch<{ message: string }>(`/mail/templates/${id}/test`, { method: "POST" }),
+  mailSettings: () => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/settings"),
+  updateMailSettings: (body: { sending_enabled: boolean }) => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean }; message: string }>("/mail/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  mailMessages: (query = "") => laravelFetch<{ data: Array<{ id: number; email: string; template_key: string; subject: string; status: string; attempts: number; failure_reason: string | null; provider_id: string | null; created_at: string; user?: { role?: string } }> }>(`/mail/messages${query}`),
   uploadMedia: (file: Blob, filename = "file.bin") => {
     const body = new FormData();
     body.append("file", file, filename);

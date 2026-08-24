@@ -15,8 +15,10 @@ use App\Http\Resources\RecurringContractResource;
 use App\Jobs\SyncRecurringPostMetricsJob;
 use App\Models\Company;
 use App\Models\ContentPlanningItem;
+use App\Models\Creator;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
+use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
@@ -43,7 +45,10 @@ class RecurringContractController extends Controller
         'live_youtube' => ['type' => ContentType::LiveYoutube, 'format_key' => 'live_youtube'],
     ];
 
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly MailNotifier $mail,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -161,6 +166,7 @@ class RecurringContractController extends Controller
 
         $ids = $data['creator_ids'] ?? [];
         unset($data['creator_ids']);
+        $this->assertCompanyCanAssignCreators($request, $ids);
         if (! $request->user()->canPublishWithoutApproval()) {
             $data['status'] = RecurringContractStatus::PendingAgency;
         } else {
@@ -176,6 +182,7 @@ class RecurringContractController extends Controller
 
         if ($contract->isPendingAgency()) {
             $this->notifyAgencyReview($contract);
+            $this->mail->recurringPendingAgency($contract->loadMissing('company'));
         }
 
         return response()->json(['data' => new RecurringContractResource($contract->load(['company', 'recurringContractCreators.creator']))], 201);
@@ -241,6 +248,7 @@ class RecurringContractController extends Controller
             'monthly_deliverables' => ['nullable', 'array'],
             'notes' => ['nullable', 'string'],
         ]);
+        $this->assertCompanyCanAssignCreators($request, [(int) $data['creator_id']], $recurringContract);
         $row = $recurringContract->recurringContractCreators()->updateOrCreate(
             ['creator_id' => $data['creator_id']],
             $data,
@@ -270,7 +278,7 @@ class RecurringContractController extends Controller
         $created = $this->syncMonthlyDeliverables($recurringContract, $row, $data['month']);
 
         if ($created > 0 && ! $recurringContract->isPendingAgency()) {
-            $row->loadMissing('creator');
+            $row->loadMissing('creator.user');
             $this->notifications->notifyCreator($row->creator_id, [
                 'recurring_contract_id' => $recurringContract->id,
                 'title' => __('auth.new_demands_title'),
@@ -282,6 +290,9 @@ class RecurringContractController extends Controller
                 'type' => NotificationType::Contract,
                 'link' => '/creators/'.$row->creator_id.'?tab=recurring',
             ]);
+            if ($row->creator?->user) {
+                $this->mail->demandAssignedToCreator($row->creator, $recurringContract);
+            }
         }
 
         return response()->json([
@@ -481,8 +492,18 @@ class RecurringContractController extends Controller
             ]);
         }
 
-        $contentPlanningItem->loadMissing(['creator', 'recurringContract']);
+        $contentPlanningItem->loadMissing(['creator.user', 'recurringContract']);
         $this->notifyPlanningItemChange($contentPlanningItem, $data);
+
+        if (
+            isset($data['planned_date'])
+            || NotificationService::is($data['status'] ?? null, ContentPlanningStatus::Rejected)
+        ) {
+            $this->mail->demandUpdated(
+                $contentPlanningItem,
+                $data['feedback_note'] ?? null,
+            );
+        }
 
         if (
             ! $actorIsCreator
@@ -498,6 +519,10 @@ class RecurringContractController extends Controller
 
     public function destroyItem(ContentPlanningItem $contentPlanningItem): JsonResponse
     {
+        $contentPlanningItem->loadMissing(['creator.user', 'recurringContract.company']);
+        if ($contentPlanningItem->creator?->user) {
+            $this->mail->demandUpdated($contentPlanningItem, __('auth.item_removed'));
+        }
         $contentPlanningItem->delete();
 
         return response()->json(['message' => __('auth.item_removed')]);
@@ -644,6 +669,7 @@ class RecurringContractController extends Controller
         }
         if ($user->role === UserRole::Creator && $contract->recurringContractCreators()->where('creator_id', $user->creator?->id)->exists()) {
             abort_if($contract->isPendingAgency(), 403, __('auth.recurring_awaiting_agency'));
+
             return;
         }
         abort(403, __('auth.forbidden'));
@@ -659,6 +685,31 @@ class RecurringContractController extends Controller
             return;
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    /**
+     * @param  list<int|string>  $creatorIds
+     */
+    private function assertCompanyCanAssignCreators(Request $request, array $creatorIds, ?RecurringContract $contract = null): void
+    {
+        if ($request->user()?->role !== UserRole::Company || $creatorIds === []) {
+            return;
+        }
+
+        $companyId = (int) $request->user()->companyUser?->company_id;
+        abort_unless($companyId, 403, __('auth.company_not_linked'));
+
+        $ids = array_values(array_unique(array_map('intval', $creatorIds)));
+        $alreadyAttached = $contract
+            ? array_map('intval', $contract->recurringContractCreators()->whereIn('creator_id', $ids)->pluck('creator_id')->all())
+            : [];
+        $pending = array_values(array_diff($ids, $alreadyAttached));
+        if ($pending === []) {
+            return;
+        }
+
+        $allowed = Creator::query()->inCompanyPool($companyId)->whereIn('id', $pending)->count();
+        abort_unless($allowed === count($pending), 403, __('auth.creator_not_in_company_pool'));
     }
 
     private function notifyAgencyReview(RecurringContract $contract): void
@@ -703,6 +754,10 @@ class RecurringContractController extends Controller
             'type' => NotificationType::Contract,
             'link' => '/creators/'.$creatorId.'?tab=recurring',
         ]);
+        $creator = Creator::query()->with('user')->find($creatorId);
+        if ($creator?->user) {
+            $this->mail->demandAssignedToCreator($creator, $contract);
+        }
     }
 
     private function notifyPautaReady(ContentPlanningItem $item, RecurringContract $contract): void
@@ -717,6 +772,10 @@ class RecurringContractController extends Controller
             'type' => NotificationType::Contract,
             'link' => '/creators/'.$item->creator_id.'?tab=recurring',
         ]);
+        $item->loadMissing('creator.user');
+        if ($item->creator?->user) {
+            $this->mail->demandAssignedToCreator($item->creator, $contract, $item);
+        }
     }
 
     private function itemHasBriefing(ContentPlanningItem $item): bool
@@ -919,6 +978,30 @@ class RecurringContractController extends Controller
                 'type' => NotificationType::DeliveryReview,
                 'link' => $creatorLink,
             ]);
+        }
+
+        $user = $item->creator?->user;
+        $ids = ['creator_id' => $creatorId, 'company_id' => $companyId];
+        if ($companyId && $item->creator && (
+            $script === StageApprovalStatus::Submitted->value
+            || $video === StageApprovalStatus::Submitted->value
+            || isset($data['submission_url'])
+            || isset($data['media_url'])
+        )) {
+            $this->mail->deliverySubmitted($companyId, $item->creator, $itemTitle, $companyLink, $ids, $item->recurringContract);
+        }
+        if ($user && ($materialApproved || $status === ContentPlanningStatus::Published->value || $status === ContentPlanningStatus::Approved->value)) {
+            $this->mail->deliveryApproved($user, $projectTitle, $itemTitle, $creatorLink, $ids);
+        }
+        if ($user && ($script === StageApprovalStatus::Revision->value || $video === StageApprovalStatus::Revision->value)) {
+            $this->mail->revisionRequested(
+                $user,
+                $projectTitle,
+                $itemTitle,
+                (string) ($data['video_feedback'] ?? $data['script_feedback'] ?? $data['feedback_note'] ?? ''),
+                $creatorLink,
+                $ids,
+            );
         }
     }
 }

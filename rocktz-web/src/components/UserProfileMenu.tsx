@@ -302,6 +302,13 @@ export function UserProfileMenu({
           </button>
         ) : null}
 
+        <Link href="/settings/notifications" onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
+          <div className="flex items-center gap-2.5">
+            <Mail size={15} className="text-indigo-600" />
+            <span>{t("notificationSettings")}</span>
+          </div>
+        </Link>
+
         {onOpenLgpdModal ? (
           <button
             type="button"

@@ -111,8 +111,16 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        'address' => env('MAIL_FROM_ADDRESS', 'naoresponda@rocketz.me'),
+        'name' => env('MAIL_FROM_NAME', 'Creatorz by Rocketz'),
     ],
+
+    'support_address' => env('MAIL_SUPPORT_ADDRESS', 'contato@rocketzmkt.com.br'),
+
+    /*
+    | Pause every transactional send (Resend, queue job, reminders).
+    | MAIL_ENABLED=false is a hard lock even if the admin toggle is on.
+    */
+    'sending_enabled' => filter_var(env('MAIL_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
 
 ];

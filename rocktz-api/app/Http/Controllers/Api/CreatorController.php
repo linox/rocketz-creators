@@ -10,9 +10,9 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
 use App\Jobs\SyncCreatorSocialsJob;
-use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
 use App\Models\User;
+use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Services\SocialMetricsService;
 use App\Support\Geo;
@@ -25,7 +25,10 @@ use Illuminate\Validation\Rule;
 
 class CreatorController extends Controller
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly MailNotifier $mail,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -35,14 +38,9 @@ class CreatorController extends Controller
         if ($user->role === UserRole::Creator) {
             $query->where('id', $user->creator?->id);
         } elseif ($user->role === UserRole::Company) {
-            $companyId = $user->companyUser?->company_id;
-            $query->where(function ($builder) use ($companyId) {
-                $builder->where('status', CreatorStatus::Active)
-                    ->orWhere(function ($inner) use ($companyId) {
-                        $inner->where('invited_by_company_id', $companyId)
-                            ->whereIn('status', [CreatorStatus::Review, CreatorStatus::Rejected]);
-                    });
-            });
+            $companyId = (int) $user->companyUser?->company_id;
+            abort_unless($companyId, 403, __('auth.company_not_linked'));
+            $query->inCompanyPool($companyId);
         }
 
         if ($status = $request->string('status')->toString()) {
@@ -86,14 +84,9 @@ class CreatorController extends Controller
             return response()->json(['message' => __('auth.forbidden')], 403);
         }
 
-        if ($user->role === UserRole::Company && $creator->status !== CreatorStatus::Active) {
-            $companyId = $user->companyUser?->company_id;
-            $invited = $creator->invited_by_company_id && $creator->invited_by_company_id === $companyId;
-            $fromLanding = $companyId && CompanyLandingSignup::query()
-                ->where('company_id', $companyId)
-                ->where('creator_id', $creator->id)
-                ->exists();
-            if (! $invited && ! $fromLanding) {
+        if ($user->role === UserRole::Company) {
+            $companyId = (int) $user->companyUser?->company_id;
+            if (! $companyId || ! $creator->isAccessibleByCompany($companyId)) {
                 return response()->json(['message' => __('auth.profile_unavailable')], 403);
             }
         }
@@ -304,6 +297,7 @@ class CreatorController extends Controller
                 'target_role' => NotificationTargetRole::Creator,
                 'link' => '/available-campaigns',
             ]);
+            $this->mail->creatorApproved($creator->fresh(['user']));
         }
 
         return response()->json(['data' => new CreatorResource($creator->fresh()->load('user'))]);
@@ -328,6 +322,7 @@ class CreatorController extends Controller
                 'target_role' => NotificationTargetRole::Creator,
                 'link' => '/creator-dashboard',
             ]);
+            $this->mail->creatorRejected($creator->fresh(['user']), $request->string('reason')->toString() ?: null);
         }
 
         return response()->json(['data' => new CreatorResource($creator->fresh()->load('user'))]);

@@ -2,15 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CampaignStatus;
 use App\Enums\CompanyStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\LandingPageStatus;
 use App\Enums\LandingSignupStatus;
+use App\Models\Campaign;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
+use App\Models\CreatorContractAcceptance;
 use App\Models\Notification;
+use App\Models\RecurringContract;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -302,5 +306,106 @@ class CompanyLandingTest extends TestCase
             ->assertJsonPath('data.status', LandingPageStatus::Disabled->value);
 
         $this->getJson('/api/landings/cricut')->assertNotFound();
+    }
+
+    public function test_company_sees_landing_creators_in_catalog_but_not_global_ones(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company = $companyUser->company;
+        $token = $companyUser->createToken('auth')->plainTextToken;
+        $page = CompanyLandingPage::factory()->published()->create([
+            'company_id' => $company->id,
+            'slug' => 'cricut',
+            'display_name' => 'Cricut',
+        ]);
+
+        $landingCreator = Creator::factory()->review()->create(['artistic_name' => 'Landing Pool']);
+        $globalCreator = Creator::factory()->active()->create(['artistic_name' => 'Global Pool']);
+        CompanyLandingSignup::query()->create([
+            'company_id' => $company->id,
+            'company_landing_page_id' => $page->id,
+            'creator_id' => $landingCreator->id,
+            'status' => LandingSignupStatus::Pending,
+        ]);
+
+        $this->withToken($token)->getJson('/api/creators')->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Landing Pool'])
+            ->assertJsonMissing(['artistic_name' => 'Global Pool'])
+            ->assertJsonMissing(['artistic_name' => 'Ana UGC']);
+
+        $this->withToken($token)
+            ->getJson("/api/creators/{$landingCreator->id}")
+            ->assertOk()
+            ->assertJsonPath('data.artistic_name', 'Landing Pool');
+
+        $this->withToken($token)
+            ->getJson("/api/creators/{$globalCreator->id}")
+            ->assertForbidden()
+            ->assertJsonPath('message', __('auth.profile_unavailable'));
+    }
+
+    public function test_global_creator_can_see_and_apply_to_company_campaign_and_company_can_open_applicant_profile(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company = $companyUser->company;
+        $ana = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+        $campaign = Campaign::query()
+            ->where('company_id', $company->id)
+            ->where('is_secret', false)
+            ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency])
+            ->firstOrFail();
+
+        $available = $this->actingAs($ana)
+            ->getJson('/api/campaigns/available')
+            ->assertOk()
+            ->json('data');
+        $this->assertTrue(collect($available)->contains(fn ($row) => (int) $row['id'] === (int) $campaign->id));
+
+        $creator = Creator::factory()->active()->create([
+            'artistic_name' => 'Fora Da Landing',
+            'country' => $company->country ?: 'BR',
+        ]);
+        CreatorContractAcceptance::factory()->valid()->create([
+            'creator_id' => $creator->id,
+            'full_name' => $creator->full_name,
+            'email' => $creator->user?->email,
+        ]);
+
+        $this->actingAs($creator->user)
+            ->postJson("/api/campaigns/{$campaign->id}/apply", ['notes' => 'Quero participar'])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('campaign_creators', [
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->actingAs($companyUser)->getJson('/api/creators')->assertOk()
+            ->assertJsonMissing(['artistic_name' => 'Fora Da Landing']);
+
+        $this->actingAs($companyUser)
+            ->getJson("/api/creators/{$creator->id}")
+            ->assertOk()
+            ->assertJsonPath('data.artistic_name', 'Fora Da Landing');
+    }
+
+    public function test_company_cannot_attach_global_creator_to_recurring_contract(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $contract = RecurringContract::query()->where('company_id', $companyUser->companyUser?->company_id)->firstOrFail();
+        $outsider = Creator::factory()->active()->create(['artistic_name' => 'Fora Do Pool']);
+
+        $this->withToken($companyUser->createToken('auth')->plainTextToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/creators", [
+                'creator_id' => $outsider->id,
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('message', __('auth.creator_not_in_company_pool'));
     }
 }

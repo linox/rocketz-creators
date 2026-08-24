@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
+use App\Enums\LandingSignupStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\Permission;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
+use App\Models\CompanyLandingPage;
+use App\Models\CompanyLandingSignup;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\Notification;
@@ -72,27 +75,58 @@ class DomainApiTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
-    public function test_company_can_list_active_creators_and_filter_by_country(): void
+    public function test_company_lists_only_landing_and_invited_creators_and_can_filter_by_country(): void
     {
         $this->seed();
 
-        $company = User::query()->where('email', 'empresa@rocketz.test')->first();
-        $token = $company->createToken('auth')->plainTextToken;
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company = $companyUser->company;
+        $token = $companyUser->createToken('auth')->plainTextToken;
 
         $this->withToken($token)->getJson('/api/creators')->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.artistic_name', 'Ana UGC');
+            ->assertJsonMissing(['artistic_name' => 'Ana UGC']);
 
+        $page = CompanyLandingPage::factory()->published()->create([
+            'company_id' => $company->id,
+            'slug' => 'aurora-landing',
+            'display_name' => $company->name,
+        ]);
+
+        $brLanding = Creator::factory()->active()->create([
+            'country' => 'BR',
+            'state' => 'SP',
+            'artistic_name' => 'Landing BR',
+        ]);
+        $usLanding = Creator::factory()->active()->create([
+            'country' => 'US',
+            'state' => 'CA',
+            'artistic_name' => 'Landing US',
+        ]);
         Creator::factory()->active()->create([
             'country' => 'US',
             'state' => 'CA',
             'artistic_name' => 'Maya Cast',
         ]);
 
+        foreach ([$brLanding, $usLanding] as $creator) {
+            CompanyLandingSignup::query()->create([
+                'company_id' => $company->id,
+                'company_landing_page_id' => $page->id,
+                'creator_id' => $creator->id,
+                'status' => LandingSignupStatus::Approved,
+            ]);
+        }
+
+        $this->withToken($token)->getJson('/api/creators')->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Landing BR'])
+            ->assertJsonFragment(['artistic_name' => 'Landing US'])
+            ->assertJsonMissing(['artistic_name' => 'Maya Cast'])
+            ->assertJsonMissing(['artistic_name' => 'Ana UGC']);
+
         $this->withToken($token)->getJson('/api/creators?country=US')->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.country', 'US')
-            ->assertJsonPath('data.0.artistic_name', 'Maya Cast');
+            ->assertJsonPath('data.0.artistic_name', 'Landing US');
 
         $this->withToken($token)->getJson('/api/creators?country=US&state=CA')->assertOk()
             ->assertJsonCount(1, 'data');
@@ -130,9 +164,28 @@ class DomainApiTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/creators')
             ->assertOk()
+            ->assertJsonMissing(['artistic_name' => 'Ana UGC']);
+
+        $invited = Creator::factory()->review()->create([
+            'invited_by_company_id' => $company->companyUser?->company_id,
+            'artistic_name' => 'Convite Privado',
+            'full_name' => 'Nome Completo Oculto',
+            'whatsapp' => '11988887777',
+        ]);
+
+        $this->withToken($token)
+            ->getJson('/api/creators')
+            ->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Convite Privado'])
             ->assertJsonMissingPath('data.0.email')
             ->assertJsonMissingPath('data.0.whatsapp')
             ->assertJsonMissingPath('data.0.full_name');
+
+        $this->withToken($token)
+            ->getJson("/api/creators/{$invited->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('data.full_name')
+            ->assertJsonMissingPath('data.whatsapp');
 
         $this->withToken($token)
             ->patchJson("/api/creators/{$ana->id}", ['whatsapp' => '11988887777'])
