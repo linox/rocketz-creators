@@ -63,6 +63,61 @@ export function persistAuth(payload: AuthPayload, afterSignup = false): string {
   return homePathForUser(payload.user);
 }
 
+export type UploadProgressHandler = (percent: number) => void;
+
+export async function laravelUpload<T>(
+  path: string,
+  body: FormData,
+  onProgress?: UploadProgressHandler,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${getApiUrl()}${path}`);
+    xhr.responseType = "text";
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("Accept-Language", getAppLocale());
+
+    const token = getToken();
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader("X-Auth-Token", token);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable || event.total <= 0) return;
+      onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+
+    xhr.onload = () => {
+      const data = parseLaravelJson<T>(xhr.responseText);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError(data.message ?? i18n.t("common:alerts.tryAgain"), xhr.status, data.errors));
+        return;
+      }
+      onProgress?.(100);
+      resolve(data as T);
+    };
+
+    xhr.onerror = () => {
+      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+    };
+
+    xhr.onabort = () => {
+      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+    };
+
+    xhr.send(body);
+  });
+}
+
+function parseLaravelJson<T>(raw: string): T & LaravelError {
+  try {
+    return JSON.parse(raw || "{}") as T & LaravelError;
+  } catch {
+    return {} as T & LaravelError;
+  }
+}
+
 export async function laravelFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");

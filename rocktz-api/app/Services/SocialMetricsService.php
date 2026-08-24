@@ -20,6 +20,15 @@ class SocialMetricsService
 
     private const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
+    private const IG_APP_ID = '936619743392459';
+
+    private const IG_ASBD_ID = '129477';
+
+    /** @var array<string, string> */
+    private array $instagramCookies = [];
+
+    private bool $instagramPrimed = false;
+
     /**
      * @param  array<string, string|null>  $handles
      * @return array<string, array<string, mixed>>
@@ -166,9 +175,22 @@ class SocialMetricsService
     private function fetch(string $network, string $handle): SocialSnapshot
     {
         if ($this->scrapeCreatorsKey() !== '') {
-            return $this->fetchViaScrapeCreators($network, $handle);
+            try {
+                return $this->fetchViaScrapeCreators($network, $handle);
+            } catch (SocialMetricsException $e) {
+                try {
+                    return $this->fetchPublic($network, $handle);
+                } catch (SocialMetricsException) {
+                    throw $e;
+                }
+            }
         }
 
+        return $this->fetchPublic($network, $handle);
+    }
+
+    private function fetchPublic(string $network, string $handle): SocialSnapshot
+    {
         return match ($network) {
             'youtube' => $this->fetchYouTube($handle),
             'instagram' => $this->fetchInstagramPublic($handle),
@@ -409,48 +431,129 @@ class SocialMetricsService
 
     private function fetchInstagramPublic(string $handle): SocialSnapshot
     {
-        $profileUrl = SocialHandle::publicUrl('instagram', $handle);
-        $infoUrl = 'https://www.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle);
+        $infoUrls = [
+            'https://www.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle),
+            'https://i.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle),
+        ];
 
-        $response = $this->http()
-            ->withHeaders([
-                'Accept' => 'application/json, text/plain, */*',
-                'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
-                'X-IG-App-ID' => '936619743392459',
-                'Referer' => $profileUrl,
-                'Origin' => 'https://www.instagram.com',
-            ])
-            ->get($infoUrl);
-
-        if ($response->status() === 404) {
-            throw new SocialMetricsException(__('auth.social_profile_not_found'));
-        }
-
-        if ($response->successful()) {
-            $json = $response->json();
-            if (is_array($json) && data_get($json, 'data.user')) {
-                $snapshot = $this->snapshotFromInstagramPayload($handle, $json);
-                if ($snapshot->views === null) {
-                    $snapshot = $snapshot->fillMissing(
-                        views: SocialNumbers::average($this->viewCountsFromText((string) $response->body())),
-                    );
-                }
-
+        foreach ($infoUrls as $infoUrl) {
+            $snapshot = $this->instagramSnapshotFromInfoUrl($handle, $infoUrl);
+            if ($snapshot !== null) {
                 return $snapshot;
             }
+        }
 
-            $fromHtml = $this->snapshotFromInstagramHtml($handle, (string) $response->body());
+        $this->primeInstagramGuestSession();
+
+        foreach ($infoUrls as $infoUrl) {
+            $snapshot = $this->instagramSnapshotFromInfoUrl($handle, $infoUrl);
+            if ($snapshot !== null) {
+                return $snapshot;
+            }
+        }
+
+        $profileUrl = SocialHandle::publicUrl('instagram', $handle);
+        foreach ([
+            [$profileUrl, self::BROWSER_UA],
+            [$profileUrl, self::MOBILE_UA],
+            ['https://www.instagram.com/'.$handle.'/embed/', self::BROWSER_UA],
+        ] as [$url, $userAgent]) {
+            $html = $this->requestHtmlLenient($url, $userAgent);
+            if ($html === null) {
+                continue;
+            }
+
+            $fromHtml = $this->snapshotFromInstagramHtml($handle, $html);
             if ($fromHtml !== null) {
                 return $fromHtml;
             }
         }
 
-        $fromHtml = $this->snapshotFromInstagramHtml($handle, $this->requestHtml($profileUrl));
-        if ($fromHtml !== null) {
-            return $fromHtml;
+        throw new SocialMetricsException(__('auth.social_profile_unavailable'));
+    }
+
+    private function instagramSnapshotFromInfoUrl(string $handle, string $infoUrl): ?SocialSnapshot
+    {
+        $profileUrl = SocialHandle::publicUrl('instagram', $handle);
+        $csrf = $this->cookieValue('csrftoken') ?? '';
+
+        try {
+            $response = $this->instagramHttp()
+                ->withHeaders([
+                    'Accept' => '*/*',
+                    'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
+                    'X-IG-App-ID' => self::IG_APP_ID,
+                    'X-ASBD-ID' => self::IG_ASBD_ID,
+                    'X-CSRFToken' => $csrf,
+                    'X-Requested-With' => 'XMLHttpRequest',
+                    'Referer' => $profileUrl,
+                    'Origin' => 'https://www.instagram.com',
+                    'Sec-Fetch-Dest' => 'empty',
+                    'Sec-Fetch-Mode' => 'cors',
+                    'Sec-Fetch-Site' => 'same-origin',
+                    'sec-ch-ua' => '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                    'sec-ch-ua-mobile' => '?0',
+                    'sec-ch-ua-platform' => '"macOS"',
+                ])
+                ->get($infoUrl);
+        } catch (\Throwable) {
+            return null;
         }
 
-        throw new SocialMetricsException(__('auth.social_profile_unavailable'));
+        $this->rememberInstagramCookies($response);
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $json = $response->json();
+        if (is_array($json) && data_get($json, 'data.user')) {
+            try {
+                $snapshot = $this->snapshotFromInstagramPayload($handle, $json);
+            } catch (SocialMetricsException) {
+                return $this->snapshotFromInstagramHtml($handle, (string) $response->body());
+            }
+
+            if ($snapshot->views === null) {
+                $snapshot = $snapshot->fillMissing(
+                    views: SocialNumbers::average($this->viewCountsFromText((string) $response->body())),
+                );
+            }
+
+            return $snapshot;
+        }
+
+        return $this->snapshotFromInstagramHtml($handle, (string) $response->body());
+    }
+
+    private function primeInstagramGuestSession(): void
+    {
+        if ($this->instagramPrimed) {
+            return;
+        }
+
+        $this->instagramPrimed = true;
+
+        try {
+            $response = $this->instagramHttp()
+                ->withHeaders([
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
+                    'Upgrade-Insecure-Requests' => '1',
+                    'Sec-Fetch-Dest' => 'document',
+                    'Sec-Fetch-Mode' => 'navigate',
+                    'Sec-Fetch-Site' => 'none',
+                    'Sec-Fetch-User' => '?1',
+                ])
+                ->get('https://www.instagram.com/');
+            $this->rememberInstagramCookies($response);
+        } catch (\Throwable) {
+            // Keep going with a self-issued CSRF cookie.
+        }
+
+        if ($this->cookieValue('csrftoken') === null) {
+            $this->instagramCookies['csrftoken'] = bin2hex(random_bytes(16));
+        }
     }
 
     private function snapshotFromInstagramHtml(string $handle, string $html): ?SocialSnapshot
@@ -850,12 +953,74 @@ class SocialMetricsService
         return (string) $response->body();
     }
 
+    private function requestHtmlLenient(string $url, ?string $userAgent = null): ?string
+    {
+        try {
+            $response = $this->instagramHttp($userAgent)->withHeaders([
+                'Accept' => 'text/html,application/xhtml+xml',
+                'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
+            ])->get($url);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $this->rememberInstagramCookies($response);
+
+        if ($response->status() >= 500) {
+            return null;
+        }
+
+        $html = (string) $response->body();
+
+        return $html === '' ? null : $html;
+    }
+
     private function http(?string $userAgent = null): PendingRequest
     {
         return Http::timeout(12)
             ->connectTimeout(8)
             ->withUserAgent($userAgent ?? self::BROWSER_UA)
             ->withOptions(['allow_redirects' => true]);
+    }
+
+    private function instagramHttp(?string $userAgent = null): PendingRequest
+    {
+        $request = $this->http($userAgent);
+        if ($this->instagramCookies === []) {
+            return $request;
+        }
+
+        return $request->withCookies($this->instagramCookies, 'instagram.com');
+    }
+
+    private function rememberInstagramCookies(Response $response): void
+    {
+        foreach ($response->headers() as $header => $values) {
+            if (strcasecmp((string) $header, 'Set-Cookie') !== 0) {
+                continue;
+            }
+
+            foreach ($values as $line) {
+                $pair = explode(';', (string) $line, 2)[0];
+                $eq = strpos($pair, '=');
+                if ($eq === false) {
+                    continue;
+                }
+
+                $name = trim(substr($pair, 0, $eq));
+                $value = trim(substr($pair, $eq + 1));
+                if ($name !== '' && $value !== '') {
+                    $this->instagramCookies[$name] = $value;
+                }
+            }
+        }
+    }
+
+    private function cookieValue(string $name): ?string
+    {
+        $value = trim((string) ($this->instagramCookies[$name] ?? ''));
+
+        return $value !== '' ? $value : null;
     }
 
     private function assertReachable(Response $response): void

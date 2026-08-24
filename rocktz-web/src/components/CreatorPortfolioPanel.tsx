@@ -3,6 +3,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video } from "lucide-react";
+import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -87,12 +88,11 @@ export function CreatorPortfolioPanel({
       return;
     }
     setUploading(true);
-    setProgress(12);
+    setProgress(0);
     try {
       const orientation = await detectOrientation(uploadFile);
-      setProgress(28);
-      const uploaded = await api.uploadMedia(uploadFile, safeUploadName(uploadFile));
-      setProgress(78);
+      const uploaded = await api.uploadMedia(uploadFile, safeUploadName(uploadFile), setProgress);
+      setProgress(100);
       await api.addPortfolio(creator.id, {
         title: title.trim(),
         url: uploaded.data.url,
@@ -100,7 +100,6 @@ export function CreatorPortfolioPanel({
         orientation,
         file_size: uploaded.data.size ?? uploadFile.size,
       });
-      setProgress(100);
       await alertSuccess(t("videoSaved"));
       setUploadFile(null);
       setTitle("");
@@ -136,13 +135,14 @@ export function CreatorPortfolioPanel({
             <p className="mt-1 text-[12px] text-[#64748B]">{t("uploadHint")}</p>
           </div>
           <div
-            onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
-            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragEnter={(e) => { e.preventDefault(); if (!uploading) setDragActive(true); }}
+            onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
-            onDrop={(e) => { e.preventDefault(); setDragActive(false); pickFile(e.dataTransfer.files?.[0]); }}
-            onClick={() => fileInputRef.current?.click()}
+            onDrop={(e) => { e.preventDefault(); setDragActive(false); if (!uploading) pickFile(e.dataTransfer.files?.[0]); }}
+            onClick={() => { if (!uploading) fileInputRef.current?.click(); }}
             className={cn(
-              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[12px] border-2 border-dashed p-6 text-center transition-all",
+              "flex flex-col items-center justify-center gap-3 rounded-[12px] border-2 border-dashed p-6 text-center transition-all",
+              uploading ? "cursor-not-allowed opacity-70" : "cursor-pointer",
               dragActive ? "border-brand-primary bg-indigo-50/25" : "border-[#E2E8F0] hover:border-brand-primary",
               uploadFile ? "border-emerald-300 bg-emerald-50/10" : "",
             )}
@@ -181,18 +181,7 @@ export function CreatorPortfolioPanel({
             </label>
           </div>
           {uploading ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between text-[11px] font-bold tracking-wider uppercase">
-                <span className="flex items-center gap-1.5 text-[#64748B]">
-                  <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-indigo-500 border-t-transparent" />
-                  {t("uploading")}
-                </span>
-                <span className="text-brand-primary">{progress}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
-                <div className="h-full bg-brand-primary transition-all" style={{ width: `${progress}%` }} />
-              </div>
-            </div>
+            <UploadProgressBar progress={progress} />
           ) : (
             <button type="submit" disabled={!uploadFile || !title.trim()} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-primary text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-100 hover:bg-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none">
               <UploadCloud size={16} /> {t("sendVideo")}

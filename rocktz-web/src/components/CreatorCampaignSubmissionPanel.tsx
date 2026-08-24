@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, UploadCloud, Video } from "lucide-react";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -33,6 +34,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const [publishedUrl, setPublishedUrl] = useState(row.content?.published_link || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const isApproved = row.delivery_status === "approved";
   const flow = campaign.approval_flow || "script_and_video";
@@ -104,11 +106,12 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       return;
     }
     setSubmitting(true);
+    setUploadProgress(0);
     try {
       let videoUrl = row.content?.video_url || null;
       let videoFileSize = row.content?.video_file_size ?? 0;
       if (videoFile && canSubmitVideo) {
-        const uploaded = await api.uploadMedia(videoFile, videoFile.name);
+        const uploaded = await api.uploadMedia(videoFile, videoFile.name, setUploadProgress);
         videoUrl = uploaded.data.url;
         videoFileSize = uploaded.data.size ?? videoFile.size;
       }
@@ -167,6 +170,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       await alertApiError(err);
     } finally {
       setSubmitting(false);
+      setUploadProgress(0);
     }
   }
 
@@ -188,6 +192,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         : canSubmitVideo
           ? !videoReady
           : !script.trim() && !videoFile && !publishedUrl.trim());
+  const uploadingVideo = submitting && Boolean(videoFile) && canSubmitVideo;
 
   return (
     <div className="flex flex-col gap-5 border-l-4 border-l-brand-primary bg-indigo-50/20 p-5 sm:p-6">
@@ -346,6 +351,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                   type="file"
                   accept="video/mp4,video/quicktime,video/webm,video/*,.mp4,.mov,.webm"
                   className="hidden"
+                  disabled={submitting}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
@@ -364,8 +370,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 />
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => fileRef.current?.click()}
-                  className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border-none bg-slate-100 px-3.5 text-[11px] font-bold tracking-wider text-slate-800 uppercase transition-colors hover:bg-slate-200"
+                  className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border-none bg-slate-100 px-3.5 text-[11px] font-bold tracking-wider text-slate-800 uppercase transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <UploadCloud size={14} /> {tp("chooseFile")}
                 </button>
@@ -429,6 +436,11 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             </div>
           ) : null}
 
+          {uploadingVideo ? (
+            <div className="mt-2 border-t border-slate-100 pt-3">
+              <UploadProgressBar progress={uploadProgress} />
+            </div>
+          ) : (
           <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3">
             <button
               type="button"
@@ -464,6 +476,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                     : tp("sendForReview")}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

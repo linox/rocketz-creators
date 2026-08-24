@@ -230,6 +230,101 @@ HTML, 200),
             ->assertJsonPath('sync.instagram.views', 6000);
     }
 
+    public function test_instagram_falls_back_to_html_when_json_endpoint_returns_404(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'tw2o']);
+
+        Http::fake([
+            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response('Not Found', 404),
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
+            'https://www.instagram.com/*' => Http::response($this->instagramHtml(), 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@tw2o',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 12300);
+    }
+
+    public function test_instagram_falls_back_to_embed_when_profile_is_login_walled(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'tw2o']);
+
+        Http::fake(function ($request) {
+            $url = $request->url();
+            if (str_contains($url, 'web_profile_info')) {
+                return Http::response('login required', 404);
+            }
+            if (str_contains($url, '/embed/')) {
+                return Http::response($this->instagramHtml(), 200);
+            }
+
+            return Http::response('<html><body>Log in Sign up</body></html>', 200);
+        });
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@tw2o',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 12300);
+    }
+
+    public function test_instagram_block_is_unavailable_not_missing_channel(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'tw2o']);
+
+        Http::fake([
+            'https://www.instagram.com/*' => Http::response('Not Found', 404),
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@tw2o',
+                'force' => true,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', __('auth.social_profile_unavailable'));
+    }
+
+    public function test_scrapecreators_failure_falls_back_to_public_instagram(): void
+    {
+        config()->set('services.social.scrape_creators_key', 'test-key');
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'tw2o']);
+
+        Http::fake([
+            'https://api.scrapecreators.com/*' => Http::response(['error' => 'not found'], 404),
+            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+                'data' => [
+                    'user' => [
+                        'username' => 'tw2o',
+                        'edge_followed_by' => ['count' => 58235],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@tw2o',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 58235);
+    }
+
     public function test_scrapecreators_fills_instagram_views_from_posts(): void
     {
         config()->set('services.social.scrape_creators_key', 'test-key');

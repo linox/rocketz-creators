@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, UploadCloud } from "lucide-react";
+import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -42,6 +43,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [publishedUrl, setPublishedUrl] = useState(item.published_url || "");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const currentVideoVersion = item.video_version ?? 0;
   const currentScriptVersion = item.script_version ?? 0;
@@ -95,6 +97,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     }
 
     setSubmitting(true);
+    setUploadProgress(0);
     try {
       const body: Record<string, unknown> = { status: "review" };
       if (canSubmitScript) {
@@ -103,7 +106,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       } else if (canSubmitVideo) {
         let mediaUrl = item.media_url || item.submission_url || null;
         if (videoFile) {
-          const uploaded = await api.uploadMedia(videoFile, videoFile.name);
+          const uploaded = await api.uploadMedia(videoFile, videoFile.name, setUploadProgress);
           mediaUrl = uploaded.data.url;
         }
         body.media_url = mediaUrl;
@@ -123,6 +126,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       await alertApiError(err);
     } finally {
       setSubmitting(false);
+      setUploadProgress(0);
     }
   }
 
@@ -135,6 +139,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const disabled = submitting
     || awaitingScriptApproval
     || (canSubmitScript ? !scriptReady : canSubmitVideo ? !videoReady : true);
+  const uploadingVideo = submitting && Boolean(videoFile) && canSubmitVideo;
 
   const revisionNote = scriptRevision
     ? (item.script_feedback || "")
@@ -270,6 +275,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
               type="file"
               accept="video/mp4,video/quicktime,video/webm,video/*,.mp4,.mov,.webm"
               className="hidden"
+              disabled={submitting}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
@@ -288,8 +294,9 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
             />
             <button
               type="button"
+              disabled={submitting}
               onClick={() => fileRef.current?.click()}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-white px-3 text-[11px] font-bold text-slate-800 shadow-xs hover:bg-slate-50"
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-white px-3 text-[11px] font-bold text-slate-800 shadow-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <UploadCloud size={13} /> {tp("chooseFile")}
             </button>
@@ -315,6 +322,9 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       ) : null}
 
       {!awaitingScriptApproval && !awaitingVideoApproval && (canSubmitScript || canSubmitVideo) ? (
+        uploadingVideo ? (
+          <UploadProgressBar progress={uploadProgress} />
+        ) : (
         <button
           type="button"
           disabled={disabled}
@@ -335,6 +345,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
               ? tp("sendScriptForReview")
               : tp("sendForReview")}
         </button>
+        )
       ) : null}
     </div>
   );
