@@ -788,6 +788,20 @@
     "sendingSavedOn": "Sending is on again.",
     "sendingSavedOff": "Sending is paused. You can test the app freely."
   },
+  "security": {
+    "title": "Account security",
+    "subtitle": "Turn on two-step verification to require a code sent to your email on every sign-in.",
+    "hint": "When it is on, a password alone is not enough. The second factor is a 6-digit code in your email.",
+    "on": "Two-step verification is on",
+    "off": "Two-step verification is off",
+    "enable": "Turn on verification",
+    "disable": "Turn off",
+    "disableTitle": "Turn off two-step verification?",
+    "disableConfirm": "Your account will be protected only by the password (or Google).",
+    "enabledSuccess": "Two-step verification is on. The next sign-in will ask for the email code.",
+    "disabledSuccess": "Two-step verification was turned off.",
+    "passwordRequired": "Enter your current password to turn it off."
+  },
   "deliveries": {
     "breadcrumb": "Projects & Deliveries Hub",
     "title": "Project & Delivery Management",

@@ -17,13 +17,19 @@ Listas autenticadas respondem `{ "data": [ ... ] }`. O dashboard admin devolve K
 | GET | `/health` | público |
 | POST | `/auth/register/creator` | público |
 | POST | `/auth/register/company` | público |
-| POST | `/auth/login` | público |
+| POST | `/auth/login` | público. Se 2FA estiver ativo, devolve `two_factor_required` + `challenge_token` (sem token Sanctum) |
+| POST | `/auth/two-factor/verify` | público (`challenge_token` + código de 6 dígitos) |
+| POST | `/auth/two-factor/resend` | público |
 | POST | `/auth/forgot-password` | público (Resend em produção; não revela se o e-mail existe) |
 | POST | `/auth/reset-password` | público |
 | GET | `/auth/google/redirect` | público |
-| GET | `/auth/google/callback` | público |
+| GET | `/auth/google/callback` | público (se 2FA ativo, redireciona para `/login#two_factor=1&challenge=`) |
 | POST | `/auth/logout` | sanctum |
-| GET | `/auth/me` | sanctum |
+| GET | `/auth/me` | sanctum (`two_factor_enabled`, `has_password`) |
+| POST | `/auth/two-factor/enable` | sanctum (envia código) |
+| POST | `/auth/two-factor/confirm` | sanctum |
+| POST | `/auth/two-factor/disable-challenge` | sanctum |
+| POST | `/auth/two-factor/disable` | sanctum (senha ou código) |
 | POST | `/auth/google/complete` | sanctum |
 | PATCH | `/auth/locale` | sanctum (`{ "locale": "pt-BR" \| "en" \| "es" }`) |
 
@@ -45,6 +51,8 @@ Resposta de login/register:
 ```
 
 Cadastro de criador/empresa e Google complete aceitam `locale` opcional (`pt-BR`, `en`, `es`). Sem o campo, a API usa `Accept-Language` (ou `pt-BR`).
+
+Quando `users.two_factor_enabled` é verdadeiro, o login não devolve `token`. O front pede o código do e-mail e chama `POST /auth/two-factor/verify`. A 2FA é opt-in em `/settings/security`.
 
 ## Dashboard
 

@@ -37,7 +37,13 @@ class User extends Authenticatable implements HasLocalePreference
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'two_factor_enabled' => 'boolean',
         ];
+    }
+
+    public function twoFactorChallenges(): HasMany
+    {
+        return $this->hasMany(TwoFactorChallenge::class);
     }
 
     public function creator(): HasOne

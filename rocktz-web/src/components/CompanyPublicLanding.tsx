@@ -10,8 +10,9 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { PasswordField } from "@/components/PasswordField";
 import { RocketzLogo } from "@/components/RocketzLogo";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
-import type { AuthPayload, AuthUser } from "@/lib/auth";
-import { homePathForUser } from "@/lib/auth";
+import type { AuthPayload, AuthUser, TwoFactorChallenge } from "@/lib/auth";
+import { homePathForUser, isTwoFactorChallenge } from "@/lib/auth";
+import { TwoFactorForm } from "@/components/TwoFactorForm";
 import { api } from "@/lib/api";
 import { getAppLocale } from "@/i18n/config";
 import { attachLandingOrigin, setLandingOrigin } from "@/lib/landing-origin";
@@ -42,6 +43,7 @@ export function CompanyPublicLanding({
   const [modal, setModal] = useState<Modal>("none");
   const [loading, setLoading] = useState(false);
   const [login, setLogin] = useState({ email: "", password: "" });
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
   const [sessionUser, setSessionUser] = useState<AuthUser | null>(null);
 
   const name = page.display_name || page.company?.name || "";
@@ -115,6 +117,10 @@ export function CompanyPublicLanding({
         method: "POST",
         body: JSON.stringify({ email: login.email, password: login.password, locale: getAppLocale() }),
       });
+      if (isTwoFactorChallenge(payload)) {
+        setChallenge(payload);
+        return;
+      }
       await afterAuth(payload);
     } catch (err) {
       await alertApiError(err);
@@ -212,7 +218,7 @@ export function CompanyPublicLanding({
         {modal !== "none" ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-0 backdrop-blur-sm sm:p-4">
             <motion.div initial={{ y: 24, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} className="app-modal-panel relative my-0 max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border-0 bg-white p-5 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-slate-200 sm:p-8">
-              <button type="button" onClick={() => setModal("none")} className="absolute top-5 right-5 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <button type="button" onClick={() => { setModal("none"); setChallenge(null); }} className="absolute top-5 right-5 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
                 <X size={20} />
               </button>
               {modal === "creator" ? (
@@ -230,6 +236,13 @@ export function CompanyPublicLanding({
                     </button>
                   </p>
                 </>
+              ) : challenge ? (
+                <TwoFactorForm
+                  theme="light"
+                  challenge={challenge}
+                  onCancel={() => setChallenge(null)}
+                  onVerified={(payload) => void afterAuth(payload)}
+                />
               ) : (
                 <>
                   <h3 className="mb-4 text-2xl font-black text-slate-950">{ta("login")}</h3>

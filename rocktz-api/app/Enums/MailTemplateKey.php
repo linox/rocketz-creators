@@ -32,6 +32,7 @@ enum MailTemplateKey: string
     case AdminSendFailed = 'admin.send_failed';
     case AdminFailureVolume = 'admin.failure_volume';
     case PasswordReset = 'auth.password_reset';
+    case TwoFactorCode = 'auth.two_factor';
 
     public function audience(): MailTemplateAudience
     {
@@ -111,6 +112,7 @@ enum MailTemplateKey: string
             self::CompanyApproved,
             self::CompanyRejected => ['link_plataforma'],
             self::PasswordReset => ['link_plataforma'],
+            self::TwoFactorCode => ['codigo'],
             default => ['link_plataforma'],
         };
     }
@@ -132,6 +134,7 @@ enum MailTemplateKey: string
             self::CampaignPublished => ['nome_campanha', 'data_limite'],
             self::CreatorRejected => ['motivo_reprovacao'],
             self::CampaignApplicationRejected => ['nome_campanha'],
+            self::TwoFactorCode => ['codigo'],
             default => [],
         };
     }

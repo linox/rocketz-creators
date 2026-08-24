@@ -788,6 +788,20 @@
     "sendingSavedOn": "Envios religados.",
     "sendingSavedOff": "Envios pausados. Você pode testar o app à vontade."
   },
+  "security": {
+    "title": "Segurança da conta",
+    "subtitle": "Ative a verificação em duas etapas para exigir um código enviado ao seu e-mail a cada login.",
+    "hint": "Com a verificação ativa, senha sozinha não entra na conta. O segundo fator é um código de 6 dígitos no e-mail.",
+    "on": "Verificação em duas etapas ativa",
+    "off": "Verificação em duas etapas desligada",
+    "enable": "Ativar verificação",
+    "disable": "Desativar",
+    "disableTitle": "Desativar verificação em duas etapas?",
+    "disableConfirm": "Sua conta ficará protegida só pela senha (ou pelo Google).",
+    "enabledSuccess": "A verificação em duas etapas está ativa. No próximo login pediremos o código do e-mail.",
+    "disabledSuccess": "A verificação em duas etapas foi desativada.",
+    "passwordRequired": "Informe sua senha atual para desativar."
+  },
   "deliveries": {
     "breadcrumb": "Central de Projetos & Entregas",
     "title": "Gestão de Projetos & Entregas",

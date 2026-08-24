@@ -113,7 +113,7 @@ class TransactionalMailService
             return false;
         }
 
-        if ($key === MailTemplateKey::PasswordReset) {
+        if (in_array($key, [MailTemplateKey::PasswordReset, MailTemplateKey::TwoFactorCode], true)) {
             return true;
         }
 

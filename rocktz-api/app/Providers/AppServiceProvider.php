@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\Console\ServeCommand;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
@@ -17,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(
-            \Illuminate\Foundation\Console\ServeCommand::class,
+            ServeCommand::class,
             \App\Console\Commands\ServeCommand::class,
         );
     }
@@ -37,6 +38,12 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('auth-public', function (Request $request) {
             return Limit::perMinute(10)->by((string) $request->ip());
+        });
+
+        RateLimiter::for('two-factor', function (Request $request) {
+            $token = (string) $request->input('challenge_token');
+
+            return Limit::perMinute(8)->by($request->ip().'|'.$token);
         });
 
         ResetPassword::createUrlUsing(function (object $user, string $token) {

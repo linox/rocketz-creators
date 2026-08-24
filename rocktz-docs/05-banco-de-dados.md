@@ -38,7 +38,7 @@ O seed ainda cria campanhas em vários status, um contrato recorrente, notifica�
 
 ## Tabelas
 
-Auth: `users` (inclui `locale` padrão `pt-BR`), `password_reset_tokens`, `sessions`, `personal_access_tokens`  
+Auth: `users` (inclui `locale` padrão `pt-BR` e `two_factor_enabled`), `password_reset_tokens`, `sessions`, `personal_access_tokens`, `two_factor_challenges`  
 Pessoas: `creators`, `creator_portfolio_videos`, `creator_contract_acceptances`, `companies`, `company_contacts`, `company_users`, `company_favorite_creators`, `consents`  
 Campanhas: `campaigns`, `campaign_briefings`, `campaign_deliverables`, `campaign_creators`, `campaign_creator_contents`  
 Recorrência: `recurring_contracts`, `recurring_contract_creators`, `content_planning_items`  

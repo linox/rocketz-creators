@@ -12,6 +12,7 @@
   "mailTemplates": "Email",
   "mailLog": "Email history",
   "notificationSettings": "Email notifications",
+  "securitySettings": "Account security",
   "adminUsers": "Users",
   "users": "Users",
   "shortcuts": "Quick shortcuts",

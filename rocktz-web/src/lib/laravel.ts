@@ -56,9 +56,17 @@ export function setToken(token: string) {
   localStorage.setItem(AUTH_COOKIE, token);
 }
 
-export function consumeAuthHash(): { token: string | null; google: string | null; intent: string | null; signup: string | null } {
+export function consumeAuthHash(): {
+  token: string | null;
+  google: string | null;
+  intent: string | null;
+  signup: string | null;
+  twoFactor: string | null;
+  challenge: string | null;
+  emailHint: string | null;
+} {
   if (typeof window === "undefined") {
-    return { token: null, google: null, intent: null, signup: null };
+    return { token: null, google: null, intent: null, signup: null, twoFactor: null, challenge: null, emailHint: null };
   }
 
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -66,11 +74,14 @@ export function consumeAuthHash(): { token: string | null; google: string | null
   const google = hash.get("google");
   const intent = hash.get("intent");
   const signup = hash.get("signup");
-  if (token || google) {
+  const twoFactor = hash.get("two_factor");
+  const challenge = hash.get("challenge");
+  const emailHint = hash.get("email_hint");
+  if (token || google || twoFactor || challenge) {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
 
-  return { token, google, intent, signup };
+  return { token, google, intent, signup, twoFactor, challenge, emailHint };
 }
 
 export function clearToken() {

@@ -29,6 +29,7 @@ return [
         'link_demanda' => 'Deliverable link',
         'link_entrega' => 'Delivery link',
         'link_suporte' => 'Support link',
+        'codigo' => 'Code',
     ],
     'templates' => [
         'creator.registered' => [
@@ -198,6 +199,12 @@ return [
             'greeting' => 'Hi!',
             'body' => "We received a request to reset the password for your Creatorz by Rocketz account.\n\nThis link expires soon. If you did not request it, ignore this email.",
             'cta' => 'Reset password',
+        ],
+        'auth.two_factor' => [
+            'subject' => 'Verification code — Creatorz by Rocketz',
+            'greeting' => 'Hi!',
+            'body' => "Use the code below to finish signing in to your account. It expires in 10 minutes.\n\nIf you did not try to sign in, ignore this email.",
+            'cta' => 'Go to login',
         ],
     ],
 ];

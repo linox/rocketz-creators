@@ -30,6 +30,8 @@ Route::prefix('auth')->group(function () {
     Route::post('register/creator', [AuthController::class, 'registerCreator'])->middleware('throttle:auth-public');
     Route::post('register/company', [AuthController::class, 'registerCompany'])->middleware('throttle:auth-public');
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');
+    Route::post('two-factor/verify', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:two-factor');
+    Route::post('two-factor/resend', [AuthController::class, 'resendTwoFactor'])->middleware('throttle:two-factor');
     Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-public');
     Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-public');
     Route::get('google/redirect', [AuthController::class, 'googleRedirect']);
@@ -41,6 +43,10 @@ Route::prefix('auth')->group(function () {
         Route::patch('me', [AuthController::class, 'updateMe']);
         Route::patch('locale', [AuthController::class, 'updateLocale']);
         Route::post('google/complete', [AuthController::class, 'completeGoogleProfile']);
+        Route::post('two-factor/enable', [AuthController::class, 'enableTwoFactor'])->middleware('throttle:two-factor');
+        Route::post('two-factor/confirm', [AuthController::class, 'confirmTwoFactor'])->middleware('throttle:two-factor');
+        Route::post('two-factor/disable-challenge', [AuthController::class, 'disableTwoFactorChallenge'])->middleware('throttle:two-factor');
+        Route::post('two-factor/disable', [AuthController::class, 'disableTwoFactor'])->middleware('throttle:two-factor');
     });
 });
 

@@ -22,6 +22,8 @@ class UserResource extends JsonResource
             'avatar_url' => $this->avatar_url,
             'permissions' => $this->permissionSlugs(),
             'can_publish_without_approval' => $this->canPublishWithoutApproval(),
+            'two_factor_enabled' => (bool) $this->two_factor_enabled,
+            'has_password' => filled($this->password),
             'creator' => $this->whenLoaded('creator', function () {
                 if (! $this->creator) {
                     return null;

@@ -9,6 +9,8 @@ export type AuthUser = {
   avatar_url?: string | null;
   permissions?: string[];
   can_publish_without_approval?: boolean;
+  two_factor_enabled?: boolean;
+  has_password?: boolean;
   creator?: {
     id: number;
     full_name: string;
@@ -46,6 +48,20 @@ export type AuthPayload = {
   token: string;
   user: AuthUser;
 };
+
+export type TwoFactorChallenge = {
+  two_factor_required: true;
+  challenge_token: string;
+  email_hint: string;
+  expires_in?: number;
+  message?: string;
+};
+
+export function isTwoFactorChallenge(payload: unknown): payload is TwoFactorChallenge {
+  if (!payload || typeof payload !== "object") return false;
+  const data = payload as Partial<TwoFactorChallenge>;
+  return data.two_factor_required === true && typeof data.challenge_token === "string";
+}
 
 export function homePathForUser(user: AuthUser): string {
   if (user.role === "admin") {

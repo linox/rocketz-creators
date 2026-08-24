@@ -6,8 +6,9 @@ Next.js App Router, React 19, Tailwind v4, Inter, tokens do legado (`#6366F1`, s
 
 - `/` e `/join` — landing (modal de login com “Esqueci minha senha”; admin autenticado em `/` vê o dashboard)
 - `/l/[slug]` — landing pública da empresa
-- `/login` — login/signup criador ou empresa, Google, esqueci senha
+- `/login` — login/signup criador ou empresa, Google, esqueci senha, código 2FA
 - `/reset-password` — link enviado por e-mail
+- `/settings/security` — ativar/desativar verificação em duas etapas por e-mail
 - `/dashboard` — KPIs da agência
 - `/company-dashboard` — painel da empresa (campanhas, recorrentes, favoritos)
 - `/creator-dashboard` — início/central do criador

@@ -18,6 +18,8 @@ php artisan migrate:fresh --seed
 php artisan serve --host=127.0.0.1 --port=8000
 ```
 
+Em banco já existente: `php artisan migrate` e `php artisan db:seed --class=MailTemplateSeeder` para criar as colunas de 2FA e o template `auth.two_factor`.
+
 ## Web
 
 ```bash

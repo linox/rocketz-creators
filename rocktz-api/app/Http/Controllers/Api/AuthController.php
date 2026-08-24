@@ -4,15 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\CompanyStatus;
 use App\Enums\CreatorStatus;
+use App\Enums\TwoFactorPurpose;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\CompleteGoogleProfileRequest;
+use App\Http\Requests\Auth\DisableTwoFactorRequest;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterCompanyRequest;
 use App\Http\Requests\Auth\RegisterCreatorRequest;
+use App\Http\Requests\Auth\ResendTwoFactorRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateLocaleRequest;
+use App\Http\Requests\Auth\VerifyTwoFactorRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
 use App\Models\CompanyUser;
@@ -22,6 +26,7 @@ use App\Services\AuthService;
 use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
 use App\Services\Mail\MailNotifier;
+use App\Services\TwoFactorService;
 use App\Support\FrontendUrl;
 use App\Support\Geo;
 use App\Support\SafeHttpUrl;
@@ -39,6 +44,7 @@ class AuthController extends Controller
     public function __construct(
         private readonly AuthService $authService,
         private readonly GoogleAuthService $googleAuthService,
+        private readonly TwoFactorService $twoFactorService,
     ) {}
 
     public function registerCreator(RegisterCreatorRequest $request): JsonResponse
@@ -64,7 +70,110 @@ class AuthController extends Controller
             return response()->json(['message' => __('auth.invalid_credentials')], 422);
         }
 
+        if ($user->two_factor_enabled) {
+            return $this->twoFactorJson(fn () => $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Login));
+        }
+
         return response()->json($this->authService->issueToken($user));
+    }
+
+    public function verifyTwoFactor(VerifyTwoFactorRequest $request): JsonResponse
+    {
+        return $this->twoFactorJson(function () use ($request) {
+            $user = $this->twoFactorService->verify(
+                $request->validated('challenge_token'),
+                $request->validated('code'),
+                TwoFactorPurpose::Login,
+            );
+
+            return $this->authService->issueToken($user);
+        });
+    }
+
+    public function resendTwoFactor(ResendTwoFactorRequest $request): JsonResponse
+    {
+        return $this->twoFactorJson(fn () => $this->twoFactorService->resend($request->validated('challenge_token')));
+    }
+
+    public function enableTwoFactor(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $user->refresh();
+        if ($user->two_factor_enabled) {
+            return response()->json(['message' => __('auth.two_factor_already_enabled')], 422);
+        }
+
+        return $this->twoFactorJson(fn () => $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Enable));
+    }
+
+    public function confirmTwoFactor(VerifyTwoFactorRequest $request): JsonResponse
+    {
+        return $this->twoFactorJson(function () use ($request) {
+            $user = $this->twoFactorService->verify(
+                $request->validated('challenge_token'),
+                $request->validated('code'),
+                TwoFactorPurpose::Enable,
+            );
+            if ($user->isNot($request->user())) {
+                throw new RuntimeException(__('auth.two_factor_invalid'), 422);
+            }
+            $user->forceFill(['two_factor_enabled' => true])->save();
+            $request->user()?->forceFill(['two_factor_enabled' => true]);
+            $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+
+            return [
+                'message' => __('auth.two_factor_enabled'),
+                'user' => new UserResource($user),
+            ];
+        });
+    }
+
+    public function disableTwoFactorChallenge(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $user->refresh();
+        if (! $user->two_factor_enabled) {
+            return response()->json(['message' => __('auth.two_factor_not_enabled')], 422);
+        }
+
+        return $this->twoFactorJson(fn () => $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Disable));
+    }
+
+    public function disableTwoFactor(DisableTwoFactorRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        $user->refresh();
+        if (! $user->two_factor_enabled) {
+            return response()->json(['message' => __('auth.two_factor_not_enabled')], 422);
+        }
+
+        $data = $request->validated();
+
+        if (filled($data['password'] ?? null)) {
+            if (! $user->password || ! Hash::check($data['password'], $user->password)) {
+                return response()->json(['message' => __('auth.password')], 422);
+            }
+        } elseif (filled($data['challenge_token'] ?? null) && filled($data['code'] ?? null)) {
+            try {
+                $verified = $this->twoFactorService->verify($data['challenge_token'], $data['code'], TwoFactorPurpose::Disable);
+                if ($verified->isNot($user)) {
+                    return response()->json(['message' => __('auth.two_factor_invalid')], 422);
+                }
+            } catch (RuntimeException $e) {
+                return $this->twoFactorException($e);
+            }
+        } else {
+            return response()->json(['message' => __('auth.two_factor_disable_required')], 422);
+        }
+
+        $user->forceFill(['two_factor_enabled' => false])->save();
+        $user->twoFactorChallenges()->delete();
+        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+
+        return response()->json([
+            'message' => __('auth.two_factor_disabled'),
+            'user' => new UserResource($user),
+        ]);
     }
 
     public function logout(Request $request): JsonResponse
@@ -196,9 +305,10 @@ class AuthController extends Controller
             $intent = $this->googleAuthService->consumeState($request->string('state')->toString() ?: null);
             $googleUser = $this->googleAuthService->userFromCode((string) $request->string('code'));
             $user = $this->googleAuthService->findOrNewUser($googleUser);
-            $payload = $this->authService->issueToken($user);
 
             if ($this->googleAuthService->needsProfile($user)) {
+                $payload = $this->authService->issueToken($user);
+
                 return redirect()->away($frontend.'/login#'.http_build_query([
                     'google' => 'complete',
                     'intent' => $intent,
@@ -206,6 +316,17 @@ class AuthController extends Controller
                 ]));
             }
 
+            if ($user->two_factor_enabled) {
+                $challenge = $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Login);
+
+                return redirect()->away($frontend.'/login#'.http_build_query([
+                    'two_factor' => '1',
+                    'challenge' => $challenge['challenge_token'],
+                    'email_hint' => $challenge['email_hint'],
+                ]));
+            }
+
+            $payload = $this->authService->issueToken($user);
             $fragment = ['token' => $payload['token']];
             if ($user->wasRecentlyCreated) {
                 $fragment['signup'] = '1';
@@ -240,6 +361,28 @@ class AuthController extends Controller
         }
 
         return response()->json($this->authService->issueToken($fresh));
+    }
+
+    /**
+     * @param  callable(): array<string, mixed>  $callback
+     */
+    private function twoFactorJson(callable $callback): JsonResponse
+    {
+        try {
+            return response()->json($callback());
+        } catch (RuntimeException $e) {
+            return $this->twoFactorException($e);
+        }
+    }
+
+    private function twoFactorException(RuntimeException $e): JsonResponse
+    {
+        $status = $e->getCode();
+        if (! is_int($status) || $status < 400 || $status > 599) {
+            $status = 422;
+        }
+
+        return response()->json(['message' => $e->getMessage()], $status);
     }
 
     private function attachGoogleProfile(User $user, string $type, Request $request): void

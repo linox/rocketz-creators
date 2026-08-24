@@ -41,10 +41,11 @@ import { RocketzLogo } from "@/components/RocketzLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { UserProfileMenu } from "@/components/UserProfileMenu";
 import { alertApiError, alertWarning } from "@/lib/alerts";
-import { homePathForUser, type AuthPayload, type AuthUser } from "@/lib/auth";
+import { homePathForUser, isTwoFactorChallenge, type AuthPayload, type AuthUser, type TwoFactorChallenge } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
 import { clearToken, fetchMe, getToken, laravelFetch, logoutRequest, persistAuth } from "@/lib/laravel";
+import { TwoFactorForm } from "@/components/TwoFactorForm";
 import { attachLandingOrigin, getLandingOrigin } from "@/lib/landing-origin";
 import {
   formatWhatsApp,
@@ -391,6 +392,7 @@ export function LandingPage() {
   });
 
   const [login, setLogin] = useState({ email: "", password: "" });
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
 
   const reduceMotion = useReducedMotion();
   const heroRef = useRef<HTMLElement>(null);
@@ -483,6 +485,10 @@ export function LandingPage() {
           body && typeof body === "object" ? { ...(body as object), locale: getAppLocale() } : body,
         ),
       });
+      if (path === "/auth/login" && isTwoFactorChallenge(payload)) {
+        setChallenge(payload);
+        return;
+      }
       await attachLandingOrigin(payload.user);
       router.push(persistAuth(payload, path === "/auth/register/creator"));
     } catch (err) {
@@ -1098,13 +1104,27 @@ export function LandingPage() {
             <motion.div initial={{ y: 24, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} className="app-modal-panel relative my-0 max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border-0 bg-white p-5 shadow-2xl sm:my-8 sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-slate-200 sm:p-8">
               <button
                 type="button"
-                onClick={() => setModal("none")}
+                onClick={() => {
+                  setModal("none");
+                  setChallenge(null);
+                }}
                 className="absolute top-5 right-5 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
               >
                 <X size={20} />
               </button>
 
               {modal === "login" ? (
+                challenge ? (
+                  <TwoFactorForm
+                    theme="light"
+                    challenge={challenge}
+                    onCancel={() => setChallenge(null)}
+                    onVerified={async (payload) => {
+                      await attachLandingOrigin(payload.user);
+                      router.push(persistAuth(payload));
+                    }}
+                  />
+                ) : (
                 <>
                   <h3 className="mb-4 text-2xl font-black text-slate-950">{ta("login")}</h3>
                   <form className="space-y-3" noValidate onSubmit={onLoginSubmit}>
@@ -1119,6 +1139,7 @@ export function LandingPage() {
                     </p>
                   </form>
                 </>
+                )
               ) : null}
 
               {modal === "creator" ? (

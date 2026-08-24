@@ -29,6 +29,7 @@ return [
         'link_demanda' => 'Enlace de la demanda',
         'link_entrega' => 'Enlace de la entrega',
         'link_suporte' => 'Enlace de soporte',
+        'codigo' => 'Código',
     ],
     'templates' => [
         'creator.registered' => [
@@ -198,6 +199,12 @@ return [
             'greeting' => 'Hola!',
             'body' => "Recibimos una solicitud para restablecer la contraseña de tu cuenta en Creatorz by Rocketz.\n\nEste enlace caduca pronto. Si no hiciste esta solicitud, ignora este e-mail.",
             'cta' => 'Restablecer contraseña',
+        ],
+        'auth.two_factor' => [
+            'subject' => 'Código de verificación — Creatorz by Rocketz',
+            'greeting' => 'Hola!',
+            'body' => "Usa el código de abajo para concluir el acceso a tu cuenta. Caduca en 10 minutos.\n\nSi no intentaste entrar, ignora este e-mail.",
+            'cta' => 'Ir al inicio de sesión',
         ],
     ],
 ];

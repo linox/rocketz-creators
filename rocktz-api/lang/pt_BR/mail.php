@@ -29,6 +29,7 @@ return [
         'link_demanda' => 'Link da demanda',
         'link_entrega' => 'Link da entrega',
         'link_suporte' => 'Link de suporte',
+        'codigo' => 'Código',
     ],
     'templates' => [
         'creator.registered' => [
@@ -198,6 +199,12 @@ return [
             'greeting' => 'Olá!',
             'body' => "Recebemos um pedido para redefinir a senha da sua conta no Creatorz by Rocketz.\n\nEste link expira em breve. Se você não fez essa solicitação, ignore este e-mail.",
             'cta' => 'Redefinir senha',
+        ],
+        'auth.two_factor' => [
+            'subject' => 'Código de verificação — Creatorz by Rocketz',
+            'greeting' => 'Olá!',
+            'body' => "Use o código abaixo para concluir o acesso à sua conta. Ele expira em 10 minutos.\n\nSe você não tentou entrar, ignore este e-mail.",
+            'cta' => 'Ir para o login',
         ],
     ],
 ];

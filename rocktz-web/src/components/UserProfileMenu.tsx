@@ -11,6 +11,7 @@ import {
   FileText,
   Home,
   Instagram,
+  KeyRound,
   LogOut,
   Mail,
   MapPin,
@@ -301,6 +302,13 @@ export function UserProfileMenu({
             <span className="shrink-0 rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-purple-600">{t("official")}</span>
           </button>
         ) : null}
+
+        <Link href="/settings/security" onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
+          <div className="flex items-center gap-2.5">
+            <KeyRound size={15} className="text-indigo-600" />
+            <span>{t("securitySettings")}</span>
+          </div>
+        </Link>
 
         <Link href="/settings/notifications" onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
           <div className="flex items-center gap-2.5">

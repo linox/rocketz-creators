@@ -9,9 +9,11 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { alertApiError, alertWarning } from "@/lib/alerts";
 import type { AuthPayload } from "@/lib/auth";
+import { isTwoFactorChallenge, type TwoFactorChallenge } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
 import { laravelFetch, persistAuth, consumeAuthHash, setToken } from "@/lib/laravel";
+import { TwoFactorForm } from "@/components/TwoFactorForm";
 import { attachLandingOrigin, getLandingOrigin } from "@/lib/landing-origin";
 import {
   DEFAULT_COUNTRY,
@@ -45,6 +47,7 @@ export function LoginPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [userType, setUserType] = useState<UserType>("creator");
   const [loading, setLoading] = useState(false);
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -65,9 +68,16 @@ export function LoginPage() {
   });
 
   useEffect(() => {
-    const { token } = consumeAuthHash();
-    if (token) {
-      setToken(token);
+    const hash = consumeAuthHash();
+    if (hash.token) {
+      setToken(hash.token);
+    }
+    if (hash.twoFactor && hash.challenge) {
+      setChallenge({
+        two_factor_required: true,
+        challenge_token: hash.challenge,
+        email_hint: hash.emailHint || "",
+      });
     }
   }, []);
 
@@ -92,6 +102,10 @@ export function LoginPage() {
             : body,
         ),
       });
+      if (path === "/auth/login" && isTwoFactorChallenge(payload)) {
+        setChallenge(payload);
+        return;
+      }
       await attachLandingOrigin(payload.user);
       router.push(persistAuth(payload, mode === "signup" && userType === "creator"));
     } catch (err) {
@@ -211,13 +225,24 @@ export function LoginPage() {
           <LanguageSwitcher theme="dark" />
         </div>
         <div className="mb-6 flex rounded-xl bg-[#1E293B]/40 p-1">
-          <button type="button" onClick={() => setMode("login")} className={`flex-1 rounded-lg py-2.5 text-xs font-bold uppercase ${mode === "login" ? "bg-brand-primary text-white" : "text-slate-400"}`}>
+          <button type="button" onClick={() => { setMode("login"); setChallenge(null); }} className={`flex-1 rounded-lg py-2.5 text-xs font-bold uppercase ${mode === "login" ? "bg-brand-primary text-white" : "text-slate-400"}`}>
             {ta("doLogin")}
           </button>
-          <button type="button" onClick={() => setMode("signup")} className={`flex-1 rounded-lg py-2.5 text-xs font-bold uppercase ${mode === "signup" ? "bg-brand-primary text-white" : "text-slate-400"}`}>
+          <button type="button" onClick={() => { setMode("signup"); setChallenge(null); }} className={`flex-1 rounded-lg py-2.5 text-xs font-bold uppercase ${mode === "signup" ? "bg-brand-primary text-white" : "text-slate-400"}`}>
             {ta("createAccount")}
           </button>
         </div>
+        {challenge ? (
+          <TwoFactorForm
+            theme="dark"
+            challenge={challenge}
+            onCancel={() => setChallenge(null)}
+            onVerified={async (payload) => {
+              await attachLandingOrigin(payload.user);
+              router.push(persistAuth(payload));
+            }}
+          />
+        ) : (
         <form className="space-y-4" noValidate onSubmit={onSubmit}>
           {mode === "signup" ? (
             <>
@@ -285,6 +310,7 @@ export function LoginPage() {
             {loading ? ta("wait") : mode === "login" ? ta("login") : ta("createAccount")}
           </button>
         </form>
+        )}
         <p className="mt-6 text-center text-sm text-slate-500">
           <Link href="/" className="text-indigo-300">{ta("backToLanding")}</Link>
         </p>
