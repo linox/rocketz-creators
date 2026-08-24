@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\ContentPlanningStatus;
+use App\Enums\PostingProfile;
 use App\Enums\ContentType;
 use App\Enums\StageApprovalStatus;
 use Database\Factories\ContentPlanningItemFactory;
@@ -29,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'planned_date',
     'status',
     'approval_flow',
+    'posting_profile',
     'script_status',
     'video_status',
     'script_feedback',
@@ -63,6 +65,7 @@ class ContentPlanningItem extends Model
             'planned_date' => 'date',
             'status' => ContentPlanningStatus::class,
             'approval_flow' => ApprovalFlowType::class,
+            'posting_profile' => PostingProfile::class,
             'script_status' => StageApprovalStatus::class,
             'video_status' => StageApprovalStatus::class,
             'script_submitted_at' => 'datetime',

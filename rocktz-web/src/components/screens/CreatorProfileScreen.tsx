@@ -4,6 +4,7 @@ import { FormEvent, Fragment, Suspense, useEffect, useMemo, useState, type React
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import {
   ArrowLeft,
@@ -18,6 +19,7 @@ import {
   Eye,
   ExternalLink,
   FileText,
+  Link2,
   Filter,
   FolderPlus,
   Globe,
@@ -62,11 +64,13 @@ import { cn } from "@/lib/cn";
 import {
   CONTENT_DELIVERY_STATES,
   campaignCreatorDeliveryState,
+  creatorNextDeliveryAction,
   deliveryStatusRank,
   isApprovedDelivery,
   isRevisionDelivery,
   planningItemDeliveryState,
   type ContentDeliveryState,
+  type CreatorDeliveryActionKind,
 } from "@/lib/content-delivery-status";
 import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, formatBRLMask, parseBRLMask, moneyToMask, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF } from "@/lib/masks";
 import { DEFAULT_COUNTRY, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
@@ -1732,6 +1736,73 @@ function CreatorRecurringEmptyOrList({ myContracts }: { myContracts: RecurringCo
   );
 }
 
+function deliveryActionLabel(kind: CreatorDeliveryActionKind, tp: (key: string) => string) {
+  if (kind === "send_script") return tp("sendScriptForReview");
+  if (kind === "send_video") return tp("sendVideoForReview");
+  if (kind === "view_published") return tp("viewPublishedPost");
+  return tp("sendPublishedLink");
+}
+
+function CreatorWorkActions({
+  deliveryStatus,
+  flow,
+  publishedUrl,
+  postingProfile,
+  onOpen,
+  layout,
+  tp,
+}: {
+  deliveryStatus: ContentDeliveryState;
+  flow?: string | null;
+  publishedUrl?: string | null;
+  postingProfile?: string | null;
+  onOpen: () => void;
+  layout: "stack" | "inline";
+  tp: (key: string) => string;
+}) {
+  const action = creatorNextDeliveryAction(deliveryStatus, flow, publishedUrl, postingProfile);
+  const stack = layout === "stack";
+  const briefingClass = stack
+    ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
+    : "inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50";
+  const actionClass = cn(
+    stack
+      ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border-none px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:w-auto"
+      : "inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-none px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all",
+    action?.revision
+      ? "bg-rose-600 hover:bg-rose-700"
+      : action?.kind === "send_link" || action?.kind === "view_published"
+        ? "bg-emerald-600 hover:bg-emerald-700"
+        : "bg-brand-primary hover:bg-indigo-600",
+  );
+  const ActionIcon = action?.revision
+    ? RefreshCw
+    : action?.kind === "send_script"
+      ? FileText
+      : action?.kind === "send_video"
+        ? Video
+        : action?.kind === "view_published"
+          ? ExternalLink
+          : Link2;
+
+  return (
+    <div className={cn("flex", stack ? "flex-col gap-2 sm:flex-row sm:flex-wrap" : "flex-wrap items-center justify-end gap-2")}>
+      <button type="button" onClick={onOpen} className={briefingClass}>
+        <Eye size={13} /> {tp("viewBriefing")}
+      </button>
+      {action?.kind === "view_published" && publishedUrl ? (
+        <a href={safeHttpUrl(publishedUrl)} target="_blank" rel="noreferrer" className={actionClass}>
+          <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
+        </a>
+      ) : action ? (
+        <button type="button" onClick={onOpen} className={actionClass}>
+          <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function RecurringBriefingModal({
   work,
   onClose,
@@ -1951,13 +2022,15 @@ function ActiveRecurringWorksTable({
               </div>
               <div className="mt-3">
                 {item ? (
-                  <button
-                    type="button"
-                    onClick={() => openRow(key)}
-                    className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
-                  >
-                    <Eye size={13} /> {deliveryStatus === "approved" ? tp("sendPublishedLink") : tp("viewBriefing")}
-                  </button>
+                  <CreatorWorkActions
+                    layout="stack"
+                    deliveryStatus={deliveryStatus}
+                    flow={item.approval_flow}
+                    publishedUrl={item.published_url}
+                    postingProfile={item.posting_profile}
+                    onOpen={() => openRow(key)}
+                    tp={tp}
+                  />
                 ) : (
                   <Link
                     href={`/recurring/${contract.id}`}
@@ -2006,15 +2079,17 @@ function ActiveRecurringWorksTable({
                       {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
                     </span>
                   </td>
-                  <td className="p-3.5 pr-5 text-right whitespace-nowrap">
+                  <td className="p-3.5 pr-5 text-right">
                     {item ? (
-                      <button
-                        type="button"
-                        onClick={() => openRow(key)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
-                      >
-                        <Eye size={13} /> {deliveryStatus === "approved" ? tp("sendPublishedLink") : tp("viewBriefing")}
-                      </button>
+                      <CreatorWorkActions
+                        layout="inline"
+                        deliveryStatus={deliveryStatus}
+                        flow={item.approval_flow}
+                        publishedUrl={item.published_url}
+                        postingProfile={item.posting_profile}
+                        onOpen={() => openRow(key)}
+                        tp={tp}
+                      />
                     ) : (
                       <Link
                         href={`/recurring/${contract.id}`}
@@ -2208,27 +2283,16 @@ function ActiveCampaignsTable({
             <div className="divide-y divide-slate-100">
         {group.rows.map(({ campaign, row, deliveryStatus }) => {
           const isOpen = expandedSubmissionId === row.id;
-          const isPublished = deliveryStatus === "published";
           const actions = (
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => openSubmission(row.id)}
-                className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
-              >
-                <Eye size={13} /> {tp("viewBriefing")}
-              </button>
-              {isPublished && row.content?.published_link ? (
-                <a
-                  href={row.content.published_link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border-none bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 sm:w-auto"
-                >
-                  <ExternalLink size={13} /> {tp("viewPublishedPost")}
-                </a>
-              ) : null}
-            </div>
+            <CreatorWorkActions
+              layout="stack"
+              deliveryStatus={deliveryStatus}
+              flow={campaign.approval_flow}
+              publishedUrl={row.content?.published_link}
+              postingProfile={campaign.posting_profile}
+              onOpen={() => openSubmission(row.id)}
+              tp={tp}
+            />
           );
           return (
             <div key={row.id} className={cn("p-4", isOpen && "bg-indigo-50/40")}>
@@ -2288,7 +2352,6 @@ function ActiveCampaignsTable({
                 </tr>
             {group.rows.map(({ campaign, row, deliveryStatus }) => {
               const isOpen = expandedSubmissionId === row.id;
-              const isPublished = deliveryStatus === "published";
 
               return (
                 <tr key={row.id} className={cn("transition-colors hover:bg-indigo-50/30", isOpen && "bg-indigo-50/50")}>
@@ -2316,26 +2379,16 @@ function ActiveCampaignsTable({
                         {deliveryLabel(deliveryStatus)}
                       </span>
                     </td>
-                    <td className="p-3.5 pr-5 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openSubmission(row.id)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50"
-                        >
-                          <Eye size={13} /> {tp("viewBriefing")}
-                        </button>
-                        {isPublished && row.content?.published_link ? (
-                          <a
-                            href={row.content.published_link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-xl border-none bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700"
-                          >
-                            <ExternalLink size={13} /> {tp("viewPublishedPost")}
-                          </a>
-                        ) : null}
-                      </div>
+                    <td className="p-3.5 pr-5 text-right">
+                      <CreatorWorkActions
+                        layout="inline"
+                        deliveryStatus={deliveryStatus}
+                        flow={campaign.approval_flow}
+                        publishedUrl={row.content?.published_link}
+                        postingProfile={campaign.posting_profile}
+                        onOpen={() => openSubmission(row.id)}
+                        tp={tp}
+                      />
                     </td>
                 </tr>
               );
@@ -2624,7 +2677,7 @@ function SocialLinks({ socials, emptyLabel }: { socials?: Record<string, string>
           const href = socialHref(item.key, item.handle);
           const text = item.handle.startsWith("@") || /^https?:\/\//i.test(item.handle) ? item.handle : `@${item.handle}`;
           return (
-            <a key={item.key} href={href} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 hover:text-brand-primary">
+            <a key={item.key} href={safeHttpUrl(href)} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 hover:text-brand-primary">
               <Icon size={13} className={item.className} />
               <span className="truncate">{text || emptyLabel}</span>
             </a>

@@ -2,12 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, UploadCloud } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { PlanningItem } from "@/lib/types";
+import { isBrandPosting } from "@/lib/posting-profile";
 
 type Props = {
   item: PlanningItem;
@@ -55,6 +57,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const alreadyPublished = item.status === "published" && Boolean(item.published_url?.trim());
   const materialApproved = item.status === "approved" || item.video_status === "approved";
   const awaitingPublishUrl = !alreadyPublished && (materialApproved || flow === "live_link");
+  const brandPosts = isBrandPosting(item.posting_profile);
 
   async function submitPublishedUrl() {
     if (!publishedUrl.trim()) {
@@ -151,7 +154,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     return item.published_url ? (
       <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
         <p className="m-0 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">{tp("publishedLinkLabel")}</p>
-        <a href={item.published_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+        <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
           <Link2 size={13} /> {item.published_url}
         </a>
       </div>
@@ -159,6 +162,13 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   }
 
   if (awaitingPublishUrl) {
+    if (brandPosts) {
+      return (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="m-0 text-[11px] font-medium text-amber-900">{tp("approvedPublishHintBrand")}</p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
         <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("approvedPublishHint")}</p>

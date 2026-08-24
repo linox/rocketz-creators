@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
+use App\Enums\PostingProfile;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationType;
@@ -25,6 +26,7 @@ use App\Services\NotificationService;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
+use App\Support\SafeHttpUrl;
 use App\Support\SubmissionVersioning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -326,10 +328,14 @@ class CampaignController extends Controller
             'published_link' => ['nullable', 'string', 'max:2048'],
         ]);
 
+        $campaignCreator->loadMissing('campaign');
+        abort_unless($campaignCreator->campaign, 404);
+        $data = $this->authorizeParticipationUpdate($request, $campaignCreator, $data);
+        $data = SafeHttpUrl::validateFields($data, ['video_url', 'image_url', 'published_link']);
+
         $contentFields = array_intersect_key($data, array_flip(['script', 'video_url', 'video_file_size', 'image_url', 'published_link']));
         unset($data['script'], $data['video_url'], $data['video_file_size'], $data['image_url'], $data['published_link']);
 
-        $campaignCreator->loadMissing('campaign');
         $approvedStatus = ApplicationStatus::Approved->value;
         $nextStatus = isset($data['application_status'])
             ? ($data['application_status'] instanceof ApplicationStatus ? $data['application_status']->value : $data['application_status'])
@@ -421,8 +427,11 @@ class CampaignController extends Controller
         return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
     }
 
-    public function destroyParticipation(CampaignCreator $campaignCreator): JsonResponse
+    public function destroyParticipation(Request $request, CampaignCreator $campaignCreator): JsonResponse
     {
+        $campaignCreator->loadMissing('campaign');
+        abort_unless($campaignCreator->campaign, 404);
+        $this->assertCanManage($request, $campaignCreator->campaign);
         $campaignCreator->delete();
 
         return response()->json(['message' => __('auth.creator_removed')]);
@@ -497,6 +506,7 @@ class CampaignController extends Controller
             'is_barter' => ['sometimes', 'boolean'],
             'barter_details' => ['nullable', 'string'],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
+            'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'briefing' => ['nullable', 'array'],
             'deliverables' => ['nullable', 'array'],
         ];
@@ -525,6 +535,7 @@ class CampaignController extends Controller
         }
         if ($creating) {
             $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
+            $data['posting_profile'] ??= PostingProfile::Creator;
         }
 
         return $this->withAgencyFeeSplit(
@@ -628,6 +639,72 @@ class CampaignController extends Controller
             return;
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function authorizeParticipationUpdate(Request $request, CampaignCreator $campaignCreator, array $data): array
+    {
+        $user = $request->user();
+        $campaign = $campaignCreator->campaign;
+        abort_unless($campaign, 404);
+
+        if ($user->role === UserRole::Creator) {
+            abort_unless((int) $user->creator?->id === (int) $campaignCreator->creator_id, 403, __('auth.forbidden'));
+            $this->assertCanView($request, $campaign);
+
+            return $this->restrictCreatorParticipationPayload($data, $campaignCreator);
+        }
+
+        $this->assertCanManage($request, $campaign);
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function restrictCreatorParticipationPayload(array $data, CampaignCreator $campaignCreator): array
+    {
+        $allowed = [
+            'script',
+            'video_url',
+            'video_file_size',
+            'image_url',
+            'published_link',
+            'script_status',
+            'video_status',
+            'delivery_status',
+            'delivery_type',
+        ];
+        abort_if(array_diff_key($data, array_flip($allowed)) !== [], 403, __('auth.forbidden'));
+        $data = array_intersect_key($data, array_flip($allowed));
+
+        foreach (['script_status', 'video_status'] as $field) {
+            if (isset($data[$field]) && ! NotificationService::is($data[$field], StageApprovalStatus::Submitted)) {
+                abort(403, __('auth.forbidden'));
+            }
+        }
+
+        if (isset($data['delivery_status'])) {
+            $status = NotificationService::value($data['delivery_status']);
+            if (! in_array($status, [DeliveryStatus::Sent->value, DeliveryStatus::Published->value], true)) {
+                abort(403, __('auth.forbidden'));
+            }
+        }
+
+        $postsOnBrand = $campaignCreator->campaign?->posting_profile === PostingProfile::Brand;
+        if ($postsOnBrand && (
+            array_key_exists('published_link', $data)
+            || NotificationService::is($data['delivery_status'] ?? null, DeliveryStatus::Published)
+        )) {
+            abort(403, __('auth.brand_sends_published_link'));
+        }
+
+        return $data;
     }
 
     private function notifyAgencyReview(Campaign $campaign): void

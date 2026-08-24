@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -48,6 +49,7 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
+import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { RecurringMetricsPanel } from "@/components/RecurringMetricsPanel";
@@ -59,6 +61,7 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { itemHasPautaBriefing, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
+import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import { usePrivacy } from "@/lib/privacy";
 import { currencySymbol, DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
@@ -151,6 +154,7 @@ const EMPTY_PAUTA = {
   live_link: "",
   status: "planned",
   approval_flow: "script_and_video" as "script_and_video" | "video_only",
+  posting_profile: "creator" as PostingProfile,
 };
 
 function isLivePauta(type: string) {
@@ -651,6 +655,7 @@ function DetailInner() {
         live_link: item.published_url || "",
         status: PAUTA_STATUSES.includes(item.status as (typeof PAUTA_STATUSES)[number]) ? item.status : "planned",
         approval_flow: item.approval_flow === "video_only" ? "video_only" : "script_and_video",
+        posting_profile: normalizePostingProfile(item.posting_profile),
       });
     } else {
       setEditingPauta(null);
@@ -788,6 +793,7 @@ function DetailInner() {
     } else {
       body.approval_flow = pautaForm.approval_flow;
     }
+    body.posting_profile = pautaForm.posting_profile;
     try {
       if (editingPauta) {
         await api.updatePlanningItem(editingPauta.id, body);
@@ -1696,7 +1702,7 @@ function DetailInner() {
                             <div className="flex flex-col gap-2 rounded-xl border border-purple-100 bg-purple-50/40 p-3">
                               <span className="text-[10px] font-bold tracking-wider text-purple-700 uppercase">{t("recurringDetail.liveLinkLabel")}</span>
                               {item.published_url ? (
-                                <a href={item.published_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 truncate text-xs font-bold text-brand-primary hover:underline">
+                                <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 truncate text-xs font-bold text-brand-primary hover:underline">
                                   <ExternalLink size={12} className="shrink-0" /> {item.published_url}
                                 </a>
                               ) : (
@@ -1901,10 +1907,12 @@ function DetailInner() {
                           {isCreator && !awaitingBriefing ? (
                             <CreatorPautaSubmissionPanel item={item} onSubmitted={() => void load()} />
                           ) : null}
-                          {!isCreator && !live && isAwaitingPublishedLink(item) ? (
+                          {!isCreator && !live && isAwaitingPublishedLink(item) && (isBrandPosting(item.posting_profile) || isAdmin) ? (
                             <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
                               <span className="text-[10px] font-bold tracking-wider text-emerald-800 uppercase">{t("campaignDetail.publishedLinkLabel")}</span>
-                              <p className="m-0 text-[11px] font-medium text-emerald-800">{t("campaignDetail.publishedLinkHint")}</p>
+                              <p className="m-0 text-[11px] font-medium text-emerald-800">
+                                {t(isBrandPosting(item.posting_profile) ? "postingProfile.publishedHintBrand" : "postingProfile.publishedHintCreator")}
+                              </p>
                               <div className="flex flex-col gap-2 sm:flex-row">
                                 <input
                                   type="url"
@@ -1922,8 +1930,12 @@ function DetailInner() {
                                 </button>
                               </div>
                             </div>
+                          ) : !isCreator && !live && isAwaitingPublishedLink(item) ? (
+                            <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
+                              {t("postingProfile.awaitingCreator")}
+                            </p>
                           ) : !isCreator && !live && item.published_url ? (
-                            <a href={item.published_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+                            <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
                               <ExternalLink size={12} className="shrink-0" /> {item.published_url}
                             </a>
                           ) : null}
@@ -2172,7 +2184,7 @@ function DetailInner() {
                 <div id="pauta-view-references" className={cn(viewingPautaFocus === "references" && "rounded-2xl ring-2 ring-indigo-200 ring-offset-2")}>
                   <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-indigo-600 uppercase">{t("recurringDetail.pautaReferencesLabel")}</span>
                   {/^https?:\/\//i.test(viewingPauta.references) ? (
-                    <a href={viewingPauta.references} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
+                    <a href={safeHttpUrl(viewingPauta.references)} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
                       <ExternalLink size={12} className="shrink-0" /> {viewingPauta.references}
                     </a>
                   ) : (
@@ -2183,7 +2195,7 @@ function DetailInner() {
               {viewingPauta.published_url ? (
                 <div>
                   <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-emerald-700 uppercase">{t("recurringDetail.publishedUrlLabel")}</span>
-                  <a href={viewingPauta.published_url} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
+                  <a href={safeHttpUrl(viewingPauta.published_url)} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
                     <ExternalLink size={12} className="shrink-0" /> {viewingPauta.published_url}
                   </a>
                 </div>
@@ -2522,6 +2534,11 @@ function DetailInner() {
                   </div>
                 </div>
               ) : null}
+
+              <PostingProfileCards
+                value={pautaForm.posting_profile}
+                onChange={(value) => setPautaForm({ ...pautaForm, posting_profile: value })}
+              />
 
               <div className="flex flex-col gap-1.5">
                 <label className="flex items-center justify-between font-bold text-slate-700">

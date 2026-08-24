@@ -4,7 +4,7 @@ import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { homePathForUser } from "@/lib/auth";
 import { attachLandingOrigin } from "@/lib/landing-origin";
-import { clearToken, fetchMe, setToken } from "@/lib/laravel";
+import { clearToken, consumeAuthHash, fetchMe, setToken } from "@/lib/laravel";
 import { useTranslation } from "react-i18next";
 
 function GoogleCallback() {
@@ -13,7 +13,8 @@ function GoogleCallback() {
   const { t } = useTranslation("common");
 
   useEffect(() => {
-    const token = params.get("token");
+    const hash = consumeAuthHash();
+    const token = hash.token || params.get("token");
     if (!token) {
       router.replace("/login?error=google_failed");
       return;
@@ -23,7 +24,7 @@ function GoogleCallback() {
     fetchMe()
       .then(async (user) => {
         await attachLandingOrigin(user);
-        if (params.get("signup") === "1" && user.role === "creator" && user.creator?.id) {
+        if ((hash.signup === "1" || params.get("signup") === "1") && user.role === "creator" && user.creator?.id) {
           router.replace(`/creators/${user.creator.id}?tab=portfolio`);
           return;
         }

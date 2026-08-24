@@ -51,6 +51,23 @@ export function setToken(token: string) {
   localStorage.setItem(AUTH_COOKIE, token);
 }
 
+export function consumeAuthHash(): { token: string | null; google: string | null; intent: string | null; signup: string | null } {
+  if (typeof window === "undefined") {
+    return { token: null, google: null, intent: null, signup: null };
+  }
+
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = hash.get("token");
+  const google = hash.get("google");
+  const intent = hash.get("intent");
+  const signup = hash.get("signup");
+  if (token || google) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+
+  return { token, google, intent, signup };
+}
+
 export function clearToken() {
   localStorage.removeItem(AUTH_COOKIE);
 }

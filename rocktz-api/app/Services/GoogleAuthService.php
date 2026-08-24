@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\User;
 use App\Support\AppLocale;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -31,7 +32,7 @@ class GoogleAuthService
             'scope' => 'openid email profile',
             'access_type' => 'online',
             'prompt' => 'select_account',
-            'state' => $intent,
+            'state' => $this->encodeState($intent),
         ]);
 
         return 'https://accounts.google.com/o/oauth2/v2/auth?'.$params;
@@ -81,6 +82,10 @@ class GoogleAuthService
             throw new RuntimeException(__('auth.google_no_email'));
         }
 
+        if (($profile['verified_email'] ?? true) === false) {
+            throw new RuntimeException(__('auth.google_no_email'));
+        }
+
         return [
             'id' => $id,
             'email' => $email,
@@ -119,5 +124,47 @@ class GoogleAuthService
             UserRole::Creator => $user->creator()->doesntExist(),
             UserRole::Company => $user->companyUser()->doesntExist(),
         };
+    }
+
+    public function consumeState(?string $state): string
+    {
+        if (! is_string($state) || ! str_contains($state, '.')) {
+            throw new RuntimeException(__('auth.google_state_invalid'));
+        }
+
+        [$payload, $provided] = explode('.', $state, 2);
+        $expected = hash_hmac('sha256', $payload, (string) config('app.key'));
+        if (! hash_equals($expected, $provided)) {
+            throw new RuntimeException(__('auth.google_state_invalid'));
+        }
+
+        $padded = strtr($payload, '-_', '+/');
+        $padded .= str_repeat('=', (4 - strlen($padded) % 4) % 4);
+        $json = json_decode((string) base64_decode($padded, true), true);
+        if (! is_array($json) || (int) ($json['exp'] ?? 0) < time()) {
+            throw new RuntimeException(__('auth.google_state_invalid'));
+        }
+
+        $nonce = (string) ($json['n'] ?? '');
+        if ($nonce === '' || ! Cache::pull('google_oauth:'.$nonce)) {
+            throw new RuntimeException(__('auth.google_state_invalid'));
+        }
+
+        $intent = (string) ($json['intent'] ?? 'login');
+
+        return in_array($intent, ['login', 'creator', 'company'], true) ? $intent : 'login';
+    }
+
+    private function encodeState(string $intent): string
+    {
+        $nonce = Str::random(32);
+        Cache::put('google_oauth:'.$nonce, true, now()->addMinutes(10));
+        $payload = rtrim(strtr(base64_encode((string) json_encode([
+            'intent' => $intent,
+            'n' => $nonce,
+            'exp' => time() + 600,
+        ])), '+/', '-_'), '=');
+
+        return $payload.'.'.hash_hmac('sha256', $payload, (string) config('app.key'));
     }
 }

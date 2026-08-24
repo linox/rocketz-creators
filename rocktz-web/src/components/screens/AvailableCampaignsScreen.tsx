@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { AnimatePresence, motion } from "motion/react";
 import {
   AlertCircle,
@@ -526,7 +527,7 @@ function AvailableInner() {
                   <div className="flex flex-col gap-1 rounded-2xl border border-slate-100 bg-slate-50 p-4">
                     <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("available.supportLink")}</span>
                     {briefingStr(briefing, "link") ? (
-                      <a href={briefingStr(briefing, "link")} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 truncate text-xs font-bold text-brand-primary hover:underline">{briefingStr(briefing, "link")} <ExternalLink size={12} /></a>
+                      <a href={safeHttpUrl(briefingStr(briefing, "link"))} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 truncate text-xs font-bold text-brand-primary hover:underline">{briefingStr(briefing, "link")} <ExternalLink size={12} /></a>
                     ) : <span className="text-xs text-slate-400">{t("available.noLink")}</span>}
                   </div>
                 </div>

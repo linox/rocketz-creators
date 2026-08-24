@@ -1,4 +1,18 @@
 {
+  "postingProfile": {
+    "label": "Where the video will be published",
+    "hint": "This decides who sends the publication link after the material is approved.",
+    "creator": "Creator profile",
+    "creatorHint": "The creator posts on their own profile and sends the link.",
+    "brand": "Brand profile",
+    "brandHint": "The brand posts on its profile and sends the link. Common for UGC.",
+    "badgeCreator": "Creator post",
+    "badgeBrand": "Brand post",
+    "awaitingCreator": "Waiting for the creator to post on their profile and send the link.",
+    "awaitingBrand": "Waiting for the brand to post on its profile and send the link.",
+    "publishedHintCreator": "Paste the link of the post on the creator's profile.",
+    "publishedHintBrand": "Publish on the brand profile and paste the post link."
+  },
   "status": {
     "active": "Active",
     "review": "In review",
@@ -1438,6 +1452,7 @@
     "markPublished": "Mark Published",
     "revisionRequired": "Enter change notes before requesting a revision.",
     "approvedBanner": "@{{name}}'s material was approved! The creator is cleared to post officially.",
+    "approvedBannerBrand": "@{{name}}'s material was approved! Publish it on the brand profile and send the post link.",
     "contentApprovedTag": "Material approved",
     "publishedLinkLabel": "Official post link:",
     "publishedLinkPh": "E.g. https://www.instagram.com/reel/C...",

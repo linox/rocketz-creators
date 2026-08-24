@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
 import { RocketzLogo } from "@/components/RocketzLogo";
@@ -11,7 +11,7 @@ import { alertApiError, alertWarning } from "@/lib/alerts";
 import type { AuthPayload } from "@/lib/auth";
 import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import { getAppLocale } from "@/i18n/config";
-import { laravelFetch, persistAuth } from "@/lib/laravel";
+import { laravelFetch, persistAuth, consumeAuthHash, setToken } from "@/lib/laravel";
 import { attachLandingOrigin, getLandingOrigin } from "@/lib/landing-origin";
 import {
   DEFAULT_COUNTRY,
@@ -63,6 +63,13 @@ export function LoginPage() {
     invite_code: "",
     lgpd_accepted: false,
   });
+
+  useEffect(() => {
+    const { token } = consumeAuthHash();
+    if (token) {
+      setToken(token);
+    }
+  }, []);
 
   function update(key: string, value: string | boolean) {
     setForm((current) => {

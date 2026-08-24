@@ -12,35 +12,33 @@ class CompanyResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $private = $this->viewerCanSeePrivate($request);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
-            'cnpj' => $this->cnpj,
+            'cnpj' => $this->when($private, $this->cnpj),
             'segment' => $this->segment,
-            'responsible_name' => $this->responsible_name,
-            'whatsapp' => $this->whatsapp,
-            'email' => $this->email,
+            'responsible_name' => $this->when($private, $this->responsible_name),
+            'whatsapp' => $this->when($private, $this->whatsapp),
+            'email' => $this->when($private, $this->email),
             'city' => $this->city,
             'country' => $this->country,
             'currency' => $this->currency,
-            'observations' => $this->observations,
+            'observations' => $this->when($private, $this->observations),
             'logo_url' => $this->logo_url,
             'objective' => $this->objective,
             'status' => $this->status?->value,
-            'creator_invite_code' => $this->when(
-                $request->user()?->role?->value === 'admin'
-                    || $request->user()?->companyUser?->company_id === $this->id,
-                $this->creator_invite_code,
-            ),
-            'contacts' => $this->whenLoaded('contacts', fn () => $this->contacts->map(fn ($contact) => [
+            'creator_invite_code' => $this->when($private, $this->creator_invite_code),
+            'contacts' => $this->when($private && $this->relationLoaded('contacts'), fn () => $this->contacts->map(fn ($contact) => [
                 'id' => $contact->id,
                 'name' => $contact->name,
                 'role' => $contact->role,
                 'email' => $contact->email,
                 'whatsapp' => $contact->whatsapp,
             ])),
-            'favorite_creator_ids' => $this->whenLoaded('favoriteCreators', fn () => $this->favoriteCreators->pluck('id')->all()),
-            'users' => $this->whenLoaded('companyUsers', fn () => $this->companyUsers->map(fn ($companyUser) => [
+            'favorite_creator_ids' => $this->when($private && $this->relationLoaded('favoriteCreators'), fn () => $this->favoriteCreators->pluck('id')->all()),
+            'users' => $this->when($private && $this->relationLoaded('companyUsers'), fn () => $this->companyUsers->map(fn ($companyUser) => [
                 'id' => $companyUser->id,
                 'user_id' => $companyUser->user_id,
                 'email' => $companyUser->user?->email,
@@ -50,5 +48,16 @@ class CompanyResource extends JsonResource
             ])),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
+    }
+
+    private function viewerCanSeePrivate(Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) {
+            return false;
+        }
+
+        return $user->role?->value === 'admin'
+            || $user->companyUser?->company_id === $this->id;
     }
 }

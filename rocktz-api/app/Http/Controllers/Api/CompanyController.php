@@ -11,11 +11,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CompanyResource;
 use App\Models\Company;
 use App\Models\CompanyUser;
+use App\Models\Creator;
 use App\Models\User;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Support\Geo;
+use App\Support\SafeHttpUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +35,11 @@ class CompanyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Company::query()->with(['contacts', 'favoriteCreators']);
+        $relations = ['favoriteCreators'];
+        if ($user->role !== UserRole::Creator) {
+            $relations[] = 'contacts';
+        }
+        $query = Company::query()->with($relations);
 
         if ($user->role === UserRole::Company) {
             $query->where('id', $user->companyUser?->company_id);
@@ -58,12 +64,14 @@ class CompanyController extends Controller
 
     public function show(Request $request, Company $company): JsonResponse
     {
+        $this->assertCanViewCompany($request, $company);
         $user = $request->user();
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
-            return response()->json(['message' => __('auth.forbidden')], 403);
+        $with = ['favoriteCreators'];
+        if ($user->role !== UserRole::Creator) {
+            $with[] = 'contacts';
+            $with[] = 'companyUsers.user';
         }
-
-        $company->load(['contacts', 'favoriteCreators', 'companyUsers.user']);
+        $company->load($with);
 
         return response()->json(['data' => new CompanyResource($company)]);
     }
@@ -88,6 +96,7 @@ class CompanyController extends Controller
 
         $data['country'] = Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY);
         $data['currency'] = Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($data['country']));
+        $data = SafeHttpUrl::validateFields($data, ['logo_url']);
 
         $company = Company::query()->create([
             ...$data,
@@ -99,10 +108,8 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company): JsonResponse
     {
+        $this->assertCanManageCompany($request, $company);
         $user = $request->user();
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
-            return response()->json(['message' => __('auth.forbidden')], 403);
-        }
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -129,6 +136,7 @@ class CompanyController extends Controller
             unset($data['status']);
         }
 
+        $data = SafeHttpUrl::validateFields($data, ['logo_url']);
         $contacts = $data['contacts'] ?? null;
         unset($data['contacts']);
         if (isset($data['country'])) {
@@ -174,10 +182,7 @@ class CompanyController extends Controller
 
     public function rotateInviteCode(Request $request, Company $company): JsonResponse
     {
-        $user = $request->user();
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
-            return response()->json(['message' => __('auth.forbidden')], 403);
-        }
+        $this->assertCanManageCompany($request, $company);
 
         $company->rotateInviteCode();
 
@@ -196,10 +201,8 @@ class CompanyController extends Controller
 
     public function toggleFavorite(Request $request, Company $company, Creator $creator): JsonResponse
     {
+        $this->assertCanManageCompany($request, $company);
         $user = $request->user();
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id !== $company->id) {
-            return response()->json(['message' => __('auth.forbidden')], 403);
-        }
 
         $alreadyFavorited = $company->favoriteCreators()->where('creators.id', $creator->id)->exists();
         if ($user->role === UserRole::Company && ! $alreadyFavorited && ! $creator->isInCompanyPool((int) $company->id)) {
@@ -218,7 +221,7 @@ class CompanyController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', 'min:8'],
             'can_publish_without_approval' => ['sometimes', 'boolean'],
         ]);
 
@@ -277,5 +280,32 @@ class CompanyController extends Controller
         $companyUser->delete();
 
         return response()->json(['message' => __('auth.company_user_removed')]);
+    }
+
+    private function assertCanViewCompany(Request $request, Company $company): void
+    {
+        $user = $request->user();
+        if ($user->role === UserRole::Admin) {
+            return;
+        }
+        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $company->id) {
+            return;
+        }
+        if ($user->role === UserRole::Creator && $company->status === CompanyStatus::Active) {
+            return;
+        }
+        abort(403, __('auth.forbidden'));
+    }
+
+    private function assertCanManageCompany(Request $request, Company $company): void
+    {
+        $user = $request->user();
+        if ($user->role === UserRole::Admin) {
+            return;
+        }
+        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $company->id) {
+            return;
+        }
+        abort(403, __('auth.forbidden'));
     }
 }

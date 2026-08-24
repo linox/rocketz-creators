@@ -27,11 +27,11 @@ Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic']);
 Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track'])->middleware('throttle:60,1');
 
 Route::prefix('auth')->group(function () {
-    Route::post('register/creator', [AuthController::class, 'registerCreator']);
-    Route::post('register/company', [AuthController::class, 'registerCompany']);
-    Route::post('login', [AuthController::class, 'login']);
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('register/creator', [AuthController::class, 'registerCreator'])->middleware('throttle:auth-public');
+    Route::post('register/company', [AuthController::class, 'registerCompany'])->middleware('throttle:auth-public');
+    Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-public');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-public');
     Route::get('google/redirect', [AuthController::class, 'googleRedirect']);
     Route::get('google/callback', [AuthController::class, 'googleCallback']);
 

@@ -13,12 +13,10 @@ class ResendWebhookController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $secret = (string) config('services.resend.webhook_secret');
-        if ($secret !== '') {
-            $token = (string) $request->header('X-Resend-Webhook-Secret', '');
-            $svix = (string) $request->header('svix-signature', '');
-            $valid = ($token !== '' && hash_equals($secret, $token))
-                || ($svix !== '' && (hash_equals($secret, $svix) || str_contains($svix, $secret)));
-            abort_unless($valid, 401);
+        if ($secret === '') {
+            abort_unless(app()->environment(['local', 'testing']), 401);
+        } else {
+            abort_unless($this->webhookSignatureIsValid($request, $secret), 401);
         }
 
         $type = (string) $request->input('type', '');
@@ -67,5 +65,44 @@ class ResendWebhookController extends Controller
         $message->update($updates);
 
         return response()->json(['ok' => true]);
+    }
+
+    private function webhookSignatureIsValid(Request $request, string $secret): bool
+    {
+        $token = (string) $request->header('X-Resend-Webhook-Secret', '');
+        if ($token !== '' && hash_equals($secret, $token)) {
+            return true;
+        }
+
+        $id = (string) $request->header('svix-id', '');
+        $timestamp = (string) $request->header('svix-timestamp', '');
+        $signatureHeader = (string) $request->header('svix-signature', '');
+        if ($id === '' || $timestamp === '' || $signatureHeader === '') {
+            return false;
+        }
+
+        if (! ctype_digit($timestamp) || abs(time() - (int) $timestamp) > 300) {
+            return false;
+        }
+
+        $secretBytes = $secret;
+        if (str_starts_with($secret, 'whsec_')) {
+            $decoded = base64_decode(substr($secret, 6), true);
+            if (is_string($decoded) && $decoded !== '') {
+                $secretBytes = $decoded;
+            }
+        }
+
+        $signed = $id.'.'.$timestamp.'.'.$request->getContent();
+        $expected = base64_encode(hash_hmac('sha256', $signed, $secretBytes, true));
+
+        foreach (explode(' ', $signatureHeader) as $part) {
+            $signature = str_starts_with($part, 'v1,') ? substr($part, 3) : $part;
+            if ($signature !== '' && hash_equals($expected, $signature)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

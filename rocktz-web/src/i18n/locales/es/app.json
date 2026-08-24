@@ -1,4 +1,18 @@
 {
+  "postingProfile": {
+    "label": "Dónde se publicará el video",
+    "hint": "Esto define quién envía el enlace de la publicación después de aprobar el material.",
+    "creator": "Perfil del creador",
+    "creatorHint": "El creador publica en su propio perfil y envía el enlace.",
+    "brand": "Perfil de la marca",
+    "brandHint": "La marca publica en su perfil y envía el enlace. Común en UGC.",
+    "badgeCreator": "Post del creador",
+    "badgeBrand": "Post de la marca",
+    "awaitingCreator": "Esperando que el creador publique en su perfil y envíe el enlace.",
+    "awaitingBrand": "Esperando que la marca publique en su perfil y envíe el enlace.",
+    "publishedHintCreator": "Pega el enlace del post en el perfil del creador.",
+    "publishedHintBrand": "Publica en el perfil de la marca y pega el enlace."
+  },
   "status": {
     "active": "Activo",
     "review": "En análisis",
@@ -1438,6 +1452,7 @@
     "markPublished": "Marcar Publicado",
     "revisionRequired": "Escribe las orientaciones de ajuste antes de solicitar.",
     "approvedBanner": "El material de @{{name}} fue aprobado. El creador ya puede publicar oficialmente.",
+    "approvedBannerBrand": "El material de @{{name}} fue aprobado. Publícalo en el perfil de la marca y envía el enlace.",
     "contentApprovedTag": "Material aprobado",
     "publishedLinkLabel": "Enlace de la publicación oficial:",
     "publishedLinkPh": "Ej: https://www.instagram.com/reel/C...",

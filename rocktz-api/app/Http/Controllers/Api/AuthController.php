@@ -22,7 +22,9 @@ use App\Services\AuthService;
 use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
 use App\Services\Mail\MailNotifier;
+use App\Support\FrontendUrl;
 use App\Support\Geo;
+use App\Support\SafeHttpUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -101,6 +103,7 @@ class AuthController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'avatar_url' => ['nullable', 'string', 'max:2048'],
         ]);
+        $data = SafeHttpUrl::validateFields($data, ['avatar_url']);
 
         $user->fill($data)->save();
 
@@ -183,25 +186,32 @@ class AuthController extends Controller
 
     public function googleCallback(Request $request): RedirectResponse
     {
-        $frontend = rtrim((string) config('app.frontend_url'), '/');
-        $intent = $request->string('state')->toString() ?: 'login';
+        $frontend = FrontendUrl::origin();
 
         if ($request->filled('error')) {
             return redirect()->away($frontend.'/login?error=google_cancelled');
         }
 
         try {
+            $intent = $this->googleAuthService->consumeState($request->string('state')->toString() ?: null);
             $googleUser = $this->googleAuthService->userFromCode((string) $request->string('code'));
             $user = $this->googleAuthService->findOrNewUser($googleUser);
             $payload = $this->authService->issueToken($user);
 
             if ($this->googleAuthService->needsProfile($user)) {
-                return redirect()->away(
-                    $frontend.'/login?google=complete&intent='.urlencode($intent).'&token='.urlencode($payload['token'])
-                );
+                return redirect()->away($frontend.'/login#'.http_build_query([
+                    'google' => 'complete',
+                    'intent' => $intent,
+                    'token' => $payload['token'],
+                ]));
             }
 
-            return redirect()->away($frontend.'/auth/callback?token='.urlencode($payload['token']).($user->wasRecentlyCreated ? '&signup=1' : ''));
+            $fragment = ['token' => $payload['token']];
+            if ($user->wasRecentlyCreated) {
+                $fragment['signup'] = '1';
+            }
+
+            return redirect()->away($frontend.'/auth/callback#'.http_build_query($fragment));
         } catch (RuntimeException $e) {
             return redirect()->away($frontend.'/login?error=google_failed');
         }

@@ -270,6 +270,12 @@ class TransactionalMailTest extends TestCase
             'data' => ['email_id' => 're_abc'],
         ])->assertOk();
 
+        config(['services.resend.webhook_secret' => 'whsec_test']);
+        $this->postJson('/api/webhooks/resend', [
+            'type' => 'email.delivered',
+            'data' => ['email_id' => 're_abc'],
+        ])->assertUnauthorized();
+
         $this->assertSame(MailMessageStatus::Delivered, $message->fresh()->status);
         $this->assertNotNull($message->fresh()->delivered_at);
     }

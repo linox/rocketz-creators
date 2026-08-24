@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\ContentPlanningStatus;
+use App\Enums\PostingProfile;
 use App\Enums\ContentType;
 use App\Enums\NotificationType;
 use App\Enums\RecurringContractStatus;
@@ -23,6 +24,7 @@ use App\Services\NotificationService;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
+use App\Support\SafeHttpUrl;
 use App\Support\SubmissionVersioning;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -336,6 +338,7 @@ class RecurringContractController extends Controller
             'planned_date' => ['nullable', 'date'],
             'status' => ['nullable', Rule::enum(ContentPlanningStatus::class)],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
+            'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'published_url' => ['nullable', 'string', 'max:2048'],
         ]);
         $this->normalizeBriefingPayload($data);
@@ -349,6 +352,7 @@ class RecurringContractController extends Controller
         } else {
             $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
         }
+        $data['posting_profile'] ??= PostingProfile::Creator;
 
         $item = $recurringContract->contentPlanningItems()->create([
             ...$data,
@@ -390,19 +394,21 @@ class RecurringContractController extends Controller
             'submission_notes' => ['nullable', 'string'],
             'feedback_note' => ['nullable', 'string'],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
+            'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'script_status' => ['nullable', Rule::enum(StageApprovalStatus::class)],
             'video_status' => ['nullable', Rule::enum(StageApprovalStatus::class)],
             'script_feedback' => ['nullable', 'string'],
             'video_feedback' => ['nullable', 'string'],
         ]);
         $this->normalizeBriefingPayload($data);
+        $data = SafeHttpUrl::validateFields($data, ['references', 'submission_url', 'media_url', 'published_url']);
 
         $this->assertCanViewItem($request, $contentPlanningItem);
         $actorIsCreator = $request->user()->role === UserRole::Creator;
         $hadBriefing = $this->itemHasBriefing($contentPlanningItem);
         if ($actorIsCreator) {
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
-            unset($data['creator_id'], $data['feedback_note'], $data['script_feedback'], $data['video_feedback']);
+            $data = $this->restrictCreatorPlanningPayload($data, $contentPlanningItem);
         }
 
         if (isset($data['content_type']) && $this->isLiveContentType($data['content_type'])) {
@@ -517,9 +523,11 @@ class RecurringContractController extends Controller
         return response()->json(['data' => new ContentPlanningItemResource($contentPlanningItem->fresh()->load(['creator', 'company']))]);
     }
 
-    public function destroyItem(ContentPlanningItem $contentPlanningItem): JsonResponse
+    public function destroyItem(Request $request, ContentPlanningItem $contentPlanningItem): JsonResponse
     {
         $contentPlanningItem->loadMissing(['creator.user', 'recurringContract.company']);
+        abort_unless($contentPlanningItem->recurringContract, 404);
+        $this->assertCanManage($request, $contentPlanningItem->recurringContract);
         if ($contentPlanningItem->creator?->user) {
             $this->mail->demandUpdated($contentPlanningItem, __('auth.item_removed'));
         }
@@ -623,6 +631,7 @@ class RecurringContractController extends Controller
                     'planned_date' => $plannedDate,
                     'status' => ContentPlanningStatus::Planned,
                     'approval_flow' => $isLive ? ApprovalFlowType::LiveLink : ApprovalFlowType::ScriptAndVideo,
+                    'posting_profile' => PostingProfile::Creator,
                 ]);
                 $created++;
             }
@@ -649,6 +658,45 @@ class RecurringContractController extends Controller
         }
 
         return $type?->value ?: __('auth.new_demand_title');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function restrictCreatorPlanningPayload(array $data, ContentPlanningItem $item): array
+    {
+        $allowed = [
+            'script',
+            'submission_url',
+            'media_url',
+            'published_url',
+            'submission_notes',
+            'script_status',
+            'video_status',
+            'status',
+        ];
+        abort_if(array_diff_key($data, array_flip($allowed)) !== [], 403, __('auth.forbidden'));
+        $data = array_intersect_key($data, array_flip($allowed));
+
+        foreach (['script_status', 'video_status'] as $field) {
+            if (isset($data[$field]) && ! NotificationService::is($data[$field], StageApprovalStatus::Submitted)) {
+                abort(403, __('auth.forbidden'));
+            }
+        }
+
+        if (isset($data['status'])) {
+            $status = NotificationService::value($data['status']);
+            if ($status !== ContentPlanningStatus::Review->value) {
+                abort(403, __('auth.forbidden'));
+            }
+        }
+
+        if ($item->posting_profile === PostingProfile::Brand && array_key_exists('published_url', $data)) {
+            abort(403, __('auth.brand_sends_published_link'));
+        }
+
+        return $data;
     }
 
     private function assertCanViewItem(Request $request, ContentPlanningItem $item): void

@@ -17,6 +17,7 @@ use App\Services\NotificationService;
 use App\Services\SocialMetricsService;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
+use App\Support\SafeHttpUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,7 +103,7 @@ class CreatorController extends Controller
             'full_name' => ['required', 'string', 'max:255'],
             'artistic_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:8'],
             'whatsapp' => ['nullable', 'string', 'max:30'],
             'city' => ['nullable', 'string', 'max:120'],
             'country' => Geo::countryRules(false),
@@ -189,7 +190,7 @@ class CreatorController extends Controller
 
         $isAdmin = $user->role === UserRole::Admin;
         if (! $isAdmin) {
-            unset($data['status'], $data['internal_notes'], $data['can_access_all_countries']);
+            unset($data['status'], $data['internal_notes'], $data['can_access_all_countries'], $data['metrics']);
         }
 
         if (isset($data['country'])) {
@@ -199,6 +200,8 @@ class CreatorController extends Controller
         if (isset($data['state'])) {
             $data['state'] = Geo::normalizeRegion($data['state']);
         }
+
+        $data = SafeHttpUrl::validateFields($data, ['photo_url']);
 
         $creator->fill($data)->save();
 
@@ -331,7 +334,7 @@ class CreatorController extends Controller
     public function updatePassword(Request $request, Creator $creator): JsonResponse
     {
         $data = $request->validate([
-            'password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', 'min:8'],
         ]);
 
         abort_unless($creator->user, 422, __('auth.creator_without_user'));
@@ -371,6 +374,7 @@ class CreatorController extends Controller
             'orientation' => ['nullable', 'in:horizontal,vertical'],
             'file_size' => ['nullable', 'integer', 'min:0'],
         ]);
+        $data = SafeHttpUrl::validateFields($data, ['url']);
 
         $video = $creator->portfolioVideos()->create([
             ...$data,

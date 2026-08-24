@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\ContentPlanningStatus;
+use App\Enums\PostingProfile;
 use App\Enums\ContentType;
 use App\Enums\StageApprovalStatus;
 use App\Models\Company;
@@ -38,6 +39,7 @@ class ContentPlanningItemFactory extends Factory
             'planned_date' => fake()->optional()->dateTimeBetween('now', '+1 month')?->format('Y-m-d'),
             'status' => ContentPlanningStatus::Planned,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
+            'posting_profile' => PostingProfile::Creator,
             'script_status' => StageApprovalStatus::Pending,
             'video_status' => StageApprovalStatus::Pending,
             'script_feedback' => null,

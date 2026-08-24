@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { Campaign, CampaignCreator } from "@/lib/types";
+import { isBrandPosting } from "@/lib/posting-profile";
 
 function briefingText(campaign: Campaign, key: string) {
   const value = campaign.briefing?.[key];
@@ -37,6 +38,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const isApproved = row.delivery_status === "approved";
+  const brandPosts = isBrandPosting(campaign.posting_profile);
   const flow = campaign.approval_flow || "script_and_video";
   const stagedFlow = flow === "script_and_video";
   const scriptApproved = row.script_status === "approved";
@@ -79,6 +81,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
   async function submitMaterial() {
     if (isApproved) {
+      if (brandPosts) {
+        return;
+      }
       if (!publishedUrl.trim()) {
         await alertWarning(tp("materialRequiredTitle"), tp("publishedLinkRequired"));
         return;
@@ -186,7 +191,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     || awaitingScriptApproval
     || awaitingVideoApproval
     || (isApproved
-      ? !publishedUrl.trim()
+      ? brandPosts || !publishedUrl.trim()
       : canSubmitScript
         ? !scriptReady
         : canSubmitVideo
@@ -414,6 +419,18 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           ) : null}
 
           {isApproved ? (
+            brandPosts ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="m-0 text-[11px] font-medium text-amber-900">{tp("approvedPublishHintBrand")}</p>
+              {row.content?.video_url ? (
+                <CampaignSubmittedVideo
+                  videoUrl={row.content.video_url}
+                  fileSize={row.content.video_file_size}
+                  compact
+                />
+              ) : null}
+            </div>
+            ) : (
             <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
               <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("approvedPublishHint")}</p>
               {row.content?.video_url ? (
@@ -434,6 +451,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 />
               </div>
             </div>
+            )
           ) : null}
 
           {uploadingVideo ? (
@@ -449,6 +467,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             >
               {tp("collapseBriefing")}
             </button>
+            {!(isApproved && brandPosts) ? (
             <button
               type="button"
               disabled={submitDisabled}
@@ -475,6 +494,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                     ? tp("sendScriptForReview")
                     : tp("sendForReview")}
             </button>
+            ) : null}
           </div>
           )}
         </div>

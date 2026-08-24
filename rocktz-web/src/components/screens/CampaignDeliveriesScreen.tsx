@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
@@ -1052,7 +1053,7 @@ function ReadingPane({
           ) : null}
 
           {item.contentType === "link" && version.linkUrl ? (
-            <a href={version.linkUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:underline">
+            <a href={safeHttpUrl(version.linkUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:underline">
               <ExternalLink size={14} /> {version.linkUrl}
             </a>
           ) : null}
@@ -1075,13 +1076,13 @@ function ReadingPane({
           <div className="mt-2 flex flex-wrap gap-2">
             {version.fileUrl ? (
               <>
-                <a href={version.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                <a href={safeHttpUrl(version.fileUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Play size={12} /> {t("deliveries.inbox.watch")}
                 </a>
-                <a href={version.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                <a href={safeHttpUrl(version.fileUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Maximize2 size={12} /> {t("deliveries.inbox.fullscreen")}
                 </a>
-                <a href={version.fileUrl} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                <a href={safeHttpUrl(version.fileUrl)} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Download size={12} /> {t("deliveries.inbox.download")}
                 </a>
               </>

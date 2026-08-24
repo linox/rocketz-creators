@@ -18,6 +18,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { DEFAULT_AGENCY_FEE_PERCENT, parseAgencyFeePercent } from "@/lib/agency-fee";
@@ -26,6 +27,7 @@ import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency } from "@/lib/geo";
 import { usePrivacy } from "@/lib/privacy";
+import type { PostingProfile } from "@/lib/posting-profile";
 
 type Tab = "geral" | "entregas" | "briefing";
 type Flow = "script_and_video" | "video_only" | "script_only";
@@ -113,6 +115,7 @@ export function CreateCampaignModal({
   const [isBarter, setIsBarter] = useState(false);
   const [barterDetails, setBarterDetails] = useState("");
   const [flow, setFlow] = useState<Flow>("script_and_video");
+  const [postingProfile, setPostingProfile] = useState<PostingProfile>("creator");
   const [reels, setReels] = useState(0);
   const [stories, setStories] = useState(0);
   const [tiktok, setTiktok] = useState(0);
@@ -155,6 +158,7 @@ export function CreateCampaignModal({
     setIsBarter(false);
     setBarterDetails("");
     setFlow("script_and_video");
+    setPostingProfile("creator");
     setReels(0);
     setStories(0);
     setTiktok(0);
@@ -220,6 +224,7 @@ export function CreateCampaignModal({
         barter_details: isBarter ? barterDetails : null,
         status: "briefing",
         approval_flow: flow,
+        posting_profile: postingProfile,
         deliverables: {
           reels,
           stories,
@@ -411,6 +416,7 @@ export function CreateCampaignModal({
                     {flowCard("script_only", FileText, t("campaigns.flowScript"), t("campaigns.flowScriptHint"), t("campaigns.flowScriptBadge"))}
                   </div>
                 </div>
+                <PostingProfileCards value={postingProfile} onChange={setPostingProfile} />
                 <div>
                   <label className="mb-2.5 block text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.qtyLabel")}</label>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

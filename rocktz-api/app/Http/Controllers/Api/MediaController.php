@@ -22,7 +22,7 @@ class MediaController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'max:2097152'],
+            'file' => ['required', 'file', 'max:524288'],
         ]);
 
         /** @var UploadedFile $file */
@@ -86,15 +86,42 @@ class MediaController extends Controller
         $client = strtolower((string) $file->getClientMimeType());
         $extension = $this->rawExtension($file);
 
-        if (str_starts_with($detected, 'video/') || str_starts_with($client, 'video/') || in_array($extension, self::VIDEO_EXTENSIONS, true)) {
+        if ($this->isDangerousMime($detected) || $this->isDangerousMime($client)) {
+            return null;
+        }
+
+        if (str_starts_with($detected, 'video/')) {
             return 'video';
         }
 
-        if (str_starts_with($detected, 'image/') || str_starts_with($client, 'image/') || in_array($extension, self::IMAGE_EXTENSIONS, true)) {
+        if (str_starts_with($detected, 'image/') && $detected !== 'image/svg+xml') {
             return 'image';
         }
 
+        $ambiguous = $detected === '' || in_array($detected, ['application/octet-stream', 'application/download', 'binary/octet-stream'], true);
+        if ($ambiguous) {
+            if (in_array($extension, self::VIDEO_EXTENSIONS, true) || str_starts_with($client, 'video/')) {
+                return 'video';
+            }
+            if (in_array($extension, self::IMAGE_EXTENSIONS, true) || (str_starts_with($client, 'image/') && $client !== 'image/svg+xml')) {
+                return 'image';
+            }
+        }
+
         return null;
+    }
+
+    private function isDangerousMime(string $mime): bool
+    {
+        return in_array($mime, [
+            'text/html',
+            'text/javascript',
+            'application/javascript',
+            'application/x-httpd-php',
+            'image/svg+xml',
+            'text/xml',
+            'application/xml',
+        ], true);
     }
 
     private function rawExtension(UploadedFile $file): string

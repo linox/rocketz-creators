@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
+use App\Enums\PostingProfile;
 use Database\Factories\CampaignFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_barter',
     'barter_details',
     'approval_flow',
+    'posting_profile',
 ])]
 class Campaign extends Model
 {
@@ -74,6 +76,7 @@ class Campaign extends Model
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
             'approval_flow' => ApprovalFlowType::class,
+            'posting_profile' => PostingProfile::class,
         ];
     }
 

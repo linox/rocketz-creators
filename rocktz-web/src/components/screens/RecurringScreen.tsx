@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   Building2,
   Calendar,
@@ -1229,7 +1230,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 <div>
                   <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-indigo-600 uppercase">{t("recurringDetail.pautaReferencesLabel")}</span>
                   {/^https?:\/\//i.test(viewingItem.references) ? (
-                    <a href={viewingItem.references} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
+                    <a href={safeHttpUrl(viewingItem.references)} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-brand-primary hover:underline">
                       <ExternalLink size={12} className="shrink-0" /> {viewingItem.references}
                     </a>
                   ) : (

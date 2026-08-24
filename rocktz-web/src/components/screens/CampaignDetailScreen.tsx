@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertCircle,
   ArrowLeft,
@@ -55,6 +56,7 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
+import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
@@ -67,6 +69,7 @@ import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { currencySymbol, moneyCurrency } from "@/lib/geo";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
+import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -408,6 +411,7 @@ function DetailInner() {
     status: "briefing",
     objective: "",
     approval_flow: "script_and_video" as "script_and_video" | "video_only" | "script_only",
+    posting_profile: "creator" as PostingProfile,
     total_budget: "",
     creator_cache: "",
     agency_fee_percent: "",
@@ -775,6 +779,7 @@ function DetailInner() {
         flow === "video_only" || flow === "script_only" || flow === "script_and_video"
           ? flow
           : "script_and_video",
+      posting_profile: normalizePostingProfile(campaign.posting_profile),
       total_budget: campaign.total_budget != null ? String(campaign.total_budget) : "",
       creator_cache: campaign.creator_cache != null ? String(campaign.creator_cache) : "",
       agency_fee_percent: String(currentAgencyFeePercent(campaign)),
@@ -819,6 +824,7 @@ function DetailInner() {
         status: canChangeStatus ? editForm.status : undefined,
         objective: editForm.objective,
         approval_flow: editForm.approval_flow,
+        posting_profile: editForm.posting_profile,
         total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
         creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? Number(editForm.creator_cache) : null,
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
@@ -1033,6 +1039,9 @@ function DetailInner() {
                 : campaign.approval_flow === "script_only"
                   ? t("campaigns.flowScript")
                   : t("campaigns.flowScriptVideo")}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-extrabold text-slate-700">
+              {isBrandPosting(campaign.posting_profile) ? t("postingProfile.badgeBrand") : t("postingProfile.badgeCreator")}
             </span>
             {canManage ? (
               <button type="button" onClick={openEdit} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-xs hover:bg-slate-50">
@@ -1623,7 +1632,7 @@ function DetailInner() {
                           </div>
                         ) : null}
                         {selected.content?.image_url ? (
-                          <a href={selected.content.image_url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
+                          <a href={safeHttpUrl(selected.content.image_url)} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
                             <span className="truncate">{selected.content.image_url}</span>
                             <ExternalLink size={12} />
                           </a>
@@ -1634,7 +1643,7 @@ function DetailInner() {
                               <Sparkles size={16} className="shrink-0 text-emerald-600" />
                               <span className="truncate text-xs font-bold text-emerald-900">{t("campaignDetail.publishedPost")}</span>
                             </div>
-                            <a href={selected.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
+                            <a href={safeHttpUrl(selected.content.published_link)} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
                               {t("campaignDetail.viewPost")} ↗
                             </a>
                           </div>
@@ -1661,7 +1670,7 @@ function DetailInner() {
                         {selected.delivery_status === "approved" ? (
                           <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
                             <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                            {t("campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
+                            {t(isBrandPosting(campaign.posting_profile) ? "campaignDetail.approvedBannerBrand" : "campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
                           </div>
                         ) : null}
                         <div className="flex items-center justify-between">
@@ -1671,6 +1680,7 @@ function DetailInner() {
                           <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
                         </div>
                         {selected.delivery_status === "approved" ? (
+                          isBrandPosting(campaign.posting_profile) || isAdmin ? (
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.publishedLinkLabel")}</label>
                             <input
@@ -1680,8 +1690,15 @@ function DetailInner() {
                               onChange={(event) => setPublishedLinkDraft(event.target.value)}
                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-medium outline-none focus:border-emerald-500"
                             />
-                            <p className="text-[10px] font-medium text-slate-500">{t("campaignDetail.publishedLinkHint")}</p>
+                            <p className="text-[10px] font-medium text-slate-500">
+                              {t(isBrandPosting(campaign.posting_profile) ? "postingProfile.publishedHintBrand" : "postingProfile.publishedHintCreator")}
+                            </p>
                           </div>
+                          ) : (
+                          <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
+                            {t("postingProfile.awaitingCreator")}
+                          </p>
+                          )
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
@@ -1728,7 +1745,7 @@ function DetailInner() {
                                 )}
                               </>
                             ) : null}
-                            {selected.delivery_status === "approved" ? (
+                            {selected.delivery_status === "approved" && (isBrandPosting(campaign.posting_profile) || isAdmin) ? (
                               <button type="button" disabled={updatingId !== null || !publishedLinkDraft.trim()} onClick={() => void markPublished(selected)} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
                                 <Sparkles size={12} /> {t("campaignDetail.markPublished")}
                               </button>
@@ -2475,6 +2492,10 @@ function DetailInner() {
                     })}
                   </div>
                 </div>
+                <PostingProfileCards
+                  value={editForm.posting_profile}
+                  onChange={(value) => setEditForm({ ...editForm, posting_profile: value })}
+                />
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.objective")}</label>
                   <textarea

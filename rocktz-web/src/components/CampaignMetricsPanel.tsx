@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import type { Campaign, CampaignCreator, PostMetrics } from "@/lib/types";
 
 export type PostMetricsRow = {
@@ -272,7 +273,7 @@ export function PostMetricsPanel({
                       <td className="px-4 py-3.5 font-medium text-slate-600">{network ? networkLabel(network) : "—"}</td>
                       <td className="px-4 py-3.5">
                         {link ? (
-                          <a href={link} target="_blank" rel="noreferrer" className="inline-flex max-w-[180px] items-center gap-1 truncate text-xs font-bold text-emerald-700 hover:underline">
+                          <a href={safeHttpUrl(link)} target="_blank" rel="noreferrer" className="inline-flex max-w-[180px] items-center gap-1 truncate text-xs font-bold text-emerald-700 hover:underline">
                             {t("campaignDetail.openPost")} <ExternalLink size={12} />
                           </a>
                         ) : (

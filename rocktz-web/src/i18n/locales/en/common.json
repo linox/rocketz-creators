@@ -60,7 +60,7 @@
     "profileSoon": "Name and email come from your account. Changes land in a later release."
   },
   "password": {
-    "too_short": "Password must be at least 6 characters.",
+    "too_short": "Password must be at least 8 characters.",
     "mismatch": "The passwords do not match."
   },
   "select2": {

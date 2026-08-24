@@ -44,6 +44,7 @@ class CampaignResource extends JsonResource
             'is_barter' => (bool) $this->is_barter,
             'barter_details' => $this->barter_details,
             'approval_flow' => $this->approval_flow?->value,
+            'posting_profile' => $this->posting_profile?->value ?? 'creator',
             'briefing' => $this->whenLoaded('briefing', fn () => $this->briefing ? [
                 'product' => $this->briefing->product,
                 'key_message' => $this->briefing->key_message,

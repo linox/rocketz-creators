@@ -60,7 +60,7 @@
     "profileSoon": "Nome e e-mail vêm da conta. Alterações entram na próxima leva."
   },
   "password": {
-    "too_short": "A senha deve ter pelo menos 6 caracteres.",
+    "too_short": "A senha deve ter pelo menos 8 caracteres.",
     "mismatch": "As senhas digitadas não coincidem."
   },
   "select2": {

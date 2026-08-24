@@ -45,7 +45,7 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', 'min:8'],
             'role' => ['required', Rule::enum(UserRole::class), Rule::in([UserRole::Admin->value, UserRole::Company->value])],
             'company_id' => ['exclude_unless:role,'.UserRole::Company->value, 'required', 'exists:companies,id'],
             'permissions' => ['nullable', 'array'],
@@ -89,7 +89,7 @@ class UserController extends Controller
         $data = $request->validate([
             'permissions' => ['sometimes', 'array'],
             'permissions.*' => ['string'],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:8'],
         ]);
 
         if (array_key_exists('permissions', $data)) {

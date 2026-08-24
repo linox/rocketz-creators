@@ -96,6 +96,22 @@ class MediaUploadTest extends TestCase
             ->assertJsonPath('user.avatar_url', 'https://apicreators.rocketz.me/uploads/avatars/foto.jpg');
     }
 
+    public function test_html_and_svg_uploads_are_rejected(): void
+    {
+        Storage::fake('uploads');
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)->post('/api/media', [
+            'file' => UploadedFile::fake()->create('page.html', 12, 'text/html'),
+        ])->assertUnprocessable();
+
+        $this->withToken($token)->post('/api/media', [
+            'file' => UploadedFile::fake()->create('icon.svg', 12, 'image/svg+xml'),
+        ])->assertUnprocessable();
+    }
+
     public function test_oversized_media_post_returns_json(): void
     {
         $user = User::factory()->creator()->create();

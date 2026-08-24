@@ -151,6 +151,7 @@ export type Campaign = {
   is_barter: boolean;
   barter_details: string | null;
   approval_flow: string | null;
+  posting_profile?: "creator" | "brand" | string | null;
   briefing?: Record<string, string | string[] | null> | null;
   deliverables?: Record<string, string | number | null> | null;
   applications?: CampaignCreator[];
@@ -316,6 +317,7 @@ export type PlanningItem = {
   planned_date: string | null;
   status: string;
   approval_flow?: string | null;
+  posting_profile?: "creator" | "brand" | string | null;
   script_status?: string | null;
   video_status?: string | null;
   script_feedback?: string | null;

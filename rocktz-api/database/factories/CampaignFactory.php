@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
+use App\Enums\PostingProfile;
 use App\Models\Campaign;
 use App\Models\Company;
 use App\Support\Geo;
@@ -42,6 +43,7 @@ class CampaignFactory extends Factory
             'is_barter' => false,
             'barter_details' => null,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
+            'posting_profile' => PostingProfile::Creator,
         ];
     }
 

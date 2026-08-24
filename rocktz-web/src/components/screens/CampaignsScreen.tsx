@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertTriangle,
   Archive,
@@ -731,7 +732,7 @@ function CampaignsInner() {
                                         {row.content.published_link ? (
                                           <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
                                             <span className="truncate text-xs font-bold text-emerald-900">{t("campaigns.publishedPost")}</span>
-                                            <a href={row.content.published_link} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
+                                            <a href={safeHttpUrl(row.content.published_link)} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
                                               {t("campaigns.viewPost")} ↗
                                             </a>
                                           </div>

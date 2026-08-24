@@ -254,7 +254,7 @@ export function isValidEmail(value: string): boolean {
 export type PasswordIssue = "too_short" | "mismatch";
 
 export function passwordError(password: string, confirmation?: string): PasswordIssue | null {
-  if (password.length < 6) {
+  if (password.length < 8) {
     return "too_short";
   }
   if (confirmation !== undefined && password !== confirmation) {

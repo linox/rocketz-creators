@@ -30,7 +30,7 @@ class RegisterCompanyRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'responsible_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
             'whatsapp' => ['required', 'string', 'max:30'],
             'city' => ['nullable', 'string', 'max:120'],
             'country' => Geo::countryRules(),
