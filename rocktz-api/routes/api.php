@@ -67,6 +67,7 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::get('companies', [CompanyController::class, 'index']);
     Route::get('companies/{company}', [CompanyController::class, 'show']);
     Route::patch('companies/{company}', [CompanyController::class, 'update']);
+    Route::delete('companies/{company}', [CompanyController::class, 'destroy'])->middleware(['role:admin', 'permission:companies.moderate']);
     Route::post('companies/{company}/favorites/{creator}', [CompanyController::class, 'toggleFavorite']);
 
     Route::get('campaigns', [CampaignController::class, 'index']);
@@ -121,7 +122,6 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
             Route::post('companies', [CompanyController::class, 'store']);
             Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
             Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
-            Route::delete('companies/{company}', [CompanyController::class, 'destroy']);
         });
 
         Route::middleware('permission:campaigns.assign')->group(function () {
