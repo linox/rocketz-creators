@@ -18,9 +18,17 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#8A3FFC",
 };
+
+const BLOCK_PINCH_ZOOM_SCRIPT = `
+document.addEventListener("gesturestart", function (event) { event.preventDefault(); });
+document.addEventListener("gesturechange", function (event) { event.preventDefault(); });
+document.addEventListener("gestureend", function (event) { event.preventDefault(); });
+`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -29,6 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           id="rocktz-locale"
           dangerouslySetInnerHTML={{ __html: LOCALE_BOOTSTRAP_SCRIPT }}
+        />
+        <script
+          id="rocktz-block-pinch-zoom"
+          dangerouslySetInnerHTML={{ __html: BLOCK_PINCH_ZOOM_SCRIPT }}
         />
         <I18nProvider>{children}</I18nProvider>
       </body>
