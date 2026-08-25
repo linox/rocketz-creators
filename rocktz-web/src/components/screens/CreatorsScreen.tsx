@@ -18,7 +18,7 @@ import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
-import { userCanModerateCreator } from "@/lib/auth";
+import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const CATEGORIES = [
@@ -114,17 +114,21 @@ function CreatorCard({
   recurringContracts,
   isAdmin,
   canModerate,
+  canRemove,
   onApprove,
   onReject,
   onChangePassword,
+  onRemove,
 }: {
   creator: Creator;
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
   canModerate: boolean;
+  canRemove: boolean;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
+  onRemove: (creator: Creator) => void;
 }) {
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
@@ -169,14 +173,26 @@ function CreatorCard({
             </div>
           </div>
           {isAdmin ? (
-            <button
-              type="button"
-              title={t("creators.changePassword")}
-              onClick={() => onChangePassword(creator)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
-            >
-              <KeyRound size={14} />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                title={t("creators.changePassword")}
+                onClick={() => onChangePassword(creator)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
+              >
+                <KeyRound size={14} />
+              </button>
+              {canRemove ? (
+                <button
+                  type="button"
+                  title={t("creators.delete")}
+                  onClick={() => onRemove(creator)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 size={14} />
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -265,17 +281,21 @@ function CreatorListRow({
   recurringContracts,
   isAdmin,
   canModerate,
+  canRemove,
   onApprove,
   onReject,
   onChangePassword,
+  onRemove,
 }: {
   creator: Creator;
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
   canModerate: boolean;
+  canRemove: boolean;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
+  onRemove: (creator: Creator) => void;
 }) {
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
@@ -392,6 +412,16 @@ function CreatorListRow({
             <KeyRound size={14} />
           </button>
         ) : null}
+        {canRemove ? (
+          <button
+            type="button"
+            title={t("creators.delete")}
+            onClick={() => onRemove(creator)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : null}
         <Link
           href={`/creators/${creator.id}`}
           className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
@@ -409,6 +439,7 @@ function CreatorsInner() {
   const { t: tc } = useTranslation("common");
   const isAdmin = user.role === "admin";
   const isCompany = user.role === "company";
+  const canRemove = userHasPermission(user, "users.manage");
   const [creators, setCreators] = useState<Creator[]>([]);
   const [recurringContracts, setRecurringContracts] = useState<RecurringContract[]>([]);
   const [search, setSearch] = useState("");
@@ -526,6 +557,17 @@ function CreatorsInner() {
     try {
       await api.rejectCreator(creator.id);
       await alertSuccess(t("creators.rejectSuccess"), t("creators.rejectSuccessBody", { name: creator.artistic_name }));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function removeCreator(creator: Creator) {
+    if (!(await alertConfirm(t("creators.deleteTitle"), t("creators.deleteText", { name: creator.artistic_name }), t("creators.delete")))) return;
+    try {
+      await api.deleteCreator(creator.id);
+      await alertSuccess(t("creators.deleted"));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -805,9 +847,11 @@ function CreatorsInner() {
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
+              canRemove={canRemove}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}
+              onRemove={removeCreator}
             />
           ) : (
             <CreatorListRow
@@ -816,9 +860,11 @@ function CreatorsInner() {
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
+              canRemove={canRemove}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}
+              onRemove={removeCreator}
             />
           ),
         )}

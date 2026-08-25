@@ -116,12 +116,8 @@ class UserController extends Controller
     public function destroy(Request $request, User $user): JsonResponse
     {
         abort_if($user->id === $request->user()?->id, 422, __('auth.cannot_remove_self'));
-        abort_if($user->role === UserRole::Creator, 422, __('auth.cannot_remove_creator_user'));
 
-        DB::transaction(function () use ($user) {
-            $user->companyUser?->delete();
-            $user->delete();
-        });
+        $user->purgeAccount();
 
         return response()->json(['message' => __('auth.user_removed')]);
     }

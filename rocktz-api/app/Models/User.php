@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'role', 'google_id', 'avatar_url', 'locale'])]
@@ -146,5 +147,14 @@ class User extends Authenticatable implements HasLocalePreference
 
         return $this->hasPermission(Permission::CampaignsPublishWithoutApproval)
             || (bool) $this->companyUser?->can_publish_without_approval;
+    }
+
+    public function purgeAccount(): void
+    {
+        DB::transaction(function () {
+            $this->tokens()->delete();
+            $this->companyUser?->delete();
+            $this->delete();
+        });
     }
 }

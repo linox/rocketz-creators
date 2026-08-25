@@ -131,6 +131,10 @@
     "rejectText": "Deseja recusar o cadastro de @{{name}}?",
     "rejectSuccess": "Recusado",
     "rejectSuccessBody": "O cadastro de @{{name}} foi marcado como recusado.",
+    "delete": "Remover",
+    "deleteTitle": "Remover criador",
+    "deleteText": "A conta de @{{name}}, o perfil e os vínculos em campanhas serão removidos. Esta ação não pode ser desfeita.",
+    "deleted": "Criador removido",
     "created": "Criador cadastrado",
     "incompleteTitle": "Dados incompletos",
     "incomplete": "Preencha nome completo, nome artístico e e-mail.",
@@ -702,8 +706,8 @@
     "incomplete": "Preencha nome, e-mail e senha.",
     "companyRequired": "Selecione a empresa deste usuário.",
     "removeTitle": "Remover usuário",
-    "removeCreatorTitle": "Conta de criador",
-    "removeCreatorText": "Contas de criador são gerenciadas na área de criadores.",
+    "removeCreatorTitle": "Remover criador",
+    "removeCreatorText": "A conta de @{{name}} ({{email}}), o perfil e os vínculos em campanhas serão removidos. Esta ação não pode ser desfeita.",
     "noPermissionsForRole": "Este papel não tem permissões extras para gerenciar.",
     "permissions": {
       "users_manage": {

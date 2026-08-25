@@ -144,6 +144,7 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
             Route::patch('companies/{company}/users/{companyUser}', [CompanyController::class, 'updateUser']);
             Route::delete('companies/{company}/users/{companyUser}', [CompanyController::class, 'destroyUser']);
             Route::post('creators/{creator}/password', [CreatorController::class, 'updatePassword']);
+            Route::delete('creators/{creator}', [CreatorController::class, 'destroy']);
         });
 
         Route::middleware('permission:campaigns.approve_agency')->group(function () {

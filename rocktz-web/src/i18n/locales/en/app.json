@@ -131,6 +131,10 @@
     "rejectText": "Reject the signup for @{{name}}?",
     "rejectSuccess": "Rejected",
     "rejectSuccessBody": "The signup for @{{name}} was marked as rejected.",
+    "delete": "Remove",
+    "deleteTitle": "Remove creator",
+    "deleteText": "The account @{{name}}, the profile and campaign links will be removed. This action cannot be undone.",
+    "deleted": "Creator removed",
     "created": "Creator created",
     "incompleteTitle": "Incomplete details",
     "incomplete": "Fill in full name, artistic name and email.",
@@ -702,8 +706,8 @@
     "incomplete": "Fill in name, email and password.",
     "companyRequired": "Select the company for this user.",
     "removeTitle": "Remove user",
-    "removeCreatorTitle": "Creator account",
-    "removeCreatorText": "Creator accounts are managed in the creators area.",
+    "removeCreatorTitle": "Remove creator",
+    "removeCreatorText": "The account @{{name}} ({{email}}), the profile and campaign links will be removed. This action cannot be undone.",
     "noPermissionsForRole": "This role has no extra permissions to manage.",
     "permissions": {
       "users_manage": {

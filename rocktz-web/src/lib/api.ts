@@ -48,6 +48,7 @@ export const api = {
   approveCreator: (id: number) => laravelFetch<Item<Creator>>(`/creators/${id}/approve`, { method: "POST" }),
   rejectCreator: (id: number, reason?: string) => laravelFetch<Item<Creator>>(`/creators/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
   updateCreatorPassword: (id: number, password: string) => laravelFetch<{ message: string }>(`/creators/${id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
+  deleteCreator: (id: number) => laravelFetch<{ message: string }>(`/creators/${id}`, { method: "DELETE" }),
   resetCasting: () => laravelFetch<{ message: string; deleted: number }>("/creators/reset-casting", { method: "POST" }),
   addPortfolio: (id: number, body: unknown) => laravelFetch(`/creators/${id}/portfolio`, { method: "POST", body: JSON.stringify(body) }),
   removePortfolio: (id: number, video: number) => laravelFetch(`/creators/${id}/portfolio/${video}`, { method: "DELETE" }),

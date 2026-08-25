@@ -1184,6 +1184,59 @@ class DomainApiTest extends TestCase
             ->assertOk();
     }
 
+    public function test_admin_can_remove_creator_user_and_profile(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->active()->create();
+        $userId = $creator->user_id;
+        $creatorId = $creator->id;
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/users/{$userId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Usuário removido.');
+
+        $this->assertDatabaseMissing('users', ['id' => $userId]);
+        $this->assertDatabaseMissing('creators', ['id' => $creatorId]);
+    }
+
+    public function test_admin_can_delete_creator_account(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->active()->create();
+        $userId = $creator->user_id;
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/creators/{$creator->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Criador removido.');
+
+        $this->assertDatabaseMissing('users', ['id' => $userId]);
+        $this->assertDatabaseMissing('creators', ['id' => $creator->id]);
+    }
+
+    public function test_admin_cannot_remove_self(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/users/{$admin->id}")
+            ->assertStatus(422);
+    }
+
+    public function test_admin_without_users_manage_cannot_delete_creator(): void
+    {
+        $limited = User::factory()->admin()->create();
+        app(PermissionService::class)->sync($limited, [Permission::CreatorsModerate->value]);
+        $creator = Creator::factory()->active()->create();
+
+        $this->withToken($limited->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/creators/{$creator->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('creators', ['id' => $creator->id]);
+    }
+
     public function test_admin_without_users_manage_cannot_list_users(): void
     {
         $this->seed();

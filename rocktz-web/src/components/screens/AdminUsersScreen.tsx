@@ -179,11 +179,12 @@ function UsersInner() {
   }
 
   async function onRemove(item: AuthUser) {
-    if (item.role === "creator") {
-      await alertWarning(t("users.removeCreatorTitle"), t("users.removeCreatorText"));
-      return;
-    }
-    if (!(await alertConfirm(t("users.removeTitle"), item.email, tc("remove")))) return;
+    const isCreator = item.role === "creator";
+    const title = isCreator ? t("users.removeCreatorTitle") : t("users.removeTitle");
+    const text = isCreator
+      ? t("users.removeCreatorText", { name: item.creator?.artistic_name || item.name, email: item.email })
+      : item.email;
+    if (!(await alertConfirm(title, text, tc("remove")))) return;
     try {
       await api.deleteUser(item.id);
       await alertSuccess(t("users.removed"));
@@ -332,7 +333,7 @@ function UsersInner() {
                           {t("users.editPermissions")}
                         </button>
                       ) : null}
-                      {canManage && item.role !== "creator" && item.id !== me.id ? (
+                      {canManage && item.id !== me.id ? (
                         <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50">
                           {tc("remove")}
                         </button>
@@ -365,7 +366,7 @@ function UsersInner() {
                 {canManage && permissionsForRole(item.role).length > 0 ? (
                   <button type="button" onClick={() => { setEditing(item); setEditPerms(item.permissions ?? []); }} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{t("users.editPermissions")}</button>
                 ) : null}
-                {canManage && item.role !== "creator" && item.id !== me.id ? (
+                {canManage && item.id !== me.id ? (
                   <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-2 text-[11px] font-bold text-rose-600">{tc("remove")}</button>
                 ) : null}
               </div>

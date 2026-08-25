@@ -356,6 +356,17 @@ class CreatorController extends Controller
         return response()->json(['message' => __('auth.password_updated')]);
     }
 
+    public function destroy(Request $request, Creator $creator): JsonResponse
+    {
+        $user = $creator->user;
+        abort_unless($user, 422, __('auth.creator_without_user'));
+        abort_if($user->id === $request->user()?->id, 422, __('auth.cannot_remove_self'));
+
+        $user->purgeAccount();
+
+        return response()->json(['message' => __('auth.creator_account_removed')]);
+    }
+
     public function resetCasting(): JsonResponse
     {
         $deleted = User::query()->where('role', UserRole::Creator)->count();

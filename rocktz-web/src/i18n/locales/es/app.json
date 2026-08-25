@@ -131,6 +131,10 @@
     "rejectText": "¿Deseas rechazar el registro de @{{name}}?",
     "rejectSuccess": "Rechazado",
     "rejectSuccessBody": "El registro de @{{name}} fue marcado como rechazado.",
+    "delete": "Eliminar",
+    "deleteTitle": "Eliminar creador",
+    "deleteText": "La cuenta de @{{name}}, el perfil y los vínculos en campañas se eliminarán. Esta acción no se puede deshacer.",
+    "deleted": "Creador eliminado",
     "created": "Creador registrado",
     "incompleteTitle": "Datos incompletos",
     "incomplete": "Completa nombre completo, nombre artístico y e-mail.",
@@ -702,8 +706,8 @@
     "incomplete": "Completa nombre, e-mail y contraseña.",
     "companyRequired": "Selecciona la empresa de este usuario.",
     "removeTitle": "Eliminar usuario",
-    "removeCreatorTitle": "Cuenta de creador",
-    "removeCreatorText": "Las cuentas de creadores se gestionan en el área de creadores.",
+    "removeCreatorTitle": "Eliminar creador",
+    "removeCreatorText": "La cuenta de @{{name}} ({{email}}), el perfil y los vínculos en campañas se eliminarán. Esta acción no se puede deshacer.",
     "noPermissionsForRole": "Este rol no tiene permisos extra para gestionar.",
     "permissions": {
       "users_manage": {

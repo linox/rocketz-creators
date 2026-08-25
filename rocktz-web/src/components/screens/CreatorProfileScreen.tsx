@@ -36,6 +36,7 @@ import {
   Send,
   Smartphone,
   Sparkles,
+  Trash2,
   User,
   UserCheck,
   Video,
@@ -79,7 +80,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromPath } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
-import { userCanModerateCreator } from "@/lib/auth";
+import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 
 type RecurringWorkRow = {
   key: string;
@@ -495,6 +496,7 @@ function ProfileInner() {
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
   const canModerateCreator = creator ? userCanModerateCreator(user, creator) : false;
+  const canRemove = userHasPermission(user, "users.manage");
 
   async function updateLandingReview(status: string) {
     const companyId = user.company?.id;
@@ -929,6 +931,17 @@ function ProfileInner() {
     }
   }
 
+  async function removeCreatorAccount() {
+    if (!(await alertConfirm(ta("creators.deleteTitle"), ta("creators.deleteText", { name: creator.artistic_name }), ta("creators.delete")))) return;
+    try {
+      await api.deleteCreator(creator.id);
+      await alertSuccess(ta("creators.deleted"));
+      router.push("/creators");
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8 pb-24">
       {isAdmin ? (
@@ -1066,6 +1079,11 @@ function ProfileInner() {
                   <UserCheck size={13} /> {editing ? tp("viewPortfolioShort") : tp("editProfileBtn")}
                 </button>
               </div>
+              {canRemove ? (
+                <button type="button" onClick={() => void removeCreatorAccount()} className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100">
+                  <Trash2 size={13} /> {ta("creators.delete")}
+                </button>
+              ) : null}
               <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5">
                 <input
                   type="checkbox"
