@@ -26,9 +26,11 @@ class TransactionalMailTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_creator_registration_queues_operational_email(): void
+    public function test_creator_registration_sends_email_immediately(): void
     {
         Mail::fake();
+        Queue::fake();
+        config(['queue.default' => 'database']);
 
         $this->postJson('/api/auth/register/creator', [
             'full_name' => 'Maria Silva',
@@ -44,37 +46,35 @@ class TransactionalMailTest extends TestCase
             'lgpd_accepted' => true,
         ])->assertCreated();
 
+        Mail::assertSent(TransactionalMailable::class);
+        Queue::assertNotPushed(SendTransactionalMailJob::class);
         $this->assertDatabaseHas('mail_messages', [
             'email' => 'maria@example.com',
             'template_key' => MailTemplateKey::CreatorRegistered->value,
+            'status' => MailMessageStatus::Sent->value,
         ]);
-        Mail::assertSent(TransactionalMailable::class);
     }
 
     public function test_operational_mail_goes_to_default_queue(): void
     {
         Queue::fake();
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->review()->create();
+        $token = $admin->createToken('auth')->plainTextToken;
 
-        $this->postJson('/api/auth/register/creator', [
-            'full_name' => 'Maria Silva',
-            'artistic_name' => 'mariasilva',
-            'email' => 'maria@example.com',
-            'password' => 'secret123',
-            'password_confirmation' => 'secret123',
-            'whatsapp' => '11999999999',
-            'city' => 'São Paulo',
-            'state' => 'SP',
-            'instagram' => 'mariasilva',
-            'category' => 'UGC Content',
-            'lgpd_accepted' => true,
-        ])->assertCreated();
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/approve")
+            ->assertOk();
 
         Queue::assertPushedOn('default', SendTransactionalMailJob::class);
+        $this->flushHeaders();
     }
 
-    public function test_company_registration_queues_operational_email(): void
+    public function test_company_registration_sends_email_immediately(): void
     {
         Mail::fake();
+        Queue::fake();
+        config(['queue.default' => 'database']);
 
         $this->postJson('/api/auth/register/company', [
             'name' => 'Marca Teste',
@@ -89,9 +89,12 @@ class TransactionalMailTest extends TestCase
             'lgpd_accepted' => true,
         ])->assertCreated();
 
+        Mail::assertSent(TransactionalMailable::class);
+        Queue::assertNotPushed(SendTransactionalMailJob::class);
         $this->assertDatabaseHas('mail_messages', [
             'email' => 'joao@marca.com',
             'template_key' => MailTemplateKey::CompanyRegistered->value,
+            'status' => MailMessageStatus::Sent->value,
         ]);
     }
 

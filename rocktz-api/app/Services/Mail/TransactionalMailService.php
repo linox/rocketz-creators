@@ -99,7 +99,7 @@ class TransactionalMailService
 
     public function sendsImmediately(MailTemplateKey $key): bool
     {
-        return $key->isAuthPriority();
+        return $key->sendsImmediately();
     }
 
     public function deliver(MailMessage $message): void

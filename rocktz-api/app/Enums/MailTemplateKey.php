@@ -92,6 +92,19 @@ enum MailTemplateKey: string
         };
     }
 
+    public function sendsImmediately(): bool
+    {
+        return match ($this) {
+            self::PasswordReset,
+            self::TwoFactorCode,
+            self::CreatorRegistered,
+            self::CompanyRegistered,
+            self::AdminCreatorPending,
+            self::AdminCompanyPending => true,
+            default => false,
+        };
+    }
+
     public function queueName(): string
     {
         return $this->isAuthPriority() ? 'high' : 'default';
