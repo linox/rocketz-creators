@@ -37,6 +37,7 @@ return [
     'item_removed' => 'Pauta eliminada.',
     'video_removed' => 'Video eliminado.',
     'admin_removed' => 'Admin eliminado.',
+    'company_removed' => 'Empresa eliminada.',
     'company_user_removed' => 'Acceso de la empresa eliminado.',
     'notifications_read' => 'Notificaciones marcadas como leídas.',
     'notification_removed' => 'Notificación eliminada.',

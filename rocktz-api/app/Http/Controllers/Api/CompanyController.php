@@ -199,6 +199,19 @@ class CompanyController extends Controller
         return response()->json(['data' => new CompanyResource($company->fresh())]);
     }
 
+    public function destroy(Company $company): JsonResponse
+    {
+        DB::transaction(function () use ($company) {
+            $userIds = $company->companyUsers()->pluck('user_id')->filter()->all();
+            $company->delete();
+            if ($userIds !== []) {
+                User::query()->whereIn('id', $userIds)->delete();
+            }
+        });
+
+        return response()->json(['message' => __('auth.company_removed')]);
+    }
+
     public function toggleFavorite(Request $request, Company $company, Creator $creator): JsonResponse
     {
         $this->assertCanManageCompany($request, $company);

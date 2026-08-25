@@ -121,6 +121,7 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
             Route::post('companies', [CompanyController::class, 'store']);
             Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);
             Route::post('companies/{company}/reject', [CompanyController::class, 'reject']);
+            Route::delete('companies/{company}', [CompanyController::class, 'destroy']);
         });
 
         Route::middleware('permission:campaigns.assign')->group(function () {

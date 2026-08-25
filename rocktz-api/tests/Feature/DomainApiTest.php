@@ -13,6 +13,7 @@ use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
+use App\Models\CompanyUser;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\Notification;
@@ -626,6 +627,56 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.status', 'active')
             ->assertJsonPath('data.country', 'BR')
             ->assertJsonPath('data.currency', 'BRL');
+    }
+
+    public function test_admin_can_delete_company_and_linked_users(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $company = Company::factory()->active()->create();
+        $user = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+        $campaign = Campaign::factory()->create(['company_id' => $company->id]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/companies/{$company->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Empresa removida.');
+
+        $this->assertDatabaseMissing('companies', ['id' => $company->id]);
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
+        $this->assertDatabaseMissing('campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_company_cannot_delete_company(): void
+    {
+        $company = Company::factory()->active()->create();
+        $user = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+
+        $this->withToken($user->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/companies/{$company->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('companies', ['id' => $company->id]);
+    }
+
+    public function test_admin_without_companies_moderate_cannot_delete_company(): void
+    {
+        $limited = User::factory()->admin()->create();
+        app(PermissionService::class)->sync($limited, [Permission::CreatorsModerate->value]);
+        $company = Company::factory()->active()->create();
+
+        $this->withToken($limited->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/companies/{$company->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('companies', ['id' => $company->id]);
     }
 
     public function test_admin_can_update_creator_password(): void

@@ -90,6 +90,7 @@ Filtros de lista: `?status=`, `?q=`, `?category=`. Portfólio nesta leva é **UR
 | PATCH | `/companies/{id}` | admin ou a própria empresa |
 | POST | `/companies/{id}/approve` | admin |
 | POST | `/companies/{id}/reject` | admin |
+| DELETE | `/companies/{id}` | admin |
 | POST | `/companies/{id}/favorites/{creator}` | admin ou a própria (toggle) |
 | POST | `/companies/{id}/users` | admin |
 

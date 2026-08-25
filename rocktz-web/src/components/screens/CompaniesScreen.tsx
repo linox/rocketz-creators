@@ -49,12 +49,14 @@ function CompanyCard({
   onEdit,
   onApprove,
   onReject,
+  onDelete,
 }: {
   company: Company;
   isAdmin: boolean;
   onEdit: (company: Company) => void;
   onApprove: (company: Company) => void;
   onReject: (company: Company) => void;
+  onDelete: (company: Company) => void;
 }) {
   const { t, i18n } = useTranslation("app");
   const status = company.status || "pending";
@@ -83,14 +85,24 @@ function CompanyCard({
         <div className="flex items-center gap-1.5">
           <CompanyStatusBadge status={status} />
           {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => onEdit(company)}
-              title={t("companies.editTitle")}
-              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
-            >
-              <Edit size={16} />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(company)}
+                title={t("companies.editTitle")}
+                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
+              >
+                <Edit size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(company)}
+                title={t("companies.delete")}
+                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600"
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -532,6 +544,18 @@ function CompaniesInner() {
     }
   }
 
+  async function removeCompany(company: Company) {
+    if (!(await alertConfirm(t("companies.deleteTitle"), t("companies.deleteConfirm", { name: company.name }), t("companies.delete")))) return;
+    try {
+      await api.deleteCompany(company.id);
+      setEditing(null);
+      await alertSuccess(t("companies.deleted"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -601,7 +625,7 @@ function CompaniesInner() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         <AnimatePresence>
           {filtered.map((company) => (
-            <CompanyCard key={company.id} company={company} isAdmin={isAdmin} onEdit={openEdit} onApprove={approve} onReject={reject} />
+            <CompanyCard key={company.id} company={company} isAdmin={isAdmin} onEdit={openEdit} onApprove={approve} onReject={reject} onDelete={removeCompany} />
           ))}
         </AnimatePresence>
       </div>
@@ -849,6 +873,14 @@ function CompaniesInner() {
               </div>
 
               <div className="mt-4 flex gap-3 border-t border-[#E2E8F0] bg-white pt-4">
+                <button
+                  type="button"
+                  onClick={() => void removeCompany(editing)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-100"
+                >
+                  <Trash2 size={14} />
+                  {t("companies.delete")}
+                </button>
                 <button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-lg border border-[#E2E8F0] py-2.5 text-sm font-bold text-[#64748B] hover:bg-slate-50">{tc("cancel")}</button>
                 <button type="submit" className="flex-1 rounded-lg bg-brand-primary py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-600">{t("companies.saveChanges")}</button>
               </div>

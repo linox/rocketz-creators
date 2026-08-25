@@ -37,6 +37,7 @@ return [
     'item_removed' => 'Brief removed.',
     'video_removed' => 'Video removed.',
     'admin_removed' => 'Admin removed.',
+    'company_removed' => 'Company removed.',
     'company_user_removed' => 'Company access removed.',
     'notifications_read' => 'Notifications marked as read.',
     'notification_removed' => 'Notification removed.',
