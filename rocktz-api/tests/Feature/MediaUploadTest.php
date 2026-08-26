@@ -112,6 +112,80 @@ class MediaUploadTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_guest_cannot_init_chunked_upload(): void
+    {
+        $this->postJson('/api/media/uploads', [
+            'filename' => 'reel.mp4',
+            'size' => 2048,
+            'mime_type' => 'video/mp4',
+        ])->assertUnauthorized();
+    }
+
+    public function test_authenticated_user_can_upload_video_in_chunks(): void
+    {
+        Storage::fake('uploads');
+        Storage::fake('local');
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+        $payload = hex2bin('000000186674797069736f6d0000000069736f6d').str_repeat("\0", 2476);
+
+        $init = $this->withToken($token)->postJson('/api/media/uploads', [
+            'filename' => 'reel.mp4',
+            'size' => strlen($payload),
+            'mime_type' => 'video/mp4',
+        ]);
+
+        $init->assertCreated()
+            ->assertJsonPath('data.total_chunks', 3);
+
+        $uploadId = (string) $init->json('data.id');
+        $chunkSize = (int) $init->json('data.chunk_size');
+
+        for ($index = 0; $index < 3; $index++) {
+            $chunk = substr($payload, $index * $chunkSize, $chunkSize);
+            $this->withToken($token)
+                ->call('POST', '/api/media/uploads/'.$uploadId.'/chunks/'.$index, content: $chunk, server: [
+                    'CONTENT_TYPE' => 'application/octet-stream',
+                    'HTTP_ACCEPT' => 'application/json',
+                    'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+                ])
+                ->assertOk();
+        }
+
+        $this->withToken($token)
+            ->postJson('/api/media/uploads/'.$uploadId)
+            ->assertCreated()
+            ->assertJsonPath('data.size', strlen($payload));
+
+        $this->assertDatabaseHas('media_files', [
+            'uploaded_by' => $user->id,
+            'size' => strlen($payload),
+        ]);
+    }
+
+    public function test_complete_chunked_upload_requires_all_chunks(): void
+    {
+        Storage::fake('uploads');
+        Storage::fake('local');
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $init = $this->withToken($token)->postJson('/api/media/uploads', [
+            'filename' => 'reel.mp4',
+            'size' => 2048,
+            'mime_type' => 'video/mp4',
+        ]);
+
+        $uploadId = (string) $init->json('data.id');
+
+        $this->withToken($token)
+            ->postJson('/api/media/uploads/'.$uploadId)
+            ->assertUnprocessable()
+            ->assertJsonPath('message', __('auth.upload_incomplete'));
+    }
+
     public function test_oversized_media_post_returns_json(): void
     {
         $user = User::factory()->creator()->create();

@@ -3,21 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\MediaFile;
+use App\Services\MediaStorageException;
+use App\Services\MediaStorageService;
+use App\Support\MediaKind;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class MediaController extends Controller
 {
-    /** @var list<string> */
-    private const VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', 'qt'];
-
-    /** @var list<string> */
-    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    public function __construct(private readonly MediaStorageService $media)
+    {
+    }
 
     public function store(Request $request): JsonResponse
     {
@@ -27,46 +28,154 @@ class MediaController extends Controller
 
         /** @var UploadedFile $file */
         $file = $request->file('file');
-        $kind = $this->mediaKind($file);
 
+        try {
+            return $this->respondStored($this->media->storeUploaded($file, $request->user()));
+        } catch (MediaStorageException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
+        }
+    }
+
+    public function initUpload(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'filename' => ['required', 'string', 'max:255'],
+            'size' => ['required', 'integer', 'min:1', 'max:'.MediaKind::MAX_VIDEO_BYTES],
+            'mime_type' => ['nullable', 'string', 'max:127'],
+        ]);
+
+        $extension = MediaKind::rawExtension($data['filename']);
+        $kind = MediaKind::detect('', (string) ($data['mime_type'] ?? ''), $extension);
         if ($kind === null) {
             return response()->json(['message' => __('auth.invalid_media_type')], 422);
         }
 
-        if ($kind === 'image' && $file->getSize() > 5 * 1024 * 1024) {
-            return response()->json(['message' => __('validation.max.file', ['attribute' => __('validation.attributes.file'), 'max' => 5120])], 422);
+        if ($kind === 'image' && (int) $data['size'] > MediaKind::MAX_IMAGE_BYTES) {
+            return response()->json(['message' => __('validation.max.file', [
+                'attribute' => __('validation.attributes.file'),
+                'max' => 5120,
+            ])], 422);
         }
 
-        $folder = $kind === 'video' ? 'portfolio' : 'avatars';
-        $prefix = $kind === 'video' ? 'video' : 'avatar';
-        $extension = $this->safeExtension($file, $kind);
-        $filename = $prefix.'-'.now()->format('YmdHis').'-'.Str::lower(Str::random(8)).'.'.$extension;
-        $path = $file->storeAs($folder, $filename, 'uploads');
+        $uploadId = (string) Str::uuid();
+        $size = (int) $data['size'];
+        $chunkSize = MediaKind::chunkBytes();
+        $totalChunks = (int) ceil($size / $chunkSize);
+        $userId = (int) $request->user()->id;
 
-        if (! $path) {
-            return response()->json(['message' => __('auth.upload_failed')], 500);
-        }
-
-        $media = MediaFile::query()->create([
-            'filename' => $filename,
-            'disk' => 'uploads',
-            'path' => $path,
-            'mime_type' => $this->storedMime($file, $kind, $extension),
-            'size' => $file->getSize(),
-            'uploaded_by' => $request->user()?->id,
-            'mediable_type' => $request->user() ? $request->user()::class : null,
-            'mediable_id' => $request->user()?->id,
-        ]);
+        Storage::disk('local')->put($this->metaPath($userId, $uploadId), json_encode([
+            'user_id' => $userId,
+            'filename' => $data['filename'],
+            'size' => $size,
+            'mime_type' => (string) ($data['mime_type'] ?? ''),
+            'chunk_size' => $chunkSize,
+            'total_chunks' => $totalChunks,
+            'created_at' => now()->toIso8601String(),
+        ], JSON_THROW_ON_ERROR));
 
         return response()->json([
             'data' => [
-                'id' => $media->id,
-                'url' => Storage::disk('uploads')->url($path),
-                'filename' => $filename,
-                'path' => $path,
-                'size' => $file->getSize(),
+                'id' => $uploadId,
+                'chunk_size' => $chunkSize,
+                'total_chunks' => $totalChunks,
             ],
         ], 201);
+    }
+
+    public function storeChunk(Request $request, string $uploadId, int $index): JsonResponse
+    {
+        $meta = $this->loadMeta($request, $uploadId);
+        if ($meta === null) {
+            return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        $totalChunks = (int) $meta['total_chunks'];
+        $chunkSize = (int) $meta['chunk_size'];
+        if ($index < 0 || $index >= $totalChunks) {
+            return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
+        }
+
+        $bytes = $request->getContent();
+        $expected = $index === $totalChunks - 1
+            ? (int) $meta['size'] - ($index * $chunkSize)
+            : $chunkSize;
+
+        if ($expected < 1 || strlen($bytes) !== $expected) {
+            return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
+        }
+
+        Storage::disk('local')->put($this->chunkPath((int) $meta['user_id'], $uploadId, $index), $bytes);
+
+        return response()->json(['data' => ['index' => $index]]);
+    }
+
+    public function completeUpload(Request $request, string $uploadId): JsonResponse
+    {
+        $meta = $this->loadMeta($request, $uploadId);
+        if ($meta === null) {
+            return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        $userId = (int) $meta['user_id'];
+        $totalChunks = (int) $meta['total_chunks'];
+        $disk = Storage::disk('local');
+
+        for ($index = 0; $index < $totalChunks; $index++) {
+            if (! $disk->exists($this->chunkPath($userId, $uploadId, $index))) {
+                return response()->json(['message' => __('auth.upload_incomplete')], 422);
+            }
+        }
+
+        $assembledRelative = $this->sessionDir($userId, $uploadId).'/assembled';
+        $assembledAbsolute = $disk->path($assembledRelative);
+        $disk->makeDirectory($this->sessionDir($userId, $uploadId));
+        $out = fopen($assembledAbsolute, 'wb');
+        if ($out === false) {
+            return response()->json(['message' => __('auth.upload_failed')], 500);
+        }
+
+        try {
+            for ($index = 0; $index < $totalChunks; $index++) {
+                $in = fopen($disk->path($this->chunkPath($userId, $uploadId, $index)), 'rb');
+                if ($in === false) {
+                    fclose($out);
+                    return response()->json(['message' => __('auth.upload_failed')], 500);
+                }
+                stream_copy_to_stream($in, $out);
+                fclose($in);
+            }
+        } finally {
+            if (is_resource($out)) {
+                fclose($out);
+            }
+        }
+
+        if ((int) filesize($assembledAbsolute) !== (int) $meta['size']) {
+            $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
+
+            return response()->json(['message' => __('auth.upload_failed')], 500);
+        }
+
+        try {
+            $payload = $this->media->storeAssembled(
+                $assembledAbsolute,
+                (string) $meta['filename'],
+                (string) $meta['mime_type'],
+                $request->user(),
+            );
+        } catch (MediaStorageException $e) {
+            $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
+
+            return response()->json(['message' => $e->getMessage()], $e->status);
+        } catch (Throwable $e) {
+            $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
+
+            return response()->json(['message' => __('auth.upload_failed')], 500);
+        }
+
+        $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
+
+        return $this->respondStored($payload);
     }
 
     public function download(string $folder, string $filename): StreamedResponse
@@ -80,81 +189,49 @@ class MediaController extends Controller
         return Storage::disk('uploads')->download($path, $filename);
     }
 
-    private function mediaKind(UploadedFile $file): ?string
+    /**
+     * @param  array{id: int, url: string, filename: string, path: string, size: int}  $payload
+     */
+    private function respondStored(array $payload): JsonResponse
     {
-        $detected = strtolower((string) $file->getMimeType());
-        $client = strtolower((string) $file->getClientMimeType());
-        $extension = $this->rawExtension($file);
+        return response()->json(['data' => $payload], 201);
+    }
 
-        if ($this->isDangerousMime($detected) || $this->isDangerousMime($client)) {
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function loadMeta(Request $request, string $uploadId): ?array
+    {
+        if (! preg_match('/^[0-9a-fA-F-]{36}$/', $uploadId)) {
             return null;
         }
 
-        if (str_starts_with($detected, 'video/')) {
-            return 'video';
+        $userId = (int) $request->user()->id;
+        $path = $this->metaPath($userId, $uploadId);
+        if (! Storage::disk('local')->exists($path)) {
+            return null;
         }
 
-        if (str_starts_with($detected, 'image/') && $detected !== 'image/svg+xml') {
-            return 'image';
+        $meta = json_decode((string) Storage::disk('local')->get($path), true);
+        if (! is_array($meta) || (int) ($meta['user_id'] ?? 0) !== $userId) {
+            return null;
         }
 
-        $ambiguous = $detected === '' || in_array($detected, ['application/octet-stream', 'application/download', 'binary/octet-stream'], true);
-        if ($ambiguous) {
-            if (in_array($extension, self::VIDEO_EXTENSIONS, true) || str_starts_with($client, 'video/')) {
-                return 'video';
-            }
-            if (in_array($extension, self::IMAGE_EXTENSIONS, true) || (str_starts_with($client, 'image/') && $client !== 'image/svg+xml')) {
-                return 'image';
-            }
-        }
-
-        return null;
+        return $meta;
     }
 
-    private function isDangerousMime(string $mime): bool
+    private function sessionDir(int $userId, string $uploadId): string
     {
-        return in_array($mime, [
-            'text/html',
-            'text/javascript',
-            'application/javascript',
-            'application/x-httpd-php',
-            'image/svg+xml',
-            'text/xml',
-            'application/xml',
-        ], true);
+        return 'media-chunks/'.$userId.'/'.$uploadId;
     }
 
-    private function rawExtension(UploadedFile $file): string
+    private function metaPath(int $userId, string $uploadId): string
     {
-        return strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension()));
+        return $this->sessionDir($userId, $uploadId).'/meta.json';
     }
 
-    private function safeExtension(UploadedFile $file, string $kind): string
+    private function chunkPath(int $userId, string $uploadId, int $index): string
     {
-        $extension = $this->rawExtension($file);
-        $allowed = $kind === 'video' ? self::VIDEO_EXTENSIONS : self::IMAGE_EXTENSIONS;
-
-        if (in_array($extension, $allowed, true)) {
-            return $extension === 'qt' ? 'mov' : $extension;
-        }
-
-        return $kind === 'video' ? 'mp4' : 'jpg';
-    }
-
-    private function storedMime(UploadedFile $file, string $kind, string $extension): string
-    {
-        $mime = (string) $file->getMimeType();
-        if (str_starts_with($mime, 'video/') || str_starts_with($mime, 'image/')) {
-            return $mime;
-        }
-
-        return match ($extension) {
-            'webm' => 'video/webm',
-            'mov' => 'video/quicktime',
-            'png' => 'image/png',
-            'webp' => 'image/webp',
-            'gif' => 'image/gif',
-            default => $kind === 'video' ? 'video/mp4' : 'image/jpeg',
-        };
+        return $this->sessionDir($userId, $uploadId).'/'.$index;
     }
 }

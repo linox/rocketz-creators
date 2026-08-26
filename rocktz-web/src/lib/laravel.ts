@@ -101,17 +101,104 @@ export function persistAuth(payload: AuthPayload, afterSignup = false): string {
 
 export type UploadProgressHandler = (percent: number) => void;
 
+const CHUNK_THRESHOLD_BYTES = 2 * 1024 * 1024;
+const CHUNK_CONCURRENCY = 4;
+const CHUNK_RETRIES = 3;
+
 export async function laravelUpload<T>(
   path: string,
   body: FormData,
   onProgress?: UploadProgressHandler,
 ): Promise<T> {
+  const file = body.get("file");
+  if (path === "/media" && file instanceof Blob && file.size >= CHUNK_THRESHOLD_BYTES) {
+    const filename = file instanceof File && file.name ? file.name : "file.bin";
+    return laravelChunkedUpload<T>(file, filename, onProgress);
+  }
+
+  return xhrSend<T>("POST", `${getApiUrl()}${path}`, body, onProgress);
+}
+
+async function laravelChunkedUpload<T>(
+  file: Blob,
+  filename: string,
+  onProgress?: UploadProgressHandler,
+): Promise<T> {
+  const session = await laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number } }>("/media/uploads", {
+    method: "POST",
+    body: JSON.stringify({
+      filename,
+      size: file.size,
+      mime_type: file.type || "",
+    }),
+  });
+
+  const { id, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
+  const uploaded = new Array<number>(totalChunks).fill(0);
+  const report = () => {
+    if (!onProgress) return;
+    const loaded = uploaded.reduce((sum, value) => sum + value, 0);
+    onProgress(Math.min(99, Math.round((loaded / file.size) * 100)));
+  };
+
+  const sendChunk = async (index: number) => {
+    const start = index * chunkSize;
+    const chunk = file.slice(start, Math.min(start + chunkSize, file.size));
+    let attempt = 0;
+    while (true) {
+      try {
+        await xhrSend<{ data: { index: number } }>(
+          "POST",
+          `${getApiUrl()}/media/uploads/${id}/chunks/${index}`,
+          chunk,
+          (percent) => {
+            uploaded[index] = Math.round((percent / 100) * chunk.size);
+            report();
+          },
+          "application/octet-stream",
+        );
+        uploaded[index] = chunk.size;
+        report();
+        return;
+      } catch (error) {
+        attempt += 1;
+        if (attempt >= CHUNK_RETRIES) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      }
+    }
+  };
+
+  const pending = Array.from({ length: totalChunks }, (_, index) => index);
+  const workers = Array.from({ length: Math.min(CHUNK_CONCURRENCY, totalChunks) }, async () => {
+    while (pending.length > 0) {
+      const index = pending.shift();
+      if (index === undefined) return;
+      await sendChunk(index);
+    }
+  });
+  await Promise.all(workers);
+
+  const completed = await laravelFetch<T>(`/media/uploads/${id}`, { method: "POST" });
+  onProgress?.(100);
+  return completed;
+}
+
+function xhrSend<T>(
+  method: string,
+  url: string,
+  body: FormData | Blob,
+  onProgress?: UploadProgressHandler,
+  contentType?: string,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${getApiUrl()}${path}`);
+    xhr.open(method, url);
     xhr.responseType = "text";
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("Accept-Language", getAppLocale());
+    if (contentType) {
+      xhr.setRequestHeader("Content-Type", contentType);
+    }
 
     const token = getToken();
     if (token) {

@@ -53,6 +53,9 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::post('media', [MediaController::class, 'store']);
+    Route::post('media/uploads', [MediaController::class, 'initUpload']);
+    Route::post('media/uploads/{uploadId}/chunks/{index}', [MediaController::class, 'storeChunk'])->whereNumber('index');
+    Route::post('media/uploads/{uploadId}', [MediaController::class, 'completeUpload']);
     Route::get('dashboard', DashboardController::class);
     Route::get('nav', NavController::class);
     Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);

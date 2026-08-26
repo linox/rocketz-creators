@@ -34,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('mail:reminders')->hourly();
         $schedule->command('mail:admin-alerts')->dailyAt('08:00');
+        $schedule->command('media:prune-chunks')->hourly();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
