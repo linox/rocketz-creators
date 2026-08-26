@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\MediaController;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForwardAuthorizationHeader;
@@ -12,6 +13,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,6 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function (): void {
+            Route::get('/stream/{folder}/{filename}', [MediaController::class, 'stream'])
+                ->where('folder', 'portfolio|avatars')
+                ->where('filename', '[A-Za-z0-9._-]+');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [

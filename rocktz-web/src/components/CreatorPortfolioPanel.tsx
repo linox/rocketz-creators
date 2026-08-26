@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -231,7 +232,7 @@ export function CreatorPortfolioPanel({
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
           <button type="button" className="absolute inset-0" aria-label={t("closePlayer")} onClick={() => setPlayVideo(null)} />
           <div className={cn("relative z-10 overflow-hidden rounded-2xl bg-black shadow-2xl", playVideo.orientation === "horizontal" ? "w-full max-w-4xl" : "w-full max-w-md")}>
-            <video src={playVideo.url} controls autoPlay className="max-h-[80vh] w-full" />
+            <VideoPlayer src={playVideo.url} autoPlay className="max-h-[80vh] w-full" />
             <button type="button" onClick={() => setPlayVideo(null)} className="absolute top-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs font-bold">{t("closePlayer")}</button>
           </div>
         </div>
@@ -274,7 +275,7 @@ function OrientationGrid({
               <article key={video.id} className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-[#F1F5F9] bg-slate-50 transition-all hover:border-brand-primary hover:shadow-md">
                 {playable ? (
                   <button type="button" onClick={() => onPlay(video)} className={cn("relative flex cursor-pointer items-center justify-center overflow-hidden bg-slate-900", vertical ? "aspect-[9/16] max-h-[320px]" : "aspect-video")}>
-                    <video muted playsInline src={video.url} className="h-full w-full object-cover opacity-70 transition-all group-hover:scale-105" />
+                    <VideoPlayer src={video.url} muted preload="metadata" controls={false} className="h-full w-full object-cover opacity-70 transition-all group-hover:scale-105" />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all group-hover:bg-black/45">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
                         <Play size={24} fill="currentColor" className="translate-x-0.5" />

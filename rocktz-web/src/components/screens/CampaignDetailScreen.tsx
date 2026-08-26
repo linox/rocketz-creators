@@ -62,6 +62,7 @@ import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { CampaignMetricsPanel } from "@/components/CampaignMetricsPanel";
 import { api } from "@/lib/api";
 import { agencyFeeFromBudget, currentAgencyFeePercent, parseAgencyFeePercent } from "@/lib/agency-fee";
@@ -2776,7 +2777,7 @@ function DetailInner() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
           <button type="button" className="absolute inset-0" aria-label={t("campaignDetail.closeVideoPlayer")} onClick={() => setWatchingVideoUrl(null)} />
           <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl">
-            <video src={watchingVideoUrl} controls autoPlay className="max-h-[80vh] w-full" />
+            <VideoPlayer src={watchingVideoUrl} autoPlay className="max-h-[80vh] w-full" />
             <button
               type="button"
               onClick={() => setWatchingVideoUrl(null)}

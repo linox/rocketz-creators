@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
@@ -2268,7 +2269,7 @@ function DetailInner() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
           <button type="button" className="absolute inset-0" aria-label={t("campaignDetail.closeVideoPlayer")} onClick={() => setWatchingVideoUrl(null)} />
           <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl">
-            <video src={watchingVideoUrl} controls autoPlay className="max-h-[80vh] w-full" />
+            <VideoPlayer src={watchingVideoUrl} autoPlay className="max-h-[80vh] w-full" />
             <button
               type="button"
               onClick={() => setWatchingVideoUrl(null)}

@@ -24,6 +24,7 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -1025,7 +1026,7 @@ function ReadingPane({
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           {(item.contentType === "video" || item.contentType === "story") && version.fileUrl ? (
             <div className={cn("mx-auto overflow-hidden rounded-lg bg-black", isVertical ? "aspect-[9/16] max-h-[420px] max-w-[240px]" : "aspect-video max-w-xl")}>
-              <video src={version.fileUrl} controls className="h-full w-full object-contain" />
+              <VideoPlayer src={version.fileUrl} className="h-full w-full object-contain" />
             </div>
           ) : null}
 

@@ -81,6 +81,23 @@ class MediaUploadTest extends TestCase
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
     }
 
+    public function test_video_stream_supports_byte_range(): void
+    {
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('portfolio/video-demo.mp4', str_repeat('abcdefghij', 20));
+
+        $this->get('/stream/portfolio/video-demo.mp4')
+            ->assertOk()
+            ->assertHeader('Accept-Ranges', 'bytes')
+            ->assertHeader('Content-Type', 'video/mp4');
+
+        $partial = $this->get('/stream/portfolio/video-demo.mp4', ['Range' => 'bytes=0-9']);
+        $partial->assertStatus(206)
+            ->assertHeader('Accept-Ranges', 'bytes')
+            ->assertHeader('Content-Range', 'bytes 0-9/200')
+            ->assertHeader('Content-Length', '10');
+    }
+
     public function test_user_can_update_own_avatar_url(): void
     {
         $user = User::factory()->admin()->create(['name' => 'Admin']);

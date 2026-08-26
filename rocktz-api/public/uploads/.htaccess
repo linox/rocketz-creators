@@ -1,0 +1,16 @@
+<IfModule mod_headers.c>
+    Header set Accept-Ranges "bytes"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Expose-Headers "Content-Length, Content-Range, Accept-Ranges"
+    Header set Cross-Origin-Resource-Policy "cross-origin"
+    Header set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+
+<IfModule mod_mime.c>
+    AddType video/mp4 .mp4 .m4v .mov
+    AddType video/webm .webm
+</IfModule>
+
+<IfModule mod_deflate.c>
+    SetEnvIfNoCase Request_URI "\.(mp4|m4v|mov|webm|mkv)$" no-gzip dont-vary
+</IfModule>

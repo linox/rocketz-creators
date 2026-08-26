@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\MediaFile;
 use App\Models\User;
 use App\Support\MediaKind;
+use App\Support\Mp4Faststart;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -122,6 +123,13 @@ class MediaStorageService
         $prefix = $kind === 'video' ? 'video' : 'avatar';
         $filename = $prefix.'-'.now()->format('YmdHis').'-'.Str::lower(Str::random(8)).'.'.$extension;
         $path = $writer($folder, $filename);
+
+        if ($kind === 'video') {
+            $absolute = Storage::disk('uploads')->path($path);
+            if (Mp4Faststart::optimize($absolute)) {
+                $size = (int) filesize($absolute);
+            }
+        }
 
         $media = MediaFile::query()->create([
             'filename' => $filename,

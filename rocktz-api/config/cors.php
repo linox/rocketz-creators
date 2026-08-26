@@ -4,7 +4,7 @@ $frontend = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
 
 return [
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'sanctum/csrf-cookie', 'stream/*'],
 
     'allowed_methods' => ['*'],
 

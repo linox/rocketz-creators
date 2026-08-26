@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -187,6 +188,37 @@ class MediaController extends Controller
         abort_unless(Storage::disk('uploads')->exists($path), 404);
 
         return Storage::disk('uploads')->download($path, $filename);
+    }
+
+    public function stream(string $folder, string $filename): BinaryFileResponse
+    {
+        abort_unless(in_array($folder, ['portfolio', 'avatars'], true), 404);
+        abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
+
+        $path = $folder.'/'.$filename;
+        abort_unless(Storage::disk('uploads')->exists($path), 404);
+
+        $absolute = Storage::disk('uploads')->path($path);
+        $extension = strtolower((string) pathinfo($filename, PATHINFO_EXTENSION));
+        $mime = match ($extension) {
+            'webm' => 'video/webm',
+            'mov', 'm4v', 'mp4', 'qt' => 'video/mp4',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            'jpg', 'jpeg' => 'image/jpeg',
+            default => (string) (new \finfo(FILEINFO_MIME_TYPE))->file($absolute) ?: 'application/octet-stream',
+        };
+
+        return response()->file($absolute, [
+            'Content-Type' => $mime,
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Cross-Origin-Resource-Policy' => 'cross-origin',
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /**

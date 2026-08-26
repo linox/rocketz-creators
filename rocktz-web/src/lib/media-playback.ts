@@ -9,7 +9,7 @@ export function isPlayableVideoSize(size?: number | null) {
 function uploadsRelativePath(url: string): string | null {
   try {
     const parsed = new URL(url, "http://localhost");
-    const marker = "/uploads/";
+    const marker = parsed.pathname.includes("/stream/") ? "/stream/" : parsed.pathname.includes("/downloads/") ? "/downloads/" : "/uploads/";
     if (!parsed.pathname.includes(marker)) return null;
     return `${parsed.pathname.split(marker)[1] ?? ""}${parsed.search}`;
   } catch {
@@ -27,6 +27,14 @@ export function mediaPublicUrl(url?: string | null): string | null {
   const relative = uploadsRelativePath(raw);
   if (!relative) return raw;
   return `${mediaOrigin()}/uploads/${relative}`;
+}
+
+export function mediaStreamUrl(url?: string | null): string | null {
+  if (!url?.trim()) return null;
+  const raw = url.trim();
+  const relative = uploadsRelativePath(raw);
+  if (!relative) return raw;
+  return `${mediaOrigin()}/stream/${relative}`;
 }
 
 export function mediaDownloadUrl(url: string): string {

@@ -26,4 +26,6 @@
 
 <IfModule mod_setenvif.c>
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+    SetEnvIfNoCase Request_URI "^/stream/" no-gzip dont-vary
+    SetEnvIfNoCase Request_URI "\.(mp4|m4v|mov|webm|mkv)$" no-gzip dont-vary
 </IfModule>
