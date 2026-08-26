@@ -98,6 +98,23 @@ export function currencyOptions(locale: string): { value: string; label: string 
   return codes.map((code) => ({ value: code, label: currencyLabel(code, locale) }));
 }
 
+export function campaignLocationLabel(
+  locale: string,
+  campaign?: {
+    limit_by_city?: boolean | null;
+    city?: string | null;
+    state?: string | null;
+    company?: { country?: string | null } | null;
+  } | null,
+): string {
+  if (!campaign?.limit_by_city) return "";
+  return formatLocation(locale, {
+    city: campaign.city,
+    state: campaign.state,
+    country: campaign.company?.country,
+  });
+}
+
 export function formatLocation(
   locale: string,
   parts: { city?: string | null; state?: string | null; country?: string | null },

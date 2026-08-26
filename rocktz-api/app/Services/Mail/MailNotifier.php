@@ -143,6 +143,7 @@ class MailNotifier
             })
             ->with('user')
             ->get()
+            ->filter(fn (Creator $creator) => $campaign->matchesCreatorLocation($creator))
             ->each(function (Creator $creator) use ($campaign) {
                 if (! $creator->user) {
                     return;

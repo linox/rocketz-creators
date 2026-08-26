@@ -282,6 +282,11 @@ class CampaignController extends Controller
             403,
             __('auth.campaign_country_restricted'),
         );
+        abort_unless(
+            $campaign->matchesCreatorLocation($creator),
+            403,
+            __('auth.campaign_city_restricted'),
+        );
 
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
@@ -512,6 +517,9 @@ class CampaignController extends Controller
             'is_secret' => ['sometimes', 'boolean'],
             'is_direct_contract' => ['sometimes', 'boolean'],
             'is_barter' => ['sometimes', 'boolean'],
+            'limit_by_city' => ['sometimes', 'boolean'],
+            'state' => ['nullable', 'string', 'max:12'],
+            'city' => ['nullable', 'string', 'max:120'],
             'barter_details' => ['nullable', 'string'],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
             'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
@@ -528,10 +536,11 @@ class CampaignController extends Controller
             Company::assertApproved((int) $data['company_id']);
         }
         $companyId = (int) ($data['company_id'] ?? $request->route('campaign')?->company_id);
+        $company = $companyId ? Company::query()->find($companyId) : null;
         if ($creating || array_key_exists('company_id', $data)) {
-            $company = Company::query()->find($companyId);
             $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         }
+        $data = $this->withLocationLimit($request, $data, $creating, $company);
         if (! $user->canPublishWithoutApproval()) {
             if ($creating) {
                 $data['status'] = CampaignStatus::PendingAgency;
@@ -551,6 +560,45 @@ class CampaignController extends Controller
             $creating ? null : $request->route('campaign'),
             $user,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withLocationLimit(Request $request, array $data, bool $creating, ?Company $company): array
+    {
+        $existing = $creating ? null : $request->route('campaign');
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $limited = array_key_exists('limit_by_city', $data)
+            ? (bool) $data['limit_by_city']
+            : ($creating ? false : (bool) $campaign?->limit_by_city);
+
+        if (! array_key_exists('limit_by_city', $data) && ! $creating && ! array_key_exists('city', $data) && ! array_key_exists('state', $data)) {
+            return $data;
+        }
+
+        if (! $limited) {
+            if ($creating || array_key_exists('limit_by_city', $data)) {
+                $data['limit_by_city'] = false;
+                $data['state'] = null;
+                $data['city'] = null;
+            }
+
+            return $data;
+        }
+
+        $country = $company?->countryCode() ?: ($campaign?->company?->countryCode() ?: Geo::DEFAULT_COUNTRY);
+        $needsRegion = Geo::hasRegions($country);
+        $validated = $request->validate([
+            'city' => ['required', 'string', 'max:120'],
+            'state' => Geo::regionRules($country, $needsRegion),
+        ]);
+        $data['limit_by_city'] = true;
+        $data['city'] = trim((string) $validated['city']);
+        $data['state'] = $needsRegion ? Geo::normalizeRegion($validated['state'] ?? null) : null;
+
+        return $data;
     }
 
     /**
@@ -596,12 +644,16 @@ class CampaignController extends Controller
                     ->where(function ($builder) use ($user) {
                         $builder->whereHas('campaignCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
                         if ($user->creator?->canAccessAllCountries()) {
-                            $builder->orWhere('is_secret', false);
+                            $builder->orWhere(function ($open) use ($user) {
+                                $open->where('is_secret', false)
+                                    ->matchingCreatorLocation($user->creator);
+                            });
                         } else {
                             $country = $user->creator?->countryCode() ?: Geo::DEFAULT_COUNTRY;
-                            $builder->orWhere(function ($inner) use ($country) {
+                            $builder->orWhere(function ($inner) use ($country, $user) {
                                 $inner->where('is_secret', false)
-                                    ->whereHas('company', fn ($q) => $q->where('country', $country));
+                                    ->whereHas('company', fn ($q) => $q->where('country', $country))
+                                    ->matchingCreatorLocation($user->creator);
                             });
                         }
                     })
@@ -631,6 +683,7 @@ class CampaignController extends Controller
             }
             $campaign->loadMissing('company');
             abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
+            abort_unless($user->creator && $campaign->matchesCreatorLocation($user->creator), 403, __('auth.campaign_city_restricted'));
 
             return;
         }

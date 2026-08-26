@@ -17,6 +17,7 @@ import {
   Gift,
   Info,
   Layers,
+  MapPin,
   Megaphone,
   Search,
   Send,
@@ -25,12 +26,14 @@ import {
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { RegionSelect } from "@/components/GeoSelectFields";
+import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
-import { moneyCurrency } from "@/lib/geo";
+import { campaignLocationLabel, DEFAULT_COUNTRY, moneyCurrency } from "@/lib/geo";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -69,6 +72,8 @@ function AvailableInner() {
   const [search, setSearch] = useState("");
   const [format, setFormat] = useState<FormatFilter>("all");
   const [segment, setSegment] = useState("all");
+  const [region, setRegion] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
   const [view, setView] = useState<ViewMode>("grid");
   const [briefing, setBriefing] = useState<Campaign | null>(null);
   const [applying, setApplying] = useState<Campaign | null>(null);
@@ -106,6 +111,16 @@ function AvailableInner() {
 
   const companySegments = [...new Set(items.map((c) => c.company?.segment).filter((s): s is string => Boolean(s)))];
   const segmentOptions = ["all", ...companySegments, ...EXTRA_NICHES.filter((n) => !companySegments.includes(n))];
+  const filterCountry = user.creator?.country || items.find((item) => item.company?.country)?.company?.country || DEFAULT_COUNTRY;
+  const cityOptions = useMemo(() => {
+    const cities = new Set<string>();
+    for (const campaign of items) {
+      if (!campaign.limit_by_city || !campaign.city) continue;
+      if (region !== "all" && campaign.state !== region) continue;
+      cities.add(campaign.city);
+    }
+    return [...cities].sort((a, b) => a.localeCompare(b, locale, { sensitivity: "base" })).map((value) => ({ value, label: value }));
+  }, [items, region, locale]);
 
   const filtered = items.filter((campaign) => {
     const companyName = campaign.company?.name || "";
@@ -133,6 +148,8 @@ function AvailableInner() {
     }
     if (format === "barter" && !campaign.is_barter) return false;
     if (format === "paid" && campaign.is_barter) return false;
+    if (region !== "all" && campaign.limit_by_city && campaign.state !== region) return false;
+    if (cityFilter !== "all" && (!campaign.limit_by_city || campaign.city !== cityFilter)) return false;
     return true;
   });
 
@@ -312,6 +329,34 @@ function AvailableInner() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("available.region")}</span>
+          <RegionSelect
+            theme="light"
+            country={filterCountry}
+            value={region}
+            onChange={(value) => {
+              setRegion(value);
+              setCityFilter("all");
+            }}
+            placeholder={t("available.regionPh")}
+            emptyLabel={t("available.allRegions")}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("available.city")}</span>
+          <Select2Field
+            theme="light"
+            searchable
+            placeholder={t("available.cityPh")}
+            value={cityFilter}
+            options={[{ value: "all", label: t("available.allCities") }, ...cityOptions]}
+            onChange={setCityFilter}
+          />
+        </div>
+      </div>
+
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <span className="mr-1 shrink-0 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("available.segments")}</span>
         {segmentOptions.slice(0, 8).map((value) => {
@@ -336,8 +381,8 @@ function AvailableInner() {
             <h3 className="text-base font-bold text-slate-900">{t("available.emptyTitle")}</h3>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">{t("available.emptyHint")}</p>
           </div>
-          {search || segment !== "all" || format !== "all" ? (
-            <button type="button" onClick={() => { setSearch(""); setSegment("all"); setFormat("all"); }} className="cursor-pointer rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200">{t("available.clearFilters")}</button>
+          {search || segment !== "all" || format !== "all" || region !== "all" || cityFilter !== "all" ? (
+            <button type="button" onClick={() => { setSearch(""); setSegment("all"); setFormat("all"); setRegion("all"); setCityFilter("all"); }} className="cursor-pointer rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200">{t("available.clearFilters")}</button>
           ) : null}
         </div>
       ) : view === "grid" ? (
@@ -374,6 +419,12 @@ function AvailableInner() {
                       <Calendar size={13} className="shrink-0 text-slate-400" />
                       <span>{t("available.until", { start: fmtDate(campaign.start_date), end: fmtDate(campaign.end_date) })}</span>
                     </div>
+                    {campaignLocationLabel(locale, campaign) ? (
+                      <div className="flex items-center gap-2 text-[11px] font-semibold text-sky-700">
+                        <MapPin size={13} className="shrink-0 text-sky-500" />
+                        <span>{campaignLocationLabel(locale, campaign)}</span>
+                      </div>
+                    ) : null}
                     {briefingStr(campaign, "product") ? (
                       <div className="flex flex-col gap-0.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
                         <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">{t("available.productFocus")}</span>
@@ -447,6 +498,7 @@ function AvailableInner() {
                     </div>
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-600">
                       <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 font-semibold"><Calendar size={13} className="text-slate-400" /> {t("available.period", { start: fmtDate(campaign.start_date), end: fmtDate(campaign.end_date) })}</div>
+                      {campaignLocationLabel(locale, campaign) ? <div className="flex items-center gap-1.5 rounded-xl bg-sky-50 px-3 py-1.5 font-semibold text-sky-800"><MapPin size={13} className="text-sky-500" /> {campaignLocationLabel(locale, campaign)}</div> : null}
                       {briefingStr(campaign, "hashtags") ? <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-1.5 font-mono text-[11px] text-indigo-700">{briefingStr(campaign, "hashtags")}</div> : null}
                       {briefingStr(campaign, "coupon") ? <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700">{t("available.coupon", { code: briefingStr(campaign, "coupon") })}</div> : null}
                     </div>

@@ -69,6 +69,7 @@ return [
     'landing_signup_message' => ':name concluiu o cadastro e está aguardando sua análise.',
     'creator_must_accept_contract' => 'Você precisa assinar o contrato de uso de imagem para se candidatar às campanhas.',
     'campaign_country_restricted' => 'Esta campanha não está disponível no seu país.',
+    'campaign_city_restricted' => 'Esta campanha está limitada a outra cidade ou região.',
     'social_handle_required' => 'Informe o usuário ou o link do canal para buscar os dados.',
     'social_network_unsupported' => 'Rede social não suportada para busca automática.',
     'social_profile_not_found' => 'Não encontramos esse canal. Confira o usuário e tente de novo.',

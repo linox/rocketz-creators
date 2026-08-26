@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Enums\PostingProfile;
+use App\Support\Geo;
 use Database\Factories\CampaignFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -31,6 +32,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_secret',
     'is_direct_contract',
     'is_barter',
+    'limit_by_city',
+    'state',
+    'city',
     'barter_details',
     'approval_flow',
     'posting_profile',
@@ -75,6 +79,7 @@ class Campaign extends Model
             'is_secret' => 'boolean',
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
+            'limit_by_city' => 'boolean',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
         ];
@@ -116,12 +121,56 @@ class Campaign extends Model
         return $this->status === CampaignStatus::PendingAgency;
     }
 
-    public function scopeForCreatorMarketplace($query, Creator $creator)
+    public function matchesCreatorLocation(?Creator $creator): bool
     {
-        if ($creator->canAccessAllCountries()) {
-            return $query;
+        if (! $this->limit_by_city) {
+            return true;
+        }
+        if (! $creator) {
+            return false;
         }
 
-        return $query->whereHas('company', fn ($builder) => $builder->where('country', $creator->countryCode()));
+        $state = Geo::normalizeRegion($this->state);
+        if ($state !== '' && Geo::normalizeRegion($creator->state) !== $state) {
+            return false;
+        }
+
+        $city = mb_strtolower(trim((string) $this->city));
+        if ($city !== '' && mb_strtolower(trim((string) $creator->city)) !== $city) {
+            return false;
+        }
+
+        return $state !== '' || $city !== '';
+    }
+
+    public function scopeMatchingCreatorLocation($query, Creator $creator)
+    {
+        return $query->where(function ($builder) use ($creator) {
+            $builder->where('limit_by_city', false)
+                ->orWhere(function ($limited) use ($creator) {
+                    $state = Geo::normalizeRegion($creator->state);
+                    $city = trim((string) $creator->city);
+                    $limited->where('limit_by_city', true);
+                    if ($state === '' || $city === '') {
+                        $limited->whereRaw('0 = 1');
+
+                        return;
+                    }
+                    $limited->whereRaw('UPPER(state) = ?', [$state])
+                        ->whereRaw('LOWER(TRIM(city)) = LOWER(TRIM(?))', [$city]);
+                });
+        });
+    }
+
+    public function scopeForCreatorMarketplace($query, Creator $creator)
+    {
+        if (! $creator->canAccessAllCountries()) {
+            $query->whereHas('company', fn ($builder) => $builder->where('country', $creator->countryCode()));
+        }
+
+        return $query->where(function ($builder) use ($creator) {
+            $builder->matchingCreatorLocation($creator)
+                ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $creator->id));
+        });
     }
 }

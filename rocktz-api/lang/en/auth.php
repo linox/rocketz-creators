@@ -69,6 +69,7 @@ return [
     'landing_signup_message' => ':name completed signup and is waiting for your review.',
     'creator_must_accept_contract' => 'You must sign the image usage agreement before applying to campaigns.',
     'campaign_country_restricted' => 'This campaign is not available in your country.',
+    'campaign_city_restricted' => 'This campaign is limited to another city or region.',
     'social_handle_required' => 'Enter the username or channel link to fetch the stats.',
     'social_network_unsupported' => 'This social network cannot be fetched automatically.',
     'social_profile_not_found' => 'We could not find that channel. Check the username and try again.',

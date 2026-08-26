@@ -149,6 +149,9 @@ export type Campaign = {
   is_secret: boolean;
   is_direct_contract: boolean;
   is_barter: boolean;
+  limit_by_city?: boolean;
+  state?: string | null;
+  city?: string | null;
   barter_details: string | null;
   approval_flow: string | null;
   posting_profile?: "creator" | "brand" | string | null;

@@ -69,6 +69,7 @@ return [
     'landing_signup_message' => ':name completó el registro y espera tu análisis.',
     'creator_must_accept_contract' => 'Debes firmar el contrato de uso de imagen para postularte a las campañas.',
     'campaign_country_restricted' => 'Esta campaña no está disponible en tu país.',
+    'campaign_city_restricted' => 'Esta campaña está limitada a otra ciudad o región.',
     'social_handle_required' => 'Indica el usuario o el enlace del canal para buscar los datos.',
     'social_network_unsupported' => 'Esta red social no admite búsqueda automática.',
     'social_profile_not_found' => 'No encontramos ese canal. Revisa el usuario e inténtalo de nuevo.',

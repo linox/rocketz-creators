@@ -18,6 +18,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
@@ -25,7 +26,7 @@ import { DEFAULT_AGENCY_FEE_PERCENT, parseAgencyFeePercent } from "@/lib/agency-
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
-import { moneyCurrency } from "@/lib/geo";
+import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
 import { usePrivacy } from "@/lib/privacy";
 import type { PostingProfile } from "@/lib/posting-profile";
 
@@ -113,6 +114,9 @@ export function CreateCampaignModal({
   const [isSecret, setIsSecret] = useState(false);
   const [isDirect, setIsDirect] = useState(false);
   const [isBarter, setIsBarter] = useState(false);
+  const [limitByCity, setLimitByCity] = useState(false);
+  const [regionState, setRegionState] = useState("");
+  const [city, setCity] = useState("");
   const [barterDetails, setBarterDetails] = useState("");
   const [flow, setFlow] = useState<Flow>("script_and_video");
   const [postingProfile, setPostingProfile] = useState<PostingProfile>("creator");
@@ -156,6 +160,9 @@ export function CreateCampaignModal({
     setIsSecret(false);
     setIsDirect(false);
     setIsBarter(false);
+    setLimitByCity(false);
+    setRegionState("");
+    setCity("");
     setBarterDetails("");
     setFlow("script_and_video");
     setPostingProfile("creator");
@@ -201,6 +208,19 @@ export function CreateCampaignModal({
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
       return;
     }
+    if (limitByCity) {
+      const country = selectedCompany?.country || DEFAULT_COUNTRY;
+      if (hasRegions(country) && !regionState) {
+        setTab("geral");
+        await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+        return;
+      }
+      if (!city.trim()) {
+        setTab("geral");
+        await alertWarning(tc("alerts.cityRequiredTitle"), t("campaigns.cityRequired"));
+        return;
+      }
+    }
     const feePercent = parseAgencyFeePercent(agencyFeePercent);
     if (isAdmin && !isBarter && feePercent == null) {
       setTab("geral");
@@ -221,6 +241,9 @@ export function CreateCampaignModal({
         is_secret: isSecret,
         is_direct_contract: isDirect,
         is_barter: isBarter,
+        limit_by_city: limitByCity,
+        state: limitByCity ? regionState || null : null,
+        city: limitByCity ? city.trim() : null,
         barter_details: isBarter ? barterDetails : null,
         status: "briefing",
         approval_flow: flow,
@@ -319,7 +342,7 @@ export function CreateCampaignModal({
                 {isAdmin ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.company")} *</label>
-                    <Select2Field theme="light" placeholder={t("campaigns.companyPh")} value={companyId} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={setCompanyId} />
+                    <Select2Field theme="light" placeholder={t("campaigns.companyPh")} value={companyId} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => { setCompanyId(value); setRegionState(""); }} />
                   </div>
                 ) : null}
 
@@ -361,7 +384,21 @@ export function CreateCampaignModal({
                     />
                   ) : null}
                 </div>
-
+                <CampaignLocationFields
+                  country={selectedCompany?.country}
+                  enabled={limitByCity}
+                  onEnabledChange={(value) => {
+                    setLimitByCity(value);
+                    if (!value) {
+                      setRegionState("");
+                      setCity("");
+                    }
+                  }}
+                  state={regionState}
+                  onStateChange={setRegionState}
+                  city={city}
+                  onCityChange={setCity}
+                />
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                   <input type="checkbox" checked={isSecret} onChange={(e) => setIsSecret(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600" />
                   <span>

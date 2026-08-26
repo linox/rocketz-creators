@@ -1447,4 +1447,50 @@ class DomainApiTest extends TestCase
         $availableAfter = $this->withToken($creatorToken)->getJson('/api/campaigns/available')->assertOk()->json('data');
         $this->assertTrue(collect($availableAfter)->contains(fn ($row) => (int) $row['id'] === (int) $campaignId));
     }
+
+    public function test_creator_only_sees_city_limited_campaigns_in_own_city(): void
+    {
+        $this->seed();
+
+        $company = Company::query()->where('country', 'BR')->firstOrFail();
+        $sp = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'name' => 'SP City Campaign',
+            'is_barter' => true,
+            'is_secret' => false,
+            'limit_by_city' => true,
+            'state' => 'SP',
+            'city' => 'São Paulo',
+            'status' => CampaignStatus::Briefing,
+        ]);
+        $rj = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'name' => 'RJ City Campaign',
+            'is_barter' => true,
+            'is_secret' => false,
+            'limit_by_city' => true,
+            'state' => 'RJ',
+            'city' => 'Rio de Janeiro',
+            'status' => CampaignStatus::Briefing,
+        ]);
+
+        $creator = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail();
+        $creator->load('creator');
+        $this->assertSame('SP', $creator->creator->state);
+        $token = $creator->createToken('auth')->plainTextToken;
+
+        $available = $this->withToken($token)->getJson('/api/campaigns/available')->assertOk()->json('data');
+        $ids = collect($available)->pluck('id')->map(fn ($id) => (int) $id);
+        $this->assertTrue($ids->contains($sp->id));
+        $this->assertFalse($ids->contains($rj->id));
+
+        $this->withToken($token)
+            ->postJson("/api/campaigns/{$rj->id}/apply", ['notes' => 'Quero participar'])
+            ->assertForbidden()
+            ->assertJsonPath('message', __('auth.campaign_city_restricted'));
+
+        $this->withToken($token)
+            ->postJson("/api/campaigns/{$sp->id}/apply", ['notes' => 'Quero participar'])
+            ->assertCreated();
+    }
 }

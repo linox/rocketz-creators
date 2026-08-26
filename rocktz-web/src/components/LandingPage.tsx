@@ -64,6 +64,9 @@ import { useTranslation } from "react-i18next";
 
 type Modal = "none" | "creator" | "company" | "login";
 
+const SHOW_PARTNER_BRANDS = false;
+const SHOW_PLATFORM_STATS = false;
+
 const trustedBrands: { name: string; className: string; boxed?: boolean }[] = [
   { name: "Samsung", className: "text-[17px] font-black uppercase tracking-[0.22em]" },
   { name: "natura", className: "font-serif text-[23px] font-medium lowercase tracking-tight" },
@@ -371,6 +374,13 @@ export function LandingPage() {
     const value = tl(key, { returnObjects: true });
     return Array.isArray(value) ? (value as string[]) : [];
   };
+  const platformNav = [
+    { id: "para-empresas", label: tl("nav.forCompanies") },
+    { id: "para-criadores", label: tl("nav.forCreators") },
+    { id: "como-funciona", label: tl("nav.howItWorks") },
+    { id: "recursos", label: tl("nav.features") },
+    ...(SHOW_PARTNER_BRANDS ? [{ id: "marcas-parceiras", label: tl("nav.partnerBrands") }] : []),
+  ];
   const [modal, setModal] = useState<Modal>("none");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -568,11 +578,11 @@ export function LandingPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6 lg:px-8">
           <RocketzLogo variant="light" size="md" href="/" />
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 lg:flex xl:gap-8">
-            <button onClick={() => scrollTo("para-empresas")} className="hover:text-purple-600">{tl("nav.forCompanies")}</button>
-            <button onClick={() => scrollTo("para-criadores")} className="hover:text-purple-600">{tl("nav.forCreators")}</button>
-            <button onClick={() => scrollTo("como-funciona")} className="hover:text-purple-600">{tl("nav.howItWorks")}</button>
-            <button onClick={() => scrollTo("recursos")} className="hover:text-purple-600">{tl("nav.features")}</button>
-            <button onClick={() => scrollTo("marcas-parceiras")} className="hover:text-purple-600">{tl("nav.partnerBrands")}</button>
+            {platformNav.map((link) => (
+              <button key={link.id} onClick={() => scrollTo(link.id)} className="hover:text-purple-600">
+                {link.label}
+              </button>
+            ))}
           </nav>
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
             <LanguageSwitcher theme="light" />
@@ -616,13 +626,7 @@ export function LandingPage() {
         {mobileOpen ? (
           <nav className="border-t border-slate-100/80 px-4 py-3 lg:hidden sm:px-6">
             <div className="mx-auto flex max-w-7xl flex-col gap-1 text-sm font-medium text-slate-700">
-              {[
-                { id: "para-empresas", label: tl("nav.forCompanies") },
-                { id: "para-criadores", label: tl("nav.forCreators") },
-                { id: "como-funciona", label: tl("nav.howItWorks") },
-                { id: "recursos", label: tl("nav.features") },
-                { id: "marcas-parceiras", label: tl("nav.partnerBrands") },
-              ].map((link) => (
+              {platformNav.map((link) => (
                 <button
                   key={link.id}
                   onClick={() => scrollTo(link.id)}
@@ -777,6 +781,7 @@ export function LandingPage() {
         </div>
       </section>
 
+      {SHOW_PARTNER_BRANDS ? (
       <section id="marcas-parceiras" className="scroll-mt-24 bg-white px-4 py-12 sm:px-6 md:py-14 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <p className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -798,6 +803,7 @@ export function LandingPage() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <section id="recursos" className={`bg-[#FAFAFC] ${sectionY}`}>
         <div className={sectionInner}>
@@ -931,6 +937,8 @@ export function LandingPage() {
             </div>
           </div>
 
+          {SHOW_PLATFORM_STATS ? (
+          <>
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -961,6 +969,8 @@ export function LandingPage() {
           <p className="mt-5 text-center text-[11px] leading-relaxed text-slate-400">
             {tl("impact.footnote")}
           </p>
+          </>
+          ) : null}
         </div>
       </section>
 
@@ -1038,13 +1048,7 @@ export function LandingPage() {
 
             <div className="flex flex-col gap-2.5 md:col-span-3">
               <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-900">{tl("footer.platform")}</h3>
-              {[
-                { id: "para-empresas", label: tl("nav.forCompanies") },
-                { id: "para-criadores", label: tl("nav.forCreators") },
-                { id: "como-funciona", label: tl("nav.howItWorks") },
-                { id: "recursos", label: tl("nav.features") },
-                { id: "marcas-parceiras", label: tl("nav.partnerBrands") },
-              ].map((link) => (
+              {platformNav.map((link) => (
                 <button
                   key={link.id}
                   onClick={() => scrollTo(link.id)}

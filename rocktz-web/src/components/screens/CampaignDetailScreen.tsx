@@ -37,6 +37,7 @@ import {
   Layers,
   LayoutGrid,
   Lock,
+  MapPin,
   Megaphone,
   MessageCircle,
   Package,
@@ -56,6 +57,7 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
+import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -67,7 +69,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
-import { currencySymbol, moneyCurrency } from "@/lib/geo";
+import { campaignLocationLabel, currencySymbol, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
@@ -420,6 +422,9 @@ function DetailInner() {
     is_secret: false,
     is_direct_contract: false,
     is_barter: false,
+    limit_by_city: false,
+    state: "",
+    city: "",
     barter_details: "",
     product: "",
     key_message: "",
@@ -788,6 +793,9 @@ function DetailInner() {
       is_secret: campaign.is_secret,
       is_direct_contract: campaign.is_direct_contract,
       is_barter: campaign.is_barter,
+      limit_by_city: Boolean(campaign.limit_by_city),
+      state: campaign.state || "",
+      city: campaign.city || "",
       barter_details: campaign.barter_details || "",
       product: String(campaign.briefing?.product ?? ""),
       key_message: String(campaign.briefing?.key_message ?? ""),
@@ -817,6 +825,17 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
       return;
     }
+    if (editForm.limit_by_city) {
+      const country = companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country || DEFAULT_COUNTRY;
+      if (hasRegions(country) && !editForm.state) {
+        await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
+        return;
+      }
+      if (!editForm.city.trim()) {
+        await alertWarning(tc("alerts.cityRequiredTitle"), t("campaigns.cityRequired"));
+        return;
+      }
+    }
     try {
       await api.updateCampaign(campaign.id, {
         name: editForm.name,
@@ -834,6 +853,9 @@ function DetailInner() {
         is_secret: editForm.is_secret,
         is_direct_contract: editForm.is_direct_contract,
         is_barter: editForm.is_barter,
+        limit_by_city: editForm.limit_by_city,
+        state: editForm.limit_by_city ? editForm.state || null : null,
+        city: editForm.limit_by_city ? editForm.city.trim() : null,
         barter_details: editForm.is_barter ? editForm.barter_details : null,
         briefing: {
           product: editForm.product,
@@ -1009,6 +1031,11 @@ function DetailInner() {
                   {campaign.is_barter ? (
                     <span className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">
                       <Gift size={9} /> {t("campaigns.barter")}
+                    </span>
+                  ) : null}
+                  {campaign.limit_by_city ? (
+                    <span className="flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700">
+                      <MapPin size={9} /> {campaignLocationLabel(locale, campaign) || t("campaigns.cityLimited")}
                     </span>
                   ) : null}
                 </div>
@@ -2371,7 +2398,7 @@ function DetailInner() {
                   {isAdmin ? (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.company")}</label>
-                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value })} />
+                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value, state: "" })} />
                     </div>
                   ) : null}
                   {canChangeStatus ? (
@@ -2511,6 +2538,15 @@ function DetailInner() {
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_direct_contract} onChange={(event) => setEditForm({ ...editForm, is_direct_contract: event.target.checked })} /> {t("deliveries.directCompany")}</label>
                   <label className="flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" checked={editForm.is_barter} onChange={(event) => setEditForm({ ...editForm, is_barter: event.target.checked })} /> {t("deliveries.barterProducts")}</label>
                 </div>
+                <CampaignLocationFields
+                  country={companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country}
+                  enabled={editForm.limit_by_city}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, limit_by_city: value, state: value ? editForm.state : "", city: value ? editForm.city : "" })}
+                  state={editForm.state}
+                  onStateChange={(value) => setEditForm({ ...editForm, state: value })}
+                  city={editForm.city}
+                  onCityChange={(value) => setEditForm({ ...editForm, city: value })}
+                />
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                   {(["reels", "stories", "tiktok", "ugc", "posts", "youtube"] as const).map((key) => (
                     <div key={key} className="flex flex-col gap-1">

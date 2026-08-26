@@ -22,6 +22,7 @@ import {
   Instagram,
   Layers,
   Lock,
+  MapPin,
   Megaphone,
   Package,
   Plus,
@@ -39,7 +40,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
-import { moneyCurrency } from "@/lib/geo";
+import { campaignLocationLabel, moneyCurrency } from "@/lib/geo";
 import type { Campaign, CampaignCreator, Company } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -120,10 +121,12 @@ function CampaignCard({
   isAdmin?: boolean;
   onApprove?: (campaign: Campaign) => void;
 }) {
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
+  const locale = intlLocale(normalizeLocale(i18n.language));
   const companyName = campaign.company?.name || t("campaigns.client");
   const summary = formatDeliverablesSummary(campaign.deliverables);
   const pending = campaign.pending_applications ?? 0;
+  const location = campaignLocationLabel(locale, campaign);
 
   return (
     <motion.article
@@ -166,6 +169,11 @@ function CampaignCard({
             {campaign.is_barter ? (
               <span className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-amber-300 uppercase backdrop-blur-md">
                 <Gift size={10} /> {t("campaigns.barter")}
+              </span>
+            ) : null}
+            {campaign.limit_by_city ? (
+              <span className="flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-200 uppercase backdrop-blur-md">
+                <MapPin size={10} /> {t("campaigns.cityLimited")}
               </span>
             ) : null}
           </div>
@@ -212,6 +220,12 @@ function CampaignCard({
             <Calendar size={13} className="shrink-0 text-slate-400" />
             <span>{dateLabel}</span>
           </div>
+          {location ? (
+            <div className="flex items-center gap-2.5 text-xs text-[#64748B]">
+              <MapPin size={13} className="shrink-0 text-sky-500" />
+              <span>{location}</span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2.5 text-xs font-bold text-[#0F172A]">
             {campaign.is_barter ? (
               <>
