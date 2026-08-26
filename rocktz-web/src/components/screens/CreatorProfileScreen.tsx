@@ -932,6 +932,7 @@ function ProfileInner() {
   }
 
   async function removeCreatorAccount() {
+    if (!creator) return;
     if (!(await alertConfirm(ta("creators.deleteTitle"), ta("creators.deleteText", { name: creator.artistic_name }), ta("creators.delete")))) return;
     try {
       await api.deleteCreator(creator.id);
@@ -1676,8 +1677,8 @@ function ProfileInner() {
           isOpen
           onClose={() => setContractOpen(false)}
           readOnly={Boolean(creator.contract_acceptance) && !canEdit}
-          creatorName={creator.full_name}
-          creatorEmail={creator.email ?? user.email}
+          creatorName={creator.full_name ?? undefined}
+          creatorEmail={creator.email ?? user.email ?? undefined}
           creatorDocument={creator.document || creator.cpf || ""}
           existingAudit={creator.contract_acceptance ? {
             termId: "rocketz-2026",

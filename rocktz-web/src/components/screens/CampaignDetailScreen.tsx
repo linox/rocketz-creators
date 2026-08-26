@@ -545,7 +545,7 @@ function DetailInner() {
 
   const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
   const selectedCreator = selected?.creator;
-  const selectedDeliveryState = selected ? campaignCreatorDeliveryState(selected, campaign.approval_flow) : null;
+  const selectedDeliveryState = selected && campaign ? campaignCreatorDeliveryState(selected, campaign.approval_flow) : null;
 
   useEffect(() => {
     setPublishedLinkDraft(selected?.content?.published_link || "");

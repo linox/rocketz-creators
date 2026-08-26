@@ -451,15 +451,15 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   }
 
   const companyOptions = [{ value: "all", label: t("recurring.allCompanies") }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))];
-  const creatorOptions = [{ value: "all", label: t("recurring.allCreators") }, ...knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name }))];
+  const creatorOptions = [{ value: "all", label: t("recurring.allCreators") }, ...knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))];
   const typeOptions = [{ value: "all", label: t("recurring.allFormats") }, ...CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))];
   const itemStatusOptions = [{ value: "all", label: t("recurring.allStatuses") }, ...ITEM_STATUSES.map((status) => ({ value: status, label: t(`recurring.itemStatus.${status}`) }))];
   const selectedContract = contracts.find((c) => String(c.id) === contentForm.contract_id);
   const contentCreatorOptions = (selectedContract?.creators || [])
     .map((row) => row.creator)
     .filter(Boolean)
-    .map((creator) => ({ value: String(creator!.id), label: creator!.artistic_name || creator!.full_name }));
-  const fallbackCreatorOptions = knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name }));
+    .map((creator) => ({ value: String(creator!.id), label: creator!.artistic_name || creator!.full_name || String(creator!.id) }));
+  const fallbackCreatorOptions = knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }));
 
   return (
     <div className="space-y-8 pb-8">
@@ -929,7 +929,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">{t("recurring.selectCreator")}</span>
               <div className="w-56">
-                <Select2Field theme="light" value={agendaCreatorId ? String(agendaCreatorId) : ""} options={knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name }))} onChange={setCreatorFilter} />
+                <Select2Field theme="light" value={agendaCreatorId ? String(agendaCreatorId) : ""} options={knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))} onChange={setCreatorFilter} />
               </div>
             </div>
           </div>

@@ -7,6 +7,17 @@ export type PautaBriefingFields = {
   hashtags: string;
 };
 
+/** API / PlanningItem may send null for empty fields. */
+export type PautaBriefingFieldsInput = Partial<{
+  [K in keyof PautaBriefingFields]: string | null;
+}>;
+
+export type PautaBriefingItemLike = {
+  briefing?: string | null;
+  briefing_note?: string | null;
+  briefing_fields?: PautaBriefingFieldsInput | null;
+};
+
 export const PAUTA_BRIEFING_KEYS = ["product", "key_message", "must_have", "donts", "cta", "hashtags"] as const;
 
 export const EMPTY_PAUTA_BRIEFING: PautaBriefingFields = {
@@ -22,16 +33,12 @@ export function emptyPautaBriefing(): PautaBriefingFields {
   return { ...EMPTY_PAUTA_BRIEFING };
 }
 
-export function pautaBriefingHasContent(fields?: Partial<PautaBriefingFields> | null) {
+export function pautaBriefingHasContent(fields?: PautaBriefingFieldsInput | null) {
   if (!fields) return false;
   return PAUTA_BRIEFING_KEYS.some((key) => String(fields[key] ?? "").trim());
 }
 
-export function parsePautaBriefing(item: {
-  briefing?: string | null;
-  briefing_note?: string | null;
-  briefing_fields?: Partial<PautaBriefingFields> | null;
-}): PautaBriefingFields {
+export function parsePautaBriefing(item: PautaBriefingItemLike): PautaBriefingFields {
   const fields = emptyPautaBriefing();
   if (item.briefing_fields && typeof item.briefing_fields === "object") {
     for (const key of PAUTA_BRIEFING_KEYS) {
@@ -49,10 +56,6 @@ export function pautaBriefingSummary(fields: PautaBriefingFields) {
   return text || null;
 }
 
-export function itemHasPautaBriefing(item: {
-  briefing?: string | null;
-  briefing_note?: string | null;
-  briefing_fields?: Partial<PautaBriefingFields> | null;
-}) {
+export function itemHasPautaBriefing(item: PautaBriefingItemLike) {
   return pautaBriefingHasContent(parsePautaBriefing(item));
 }

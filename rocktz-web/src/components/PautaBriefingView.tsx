@@ -3,13 +3,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { parsePautaBriefing, pautaBriefingHasContent, type PautaBriefingFields } from "@/lib/pauta-briefing";
+import { parsePautaBriefing, pautaBriefingHasContent, type PautaBriefingItemLike } from "@/lib/pauta-briefing";
 
-type ItemLike = {
-  briefing?: string | null;
-  briefing_note?: string | null;
-  briefing_fields?: Partial<PautaBriefingFields> | null;
-};
+type ItemLike = PautaBriefingItemLike;
 
 type Props = {
   item: ItemLike;

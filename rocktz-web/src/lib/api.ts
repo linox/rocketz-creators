@@ -130,7 +130,7 @@ export const api = {
     return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`));
   },
 
-  recurring: () => laravelFetch<List<RecurringContract>>("/recurring-contracts"),
+  recurring: (query = "") => laravelFetch<List<RecurringContract>>(`/recurring-contracts${query}`),
   recurringOne: (id: number | string) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}`),
   createRecurring: (body: unknown) => laravelFetch<Item<RecurringContract>>("/recurring-contracts", { method: "POST", body: JSON.stringify(body) }),
   updateRecurring: (id: number, body: unknown) => laravelFetch<Item<RecurringContract>>(`/recurring-contracts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
