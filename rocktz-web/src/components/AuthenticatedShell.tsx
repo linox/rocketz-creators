@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AppShell } from "@/components/AppShell";
-import { clearToken, fetchMe, getToken } from "@/lib/laravel";
+import { clearToken, fetchMe, getToken, ApiError } from "@/lib/laravel";
+import { cacheAuthUser, isUserCacheFresh, peekCachedUser, peekMemoryUser } from "@/lib/session-cache";
 import { LOCALE_STORAGE_KEY, normalizeLocale } from "@/i18n/locales";
 import { setAppLocale } from "@/i18n/config";
 import type { AuthUser } from "@/lib/auth";
@@ -14,7 +15,7 @@ import { PrivacyProvider } from "@/lib/privacy";
 export function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { t } = useTranslation("common");
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => peekMemoryUser());
 
   useEffect(() => {
     if (!getToken()) {
@@ -22,25 +23,42 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    function loadUser() {
+    function applyUser(next: AuthUser) {
+      cacheAuthUser(next);
+      if (next.locale && !localStorage.getItem(LOCALE_STORAGE_KEY)) {
+        void setAppLocale(normalizeLocale(next.locale));
+      }
+      setUser(next);
+    }
+
+    function loadUser(force: boolean) {
+      const cached = peekCachedUser();
+      if (cached) setUser(cached);
+
+      if (!force && isUserCacheFresh()) {
+        return Promise.resolve();
+      }
+
       return fetchMe()
-        .then((next) => {
-          if (next.locale && !localStorage.getItem(LOCALE_STORAGE_KEY)) {
-            void setAppLocale(normalizeLocale(next.locale));
+        .then(applyUser)
+        .catch((err) => {
+          if (err instanceof ApiError && err.status === 401) {
+            clearToken();
+            router.replace("/login");
+            return;
           }
-          setUser(next);
-        })
-        .catch(() => {
-          clearToken();
-          router.replace("/login");
+          if (!peekCachedUser()) {
+            clearToken();
+            router.replace("/login");
+          }
         });
     }
 
-    void loadUser();
+    void loadUser(false);
 
     function onAuthRefresh() {
       if (!getToken()) return;
-      void fetchMe().then(setUser).catch(() => undefined);
+      void fetchMe().then(applyUser).catch(() => undefined);
     }
 
     window.addEventListener("rocketz:auth-refresh", onAuthRefresh);
@@ -58,7 +76,7 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   return (
     <AuthUserContext.Provider value={user}>
       <PrivacyProvider>
-        <AppShell user={user} onUserChange={setUser}>{children}</AppShell>
+        <AppShell user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>
       </PrivacyProvider>
     </AuthUserContext.Provider>
   );

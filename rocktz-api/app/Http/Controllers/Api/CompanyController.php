@@ -35,7 +35,9 @@ class CompanyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $relations = ['favoriteCreators'];
+        $relations = [
+            'favoriteCreators' => fn ($q) => $q->select('creators.id'),
+        ];
         if ($user->role !== UserRole::Creator) {
             $relations[] = 'contacts';
         }

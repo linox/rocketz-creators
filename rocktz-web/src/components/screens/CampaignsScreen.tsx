@@ -280,7 +280,7 @@ function CampaignsInner() {
 
   async function load() {
     try {
-      const res = await api.campaigns();
+      const res = await api.campaigns("?include=content");
       setItems(res.data);
     } catch (err) {
       await alertApiError(err);

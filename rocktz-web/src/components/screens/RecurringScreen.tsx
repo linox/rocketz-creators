@@ -210,7 +210,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
 
   async function load() {
     try {
-      setContracts((await api.recurring()).data);
+      setContracts((await api.recurring("?include=items")).data);
     } catch (err) {
       await alertApiError(err);
     }

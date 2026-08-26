@@ -96,7 +96,7 @@ function DeliveriesInboxInner() {
   async function loadInbox() {
     setLoading(true);
     try {
-      const [campaignsRes, recurringRes] = await Promise.all([api.campaigns(), api.recurring()]);
+      const [campaignsRes, recurringRes] = await Promise.all([api.campaigns("?include=content"), api.recurring("?include=items")]);
       setItems(buildDeliveryInboxFromApi(campaignsRes.data, recurringRes.data));
     } catch (err) {
       await alertApiError(err);

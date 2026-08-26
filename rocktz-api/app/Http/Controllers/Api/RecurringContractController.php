@@ -57,7 +57,7 @@ class RecurringContractController extends Controller
         $user = $request->user();
         $query = RecurringContract::query()->with('company');
         $this->scopeContractsForUser($query, $user);
-        $this->eagerLoadForUser($query, $user);
+        $this->eagerLoadForUser($query, $user, $this->wantsInclude($request, 'items'));
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
@@ -546,20 +546,34 @@ class RecurringContractController extends Controller
         }
     }
 
-    private function eagerLoadForUser(Builder $query, mixed $user): void
+    private function eagerLoadForUser(Builder $query, mixed $user, bool $withItems = true): void
     {
         $creatorId = $user->creator?->id;
         if ($user->role === UserRole::Creator && $creatorId) {
-            $query->with([
+            $with = [
                 'company',
                 'recurringContractCreators' => fn ($q) => $q->where('creator_id', $creatorId)->with('creator'),
-                'contentPlanningItems' => fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']),
-            ]);
+            ];
+            if ($withItems) {
+                $with['contentPlanningItems'] = fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']);
+            }
+            $query->with($with);
 
             return;
         }
 
-        $query->with(['recurringContractCreators.creator', 'contentPlanningItems.creator', 'contentPlanningItems.company']);
+        $with = ['recurringContractCreators.creator'];
+        if ($withItems) {
+            $with[] = 'contentPlanningItems.creator';
+            $with[] = 'contentPlanningItems.company';
+        }
+        $query->with($with);
+    }
+
+    private function wantsInclude(Request $request, string $key): bool
+    {
+        return collect(explode(',', $request->string('include')->toString()))
+            ->contains(fn ($value) => trim($value) === $key);
     }
 
     private function loadVisibleRelations(Request $request, RecurringContract $contract): void

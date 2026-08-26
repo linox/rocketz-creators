@@ -41,6 +41,7 @@ async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () =
 
 export const api = {
   dashboard: () => laravelFetch<DashboardStats>("/dashboard"),
+  nav: () => laravelFetch<{ unread: number; pending_applications: number }>("/nav"),
   creators: (query = "") => laravelFetch<List<Creator>>(`/creators${query}`),
   creator: (id: number | string) => laravelFetch<Item<Creator>>(`/creators/${id}`),
   createCreator: (body: unknown) => laravelFetch<Item<Creator>>("/creators", { method: "POST", body: JSON.stringify(body) }),

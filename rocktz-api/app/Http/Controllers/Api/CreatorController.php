@@ -34,7 +34,7 @@ class CreatorController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Creator::query()->with(['user', 'portfolioVideos', 'invitedByCompany']);
+        $query = Creator::query()->with(['user', 'invitedByCompany:id,name']);
 
         if ($user->role === UserRole::Creator) {
             $query->where('id', $user->creator?->id);

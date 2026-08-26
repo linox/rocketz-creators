@@ -137,6 +137,7 @@ class DashboardController extends Controller
 
         Campaign::query()
             ->whereNotNull('start_date')
+            ->where('start_date', '>=', now()->startOfMonth()->subMonths(5)->toDateString())
             ->get(['start_date', 'total_budget'])
             ->each(function (Campaign $campaign) use (&$series) {
                 $key = $campaign->start_date?->format('Y-m');

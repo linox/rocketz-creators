@@ -25,6 +25,7 @@ import type { AuthUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import type { AppNotification } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { emitNavRefresh } from "@/lib/session-cache";
 
 type FilterTab = "all" | "unread" | "applications" | "deliveries" | "approvals" | "changes" | "contracts";
 type RoleFilter = "admin_only" | "all";
@@ -240,6 +241,7 @@ function NotificationsInner() {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, read: true } : item)));
     try {
       await api.markRead(id);
+      emitNavRefresh();
     } catch (err) {
       await alertApiError(err);
       void load();
@@ -250,6 +252,7 @@ function NotificationsInner() {
     setItems((prev) => prev.filter((item) => item.id !== id));
     try {
       await api.deleteNotification(id);
+      emitNavRefresh();
     } catch (err) {
       await alertApiError(err);
       void load();
@@ -261,6 +264,7 @@ function NotificationsInner() {
     setItems((prev) => prev.map((item) => ({ ...item, read: true })));
     try {
       await api.markAllRead();
+      emitNavRefresh();
     } catch (err) {
       await alertApiError(err);
       void load();

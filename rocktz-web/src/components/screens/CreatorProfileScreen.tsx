@@ -660,10 +660,10 @@ function ProfileInner() {
 
   useEffect(() => {
     if (isAdmin) {
-      api.campaigns().then((res) => setCampaigns(res.data)).catch(() => undefined);
+      api.campaigns("?include=content").then((res) => setCampaigns(res.data)).catch(() => undefined);
     }
     if (isAdmin || isCreatorSelf) {
-      api.recurring().then((res) => setRecurring(res.data)).catch(() => undefined);
+      api.recurring("?include=items").then((res) => setRecurring(res.data)).catch(() => undefined);
     }
   }, [isAdmin, isCreatorSelf]);
 
@@ -696,7 +696,7 @@ function ProfileInner() {
 
   async function reloadRecurring() {
     try {
-      setRecurring((await api.recurring()).data);
+      setRecurring((await api.recurring("?include=items")).data);
     } catch {
       /* ignore */
     }

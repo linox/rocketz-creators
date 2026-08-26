@@ -23,11 +23,18 @@ export function CreatorSwitcher({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creators, setCreators] = useState<Creator[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.creators().then((res) => setCreators(res.data)).catch(() => undefined);
-  }, []);
+    if (!open || loaded) return;
+    api.creators()
+      .then((res) => {
+        setCreators(res.data);
+        setLoaded(true);
+      })
+      .catch(() => undefined);
+  }, [open, loaded]);
 
   useEffect(() => {
     function onDoc(event: MouseEvent) {

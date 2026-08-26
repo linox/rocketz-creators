@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\MailMessageController;
 use App\Http\Controllers\Api\MailTemplateController;
 use App\Http\Controllers\Api\MailUnsubscribeController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\NavController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\RecurringContractController;
@@ -53,6 +54,7 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::post('media', [MediaController::class, 'store']);
     Route::get('dashboard', DashboardController::class);
+    Route::get('nav', NavController::class);
     Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);
 
     Route::get('creators', [CreatorController::class, 'index']);

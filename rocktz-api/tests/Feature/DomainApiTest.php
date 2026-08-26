@@ -49,6 +49,46 @@ class DomainApiTest extends TestCase
         $this->withToken($token)->getJson('/api/notifications')->assertOk();
         $this->withToken($token)->getJson('/api/recurring-contracts')->assertOk();
         $this->withToken($token)->getJson('/api/admin-users')->assertOk();
+        $this->withToken($token)->getJson('/api/nav')->assertOk()
+            ->assertJsonStructure(['unread', 'pending_applications']);
+    }
+
+    public function test_list_endpoints_omit_heavy_relations_until_requested(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $creator = $this->withToken($token)->getJson('/api/creators')->assertOk()->json('data.0');
+        $this->assertIsArray($creator);
+        $this->assertArrayNotHasKey('portfolio', $creator);
+
+        $campaign = $this->withToken($token)->getJson('/api/campaigns')->assertOk()->json('data.0');
+        if (is_array($campaign)) {
+            $application = $campaign['applications'][0] ?? null;
+            if (is_array($application)) {
+                $this->assertArrayNotHasKey('content', $application);
+            }
+        }
+
+        $withContent = $this->withToken($token)->getJson('/api/campaigns?include=content')->assertOk()->json('data.0');
+        if (is_array($withContent)) {
+            $application = $withContent['applications'][0] ?? null;
+            if (is_array($application)) {
+                $this->assertArrayHasKey('content', $application);
+            }
+        }
+
+        $contract = $this->withToken($token)->getJson('/api/recurring-contracts')->assertOk()->json('data.0');
+        if (is_array($contract)) {
+            $this->assertArrayNotHasKey('items', $contract);
+        }
+
+        $withItems = $this->withToken($token)->getJson('/api/recurring-contracts?include=items')->assertOk()->json('data.0');
+        if (is_array($withItems)) {
+            $this->assertArrayHasKey('items', $withItems);
+        }
     }
 
     public function test_admin_can_approve_creator(): void

@@ -1,5 +1,6 @@
 import { AUTH_COOKIE, homePathForUser, type AuthPayload, type AuthUser } from "@/lib/auth";
 import i18n, { getAppLocale } from "@/i18n/config";
+import { cacheAuthUser, clearSessionCache } from "@/lib/session-cache";
 
 const DEFAULT_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 const PRODUCTION_API_URL = "https://api.creatorz.digital/api";
@@ -86,10 +87,12 @@ export function consumeAuthHash(): {
 
 export function clearToken() {
   localStorage.removeItem(AUTH_COOKIE);
+  clearSessionCache();
 }
 
 export function persistAuth(payload: AuthPayload, afterSignup = false): string {
   setToken(payload.token);
+  cacheAuthUser(payload.user);
   if (afterSignup && payload.user.role === "creator" && payload.user.creator?.id) {
     return `/creators/${payload.user.creator.id}?tab=portfolio`;
   }
@@ -183,6 +186,7 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
 
 export async function fetchMe(): Promise<AuthUser> {
   const data = await laravelFetch<{ user: AuthUser }>("/auth/me");
+  cacheAuthUser(data.user);
   return data.user;
 }
 

@@ -37,6 +37,7 @@ import type { AuthUser } from "@/lib/auth";
 import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { fetchMe, logoutRequest } from "@/lib/laravel";
+import { cacheNavBadges, isNavCacheFresh, peekNavBadges } from "@/lib/session-cache";
 import { usePrivacy } from "@/lib/privacy";
 import { useTranslation } from "react-i18next";
 
@@ -126,11 +127,44 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         : "/creator-dashboard";
 
   useEffect(() => {
-    api.notifications("?unread=1").then((res) => setUnread(res.data.length)).catch(() => undefined);
-    if (user.role === "admin") {
-      api.dashboard().then((stats) => setPendingCampaigns(stats.pending_applications ?? 0)).catch(() => undefined);
+    let cancelled = false;
+
+    function apply(badges: { unread: number; pending_applications: number }) {
+      setUnread(badges.unread);
+      setPendingCampaigns(user.role === "admin" ? badges.pending_applications : 0);
     }
-  }, [user.role, pathname]);
+
+    const cached = peekNavBadges();
+    if (cached) apply(cached);
+
+    async function loadBadges() {
+      if (isNavCacheFresh() && peekNavBadges()) return;
+      try {
+        const badges = await api.nav();
+        if (cancelled) return;
+        cacheNavBadges(badges);
+        apply(badges);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    void loadBadges();
+    const timer = window.setInterval(() => {
+      void loadBadges();
+    }, 60_000);
+
+    function onNavRefresh() {
+      void loadBadges();
+    }
+    window.addEventListener("rocketz:nav-refresh", onNavRefresh);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("rocketz:nav-refresh", onNavRefresh);
+    };
+  }, [user.role]);
 
   useEffect(() => {
     setOpen(false);

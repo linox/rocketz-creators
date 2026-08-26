@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\NotificationResource;
 use App\Models\Notification;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -18,7 +17,7 @@ class NotificationController extends Controller
     {
         $user = $request->user();
         $query = Notification::query()->latest();
-        $this->scopeForUser($query, $user);
+        $query->visibleTo($user);
 
         if ($user->role === UserRole::Admin && $request->boolean('mine')) {
             $query->where('user_id', $user->id);
@@ -46,7 +45,7 @@ class NotificationController extends Controller
     public function markAllRead(Request $request): JsonResponse
     {
         $query = Notification::query()->where('read', false);
-        $this->scopeForUser($query, $request->user());
+        $query->visibleTo($request->user());
         $query->update(['read' => true]);
 
         return response()->json(['message' => __('auth.notifications_read')]);
@@ -58,30 +57,6 @@ class NotificationController extends Controller
         $notification->delete();
 
         return response()->json(['message' => __('auth.notification_removed')]);
-    }
-
-    private function scopeForUser(Builder $query, User $user): void
-    {
-        if ($user->role === UserRole::Admin) {
-            return;
-        }
-
-        if ($user->role === UserRole::Creator) {
-            $creatorId = $user->creator?->id;
-            $query->where(function (Builder $builder) use ($user, $creatorId) {
-                $builder->where('user_id', $user->id);
-                if ($creatorId) {
-                    $builder->orWhere(function (Builder $inner) use ($creatorId) {
-                        $inner->where('creator_id', $creatorId)
-                            ->where('target_role', NotificationTargetRole::Creator);
-                    });
-                }
-            });
-
-            return;
-        }
-
-        $query->where('user_id', $user->id);
     }
 
     private function visibleTo(User $user, Notification $notification): bool

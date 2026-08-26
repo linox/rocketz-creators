@@ -44,12 +44,20 @@ class CampaignController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $includeContent = $this->wantsInclude($request, 'content');
         $query = $this->scoped($request)
-            ->with(['company', 'briefing', 'deliverable'])
+            ->with(['company', 'deliverable'])
             ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         if ($request->user()?->role !== UserRole::Creator) {
-            $query->with(['campaignCreators.creator', 'campaignCreators.content']);
+            $query->with([
+                'campaignCreators' => function ($q) use ($includeContent) {
+                    $q->with('creator');
+                    if ($includeContent) {
+                        $q->with('content');
+                    }
+                },
+            ]);
         }
 
         if ($status = $request->string('status')->toString()) {
@@ -964,5 +972,11 @@ class CampaignController extends Controller
         }
 
         return $scriptOnly && $scriptApproved;
+    }
+
+    private function wantsInclude(Request $request, string $key): bool
+    {
+        return collect(explode(',', $request->string('include')->toString()))
+            ->contains(fn ($value) => trim($value) === $key);
     }
 }

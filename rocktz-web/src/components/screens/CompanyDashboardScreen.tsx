@@ -125,8 +125,8 @@ function CompanyDashboardInner() {
     setLoading(true);
     Promise.all([
       api.company(companyId).then((res) => setCompany(res.data)),
-      api.campaigns().then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
-      api.recurring().then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
+      api.campaigns("?include=content").then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
+      api.recurring("?include=items").then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
       api.creators().then((res) => setCreators(res.data)),
       api.companyLanding(companyId).then((res) => setLanding(res.data)).catch(() => setLanding(null)),
     ])
@@ -411,7 +411,7 @@ function CompanyDashboardInner() {
           ? t("deliveries.inbox.scriptApprovedWaiting")
           : t("companyDash.overview.approvedOk"),
       );
-      const [campRes, recRes] = await Promise.all([api.campaigns(), api.recurring()]);
+      const [campRes, recRes] = await Promise.all([api.campaigns("?include=content"), api.recurring("?include=items")]);
       setCampaigns(campRes.data.filter((item) => item.company_id === companyId));
       setRecurring(recRes.data.filter((item) => item.company_id === companyId));
     } catch (err) {
