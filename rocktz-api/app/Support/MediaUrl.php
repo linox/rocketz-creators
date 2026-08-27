@@ -64,12 +64,11 @@ class MediaUrl
 
     public static function signedGet(string $path, bool $asAttachment = false): ?string
     {
-        $disk = MediaDisk::name();
-        if ($disk === 'uploads') {
+        if (! MediaDisk::r2Configured()) {
             return null;
         }
 
-        $storage = Storage::disk($disk);
+        $storage = Storage::disk('r2');
         if (! $storage->exists($path)) {
             return null;
         }

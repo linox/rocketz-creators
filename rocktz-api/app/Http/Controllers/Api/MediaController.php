@@ -321,7 +321,7 @@ class MediaController extends Controller
         return $redirect;
     }
 
-    public function stream(Request $request, string $folder, string $filename): BinaryFileResponse|StreamedResponse
+    public function stream(Request $request, string $folder, string $filename): BinaryFileResponse|StreamedResponse|RedirectResponse
     {
         abort_unless(in_array($folder, ['portfolio', 'avatars'], true), 404);
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
@@ -489,13 +489,58 @@ class MediaController extends Controller
             'Access-Control-Allow-Origin' => '*',
             'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
             'X-Content-Type-Options' => 'nosniff',
+            'X-Accel-Buffering' => 'no',
         ];
     }
 
-    private function streamRemote(Request $request, string $path, string $filename): BinaryFileResponse|StreamedResponse|null
+    private function streamRemote(Request $request, string $path, string $filename): BinaryFileResponse|StreamedResponse|RedirectResponse|null
     {
+        $headers = $this->playbackHeaders($filename);
+
+        if (MediaDisk::r2Configured() && Storage::disk('r2')->exists($path)) {
+            $disk = Storage::disk('r2');
+            if (! $disk instanceof AwsS3V3Adapter) {
+                return $disk->response($path, $filename, $headers);
+            }
+
+            if ($request->isMethod('HEAD')) {
+                $size = $this->r2->objectSize($path);
+
+                return response('', 200, $headers + [
+                    'Content-Length' => (string) $size,
+                ]);
+            }
+
+            $signed = MediaUrl::signedGet($path, false);
+            if (is_string($signed) && str_starts_with($signed, 'http')) {
+                return redirect()->away($signed);
+            }
+
+            $object = $this->r2->readObject($path, $request->header('Range'));
+            $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];
+            $headers['Content-Length'] = (string) $object['length'];
+            if ($object['range']) {
+                $headers['Content-Range'] = $object['range'];
+            }
+
+            $body = $object['body'];
+
+            return response()->stream(function () use ($body) {
+                if (is_object($body) && method_exists($body, 'detach')) {
+                    $resource = $body->detach();
+                    if (is_resource($resource)) {
+                        fpassthru($resource);
+                        fclose($resource);
+
+                        return;
+                    }
+                }
+                echo (string) $body;
+            }, $object['status'], $headers);
+        }
+
         $diskName = MediaDisk::name();
-        if ($diskName === 'uploads') {
+        if ($diskName === 'uploads' || $diskName === 'r2') {
             return null;
         }
 
@@ -504,41 +549,7 @@ class MediaController extends Controller
             return null;
         }
 
-        $headers = $this->playbackHeaders($filename);
-
-        if (! $disk instanceof AwsS3V3Adapter) {
-            return $disk->response($path, $filename, $headers);
-        }
-
-        if ($request->isMethod('HEAD')) {
-            $size = $this->r2->objectSize($path);
-
-            return response()->stream(fn () => null, 200, $headers + [
-                'Content-Length' => (string) $size,
-            ]);
-        }
-
-        $object = $this->r2->readObject($path, $request->header('Range'));
-        $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];
-        $headers['Content-Length'] = (string) $object['length'];
-        if ($object['range']) {
-            $headers['Content-Range'] = $object['range'];
-        }
-
-        $body = $object['body'];
-
-        return response()->stream(function () use ($body) {
-            if (is_object($body) && method_exists($body, 'detach')) {
-                $resource = $body->detach();
-                if (is_resource($resource)) {
-                    fpassthru($resource);
-                    fclose($resource);
-
-                    return;
-                }
-            }
-            echo (string) $body;
-        }, $object['status'], $headers);
+        return $disk->response($path, $filename, $headers);
     }
 
     /**

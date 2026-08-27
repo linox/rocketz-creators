@@ -4,7 +4,7 @@ $frontend = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
 
 return [
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie', 'stream/*'],
+    'paths' => ['api/*', 'sanctum/csrf-cookie', 'stream/*', 'downloads/*'],
 
     'allowed_methods' => ['*'],
 
@@ -24,7 +24,7 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag'],
 
     'max_age' => 3600,
 

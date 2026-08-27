@@ -361,4 +361,23 @@ class MediaUploadTest extends TestCase
             ->assertHeader('Content-Type', 'video/mp4')
             ->assertHeader('Accept-Ranges', 'bytes');
     }
+
+    public function test_video_stream_uses_r2_even_when_default_disk_is_uploads(): void
+    {
+        config([
+            'media.disk' => 'uploads',
+            'filesystems.disks.r2.key' => 'key',
+            'filesystems.disks.r2.secret' => 'secret',
+            'filesystems.disks.r2.bucket' => 'media',
+            'filesystems.disks.r2.endpoint' => 'https://example.r2.cloudflarestorage.com',
+            'filesystems.disks.r2.url' => 'https://cdn.test',
+        ]);
+        Storage::fake('uploads');
+        Storage::fake('r2');
+        Storage::disk('r2')->put('portfolio/video-r2.mp4', 'video-bytes');
+
+        $this->get('/stream/portfolio/video-r2.mp4')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
+    }
 }
