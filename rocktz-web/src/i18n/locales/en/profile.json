@@ -346,6 +346,7 @@
   "uploadTimeout": "The upload took longer than expected. Check your connection and try again.",
   "viewUploadProgress": "View progress",
   "cancelUpload": "Cancel upload",
+  "uploadCancelled": "Upload cancelled",
   "downloadLinkLabel": "Video download link",
   "downloadLinkPh": "https://drive.google.com/... or WeTransfer, Dropbox, etc.",
   "downloadLinkHint": "Paste a public link where we can download the file (Google Drive, Dropbox, WeTransfer…).",

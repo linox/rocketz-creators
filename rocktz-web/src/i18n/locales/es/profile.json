@@ -346,6 +346,7 @@
   "uploadTimeout": "El envío tardó más de lo esperado. Revisa tu conexión e inténtalo de nuevo.",
   "viewUploadProgress": "Ver progreso",
   "cancelUpload": "Cancelar envío",
+  "uploadCancelled": "Envío cancelado",
   "downloadLinkLabel": "Enlace de descarga del video",
   "downloadLinkPh": "https://drive.google.com/... o WeTransfer, Dropbox, etc.",
   "downloadLinkHint": "Pega un enlace público donde podamos descargar el archivo (Google Drive, Dropbox, WeTransfer…).",

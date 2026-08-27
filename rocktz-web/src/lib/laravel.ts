@@ -46,6 +46,55 @@ export class ApiError extends Error {
   }
 }
 
+export class UploadCancelledError extends ApiError {
+  constructor() {
+    super(i18n.t("profile:uploadCancelled"), 499);
+  }
+}
+
+export function isUploadCancelled(err: unknown): boolean {
+  return err instanceof UploadCancelledError;
+}
+
+const abortedUploads = new Set<string>();
+const activeXhrs = new Map<string, Set<XMLHttpRequest>>();
+
+function isUploadAborted(uploadId?: string) {
+  return Boolean(uploadId && abortedUploads.has(uploadId));
+}
+
+function trackXhr(uploadId: string | undefined, xhr: XMLHttpRequest) {
+  if (!uploadId) return;
+  let group = activeXhrs.get(uploadId);
+  if (!group) {
+    group = new Set();
+    activeXhrs.set(uploadId, group);
+  }
+  group.add(xhr);
+}
+
+function untrackXhr(uploadId: string | undefined, xhr: XMLHttpRequest) {
+  if (!uploadId) return;
+  const group = activeXhrs.get(uploadId);
+  if (!group) return;
+  group.delete(xhr);
+  if (group.size === 0) activeXhrs.delete(uploadId);
+}
+
+export function abortMediaUploadClient(uploadId: string) {
+  abortedUploads.add(uploadId);
+  const group = activeXhrs.get(uploadId);
+  if (!group) return;
+  for (const xhr of group) {
+    xhr.abort();
+  }
+  activeXhrs.delete(uploadId);
+}
+
+export function clearUploadAbort(uploadId: string) {
+  abortedUploads.delete(uploadId);
+}
+
 export function getToken(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -128,20 +177,22 @@ export async function laravelUpload<T>(
   path: string,
   body: FormData,
   onProgress?: UploadProgressHandler,
+  signal?: AbortSignal,
 ): Promise<T> {
   const file = body.get("file");
   if (path === "/media" && file instanceof Blob && file.size >= CHUNK_THRESHOLD_BYTES) {
     const filename = file instanceof File && file.name ? file.name : "file.bin";
-    return laravelChunkedUpload<T>(file, filename, onProgress);
+    return laravelChunkedUpload<T>(file, filename, onProgress, signal);
   }
 
-  return xhrSend<T>("POST", `${getApiUrl()}${path}`, body, onProgress);
+  return xhrSend<T>("POST", `${getApiUrl()}${path}`, body, onProgress, undefined, undefined, signal);
 }
 
 export async function initMediaUpload(
   file: Blob,
   filename: string,
   submission?: Pick<SubmissionUploadMeta, "type" | "id" | "payload">,
+  signal?: AbortSignal,
 ) {
   return laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number; async: boolean } }>("/media/uploads", {
     method: "POST",
@@ -151,6 +202,7 @@ export async function initMediaUpload(
       mime_type: file.type || "",
       ...(submission ? { submission } : {}),
     }),
+    signal,
   });
 }
 
@@ -175,7 +227,12 @@ async function laravelChunkedUpload<T>(
   file: Blob,
   filename: string,
   onProgress?: UploadProgressHandler,
+  signal?: AbortSignal,
 ): Promise<T> {
+  if (signal?.aborted) {
+    throw new UploadCancelledError();
+  }
+
   const session = await laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number } }>("/media/uploads", {
     method: "POST",
     body: JSON.stringify({
@@ -183,10 +240,23 @@ async function laravelChunkedUpload<T>(
       size: file.size,
       mime_type: file.type || "",
     }),
+    signal,
   });
 
   const { id, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
+  if (signal?.aborted) {
+    await cancelMediaUpload(id).catch(() => undefined);
+    throw new UploadCancelledError();
+  }
+  signal?.addEventListener("abort", () => {
+    void cancelMediaUpload(id).catch(() => undefined);
+  }, { once: true });
+
   await runUploadChunks(file, id, chunkSize, totalChunks, onProgress);
+
+  if (isUploadAborted(id) || signal?.aborted) {
+    throw new UploadCancelledError();
+  }
 
   const completed = await laravelFetch<T>(`/media/uploads/${id}`, { method: "POST" });
   onProgress?.(100);
@@ -208,6 +278,9 @@ async function runUploadChunks(
   };
 
   const sendChunk = async (index: number) => {
+    if (isUploadAborted(uploadId)) {
+      throw new UploadCancelledError();
+    }
     const start = index * chunkSize;
     const chunk = file.slice(start, Math.min(start + chunkSize, file.size));
     let attempt = 0;
@@ -222,11 +295,15 @@ async function runUploadChunks(
             report();
           },
           "application/octet-stream",
+          uploadId,
         );
         uploaded[index] = chunk.size;
         report();
         return;
       } catch (error) {
+        if (error instanceof UploadCancelledError || isUploadAborted(uploadId)) {
+          throw error instanceof UploadCancelledError ? error : new UploadCancelledError();
+        }
         attempt += 1;
         if (attempt >= CHUNK_RETRIES) throw error;
         await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
@@ -237,6 +314,9 @@ async function runUploadChunks(
   const pending = Array.from({ length: totalChunks }, (_, index) => index);
   const workers = Array.from({ length: Math.min(CHUNK_CONCURRENCY, totalChunks) }, async () => {
     while (pending.length > 0) {
+      if (isUploadAborted(uploadId)) {
+        throw new UploadCancelledError();
+      }
       const index = pending.shift();
       if (index === undefined) return;
       await sendChunk(index);
@@ -269,6 +349,9 @@ export async function waitForMediaUpload(
   const began = Date.now();
 
   while (current.status === "uploading" || current.status === "processing") {
+    if (isUploadAborted(uploadId)) {
+      throw new UploadCancelledError();
+    }
     if (Date.now() - began > UPLOAD_TIMEOUT_MS) {
       throw new ApiError(i18n.t("profile:uploadTimeout"), 408);
     }
@@ -288,7 +371,15 @@ export async function waitForMediaUpload(
 }
 
 export async function cancelMediaUpload(uploadId: string) {
-  return laravelFetch<{ message: string }>(`/media/uploads/${uploadId}`, { method: "DELETE" });
+  abortMediaUploadClient(uploadId);
+  try {
+    return await laravelFetch<{ message: string }>(`/media/uploads/${uploadId}`, { method: "DELETE" });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 410)) {
+      return { message: i18n.t("profile:uploadCancelled") };
+    }
+    throw error;
+  }
 }
 
 function xhrSend<T>(
@@ -297,8 +388,15 @@ function xhrSend<T>(
   body: FormData | Blob,
   onProgress?: UploadProgressHandler,
   contentType?: string,
+  uploadId?: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted || isUploadAborted(uploadId)) {
+      reject(new UploadCancelledError());
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.responseType = "text";
@@ -319,7 +417,20 @@ function xhrSend<T>(
       onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
     };
 
+    const finish = () => {
+      untrackXhr(uploadId, xhr);
+      signal?.removeEventListener("abort", onSignalAbort);
+    };
+
+    function onSignalAbort() {
+      xhr.abort();
+    }
+
+    trackXhr(uploadId, xhr);
+    signal?.addEventListener("abort", onSignalAbort, { once: true });
+
     xhr.onload = () => {
+      finish();
       const data = parseLaravelJson<T>(xhr.responseText);
       if (xhr.status < 200 || xhr.status >= 300) {
         reject(new ApiError(data.message ?? i18n.t("common:alerts.tryAgain"), xhr.status, data.errors));
@@ -330,15 +441,18 @@ function xhrSend<T>(
     };
 
     xhr.onerror = () => {
+      finish();
       reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
     };
 
     xhr.onabort = () => {
-      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+      finish();
+      reject(new UploadCancelledError());
     };
 
     xhr.timeout = CHUNK_TIMEOUT_MS;
     xhr.ontimeout = () => {
+      finish();
       reject(new ApiError(i18n.t("profile:uploadTimeout"), 408));
     };
 
@@ -369,11 +483,19 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
     headers.set("X-Auth-Token", token);
   }
 
-  const response = await fetch(`${getApiUrl()}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiUrl()}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new UploadCancelledError();
+    }
+    throw error;
+  }
 
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, Video, X } from "lucide-react";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { VideoSubmissionFields } from "@/components/VideoSubmissionFields";
@@ -243,6 +243,12 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       setSubmitting(false);
       setUploadProgress(0);
     }
+  }
+
+  async function cancelVideoUpload() {
+    await uploadManager?.cancelSubjectUpload("campaign_creator", row.id, row.pending_upload_id);
+    setSubmitting(false);
+    setUploadProgress(0);
   }
 
   const scriptReady = canSubmitScript
@@ -497,8 +503,25 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           ) : null}
 
           {uploadingVideo ? (
-            <div className="mt-2 border-t border-slate-100 pt-3">
+            <div className="mt-2 flex flex-col gap-3 border-t border-slate-100 pt-3">
               <UploadProgressBar progress={displayProgress ?? 0} />
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="cursor-pointer rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                >
+                  {tp("collapseBriefing")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cancelVideoUpload()}
+                  className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-none bg-rose-600 px-5 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-rose-600/20 transition-all hover:bg-rose-700"
+                >
+                  <X size={15} />
+                  {tp("cancelUpload")}
+                </button>
+              </div>
             </div>
           ) : (
           <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3">

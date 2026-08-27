@@ -1,7 +1,7 @@
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import i18n from "@/i18n/config";
-import { ApiError } from "@/lib/laravel";
+import { ApiError, isUploadCancelled } from "@/lib/laravel";
 
 function base() {
   return {
@@ -79,6 +79,9 @@ export async function promptEmail(options: {
 }
 
 export function alertApiError(err: unknown) {
+  if (isUploadCancelled(err)) {
+    return Promise.resolve();
+  }
   if (err instanceof ApiError) {
     const items = err.errors ? Object.values(err.errors).flat() : [];
     if (items.length > 1) {

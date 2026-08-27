@@ -2,12 +2,13 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video } from "lucide-react";
+import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video, X } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { isUploadCancelled } from "@/lib/laravel";
 import type { Creator } from "@/lib/types";
 
 const PLAYER_MAX_BYTES = 200 * 1024 * 1024;
@@ -68,6 +69,7 @@ export function CreatorPortfolioPanel({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [playVideo, setPlayVideo] = useState<PortfolioVideo | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const videos = creator.portfolio ?? [];
   const vertical = videos.filter((video) => video.orientation !== "horizontal");
@@ -90,9 +92,11 @@ export function CreatorPortfolioPanel({
     }
     setUploading(true);
     setProgress(0);
+    const abort = new AbortController();
+    abortRef.current = abort;
     try {
       const orientation = await detectOrientation(uploadFile);
-      const uploaded = await api.uploadMedia(uploadFile, safeUploadName(uploadFile), setProgress);
+      const uploaded = await api.uploadMedia(uploadFile, safeUploadName(uploadFile), setProgress, abort.signal);
       setProgress(100);
       await api.addPortfolio(creator.id, {
         title: title.trim(),
@@ -107,11 +111,18 @@ export function CreatorPortfolioPanel({
       setDescription("");
       onChanged();
     } catch (err) {
-      await alertApiError(err);
+      if (!isUploadCancelled(err)) {
+        await alertApiError(err);
+      }
     } finally {
+      abortRef.current = null;
       setUploading(false);
       setProgress(0);
     }
+  }
+
+  function cancelUpload() {
+    abortRef.current?.abort();
   }
 
   async function onRemove(video: PortfolioVideo) {
@@ -182,7 +193,16 @@ export function CreatorPortfolioPanel({
             </label>
           </div>
           {uploading ? (
-            <UploadProgressBar progress={progress} />
+            <div className="flex flex-col gap-3">
+              <UploadProgressBar progress={progress} />
+              <button
+                type="button"
+                onClick={cancelUpload}
+                className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-rose-600 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-rose-100 hover:bg-rose-700"
+              >
+                <X size={16} /> {t("cancelUpload")}
+              </button>
+            </div>
           ) : (
             <button type="submit" disabled={!uploadFile || !title.trim()} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-primary text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-100 hover:bg-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none">
               <UploadCloud size={16} /> {t("sendVideo")}

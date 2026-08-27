@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
-import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, X } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { VideoSubmissionFields } from "@/components/VideoSubmissionFields";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -183,6 +183,12 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     }
   }
 
+  async function cancelVideoUpload() {
+    await uploadManager?.cancelSubjectUpload("content_planning_item", item.id, item.pending_upload_id);
+    setSubmitting(false);
+    setUploadProgress(0);
+  }
+
   const scriptReady = canSubmitScript
     ? Boolean(script.trim()) && (!requiresScriptChange || scriptChanged)
     : false;
@@ -355,7 +361,17 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
       {!awaitingScriptApproval && !awaitingVideoApproval && (canSubmitScript || canSubmitVideo) ? (
         uploadingVideo ? (
-          <UploadProgressBar progress={displayProgress ?? 0} />
+          <div className="flex flex-col gap-2">
+            <UploadProgressBar progress={displayProgress ?? 0} />
+            <button
+              type="button"
+              onClick={() => void cancelVideoUpload()}
+              className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-4 text-[11px] font-bold tracking-wider text-white uppercase shadow-sm transition-all hover:bg-rose-700"
+            >
+              <X size={14} />
+              {tp("cancelUpload")}
+            </button>
+          </div>
         ) : (
         <button
           type="button"

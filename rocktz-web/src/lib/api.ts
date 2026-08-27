@@ -171,10 +171,10 @@ export const api = {
   mailSettings: () => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/settings"),
   updateMailSettings: (body: { sending_enabled: boolean }) => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean }; message: string }>("/mail/settings", { method: "PATCH", body: JSON.stringify(body) }),
   mailMessages: (query = "") => laravelFetch<{ data: Array<{ id: number; email: string; template_key: string; subject: string; status: string; attempts: number; failure_reason: string | null; provider_id: string | null; created_at: string; user?: { role?: string } }> }>(`/mail/messages${query}`),
-  uploadMedia: (file: Blob, filename = "file.bin", onProgress?: UploadProgressHandler) => {
+  uploadMedia: (file: Blob, filename = "file.bin", onProgress?: UploadProgressHandler, signal?: AbortSignal) => {
     const body = new FormData();
     body.append("file", file, filename);
-    return laravelUpload<{ data: { id: number; url: string; filename: string; path: string; size?: number } }>("/media", body, onProgress);
+    return laravelUpload<{ data: { id: number; url: string; filename: string; path: string; size?: number } }>("/media", body, onProgress, signal);
   },
   updateMe: (body: { name?: string; avatar_url?: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 };

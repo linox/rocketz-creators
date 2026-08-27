@@ -13,10 +13,13 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   cancelMediaUpload,
+  clearUploadAbort,
   completeMediaUpload,
   getMediaUploadStatus,
   initMediaUpload,
+  isUploadCancelled,
   runMediaUploadChunks,
+  UploadCancelledError,
   waitForMediaUpload,
   type SubmissionUploadMeta,
   type UploadProgressHandler,
@@ -43,6 +46,11 @@ type UploadManagerContextValue = {
     onProgress?: UploadProgressHandler,
   ) => void;
   cancelActiveUpload: (uploadId: string) => Promise<void>;
+  cancelSubjectUpload: (
+    type: SubmissionUploadMeta["type"],
+    id: number,
+    fallbackUploadId?: string | null,
+  ) => Promise<void>;
   isSubjectUploading: (type: SubmissionUploadMeta["type"], id: number) => boolean;
   getSubjectProgress: (type: SubmissionUploadMeta["type"], id: number) => number | null;
 };
@@ -72,6 +80,9 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const { t: tp } = useTranslation("profile");
   const [activeUploads, setActiveUploads] = useState<ActiveUploadTask[]>([]);
   const runningRef = useRef(new Set<string>());
+  const uploadsRef = useRef<ActiveUploadTask[]>([]);
+  const controllersRef = useRef(new Map<string, AbortController>());
+  uploadsRef.current = activeUploads;
 
   const persist = useCallback((updater: (current: ActiveUploadTask[]) => ActiveUploadTask[]) => {
     setActiveUploads((current) => {
@@ -86,6 +97,10 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const cancelActiveUpload = useCallback(async (uploadId: string) => {
+    const task = uploadsRef.current.find((row) => row.uploadId === uploadId);
+    if (task) {
+      controllersRef.current.get(`${task.subjectType}:${task.subjectId}`)?.abort();
+    }
     try {
       await cancelMediaUpload(uploadId);
     } catch {
@@ -95,6 +110,20 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
       window.dispatchEvent(new CustomEvent("rocketz:upload-complete"));
     }
   }, [removeUpload]);
+
+  const cancelSubjectUpload = useCallback(async (
+    type: SubmissionUploadMeta["type"],
+    id: number,
+    fallbackUploadId?: string | null,
+  ) => {
+    const tempKey = `${type}:${id}`;
+    controllersRef.current.get(tempKey)?.abort();
+    const uploadId = uploadsRef.current.find(
+      (task) => task.subjectType === type && task.subjectId === id,
+    )?.uploadId ?? fallbackUploadId ?? null;
+    if (!uploadId) return;
+    await cancelActiveUpload(uploadId);
+  }, [cancelActiveUpload]);
 
   useEffect(() => {
     const stored = readStored();
@@ -132,12 +161,18 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
     if (runningRef.current.has(tempKey)) return;
 
     runningRef.current.add(tempKey);
+    const controller = new AbortController();
+    controllersRef.current.set(tempKey, controller);
     let uploadId = "";
 
     void (async () => {
       try {
-        const session = await initMediaUpload(file, filename, submission);
+        const session = await initMediaUpload(file, filename, submission, controller.signal);
         uploadId = session.data.id;
+        if (controller.signal.aborted) {
+          await cancelMediaUpload(uploadId).catch(() => undefined);
+          throw new UploadCancelledError();
+        }
 
         persist((current) => [
           ...current.filter((task) => !(task.subjectType === submission.type && task.subjectId === submission.id)),
@@ -174,17 +209,26 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         await alertSuccess(tp("uploadComplete"), tp("uploadCompleteHint", { label: submission.label }));
         window.dispatchEvent(new CustomEvent("rocketz:upload-complete", { detail: { type: submission.type, id: submission.id } }));
       } catch (err) {
+        const cancelled = isUploadCancelled(err);
         if (uploadId) {
-          try {
-            await cancelMediaUpload(uploadId);
-          } catch {
-            /* ignore */
+          if (!cancelled) {
+            try {
+              await cancelMediaUpload(uploadId);
+            } catch {
+              /* ignore */
+            }
           }
           removeUpload(uploadId);
           window.dispatchEvent(new CustomEvent("rocketz:upload-complete", { detail: { type: submission.type, id: submission.id } }));
         }
-        await alertApiError(err);
+        if (!cancelled) {
+          await alertApiError(err);
+        }
       } finally {
+        if (uploadId) {
+          clearUploadAbort(uploadId);
+        }
+        controllersRef.current.delete(tempKey);
         runningRef.current.delete(tempKey);
       }
     })();
@@ -203,9 +247,10 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
     activeUploads,
     startSubmissionUpload,
     cancelActiveUpload,
+    cancelSubjectUpload,
     isSubjectUploading,
     getSubjectProgress,
-  }), [activeUploads, startSubmissionUpload, cancelActiveUpload, isSubjectUploading, getSubjectProgress]);
+  }), [activeUploads, startSubmissionUpload, cancelActiveUpload, cancelSubjectUpload, isSubjectUploading, getSubjectProgress]);
 
   return (
     <UploadManagerContext.Provider value={value}>
