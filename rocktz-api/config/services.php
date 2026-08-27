@@ -36,6 +36,12 @@ return [
         ],
     ],
 
+    'fcm' => [
+        'project_id' => env('FCM_PROJECT_ID'),
+        'client_email' => env('FCM_CLIENT_EMAIL'),
+        'private_key' => env('FCM_PRIVATE_KEY'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

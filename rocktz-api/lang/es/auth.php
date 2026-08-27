@@ -154,4 +154,5 @@ return [
     'pauta_ready' => 'Recibiste la pauta ":title" en :project.',
     'campaign_assigned_title' => 'Fuiste agregado a una campaña',
     'campaign_assigned' => 'Ahora formas parte de la campaña ":name".',
+    'device_token_removed' => 'Dispositivo desconectado de las notificaciones.',
 ];

@@ -124,6 +124,17 @@ Filtros de lista: `?status=`, `?q=`, `?category=`. Portfólio nesta leva é **UR
 | PATCH | `/content-planning-items/{id}` | autenticado (criador envia `submission_url`; agência/empresa aprova/publica) |
 | DELETE | `/content-planning-items/{id}` | admin ou empresa |
 
+## App — device tokens (push)
+
+| Método | Caminho | Quem |
+|---|---|---|
+| POST | `/device-tokens` | autenticado (`token` FCM, `platform`: `ios` \| `android` \| `web`) |
+| DELETE | `/device-tokens` | autenticado (`token`) |
+
+O App Flutter registra o token FCM após o login. Sem `FCM_PROJECT_ID` + chave de service account, o job de push não envia (inbox in-app continua). iOS usa APNs através do FCM.
+
+Mapeamento de telas do App: [09-app-criadores.md](09-app-criadores.md).
+
 ## Notificações e admins
 
 | Método | Caminho | Quem |

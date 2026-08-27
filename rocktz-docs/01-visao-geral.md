@@ -22,5 +22,6 @@ Cadastro de criador entra em `review`. Cadastro de empresa entra em `pending`. A
 
 - `rocktz-api` — Laravel 13 + Sanctum + MySQL 8
 - `rocktz-web` — Next.js App Router + Tailwind v4
+- `rocktz-mobile` — App Flutter dos criadores (iOS + Android)
 - `rocktz-docs` — documentação da refatoração
 - Schema completo no dia 1, com seeders de teste

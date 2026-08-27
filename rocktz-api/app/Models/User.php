@@ -79,6 +79,11 @@ class User extends Authenticatable implements HasLocalePreference
         return $this->hasMany(Notification::class);
     }
 
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
     public function notificationPreference(): HasOne
     {
         return $this->hasOne(UserNotificationPreference::class);

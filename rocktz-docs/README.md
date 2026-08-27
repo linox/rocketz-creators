@@ -10,6 +10,7 @@
 - [06. API](06-api.md)
 - [07. Frontend](07-frontend.md)
 - [08. Setup](08-setup.md)
+- [09. App dos criadores](09-app-criadores.md)
 - [Decisões](decisoes.md)
 
 ## Pastas do monorepo
@@ -17,5 +18,6 @@
 - `legado/` — app original (React + Firebase + Express). Não evolui.
 - `rocktz-api/` — API Laravel 13 + Sanctum + MySQL.
 - `rocktz-web/` — front Next.js (App Router).
+- `rocktz-mobile/` — App Flutter dos criadores (iOS + Android).
 - `rocktz-docs/` — esta documentação.
 - `scripts/` — build do front estático para cPanel.

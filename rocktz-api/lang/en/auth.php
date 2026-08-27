@@ -154,4 +154,5 @@ return [
     'pauta_ready' => 'You received the brief ":title" in :project.',
     'campaign_assigned_title' => 'You were added to a campaign',
     'campaign_assigned' => 'You are now part of the campaign ":name".',
+    'device_token_removed' => 'Device disconnected from notifications.',
 ];

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
 use App\Http\Controllers\Api\CreatorController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MailMessageController;
 use App\Http\Controllers\Api\MailTemplateController;
@@ -60,6 +61,8 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
     Route::delete('media/uploads/{uploadId}', [MediaController::class, 'cancelUpload']);
     Route::get('dashboard', DashboardController::class);
     Route::get('nav', NavController::class);
+    Route::post('device-tokens', [DeviceTokenController::class, 'store']);
+    Route::delete('device-tokens', [DeviceTokenController::class, 'destroy']);
     Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);
 
     Route::get('creators', [CreatorController::class, 'index']);

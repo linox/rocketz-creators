@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\UserRole;
+use App\Jobs\SendPushNotificationJob;
 use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\Notification;
@@ -18,7 +19,7 @@ class NotificationService
      */
     public function send(array $payload): Notification
     {
-        return Notification::query()->create([
+        $notification = Notification::query()->create([
             'user_id' => $payload['user_id'] ?? null,
             'creator_id' => $payload['creator_id'] ?? null,
             'campaign_id' => $payload['campaign_id'] ?? null,
@@ -30,6 +31,12 @@ class NotificationService
             'link' => $payload['link'] ?? null,
             'read' => false,
         ]);
+
+        if ($notification->user_id) {
+            SendPushNotificationJob::dispatch($notification->id);
+        }
+
+        return $notification;
     }
 
     public function notifyAdmins(string $title, string $message, NotificationType $type, ?string $link = null, array $extra = []): void
