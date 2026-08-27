@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\MediaDisk;
 use App\Support\MediaUrl;
 use Aws\S3\S3Client;
 use Illuminate\Filesystem\AwsS3V3Adapter;
@@ -111,7 +110,7 @@ class R2MultipartUploader
 
     private function client(): S3Client
     {
-        $disk = Storage::disk(MediaDisk::name());
+        $disk = Storage::disk('r2');
         if (! $disk instanceof AwsS3V3Adapter) {
             throw new MediaStorageException(__('auth.upload_failed'), 500);
         }
@@ -121,6 +120,6 @@ class R2MultipartUploader
 
     private function bucket(): string
     {
-        return (string) config('filesystems.disks.'.MediaDisk::name().'.bucket');
+        return (string) config('filesystems.disks.r2.bucket');
     }
 }

@@ -17,4 +17,6 @@
 
 <IfModule mod_setenvif.c>
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+    SetEnvIfNoCase Request_URI "^/stream/" no-gzip dont-vary
+    SetEnvIfNoCase Request_URI "^/downloads/" no-gzip dont-vary
 </IfModule>
