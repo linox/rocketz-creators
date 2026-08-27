@@ -78,24 +78,26 @@ export async function promptEmail(options: {
   return result.value.trim();
 }
 
-export function alertApiError(err: unknown) {
+export async function alertApiError(err: unknown): Promise<void> {
   if (isUploadCancelled(err)) {
-    return Promise.resolve();
+    return;
   }
   if (err instanceof ApiError) {
     const items = err.errors ? Object.values(err.errors).flat() : [];
     if (items.length > 1) {
-      return Swal.fire({
+      await Swal.fire({
         ...base(),
         icon: "error",
         title: i18n.t("common:alerts.checkData"),
         html: `<ul class="list-disc pl-5 text-left text-sm">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`,
       });
+      return;
     }
-    return alertError(i18n.t("common:alerts.couldNotFinish"), items[0] ?? err.message);
+    await alertError(i18n.t("common:alerts.couldNotFinish"), items[0] ?? err.message);
+    return;
   }
 
-  return alertError(i18n.t("common:alerts.couldNotFinish"), i18n.t("common:alerts.tryAgain"));
+  await alertError(i18n.t("common:alerts.couldNotFinish"), i18n.t("common:alerts.tryAgain"));
 }
 
 export async function alertConfirm(title: string, text: string, confirmText?: string) {
