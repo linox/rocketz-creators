@@ -322,9 +322,7 @@ function CompanyDashboardInner() {
   }, [allApplications, recurring, t]);
 
   const favorites = creators.filter((creator) => creator.status === "active" && company?.favorite_creator_ids?.includes(creator.id));
-  const pendingInviteCreators = creators.filter(
-    (creator) => creator.status === "review" && creator.invited_by_company_id === company?.id,
-  );
+  const pendingInviteCreators = creators.filter((creator) => creator.status === "review");
   const favQuery = favSearch.trim().toLowerCase();
   const favoriteList = (favQuery
     ? favorites.filter((creator) => `${creator.artistic_name} ${creator.full_name ?? ""} ${Object.values(creator.socials || {}).join(" ")}`.toLowerCase().includes(favQuery))

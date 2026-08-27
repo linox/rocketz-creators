@@ -47,6 +47,7 @@ class CreatorResource extends JsonResource
             'status' => $this->status?->value,
             'can_access_all_countries' => (bool) $this->can_access_all_countries,
             'invited_by_company_id' => $this->invited_by_company_id,
+            'can_moderate' => $this->canBeModeratedBy($request->user()),
             'invited_by_company' => $this->whenLoaded('invitedByCompany', fn () => $this->invitedByCompany ? [
                 'id' => $this->invitedByCompany->id,
                 'name' => $this->invitedByCompany->name,

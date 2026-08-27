@@ -89,10 +89,15 @@ export function userHasPermission(user: AuthUser | null | undefined, slug: strin
 }
 
 export function userCanModerateCreator(
-  user: { role?: string | null; company?: { id?: number | null } | null } | null | undefined,
-  creator: { status?: string | null; invited_by_company_id?: number | null },
+  user: { role?: string | null; company?: { id?: number | null } | null; permissions?: string[] } | null | undefined,
+  creator: { status?: string | null; invited_by_company_id?: number | null; can_moderate?: boolean; landing_review?: { id?: number } | null },
 ) {
   if (creator.status !== "review") return false;
-  if (user?.role === "admin") return true;
-  return user?.role === "company" && Boolean(creator.invited_by_company_id) && creator.invited_by_company_id === user.company?.id;
+  if (typeof creator.can_moderate === "boolean") return creator.can_moderate;
+  if (user?.role === "admin") return userHasPermission(user as AuthUser, "creators.moderate");
+  if (user?.role !== "company") return false;
+  const companyId = Number(user.company?.id);
+  if (!companyId) return false;
+  if (Number(creator.invited_by_company_id) === companyId) return true;
+  return Boolean(creator.landing_review?.id);
 }

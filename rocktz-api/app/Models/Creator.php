@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\CreatorStatus;
+use App\Enums\Permission;
+use App\Enums\UserRole;
 use App\Support\Geo;
 use Database\Factories\CreatorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -137,7 +139,32 @@ class Creator extends Model
             return true;
         }
 
+        if ($this->relationLoaded('landingSignups')) {
+            return $this->landingSignups->contains(
+                fn (CompanyLandingSignup $signup) => (int) $signup->company_id === $companyId
+            );
+        }
+
         return $this->landingSignups()->where('company_id', $companyId)->exists();
+    }
+
+    public function canBeModeratedBy(?User $user): bool
+    {
+        if (! $user || $this->status !== CreatorStatus::Review) {
+            return false;
+        }
+
+        if ($user->role === UserRole::Admin) {
+            return $user->hasPermission(Permission::CreatorsModerate);
+        }
+
+        if ($user->role !== UserRole::Company) {
+            return false;
+        }
+
+        $companyId = (int) $user->companyUser?->company_id;
+
+        return $companyId > 0 && $this->isInCompanyPool($companyId);
     }
 
     public function isAccessibleByCompany(int $companyId): bool

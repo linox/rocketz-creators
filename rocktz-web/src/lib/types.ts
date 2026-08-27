@@ -26,6 +26,7 @@ export type Creator = {
   internal_notes?: string | null;
   status: string;
   can_access_all_countries?: boolean;
+  can_moderate?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
   landing_review?: {

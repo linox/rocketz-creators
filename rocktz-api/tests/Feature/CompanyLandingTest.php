@@ -176,6 +176,18 @@ class CompanyLandingTest extends TestCase
 
         $this->assertSame(CreatorStatus::Review, $creator->fresh()->status);
         $this->assertSame(LandingSignupStatus::Approved, CompanyLandingSignup::query()->find($signupId)?->status);
+
+        $this->withToken($companyToken)
+            ->getJson("/api/creators/{$creator->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_moderate', true);
+
+        $this->withToken($companyToken)
+            ->postJson("/api/creators/{$creator->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('data.status', CreatorStatus::Active->value);
+
+        $this->assertSame(CreatorStatus::Active, $creator->fresh()->status);
     }
 
     public function test_existing_creator_can_claim_landing_without_duplicating_profile(): void

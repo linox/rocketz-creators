@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\CreatorStatus;
+use App\Enums\LandingSignupStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\Permission;
@@ -10,6 +11,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
 use App\Jobs\SyncCreatorSocialsJob;
+use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\Mail\MailNotifier;
@@ -41,7 +43,8 @@ class CreatorController extends Controller
         } elseif ($user->role === UserRole::Company) {
             $companyId = (int) $user->companyUser?->company_id;
             abort_unless($companyId, 403, __('auth.company_not_linked'));
-            $query->inCompanyPool($companyId);
+            $query->inCompanyPool($companyId)
+                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
         }
 
         if ($status = $request->string('status')->toString()) {
@@ -290,6 +293,7 @@ class CreatorController extends Controller
         $this->authorizeCreatorModeration($request, $creator);
 
         $creator->update(['status' => CreatorStatus::Active]);
+        $this->syncCompanyLandingApproval($request, $creator);
         if ($creator->user_id) {
             $this->notifications->send([
                 'user_id' => $creator->user_id,
@@ -449,13 +453,29 @@ class CreatorController extends Controller
             return;
         }
 
-        abort_unless(
-            $user->role === UserRole::Company
-                && $creator->status === CreatorStatus::Review
-                && $creator->invited_by_company_id
-                && $creator->invited_by_company_id === $user->companyUser?->company_id,
-            403,
-            __('auth.forbidden'),
-        );
+        abort_unless($creator->canBeModeratedBy($user), 403, __('auth.forbidden'));
+    }
+
+    private function syncCompanyLandingApproval(Request $request, Creator $creator): void
+    {
+        $user = $request->user();
+        if ($user?->role !== UserRole::Company) {
+            return;
+        }
+
+        $companyId = (int) $user->companyUser?->company_id;
+        if ($companyId <= 0) {
+            return;
+        }
+
+        CompanyLandingSignup::query()
+            ->where('company_id', $companyId)
+            ->where('creator_id', $creator->id)
+            ->where('status', '!=', LandingSignupStatus::Approved)
+            ->update([
+                'status' => LandingSignupStatus::Approved,
+                'reviewed_at' => now(),
+                'reviewed_by_user_id' => $user->id,
+            ]);
     }
 }
