@@ -13,15 +13,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { 
-  CONTRACT_METADATA, 
-  CONTRACT_PREAMBLE, 
-  CONTRACT_PARTS, 
-  CONTRACT_DECLARATIONS, 
-  ContractPart,
-  CreatorContractAuditRecord 
-} from '@/data/creatorContractTerms';
-import { formatCPF, isValidCPF } from '@/lib/cpfValidation';
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { getCreatorContract, type CreatorContractAuditRecord } from "@/data/creatorContractTerms";
+import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { formatCPF, isValidCPF } from "@/lib/cpfValidation";
 
 interface CreatorContractModalProps {
   isOpen: boolean;
@@ -52,6 +48,13 @@ export function CreatorContractModal({
   creatorDocument = '',
   prefilledDocument = ''
 }: CreatorContractModalProps) {
+  const { t, i18n } = useTranslation("profile");
+  const { t: tc } = useTranslation("common");
+  const locale = normalizeLocale(i18n.language);
+  const dateLocale = intlLocale(locale);
+  const contract = React.useMemo(() => getCreatorContract(locale), [locale]);
+  const { metadata, preamble, parts, declarations } = contract;
+
   const finalExistingAudit = existingAuditRecord || existingAudit || null;
   const initialName = creatorName || prefilledName || finalExistingAudit?.fullName || '';
   const initialEmail = creatorEmail || prefilledEmail || finalExistingAudit?.email || '';
@@ -62,12 +65,12 @@ export function CreatorContractModal({
   const [searchTerm, setSearchTerm] = useState('');
   
   // Declarations State
-  const [declarations, setDeclarations] = useState<Record<string, boolean>>(() => {
+  const [checkedDeclarations, setCheckedDeclarations] = useState<Record<string, boolean>>(() => {
     if (finalExistingAudit?.declarations) {
       return finalExistingAudit.declarations;
     }
     const initial: Record<string, boolean> = {};
-    CONTRACT_DECLARATIONS.forEach(d => {
+    declarations.forEach((d) => {
       initial[d.id] = false;
     });
     return initial;
@@ -85,13 +88,13 @@ export function CreatorContractModal({
       if (initialName && !nameInput) setNameInput(initialName);
       if (initialEmail && !emailInput) setEmailInput(initialEmail);
       if (finalExistingAudit?.declarations) {
-        setDeclarations(finalExistingAudit.declarations);
+        setCheckedDeclarations(finalExistingAudit.declarations);
       }
     }
   }, [isOpen, initialDoc, initialName, initialEmail, finalExistingAudit]);
 
   // Computed Acceptance Status
-  const allDeclarationsChecked = CONTRACT_DECLARATIONS.every(d => !!declarations[d.id]);
+  const allDeclarationsChecked = declarations.every((d) => !!checkedDeclarations[d.id]);
 
   // Generated Acceptance Term ID
   const generatedTermId = React.useMemo(() => {
@@ -103,7 +106,7 @@ export function CreatorContractModal({
 
   const toggleDeclaration = (id: string) => {
     if (readOnly) return;
-    setDeclarations(prev => ({
+    setCheckedDeclarations((prev) => ({
       ...prev,
       [id]: !prev[id]
     }));
@@ -113,10 +116,10 @@ export function CreatorContractModal({
   const handleSelectAllDeclarations = () => {
     if (readOnly) return;
     const updated: Record<string, boolean> = {};
-    CONTRACT_DECLARATIONS.forEach(d => {
+    declarations.forEach((d) => {
       updated[d.id] = true;
     });
-    setDeclarations(updated);
+    setCheckedDeclarations(updated);
     setErrorValidation(null);
   };
 
@@ -127,41 +130,41 @@ export function CreatorContractModal({
     }
 
     if (!allDeclarationsChecked) {
-      setErrorValidation('Você precisa marcar todas as 6 declarações obrigatórias para aceitar o Termo.');
+      setErrorValidation(t("termModal.needAllDeclarations"));
       return;
     }
 
     if (!documentInput.trim()) {
-      setErrorValidation('Por favor, informe seu CPF para registro de autenticidade do aceite.');
+      setErrorValidation(t("termModal.needCpf"));
       return;
     }
 
     const formattedCpf = formatCPF(documentInput);
     if (!isValidCPF(documentInput)) {
-      setErrorValidation('Por favor, informe um CPF válido no formato 000.000.000-00 para concluir o aceite.');
+      setErrorValidation(t("termModal.invalidCpf"));
       return;
     }
 
     const now = new Date();
     const auditRecord: CreatorContractAuditRecord = {
       termId: generatedTermId,
-      version: CONTRACT_METADATA.version,
-      fullName: nameInput.trim() || 'Criador Rocketz',
+      version: metadata.version,
+      fullName: nameInput.trim() || t("termModal.creatorFallback"),
       document: formattedCpf,
       email: emailInput.trim(),
       acceptedAt: now.toISOString(),
-      formattedDate: now.toLocaleDateString('pt-BR', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+      formattedDate: now.toLocaleDateString(dateLocale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
       }),
-      ipUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser',
-      declarations,
+      ipUserAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Web Browser",
+      declarations: checkedDeclarations,
       allAccepted: true,
-      status: 'valid'
+      status: "valid",
     };
 
     if (onAccept) {
@@ -190,35 +193,38 @@ export function CreatorContractModal({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-400/30">
                   <ShieldCheck size={12} />
-                  Contrato Oficial
+                  {t("termModal.officialBadge")}
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-slate-300">
-                  Versão {CONTRACT_METADATA.version}
+                  {t("termModal.version", { version: metadata.version })}
                 </span>
                 {existingAuditRecord && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                     <Check size={11} />
-                    Termo Aceito em {existingAuditRecord.formattedDate || new Date(existingAuditRecord.acceptedAt).toLocaleDateString('pt-BR')}
+                    {t("termModal.acceptedOn", {
+                      date: existingAuditRecord.formattedDate || new Date(existingAuditRecord.acceptedAt).toLocaleDateString(dateLocale),
+                    })}
                   </span>
                 )}
               </div>
               
               <h2 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight text-white line-clamp-1">
-                {CONTRACT_METADATA.title}
+                {metadata.title}
               </h2>
               <p className="text-xs text-slate-400">
-                Operado por {CONTRACT_METADATA.companyName} (CNPJ {CONTRACT_METADATA.cnpj})
+                {t("termModal.operatedBy", { company: metadata.companyName, cnpj: metadata.cnpj })}
               </p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              <LanguageSwitcher theme="dark" layout="menu" />
               <button
                 onClick={handlePrint}
-                title="Imprimir ou Salvar em PDF"
+                title={t("termModal.printTitle")}
                 className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer size={15} />
-                <span className="hidden sm:inline">Imprimir / PDF</span>
+                <span className="hidden sm:inline">{t("termModal.print")}</span>
               </button>
 
               <button
@@ -234,76 +240,42 @@ export function CreatorContractModal({
           <div className="mt-4 pt-3 border-t border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
             {/* View Mode & Parts Nav */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {parts.map((part, index) => (
+                <button
+                  key={part.id}
+                  type="button"
+                  onClick={() => { setViewMode("parts"); setActivePartIndex(index); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    viewMode === "parts" && activePartIndex === index
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-white/5 text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  {part.partNumber}. {part.badge}
+                </button>
+              ))}
               <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(0); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  viewMode === 'parts' && activePartIndex === 0 
-                    ? 'bg-purple-600 text-white shadow-sm' 
-                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                1. Visão Geral
-              </button>
-              <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  viewMode === 'parts' && activePartIndex === 1 
-                    ? 'bg-purple-600 text-white shadow-sm' 
-                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                2. Imagem & Conteúdos
-              </button>
-              <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(2); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  viewMode === 'parts' && activePartIndex === 2 
-                    ? 'bg-purple-600 text-white shadow-sm' 
-                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                3. Mídia Paga & IA
-              </button>
-              <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(3); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  viewMode === 'parts' && activePartIndex === 3 
-                    ? 'bg-purple-600 text-white shadow-sm' 
-                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                4. Obrigações & Conar
-              </button>
-              <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(4); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  viewMode === 'parts' && activePartIndex === 4 
-                    ? 'bg-purple-600 text-white shadow-sm' 
-                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                5. Jurídico & LGPD
-              </button>
-              <button
-                onClick={() => { setViewMode('parts'); setActivePartIndex(5); }}
+                type="button"
+                onClick={() => { setViewMode("parts"); setActivePartIndex(5); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-                  viewMode === 'parts' && activePartIndex === 5 
-                    ? 'bg-emerald-600 text-white shadow-sm' 
-                    : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30'
+                  viewMode === "parts" && activePartIndex === 5
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30"
                 }`}
               >
                 <CheckCircle2 size={13} />
-                <span>6. Aceite Formal</span>
+                <span>6. {t("termModal.formalAccept")}</span>
               </button>
               <button
-                onClick={() => setViewMode(viewMode === 'full' ? 'parts' : 'full')}
+                type="button"
+                onClick={() => setViewMode(viewMode === "full" ? "parts" : "full")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ml-1 ${
-                  viewMode === 'full' 
-                    ? 'bg-indigo-600 text-white' 
-                    : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                  viewMode === "full"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white/5 text-slate-400 hover:text-white hover:bg-white/10"
                 }`}
               >
-                {viewMode === 'full' ? 'Dividir em Partes' : 'Ver Texto Integral'}
+                {viewMode === "full" ? t("termModal.splitParts") : t("termModal.fullText")}
               </button>
             </div>
 
@@ -312,7 +284,7 @@ export function CreatorContractModal({
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar cláusula..."
+                placeholder={t("termModal.searchClause")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full sm:w-44 pl-7 pr-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-white text-xs outline-none placeholder:text-slate-400 focus:bg-white/15 focus:border-purple-400 transition-all"
@@ -327,10 +299,10 @@ export function CreatorContractModal({
           <div className="p-4 sm:p-5 rounded-2xl bg-purple-50/70 border border-purple-100/80 space-y-2.5 text-xs text-slate-700">
             <div className="flex items-center gap-2 text-purple-900 font-extrabold text-sm">
               <Scale size={16} className="text-purple-600 shrink-0" />
-              <span>Preâmbulo e Qualificação das Partes</span>
+              <span>{t("termModal.preambleTitle")}</span>
             </div>
             <p className="whitespace-pre-line text-slate-600 leading-relaxed font-normal">
-              {CONTRACT_PREAMBLE}
+              {preamble}
             </p>
           </div>
 
@@ -338,7 +310,7 @@ export function CreatorContractModal({
           {viewMode === 'parts' && activePartIndex < 5 && (
             <div className="space-y-6">
               {(() => {
-                const part = CONTRACT_PARTS[activePartIndex];
+                const part = parts[activePartIndex];
                 if (!part) return null;
 
                 return (
@@ -348,7 +320,7 @@ export function CreatorContractModal({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500 text-white">
-                            Parte {part.partNumber} de 5
+                            {t("termModal.partOf", { n: part.partNumber })}
                           </span>
                           <span className="text-xs font-semibold text-purple-200">
                             {part.badge}
@@ -368,14 +340,14 @@ export function CreatorContractModal({
                             onClick={() => setActivePartIndex(prev => prev - 1)}
                             className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer"
                           >
-                            Anterior
+                            {t("termModal.previous")}
                           </button>
                         )}
                         <button
                           onClick={() => setActivePartIndex(prev => prev + 1)}
                           className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                         >
-                          <span>{activePartIndex === 4 ? 'Ir para o Aceite' : 'Próxima Parte'}</span>
+                          <span>{activePartIndex === 4 ? t("termModal.goToAcceptance") : t("termModal.nextPart")}</span>
                           <ArrowRight size={13} />
                         </button>
                       </div>
@@ -422,11 +394,11 @@ export function CreatorContractModal({
           {/* FULL VIEW MODE */}
           {(viewMode === 'full' || searchTerm.length > 0) && (
             <div className="space-y-8">
-              {CONTRACT_PARTS.map(part => (
+              {parts.map((part) => (
                 <div key={part.id} className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b-2 border-purple-200">
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-600 text-white">
-                      Parte {part.partNumber}
+                      {t("termModal.partShort", { n: part.partNumber })}
                     </span>
                     <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
                       {part.partTitle}
@@ -476,13 +448,13 @@ export function CreatorContractModal({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
                   <div>
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-white">
-                      Etapa Formal
+                      {t("termModal.formalStep")}
                     </span>
                     <h3 className="text-lg sm:text-xl font-black text-white mt-1">
-                      Declarações e Aceite Eletrônico
+                      {t("termModal.declarationsTitle")}
                     </h3>
                     <p className="text-xs text-slate-300 mt-1">
-                      Marque as declarações abaixo para concluir seu aceite vinculante de acordo com a legislação aplicável.
+                      {t("termModal.declarationsHint")}
                     </p>
                   </div>
 
@@ -493,15 +465,15 @@ export function CreatorContractModal({
                       className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-emerald-300 hover:text-white border border-emerald-400/30 text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
                     >
                       <CheckCircle2 size={15} />
-                      <span>Marcar Todas</span>
+                      <span>{t("termModal.markAll")}</span>
                     </button>
                   )}
                 </div>
 
                 {/* Checklist of Declarations */}
                 <div className="space-y-3 pt-2">
-                  {CONTRACT_DECLARATIONS.map((decl) => {
-                    const isChecked = !!declarations[decl.id];
+                  {declarations.map((decl) => {
+                    const isChecked = !!checkedDeclarations[decl.id];
 
                     return (
                       <label
@@ -535,14 +507,14 @@ export function CreatorContractModal({
                 <div className="mt-6 pt-5 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                      Nome Completo ou Razão Social do Criador *
+                      {t("termModal.fullNameLabel")}
                     </label>
                     <input
                       type="text"
                       disabled={readOnly || !!existingAuditRecord}
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
-                      placeholder="Ex: Clara Silva Santos"
+                      placeholder={t("termModal.namePh")}
                       className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all disabled:opacity-70"
                     />
                   </div>
@@ -550,11 +522,11 @@ export function CreatorContractModal({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-slate-300 block">
-                        CPF do Criador *
+                        {t("termModal.cpfLabel")}
                       </label>
                       {documentInput && (
                         <span className={`text-[10px] font-bold ${isValidCPF(documentInput) ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {isValidCPF(documentInput) ? '✓ CPF Válido' : '000.000.000-00'}
+                          {isValidCPF(documentInput) ? t("termModal.cpfValid") : "000.000.000-00"}
                         </span>
                       )}
                     </div>
@@ -578,25 +550,25 @@ export function CreatorContractModal({
 
                   <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                      E-mail do Cadastro
+                      {t("termModal.emailLabel")}
                     </label>
                     <input
                       type="email"
                       disabled={readOnly || !!existingAuditRecord}
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
-                      placeholder="criador@exemplo.com"
+                      placeholder={t("termModal.emailPh")}
                       className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all disabled:opacity-70"
                     />
                   </div>
 
                   <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                      Identificador Eletrônico do Aceite
+                      {t("termModal.acceptIdLabel")}
                     </label>
                     <div className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-purple-300 font-mono text-xs flex items-center justify-between">
                       <span>{existingAuditRecord?.termId || generatedTermId}</span>
-                      <span className="text-[10px] text-slate-400">Hash Auditável</span>
+                      <span className="text-[10px] text-slate-400">{t("termModal.auditHash")}</span>
                     </div>
                   </div>
                 </div>
@@ -617,7 +589,7 @@ export function CreatorContractModal({
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <ShieldCheck size={16} className="text-purple-600 shrink-0" />
             <span>
-              Validade jurídica conforme Medida Provisória 2.200-2 e LGPD (Lei 13.709/2018).
+              {t("termModal.legalFooter")}
             </span>
           </div>
 
@@ -627,7 +599,7 @@ export function CreatorContractModal({
               onClick={onClose}
               className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition-all cursor-pointer"
             >
-              {readOnly ? 'Fechar' : 'Cancelar'}
+              {readOnly ? tc("close") : tc("cancel")}
             </button>
 
             {!readOnly && (
@@ -638,7 +610,7 @@ export function CreatorContractModal({
                 className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-extrabold tracking-wide shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
               >
                 <CheckCircle2 size={16} />
-                <span>Aceitar Termo e Prosseguir</span>
+                <span>{t("termModal.acceptAndContinue")}</span>
               </button>
             )}
           </div>

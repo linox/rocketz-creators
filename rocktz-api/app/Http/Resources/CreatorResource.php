@@ -4,9 +4,9 @@ namespace App\Http\Resources;
 
 use App\Models\CompanyLandingSignup;
 use App\Support\CreatorPrivacy;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Str;
 
 class CreatorResource extends JsonResource
 {
@@ -81,14 +81,9 @@ class CreatorResource extends JsonResource
 
     private function portfolioDownloadUrl(?string $url): string
     {
-        $path = parse_url((string) $url, PHP_URL_PATH) ?: '';
-        if (! is_string($path) || ! str_contains($path, '/uploads/')) {
-            return (string) $url;
-        }
+        $path = MediaUrl::objectKeyFromPublicUrl($url);
 
-        $relative = ltrim(Str::after($path, '/uploads/'), '/');
-
-        return rtrim((string) config('app.url'), '/').'/downloads/'.$relative;
+        return $path ? MediaUrl::download($path) : (string) $url;
     }
 
     /**

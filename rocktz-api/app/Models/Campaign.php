@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApplicationStatus;
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Enums\PostingProfile;
@@ -119,6 +120,42 @@ class Campaign extends Model
     public function isPendingAgency(): bool
     {
         return $this->status === CampaignStatus::PendingAgency;
+    }
+
+    public function approvedCreatorsAmount(): float
+    {
+        if (isset($this->approved_creators_amount)) {
+            return round((float) $this->approved_creators_amount, 2);
+        }
+
+        if ($this->relationLoaded('campaignCreators')) {
+            return round((float) $this->campaignCreators
+                ->filter(fn (CampaignCreator $row) => $row->application_status === ApplicationStatus::Approved)
+                ->sum(fn (CampaignCreator $row) => (float) $row->amount), 2);
+        }
+
+        return round((float) $this->campaignCreators()
+            ->where('application_status', ApplicationStatus::Approved)
+            ->sum('amount'), 2);
+    }
+
+    public function creatorsBudgetLimit(): float
+    {
+        return round((float) ($this->creators_budget ?? 0), 2);
+    }
+
+    public function isAcceptingApplications(): bool
+    {
+        if ($this->is_barter) {
+            return true;
+        }
+
+        $limit = $this->creatorsBudgetLimit();
+        if ($limit <= 0) {
+            return true;
+        }
+
+        return $this->approvedCreatorsAmount() < $limit;
     }
 
     public function matchesCreatorLocation(?Creator $creator): bool

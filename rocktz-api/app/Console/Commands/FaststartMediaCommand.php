@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\MediaDisk;
 use App\Support\Mp4Faststart;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +15,14 @@ class FaststartMediaCommand extends Command
 
     public function handle(): int
     {
-        $disk = Storage::disk('uploads');
+        $diskName = MediaDisk::name();
+        $disk = Storage::disk($diskName);
+        if (config("filesystems.disks.{$diskName}.driver") !== 'local') {
+            $this->warn('media:faststart only runs on the local uploads disk.');
+
+            return self::SUCCESS;
+        }
+
         $rewritten = 0;
 
         foreach ($disk->files('portfolio') as $path) {

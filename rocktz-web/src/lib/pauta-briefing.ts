@@ -59,3 +59,18 @@ export function pautaBriefingSummary(fields: PautaBriefingFields) {
 export function itemHasPautaBriefing(item: PautaBriefingItemLike) {
   return pautaBriefingHasContent(parsePautaBriefing(item));
 }
+
+const LIVE_PAUTA_TYPES = new Set(["live", "live_instagram", "live_tiktok", "live_youtube"]);
+
+export function isLivePautaType(type?: string | null) {
+  return Boolean(type && LIVE_PAUTA_TYPES.has(type));
+}
+
+/** Generated monthly slot without a brief — creator must wait, not submit. */
+export function itemIsAwaitingPauta(item: PautaBriefingItemLike & {
+  status?: string | null;
+  content_type?: string | null;
+}) {
+  if (isLivePautaType(item.content_type)) return false;
+  return item.status === "planned" && !itemHasPautaBriefing(item);
+}

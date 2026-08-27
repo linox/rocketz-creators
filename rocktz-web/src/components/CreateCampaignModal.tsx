@@ -18,6 +18,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { MoneyInput } from "@/components/MoneyInput";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
@@ -27,6 +28,7 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
+import { parseMoneyMask, remaskMoney } from "@/lib/masks";
 import { usePrivacy } from "@/lib/privacy";
 import type { PostingProfile } from "@/lib/posting-profile";
 
@@ -203,7 +205,7 @@ export function CreateCampaignModal({
         return;
       }
     }
-    if (!isBarter && (!creatorCache.trim() || Number(creatorCache) <= 0)) {
+    if (!isBarter && (!creatorCache.trim() || parseMoneyMask(creatorCache, currency) <= 0)) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
       return;
@@ -234,8 +236,8 @@ export function CreateCampaignModal({
         company_id: isAdmin ? Number(companyId) : defaultCompanyId,
         start_date: startDate,
         end_date: endDate,
-        total_budget: isBarter ? 0 : budget ? Number(budget) : null,
-        creator_cache: creatorCache ? Number(creatorCache) : null,
+        total_budget: isBarter ? 0 : budget ? parseMoneyMask(budget, currency) : null,
+        creator_cache: creatorCache ? parseMoneyMask(creatorCache, currency) : null,
         agency_fee_percent: isAdmin ? feePercent ?? DEFAULT_AGENCY_FEE_PERCENT : undefined,
         image_url: imageUrl || null,
         is_secret: isSecret,
@@ -342,7 +344,13 @@ export function CreateCampaignModal({
                 {isAdmin ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.company")} *</label>
-                    <Select2Field theme="light" placeholder={t("campaigns.companyPh")} value={companyId} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => { setCompanyId(value); setRegionState(""); }} />
+                    <Select2Field theme="light" placeholder={t("campaigns.companyPh")} value={companyId} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => {
+                      const nextCurrency = moneyCurrency(companies.find((company) => String(company.id) === value));
+                      setBudget((current) => remaskMoney(current, currency, nextCurrency));
+                      setCreatorCache((current) => remaskMoney(current, currency, nextCurrency));
+                      setCompanyId(value);
+                      setRegionState("");
+                    }} />
                   </div>
                 ) : null}
 
@@ -364,7 +372,7 @@ export function CreateCampaignModal({
                 <div className={`grid gap-4 ${isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.creatorCache", { currency })}{!isBarter ? " *" : ""}</label>
-                    <input type="number" min="0" step="0.01" placeholder={t("campaigns.creatorCachePh")} disabled={isBarter} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={(e) => setCreatorCache(e.target.value)} />
+                    <MoneyInput currency={currency} placeholder={t("campaigns.creatorCachePh")} disabled={isBarter} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={setCreatorCache} />
                     <span className="text-[10px] leading-relaxed text-[#64748B]">{t("campaigns.creatorCacheHint")}</span>
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -372,13 +380,13 @@ export function CreateCampaignModal({
                       <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.budget", { currency })}</label>
                       {isBarter ? <span className="text-[10px] font-bold text-amber-600">{t("campaigns.budgetOptional")}</span> : null}
                     </div>
-                    <input type="number" placeholder={t("campaigns.budgetPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={budget} onChange={(e) => setBudget(e.target.value)} />
+                    <MoneyInput currency={currency} placeholder={t("campaigns.budgetPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={budget} onChange={setBudget} />
                   </div>
                   {isAdmin ? (
                     <AgencyFeePercentField
                       value={agencyFeePercent}
                       onChange={setAgencyFeePercent}
-                      totalBudget={isBarter ? 0 : budget ? Number(budget) : 0}
+                      totalBudget={isBarter ? 0 : budget ? parseMoneyMask(budget, currency) : 0}
                       formatCurrency={(amount) => formatCurrency(amount, currency)}
                       disabled={isBarter}
                     />

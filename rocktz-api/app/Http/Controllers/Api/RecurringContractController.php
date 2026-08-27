@@ -409,6 +409,7 @@ class RecurringContractController extends Controller
         if ($actorIsCreator) {
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
             $data = $this->restrictCreatorPlanningPayload($data, $contentPlanningItem);
+            $this->assertCreatorCanSubmitPauta($data, $contentPlanningItem);
         }
 
         if (isset($data['content_type']) && $this->isLiveContentType($data['content_type'])) {
@@ -711,6 +712,25 @@ class RecurringContractController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function assertCreatorCanSubmitPauta(array $data, ContentPlanningItem $item): void
+    {
+        if ($this->isLiveContentType($item->content_type) || $this->itemHasBriefing($item)) {
+            return;
+        }
+
+        $submitting = array_key_exists('script', $data)
+            || array_key_exists('script_status', $data)
+            || array_key_exists('media_url', $data)
+            || array_key_exists('submission_url', $data)
+            || array_key_exists('video_status', $data)
+            || array_key_exists('status', $data);
+
+        abort_if($submitting, 422, __('auth.pauta_awaiting_briefing'));
     }
 
     private function assertCanViewItem(Request $request, ContentPlanningItem $item): void

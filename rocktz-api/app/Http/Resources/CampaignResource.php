@@ -80,6 +80,7 @@ class CampaignResource extends JsonResource
                 return CampaignCreatorResource::collection($rows);
             }),
             'pending_applications' => $this->when(isset($this->pending_applications_count), (int) $this->pending_applications_count),
+            'accepting_applications' => $this->isAcceptingApplications(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

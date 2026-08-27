@@ -1,3 +1,5 @@
+import { localeForCurrency, resolveCurrency } from "@/lib/geo";
+
 const UF_LIST = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
   "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
@@ -198,29 +200,91 @@ export function formatKwai(value: string): string {
   return handle ? `@${handle}` : "";
 }
 
-export function formatBRLMask(value: string): string {
-  const cleaned = value.replace(/[^\d,]/g, "");
-  if (!cleaned) return "";
-  const [intRaw, decRaw] = cleaned.split(",");
-  const intDigits = (intRaw || "").replace(/\D/g, "").slice(0, 8);
-  const formattedInt = intDigits ? Number(intDigits).toLocaleString("pt-BR") : "0";
-  if (cleaned.includes(",")) {
-    return `${formattedInt},${(decRaw || "").replace(/\D/g, "").slice(0, 2)}`;
+export function moneySeparators(currency?: string | null): {
+  locale: string;
+  group: string;
+  decimal: string;
+  fractionDigits: number;
+} {
+  const code = resolveCurrency(currency);
+  const locale = localeForCurrency(code);
+  let fractionDigits = 2;
+  try {
+    fractionDigits = new Intl.NumberFormat(locale, { style: "currency", currency: code }).resolvedOptions()
+      .maximumFractionDigits ?? 2;
+  } catch {
+    fractionDigits = 2;
+  }
+  const parts = new Intl.NumberFormat(locale, {
+    useGrouping: true,
+    minimumFractionDigits: Math.min(2, fractionDigits),
+    maximumFractionDigits: Math.min(2, fractionDigits),
+  }).formatToParts(1234567.89);
+  return {
+    locale,
+    group: parts.find((part) => part.type === "group")?.value ?? ".",
+    decimal: parts.find((part) => part.type === "decimal")?.value ?? ",",
+    fractionDigits,
+  };
+}
+
+export function moneyPlaceholder(currency?: string | null): string {
+  const { locale, fractionDigits } = moneySeparators(currency);
+  return (0).toLocaleString(locale, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+}
+
+export function formatMoneyMask(value: string, currency?: string | null): string {
+  const { locale, decimal, fractionDigits } = moneySeparators(currency);
+  if (fractionDigits <= 0) {
+    const digits = value.replace(/\D/g, "").slice(0, 12);
+    if (!digits) return "";
+    return Number(digits).toLocaleString(locale);
+  }
+
+  const lastDecimal = value.lastIndexOf(decimal);
+  const hasDecimal = lastDecimal >= 0;
+  const intRaw = hasDecimal ? value.slice(0, lastDecimal) : value;
+  const decRaw = hasDecimal ? value.slice(lastDecimal + 1) : "";
+  const intDigits = intRaw.replace(/\D/g, "").slice(0, 10);
+  if (!intDigits && !hasDecimal) return "";
+  const formattedInt = intDigits ? Number(intDigits).toLocaleString(locale) : "0";
+  if (hasDecimal) {
+    return `${formattedInt}${decimal}${decRaw.replace(/\D/g, "").slice(0, fractionDigits)}`;
   }
   return formattedInt;
 }
 
-export function parseBRLMask(value: string): number {
+export function parseMoneyMask(value: string, currency?: string | null): number {
   if (!value.trim()) return 0;
-  const normalized = value.replace(/\./g, "").replace(",", ".");
+  const { group, decimal, fractionDigits } = moneySeparators(currency);
+  if (fractionDigits <= 0) {
+    return Number(value.replace(/\D/g, "")) || 0;
+  }
+  let normalized = value.trim();
+  if (group) normalized = normalized.split(group).join("");
+  if (decimal) normalized = normalized.replace(decimal, ".");
+  normalized = normalized.replace(/[^\d.-]/g, "");
   const amount = Number(normalized);
   return Number.isFinite(amount) ? amount : 0;
 }
 
-export function moneyToMask(amount: number | string | null | undefined): string {
+export function moneyToMask(amount: number | string | null | undefined, currency?: string | null): string {
   const n = Number(amount);
   if (!Number.isFinite(n) || n <= 0) return "";
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const { locale, fractionDigits } = moneySeparators(currency);
+  return n.toLocaleString(locale, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+}
+
+export function remaskMoney(value: string, fromCurrency?: string | null, toCurrency?: string | null): string {
+  return moneyToMask(parseMoneyMask(value, fromCurrency), toCurrency);
+}
+
+export function formatBRLMask(value: string): string {
+  return formatMoneyMask(value, "BRL");
+}
+
+export function parseBRLMask(value: string): number {
+  return parseMoneyMask(value, "BRL");
 }
 
 export function formatIntegerMask(value: string): string {

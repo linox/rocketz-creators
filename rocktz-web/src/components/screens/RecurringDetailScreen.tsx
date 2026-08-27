@@ -55,16 +55,18 @@ import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { RecurringMetricsPanel } from "@/components/RecurringMetricsPanel";
 import { Select2Field } from "@/components/Select2Field";
+import { MoneyInput } from "@/components/MoneyInput";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
-import { itemHasPautaBriefing, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
+import { itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import { usePrivacy } from "@/lib/privacy";
-import { currencySymbol, DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
+import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
+import { moneyToMask, parseMoneyMask } from "@/lib/masks";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -80,7 +82,6 @@ type PautaViewSection = "briefing" | "script" | "references" | "video";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
 
 const CONTENT_TYPES = ["reel", "story", "post", "tiktok", "youtube", "live_instagram", "live_tiktok", "live_youtube", "live", "pinterest", "blog", "podcast", "unboxing", "ugc", "event", "other"] as const;
-const LIVE_CONTENT_TYPES = new Set(["live", "live_instagram", "live_tiktok", "live_youtube"]);
 const PAUTA_STATUSES = ["planned", "in_production", "review", "approved", "published"] as const;
 const FIELD_INPUT = "w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary";
 const FIELD_SELECT = "h-auto min-h-[44px] rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold text-slate-800";
@@ -159,7 +160,7 @@ const EMPTY_PAUTA = {
 };
 
 function isLivePauta(type: string) {
-  return LIVE_CONTENT_TYPES.has(type);
+  return isLivePautaType(type);
 }
 
 function pautaVideoUrl(item: PlanningItem) {
@@ -334,8 +335,7 @@ function isMaterialNewVersion(item: PlanningItem) {
 }
 
 function isAwaitingBriefing(item: PlanningItem) {
-  if (isLivePauta(item.content_type)) return false;
-  return item.status === "planned" && !itemHasPautaBriefing(item);
+  return itemIsAwaitingPauta(item);
 }
 
 function isPublished(item: PlanningItem) {
@@ -618,7 +618,7 @@ function DetailInner() {
         creator_id: String(row.creator_id),
         start_date: row.start_date || contract?.start_date || todayIsoDate(),
         end_date: row.end_date || contract?.end_date || "",
-        monthly_cache: String(row.monthly_cache ?? row.monthly_fee ?? 0),
+        monthly_cache: moneyToMask(row.monthly_cache ?? row.monthly_fee ?? 0, moneyCurrency(contract)),
         notes: row.notes || "",
         reels: String(d.reels ?? d.reel ?? 0),
         stories: String(d.stories ?? d.story ?? 0),
@@ -679,7 +679,7 @@ function DetailInner() {
     if (!fee) return null;
     const editingId = editingCreator?.creator_id ?? (creatorForm.creator_id ? Number(creatorForm.creator_id) : null);
     const othersCost = allocated.filter((row) => row.creator_id !== editingId).reduce((sum, row) => sum + creatorCost(row), 0);
-    const proposed = Number(creatorForm.monthly_cache) || 0;
+    const proposed = parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract));
     return { total: fee, others: othersCost, remaining: fee - othersCost - proposed };
   }, [fee, allocated, editingCreator, creatorForm.creator_id, creatorForm.monthly_cache]);
 
@@ -699,7 +699,7 @@ function DetailInner() {
         creator_id: Number(creatorForm.creator_id),
         start_date: creatorForm.start_date,
         end_date: creatorForm.end_date || null,
-        monthly_cache: creatorForm.monthly_cache ? Number(creatorForm.monthly_cache) : 0,
+        monthly_cache: creatorForm.monthly_cache ? parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract)) : 0,
         notes: creatorForm.notes || null,
         monthly_deliverables: {
           reels: Number(creatorForm.reels) || 0,
@@ -1890,7 +1890,9 @@ function DetailInner() {
                             </div>
                           ) : awaitingBriefing ? (
                             <div className="flex flex-col gap-2 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                              <p className="m-0 text-[11px] font-medium text-amber-800">{t("recurringDetail.awaitingBriefingHint")}</p>
+                              <p className="m-0 text-[11px] font-medium text-amber-800">
+                                {t(isCreator ? "recurringDetail.awaitingBriefingHintCreator" : "recurringDetail.awaitingBriefingHint")}
+                              </p>
                               {canManage ? (
                                 <button
                                   type="button"
@@ -2055,12 +2057,15 @@ function DetailInner() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-700">{t("recurringDetail.cache")} *</label>
-                <div className="relative">
-                  <span className="absolute top-1/2 left-3.5 -translate-y-1/2 font-bold text-slate-400">{currencySymbol(moneyCurrency(contract), locale)}</span>
-                  <input type="number" min="0" step="0.01" required value={creatorForm.monthly_cache} onChange={(e) => setCreatorForm({ ...creatorForm, monthly_cache: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-4 pl-10 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary" placeholder="0.00" />
-                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-700">{t("recurringDetail.cache")} *</label>
+                  <MoneyInput
+                    required
+                    currency={moneyCurrency(contract)}
+                    value={creatorForm.monthly_cache}
+                    onChange={(value) => setCreatorForm({ ...creatorForm, monthly_cache: value })}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-4 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary"
+                  />
                 {creatorBudgetPreview ? (
                   <div className="mt-1.5 space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px]">
                     <div className="flex items-center justify-between text-slate-500">

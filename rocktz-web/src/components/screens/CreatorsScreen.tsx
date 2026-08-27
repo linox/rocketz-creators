@@ -7,13 +7,14 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, Clock, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
+import { MoneyInput } from "@/components/MoneyInput";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
-import { formatCPF, isValidCPF, isValidEmail } from "@/lib/masks";
-import { DEFAULT_COUNTRY, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
+import { formatCPF, formatIntegerMask, isValidCPF, isValidEmail, parseIntegerMask, parseMoneyMask } from "@/lib/masks";
+import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
@@ -86,7 +87,7 @@ function CreatorFeeValue({
   }
   return (
     <>
-      {formatCurrency(creator.pricing?.reel || 0)} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
+      {formatCurrency(creator.pricing?.reel || 0, defaultCurrencyForCountry(creator.country))} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
     </>
   );
 }
@@ -456,6 +457,7 @@ function CreatorsInner() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
   const [layout, setLayout] = useState<CatalogLayout>("list");
+  const filterCurrency = moneyCurrency(user.company);
 
   const categoryOptions = useMemo(
     () => [{ value: "all", label: t("creators.allCategories").toUpperCase() }, ...CATEGORIES.map((cat) => ({ value: cat, label: cat.toUpperCase() }))],
@@ -533,13 +535,13 @@ function CreatorsInner() {
         countryFilter === "all" ||
         regionFilter === "all" ||
         normalizeRegion(creator.state) === regionFilter;
-      const matchesMinFollowers = !minFollowers || followers >= Number(minFollowers);
-      const matchesMaxFollowers = !maxFollowers || followers <= Number(maxFollowers);
-      const matchesMinPrice = !minPrice || reel >= Number(minPrice);
-      const matchesMaxPrice = !maxPrice || reel <= Number(maxPrice);
+      const matchesMinFollowers = !minFollowers || followers >= parseIntegerMask(minFollowers);
+      const matchesMaxFollowers = !maxFollowers || followers <= parseIntegerMask(maxFollowers);
+      const matchesMinPrice = !minPrice || reel >= parseMoneyMask(minPrice, filterCurrency);
+      const matchesMaxPrice = !maxPrice || reel <= parseMoneyMask(maxPrice, filterCurrency);
       return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesMinPrice && matchesMaxPrice;
     });
-  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice]);
+  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency]);
 
   async function approve(creator: Creator) {
     if (!(await alertConfirm(t("creators.approveTitle"), t("creators.approveText", { name: creator.artistic_name })))) return;
@@ -806,16 +808,29 @@ function CreatorsInner() {
             {[
               { label: t("creators.minFollowers"), value: minFollowers, set: setMinFollowers, placeholder: t("creators.minFollowersPh") },
               { label: t("creators.maxFollowers"), value: maxFollowers, set: setMaxFollowers, placeholder: t("creators.maxFollowersPh") },
+            ].map((field) => (
+              <div key={field.label} className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold tracking-wide text-slate-600 uppercase">{field.label}</label>
+                <input
+                  inputMode="numeric"
+                  value={field.value}
+                  placeholder={field.placeholder}
+                  onChange={(e) => field.set(formatIntegerMask(e.target.value))}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-primary"
+                />
+              </div>
+            ))}
+            {[
               { label: t("creators.minPrice"), value: minPrice, set: setMinPrice, placeholder: t("creators.minPricePh") },
               { label: t("creators.maxPrice"), value: maxPrice, set: setMaxPrice, placeholder: t("creators.maxPricePh") },
             ].map((field) => (
               <div key={field.label} className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold tracking-wide text-slate-600 uppercase">{field.label}</label>
-                <input
-                  type="number"
+                <MoneyInput
+                  currency={filterCurrency}
                   value={field.value}
                   placeholder={field.placeholder}
-                  onChange={(e) => field.set(e.target.value)}
+                  onChange={field.set}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-primary"
                 />
               </div>

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\ApplicationStatus;
 use App\Enums\CompanyStatus;
 use App\Enums\ContentPlanningStatus;
+use App\Enums\ContentType;
 use App\Enums\DeliveryStatus;
 use App\Enums\PostingProfile;
 use App\Enums\StageApprovalStatus;
@@ -236,6 +237,37 @@ class AuthorizationHardeningTest extends TestCase
             ->assertForbidden();
 
         $this->assertNull($item->fresh()->published_url);
+    }
+
+    public function test_creator_cannot_submit_script_before_pauta_briefing(): void
+    {
+        $creator = Creator::factory()->active()->create();
+        $item = ContentPlanningItem::factory()->create([
+            'creator_id' => $creator->id,
+            'content_type' => ContentType::Reel,
+            'title' => null,
+            'briefing' => null,
+            'briefing_note' => null,
+            'briefing_fields' => null,
+            'script' => null,
+            'status' => ContentPlanningStatus::Planned,
+            'script_status' => StageApprovalStatus::Pending,
+        ]);
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $item->recurring_contract_id,
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'script' => 'Hook e CTA do produto',
+                'script_status' => StageApprovalStatus::Submitted->value,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', __('auth.pauta_awaiting_briefing'));
+
+        $this->assertNull($item->fresh()->script);
+        $this->assertSame(StageApprovalStatus::Pending, $item->fresh()->script_status);
     }
 
     public function test_webhook_with_secret_rejects_unsigned_payload(): void

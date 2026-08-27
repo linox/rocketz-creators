@@ -3,9 +3,9 @@
 namespace App\Http\Resources;
 
 use App\Support\CreatorPrivacy;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Str;
 
 class CampaignCreatorResource extends JsonResource
 {
@@ -96,13 +96,8 @@ class CampaignCreatorResource extends JsonResource
             return null;
         }
 
-        $path = parse_url($url, PHP_URL_PATH) ?: '';
-        if (! is_string($path) || ! str_contains($path, '/uploads/')) {
-            return $url;
-        }
+        $path = MediaUrl::objectKeyFromPublicUrl($url);
 
-        $relative = ltrim(Str::after($path, '/uploads/'), '/');
-
-        return rtrim((string) config('app.url'), '/').'/downloads/'.$relative;
+        return $path ? MediaUrl::download($path) : $url;
     }
 }

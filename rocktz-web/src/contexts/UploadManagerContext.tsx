@@ -188,16 +188,23 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
 
         window.dispatchEvent(new CustomEvent("rocketz:upload-started", { detail: { type: submission.type, id: submission.id } }));
 
-        await runMediaUploadChunks(file, uploadId, session.data.chunk_size, session.data.total_chunks, (percent) => {
-          onProgress?.(percent);
-          persist((current) => current.map((task) => (
-            task.uploadId === uploadId
-              ? { ...task, progress: percent, phase: percent >= 90 ? "processing" : "uploading" }
-              : task
-          )));
-        });
+        const parts = await runMediaUploadChunks(
+          file,
+          uploadId,
+          session.data.chunk_size,
+          session.data.total_chunks,
+          (percent) => {
+            onProgress?.(percent);
+            persist((current) => current.map((task) => (
+              task.uploadId === uploadId
+                ? { ...task, progress: percent, phase: percent >= 90 ? "processing" : "uploading" }
+                : task
+            )));
+          },
+          session.data.part_urls,
+        );
 
-        const started = await completeMediaUpload(uploadId);
+        const started = await completeMediaUpload(uploadId, parts);
         await waitForMediaUpload(uploadId, started.data, (percent) => {
           onProgress?.(percent);
           persist((current) => current.map((task) => (

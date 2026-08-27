@@ -4,12 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\FinalizeMediaUploadJob;
+use App\Models\User;
 use App\Services\MediaStorageException;
 use App\Services\MediaStorageService;
 use App\Services\MediaSubmissionService;
+use App\Services\R2MultipartUploader;
+use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUploadStatus;
+use App\Support\MediaUrl;
+use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +29,7 @@ class MediaController extends Controller
     public function __construct(
         private readonly MediaStorageService $media,
         private readonly MediaSubmissionService $submissions,
+        private readonly R2MultipartUploader $r2,
     ) {}
 
     public function store(Request $request): JsonResponse
@@ -68,10 +75,15 @@ class MediaController extends Controller
 
         $uploadId = (string) Str::uuid();
         $size = (int) $data['size'];
-        $chunkSize = MediaKind::chunkBytes();
+        $chunkSize = MediaDisk::chunkBytes();
         $totalChunks = (int) ceil($size / $chunkSize);
         $userId = (int) $request->user()->id;
         $submission = isset($data['submission']) && is_array($data['submission']) ? $data['submission'] : null;
+        $safeExtension = MediaKind::safeExtension($extension, $kind);
+        $allocated = $this->media->allocatePath($kind, $safeExtension);
+        $storedMime = MediaKind::storedMime((string) ($data['mime_type'] ?? ''), $kind, $safeExtension);
+        $direct = MediaDisk::usesDirectUpload() && $kind === 'video';
+        $partUrls = [];
 
         if ($submission) {
             $this->submissions->beginSubmission($request->user(), $uploadId, $submission);
@@ -85,10 +97,29 @@ class MediaController extends Controller
             'chunk_size' => $chunkSize,
             'total_chunks' => $totalChunks,
             'created_at' => now()->toIso8601String(),
+            'destination' => $direct ? 'r2' : 'api',
+            'object_key' => $allocated['path'],
+            'stored_filename' => $allocated['filename'],
+            'stored_mime' => $storedMime,
         ];
 
         if ($submission) {
             $meta['submission'] = $submission;
+        }
+
+        if ($direct) {
+            try {
+                $multipartId = $this->r2->create($allocated['path'], $storedMime);
+                $meta['multipart_upload_id'] = $multipartId;
+                $partUrls = $this->r2->presignedPartUrls($allocated['path'], $multipartId, $totalChunks);
+            } catch (Throwable $e) {
+                report($e);
+                if ($submission) {
+                    $this->submissions->clearPending($uploadId);
+                }
+
+                return response()->json(['message' => __('auth.upload_failed')], 500);
+            }
         }
 
         Storage::disk('local')->put($this->metaPath($userId, $uploadId), json_encode($meta, JSON_THROW_ON_ERROR));
@@ -101,6 +132,8 @@ class MediaController extends Controller
                 'chunk_size' => $chunkSize,
                 'total_chunks' => $totalChunks,
                 'async' => $submission !== null,
+                'destination' => $direct ? 'r2' : 'api',
+                'part_urls' => $partUrls,
             ],
         ], 201);
     }
@@ -110,6 +143,10 @@ class MediaController extends Controller
         $meta = $this->loadMeta($request, $uploadId);
         if ($meta === null) {
             return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        if (($meta['destination'] ?? 'api') === 'r2') {
+            return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
         }
 
         $totalChunks = (int) $meta['total_chunks'];
@@ -175,6 +212,10 @@ class MediaController extends Controller
         $meta = $this->loadMeta($request, $uploadId);
         if ($meta === null) {
             return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        if (($meta['destination'] ?? 'api') === 'r2') {
+            return $this->completeR2Upload($request, $meta, $uploadId);
         }
 
         $userId = (int) $meta['user_id'];
@@ -253,6 +294,7 @@ class MediaController extends Controller
         }
 
         $userId = (int) $meta['user_id'];
+        $this->abortRemoteUpload($meta);
         Storage::disk('local')->deleteDirectory($this->sessionDir($userId, $uploadId));
         $this->submissions->clearPending($uploadId);
         MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
@@ -263,26 +305,169 @@ class MediaController extends Controller
         return response()->json(['message' => __('auth.upload_cancelled')]);
     }
 
-    public function download(string $folder, string $filename): StreamedResponse
+    public function download(string $folder, string $filename): StreamedResponse|RedirectResponse
     {
         abort_unless($folder === 'portfolio', 404);
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
 
         $path = $folder.'/'.$filename;
-        abort_unless(Storage::disk('uploads')->exists($path), 404);
+        if (Storage::disk('uploads')->exists($path)) {
+            return Storage::disk('uploads')->download($path, $filename);
+        }
 
-        return Storage::disk('uploads')->download($path, $filename);
+        $redirect = $this->redirectRemoteMedia($path, true);
+        abort_if($redirect === null, 404);
+
+        return $redirect;
     }
 
-    public function stream(string $folder, string $filename): BinaryFileResponse
+    public function stream(Request $request, string $folder, string $filename): BinaryFileResponse|StreamedResponse
     {
         abort_unless(in_array($folder, ['portfolio', 'avatars'], true), 404);
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
 
         $path = $folder.'/'.$filename;
-        abort_unless(Storage::disk('uploads')->exists($path), 404);
+        if (! Storage::disk('uploads')->exists($path)) {
+            $remote = $this->streamRemote($request, $path, $filename);
+            abort_if($remote === null, 404);
+
+            return $remote;
+        }
 
         $absolute = Storage::disk('uploads')->path($path);
+        $headers = $this->playbackHeaders($filename, $absolute);
+
+        return response()->file($absolute, $headers);
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     */
+    private function completeR2Upload(Request $request, array $meta, string $uploadId): JsonResponse
+    {
+        $userId = (int) $meta['user_id'];
+        $totalChunks = (int) $meta['total_chunks'];
+        $data = $request->validate([
+            'parts' => ['required', 'array', 'size:'.$totalChunks],
+            'parts.*.index' => ['required', 'integer', 'min:0', 'max:'.max(0, $totalChunks - 1)],
+            'parts.*.etag' => ['required', 'string', 'max:200'],
+        ]);
+
+        $seen = [];
+        $awsParts = [];
+        foreach ($data['parts'] as $part) {
+            $index = (int) $part['index'];
+            if (isset($seen[$index])) {
+                return response()->json(['message' => __('auth.upload_incomplete')], 422);
+            }
+            $seen[$index] = true;
+            $etag = trim((string) $part['etag']);
+            if ($etag !== '' && ! str_starts_with($etag, '"')) {
+                $etag = '"'.$etag.'"';
+            }
+            $awsParts[] = [
+                'PartNumber' => $index + 1,
+                'ETag' => $etag,
+            ];
+        }
+
+        $key = (string) ($meta['object_key'] ?? '');
+        $multipartId = (string) ($meta['multipart_upload_id'] ?? '');
+        if ($key === '' || $multipartId === '') {
+            return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        try {
+            $this->r2->complete($key, $multipartId, $awsParts);
+            $size = $this->r2->objectSize($key);
+            if ($size !== (int) $meta['size']) {
+                throw new MediaStorageException(__('auth.upload_failed'), 500);
+            }
+
+            $payload = $this->media->registerExisting(
+                $key,
+                (string) ($meta['stored_filename'] ?? basename($key)),
+                (string) ($meta['stored_mime'] ?? $meta['mime_type'] ?? 'video/mp4'),
+                $size,
+                $request->user(),
+            );
+
+            $submission = is_array($meta['submission'] ?? null) ? $meta['submission'] : null;
+            if ($submission) {
+                $this->submissions->applySubmission($submission, $payload);
+                $this->submissions->clearPending($uploadId);
+            }
+
+            Storage::disk('local')->deleteDirectory($this->sessionDir($userId, $uploadId));
+            MediaUploadStatus::put($uploadId, MediaUploadStatus::DONE, ['progress' => 100, 'data' => $payload]);
+            $this->submissions->updateLinkedProgress($uploadId, 100);
+
+            if ($submission) {
+                return response()->json(['data' => MediaUploadStatus::get($uploadId)], 201);
+            }
+
+            return $this->respondStored($payload);
+        } catch (MediaStorageException $e) {
+            $this->abortRemoteUpload($meta);
+            Storage::disk('local')->deleteDirectory($this->sessionDir($userId, $uploadId));
+            $this->submissions->clearPending($uploadId);
+            MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
+                'progress' => 0,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => $e->getMessage()], $e->status);
+        } catch (Throwable $e) {
+            report($e);
+            $this->abortRemoteUpload($meta);
+            Storage::disk('local')->deleteDirectory($this->sessionDir($userId, $uploadId));
+            $this->submissions->clearPending($uploadId);
+            MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
+                'progress' => 0,
+                'message' => __('auth.upload_failed'),
+            ]);
+
+            return response()->json(['message' => __('auth.upload_failed')], 500);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     */
+    private function abortRemoteUpload(array $meta): void
+    {
+        if (($meta['destination'] ?? '') !== 'r2') {
+            return;
+        }
+
+        $key = (string) ($meta['object_key'] ?? '');
+        $multipartId = (string) ($meta['multipart_upload_id'] ?? '');
+        if ($key === '' || $multipartId === '') {
+            return;
+        }
+
+        try {
+            $this->r2->abort($key, $multipartId);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function redirectRemoteMedia(string $path, bool $asAttachment): ?RedirectResponse
+    {
+        $signed = MediaUrl::signedGet($path, $asAttachment);
+        if ($signed === null) {
+            return null;
+        }
+
+        return redirect()->away($signed);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function playbackHeaders(string $filename, ?string $absolute = null): array
+    {
         $extension = strtolower((string) pathinfo($filename, PATHINFO_EXTENSION));
         $mime = match ($extension) {
             'webm' => 'video/webm',
@@ -291,10 +476,12 @@ class MediaController extends Controller
             'webp' => 'image/webp',
             'gif' => 'image/gif',
             'jpg', 'jpeg' => 'image/jpeg',
-            default => (string) (new \finfo(FILEINFO_MIME_TYPE))->file($absolute) ?: 'application/octet-stream',
+            default => $absolute
+                ? ((string) (new \finfo(FILEINFO_MIME_TYPE))->file($absolute) ?: 'application/octet-stream')
+                : 'application/octet-stream',
         };
 
-        return response()->file($absolute, [
+        return [
             'Content-Type' => $mime,
             'Accept-Ranges' => 'bytes',
             'Cache-Control' => 'public, max-age=31536000, immutable',
@@ -302,14 +489,63 @@ class MediaController extends Controller
             'Access-Control-Allow-Origin' => '*',
             'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+        ];
+    }
+
+    private function streamRemote(Request $request, string $path, string $filename): BinaryFileResponse|StreamedResponse|null
+    {
+        $diskName = MediaDisk::name();
+        if ($diskName === 'uploads') {
+            return null;
+        }
+
+        $disk = Storage::disk($diskName);
+        if (! $disk->exists($path)) {
+            return null;
+        }
+
+        $headers = $this->playbackHeaders($filename);
+
+        if (! $disk instanceof AwsS3V3Adapter) {
+            return $disk->response($path, $filename, $headers);
+        }
+
+        if ($request->isMethod('HEAD')) {
+            $size = $this->r2->objectSize($path);
+
+            return response()->stream(fn () => null, 200, $headers + [
+                'Content-Length' => (string) $size,
+            ]);
+        }
+
+        $object = $this->r2->readObject($path, $request->header('Range'));
+        $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];
+        $headers['Content-Length'] = (string) $object['length'];
+        if ($object['range']) {
+            $headers['Content-Range'] = $object['range'];
+        }
+
+        $body = $object['body'];
+
+        return response()->stream(function () use ($body) {
+            if (is_object($body) && method_exists($body, 'detach')) {
+                $resource = $body->detach();
+                if (is_resource($resource)) {
+                    fpassthru($resource);
+                    fclose($resource);
+
+                    return;
+                }
+            }
+            echo (string) $body;
+        }, $object['status'], $headers);
     }
 
     /**
      * @param  array<string, mixed>  $meta
      * @return array{id: int, url: string, filename: string, path: string, size: int}
      */
-    private function assembleAndStore(array $meta, string $uploadId, ?\App\Models\User $user): array
+    private function assembleAndStore(array $meta, string $uploadId, ?User $user): array
     {
         $userId = (int) $meta['user_id'];
         $totalChunks = (int) $meta['total_chunks'];

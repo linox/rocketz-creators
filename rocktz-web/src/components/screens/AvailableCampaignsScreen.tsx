@@ -51,6 +51,10 @@ function cacheValue(campaign: Campaign) {
   return Number(campaign.creator_cache || 0);
 }
 
+function isAcceptingApplications(campaign: Campaign) {
+  return campaign.accepting_applications !== false;
+}
+
 function AvailableInner() {
   const user = useAuth();
   const router = useRouter();
@@ -169,6 +173,10 @@ function AvailableInner() {
       });
       return;
     }
+    if (!isAcceptingApplications(campaign)) {
+      void alertWarning(t("available.applicationsClosed"), t("available.applicationsClosedHint"));
+      return;
+    }
     setBriefing(null);
     setApplying(campaign);
     setNotes("");
@@ -223,10 +231,14 @@ function AvailableInner() {
         <button type="button" onClick={() => setBriefing(campaign)} className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-xs font-bold tracking-wider text-slate-800 uppercase hover:bg-slate-200">
           <FileText size={13} /> {compact ? t("available.briefing") : t("available.seeBriefing")}
         </button>
-        {canApply ? (
+        {canApply && isAcceptingApplications(campaign) ? (
           <button type="button" onClick={() => openApply(campaign)} className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-brand-primary text-xs font-bold tracking-wider text-white uppercase shadow-sm shadow-indigo-600/20 hover:bg-indigo-600">
             <Send size={13} /> {t("available.apply")}
           </button>
+        ) : canApply ? (
+          <div className="flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-2 text-center text-[10px] font-extrabold tracking-wide text-slate-500 uppercase">
+            {t("available.applicationsClosed")}
+          </div>
         ) : (
           <div />
         )}
@@ -245,7 +257,7 @@ function AvailableInner() {
               </span>
               {campaignsUnlocked ? (
                 <span className="rounded-lg border border-emerald-500/30 bg-emerald-950/60 px-3 py-1 text-[11px] font-extrabold tracking-wider text-emerald-300 uppercase">
-                  {t("available.openCount", { count: items.length })}
+                  {t("available.openCount", { count: items.filter(isAcceptingApplications).length })}
                 </span>
               ) : (
                 <span className="rounded-lg border border-amber-400/40 bg-amber-950/40 px-3 py-1 text-[11px] font-extrabold tracking-wider text-amber-200 uppercase">
@@ -508,16 +520,21 @@ function AvailableInner() {
                       {mine?.application_status === "approved" ? <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-100 px-3.5 py-1.5 text-xs font-black text-emerald-800"><CheckCircle2 size={14} /> {t("available.approvedLong")}</span>
                         : mine?.application_status === "rejected" ? <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-600">{t("available.rejectedLong")}</span>
                         : mine ? <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-100/80 px-3.5 py-1.5 text-xs font-bold text-amber-800"><Clock size={14} /> {t("available.pendingLong")}</span>
+                        : !isAcceptingApplications(campaign) ? t("available.applicationsClosedHint")
                         : t("available.applyHint")}
                     </div>
                     <div className="flex items-center gap-2.5">
                       <button type="button" onClick={() => setBriefing(campaign)} className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-xl bg-slate-100 px-4 text-xs font-bold tracking-wider text-slate-800 uppercase hover:bg-slate-200">
                         <FileText size={14} /> {t("available.seeFullBriefing")}
                       </button>
-                      {!mine && canApply ? (
+                      {!mine && canApply && isAcceptingApplications(campaign) ? (
                         <button type="button" onClick={() => openApply(campaign)} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-6 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-600/20 hover:bg-indigo-600">
                           <Send size={14} /> {t("available.applyCampaign")}
                         </button>
+                      ) : !mine && canApply ? (
+                        <span className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-xs font-bold tracking-wider text-slate-500 uppercase">
+                          {t("available.applicationsClosed")}
+                        </span>
                       ) : null}
                     </div>
                   </div>
@@ -586,10 +603,12 @@ function AvailableInner() {
               </div>
               <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 sm:p-6">
                 <button type="button" onClick={() => setBriefing(null)} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200">{tc("close")}</button>
-                {!myApps[briefing.id] && canApply ? (
+                {!myApps[briefing.id] && canApply && isAcceptingApplications(briefing) ? (
                   <button type="button" onClick={() => openApply(briefing)} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-5 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-600/20 hover:bg-indigo-600">
                     <Send size={13} /> {t("available.applyNow")}
                   </button>
+                ) : !myApps[briefing.id] && canApply ? (
+                  <span className="text-xs font-bold text-slate-500">{t("available.applicationsClosed")}</span>
                 ) : null}
               </div>
             </motion.div>

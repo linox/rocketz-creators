@@ -188,13 +188,24 @@ export async function laravelUpload<T>(
   return xhrSend<T>("POST", `${getApiUrl()}${path}`, body, onProgress, undefined, undefined, signal);
 }
 
+type MediaUploadInit = {
+  id: string;
+  chunk_size: number;
+  total_chunks: number;
+  async: boolean;
+  destination: "api" | "r2";
+  part_urls: string[];
+};
+
+type MediaUploadPart = { index: number; etag: string };
+
 export async function initMediaUpload(
   file: Blob,
   filename: string,
   submission?: Pick<SubmissionUploadMeta, "type" | "id" | "payload">,
   signal?: AbortSignal,
 ) {
-  return laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number; async: boolean } }>("/media/uploads", {
+  return laravelFetch<{ data: MediaUploadInit }>("/media/uploads", {
     method: "POST",
     body: JSON.stringify({
       filename,
@@ -206,8 +217,11 @@ export async function initMediaUpload(
   });
 }
 
-export async function completeMediaUpload(uploadId: string) {
-  return laravelFetch<{ data: MediaUploadState }>(`/media/uploads/${uploadId}`, { method: "POST" });
+export async function completeMediaUpload(uploadId: string, parts?: MediaUploadPart[]) {
+  return laravelFetch<{ data: MediaUploadState }>(`/media/uploads/${uploadId}`, {
+    method: "POST",
+    body: JSON.stringify(parts ? { parts } : {}),
+  });
 }
 
 export async function laravelSubmissionUpload(
@@ -217,9 +231,9 @@ export async function laravelSubmissionUpload(
   onProgress?: UploadProgressHandler,
 ): Promise<MediaUploadState> {
   const session = await initMediaUpload(file, filename, submission);
-  const { id: uploadId, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
-  await runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress);
-  const started = await completeMediaUpload(uploadId);
+  const { id: uploadId, chunk_size: chunkSize, total_chunks: totalChunks, part_urls: partUrls } = session.data;
+  const parts = await runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress, partUrls);
+  const started = await completeMediaUpload(uploadId, parts);
   return waitForMediaUpload(uploadId, started.data, onProgress);
 }
 
@@ -233,7 +247,7 @@ async function laravelChunkedUpload<T>(
     throw new UploadCancelledError();
   }
 
-  const session = await laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number } }>("/media/uploads", {
+  const session = await laravelFetch<{ data: MediaUploadInit }>("/media/uploads", {
     method: "POST",
     body: JSON.stringify({
       filename,
@@ -243,7 +257,7 @@ async function laravelChunkedUpload<T>(
     signal,
   });
 
-  const { id, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
+  const { id, chunk_size: chunkSize, total_chunks: totalChunks, part_urls: partUrls } = session.data;
   if (signal?.aborted) {
     await cancelMediaUpload(id).catch(() => undefined);
     throw new UploadCancelledError();
@@ -252,13 +266,16 @@ async function laravelChunkedUpload<T>(
     void cancelMediaUpload(id).catch(() => undefined);
   }, { once: true });
 
-  await runUploadChunks(file, id, chunkSize, totalChunks, onProgress);
+  const parts = await runUploadChunks(file, id, chunkSize, totalChunks, onProgress, partUrls);
 
   if (isUploadAborted(id) || signal?.aborted) {
     throw new UploadCancelledError();
   }
 
-  const completed = await laravelFetch<T>(`/media/uploads/${id}`, { method: "POST" });
+  const completed = await laravelFetch<T>(`/media/uploads/${id}`, {
+    method: "POST",
+    body: JSON.stringify(parts ? { parts } : {}),
+  });
   onProgress?.(100);
   return completed;
 }
@@ -269,7 +286,8 @@ async function runUploadChunks(
   chunkSize: number,
   totalChunks: number,
   onProgress?: UploadProgressHandler,
-) {
+  partUrls?: string[],
+): Promise<MediaUploadPart[] | undefined> {
   const uploaded = new Array<number>(totalChunks).fill(0);
   const report = () => {
     if (!onProgress) return;
@@ -277,26 +295,40 @@ async function runUploadChunks(
     onProgress(Math.min(90, Math.round((loaded / file.size) * 90)));
   };
 
+  const etags = new Array<string>(totalChunks).fill("");
   const sendChunk = async (index: number) => {
     if (isUploadAborted(uploadId)) {
       throw new UploadCancelledError();
     }
     const start = index * chunkSize;
     const chunk = file.slice(start, Math.min(start + chunkSize, file.size));
+    const directUrl = partUrls?.[index];
     let attempt = 0;
     while (true) {
       try {
-        await xhrSend<{ data: { index: number } }>(
-          "POST",
-          `${getApiUrl()}/media/uploads/${uploadId}/chunks/${index}`,
-          chunk,
-          (percent) => {
-            uploaded[index] = Math.round((percent / 100) * chunk.size);
-            report();
-          },
-          "application/octet-stream",
-          uploadId,
-        );
+        if (directUrl) {
+          etags[index] = await xhrPutPresigned(
+            directUrl,
+            chunk,
+            uploadId,
+            (percent) => {
+              uploaded[index] = Math.round((percent / 100) * chunk.size);
+              report();
+            },
+          );
+        } else {
+          await xhrSend<{ data: { index: number } }>(
+            "POST",
+            `${getApiUrl()}/media/uploads/${uploadId}/chunks/${index}`,
+            chunk,
+            (percent) => {
+              uploaded[index] = Math.round((percent / 100) * chunk.size);
+              report();
+            },
+            "application/octet-stream",
+            uploadId,
+          );
+        }
         uploaded[index] = chunk.size;
         report();
         return;
@@ -323,6 +355,9 @@ async function runUploadChunks(
     }
   });
   await Promise.all(workers);
+
+  if (!partUrls?.length) return undefined;
+  return etags.map((etag, index) => ({ index, etag }));
 }
 
 export async function runMediaUploadChunks(
@@ -331,8 +366,9 @@ export async function runMediaUploadChunks(
   chunkSize: number,
   totalChunks: number,
   onProgress?: UploadProgressHandler,
+  partUrls?: string[],
 ) {
-  return runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress);
+  return runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress, partUrls);
 }
 
 export async function getMediaUploadStatus(uploadId: string): Promise<MediaUploadState> {
@@ -380,6 +416,65 @@ export async function cancelMediaUpload(uploadId: string) {
     }
     throw error;
   }
+}
+
+function xhrPutPresigned(
+  url: string,
+  body: Blob,
+  uploadId: string,
+  onProgress?: UploadProgressHandler,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (isUploadAborted(uploadId)) {
+      reject(new UploadCancelledError());
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable || event.total <= 0) return;
+      onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+
+    const finish = () => untrackXhr(uploadId, xhr);
+
+    trackXhr(uploadId, xhr);
+
+    xhr.onload = () => {
+      finish();
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError(i18n.t("common:alerts.tryAgain"), xhr.status));
+        return;
+      }
+      const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag");
+      if (!etag) {
+        reject(new ApiError(i18n.t("common:alerts.tryAgain"), 500));
+        return;
+      }
+      resolve(etag);
+    };
+
+    xhr.onerror = () => {
+      finish();
+      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+    };
+
+    xhr.onabort = () => {
+      finish();
+      reject(new UploadCancelledError());
+    };
+
+    xhr.timeout = CHUNK_TIMEOUT_MS;
+    xhr.ontimeout = () => {
+      finish();
+      reject(new ApiError(i18n.t("profile:uploadTimeout"), 408));
+    };
+
+    xhr.send(body);
+  });
 }
 
 function xhrSend<T>(

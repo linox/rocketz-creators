@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
@@ -70,7 +71,8 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
-import { campaignLocationLabel, currencySymbol, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
+import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
+import { moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
@@ -389,7 +391,7 @@ function DetailInner() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [appFilter, setAppFilter] = useState<AppFilter>("all");
   const [appSearch, setAppSearch] = useState("");
-  const [customAmounts, setCustomAmounts] = useState<Record<number, number>>({});
+  const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
   const [rejectModal, setRejectModal] = useState<{ row: CampaignCreator | null; reason: string }>({ row: null, reason: "" });
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
@@ -786,8 +788,8 @@ function DetailInner() {
           ? flow
           : "script_and_video",
       posting_profile: normalizePostingProfile(campaign.posting_profile),
-      total_budget: campaign.total_budget != null ? String(campaign.total_budget) : "",
-      creator_cache: campaign.creator_cache != null ? String(campaign.creator_cache) : "",
+      total_budget: campaign.total_budget != null ? moneyToMask(campaign.total_budget, moneyCurrency(campaign)) : "",
+      creator_cache: campaign.creator_cache != null ? moneyToMask(campaign.creator_cache, moneyCurrency(campaign)) : "",
       agency_fee_percent: String(currentAgencyFeePercent(campaign)),
       start_date: campaign.start_date || "",
       end_date: campaign.end_date || "",
@@ -845,8 +847,8 @@ function DetailInner() {
         objective: editForm.objective,
         approval_flow: editForm.approval_flow,
         posting_profile: editForm.posting_profile,
-        total_budget: editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : null,
-        creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? Number(editForm.creator_cache) : null,
+        total_budget: editForm.is_barter ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : null,
+        creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null,
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
@@ -920,7 +922,7 @@ function DetailInner() {
     if (!editing) return;
     try {
       await api.updateParticipation(editing.id, {
-        amount: creatorEdit.amount ? Number(creatorEdit.amount) : 0,
+        amount: creatorEdit.amount ? parseMoneyMask(creatorEdit.amount, moneyCurrency(campaign)) : 0,
         delivery_type: creatorEdit.delivery_type,
         video_url: creatorEdit.video_url || null,
         published_link: creatorEdit.published_link || null,
@@ -1491,7 +1493,7 @@ function DetailInner() {
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                    setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                     setEditing(row);
                                   }}
                                   className="text-[10px] font-extrabold text-brand-primary hover:underline"
@@ -1558,7 +1560,7 @@ function DetailInner() {
                       <button
                         type="button"
                         onClick={() => {
-                          setCreatorEdit({ amount: String(selected.amount ?? ""), delivery_type: selected.delivery_type || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
+                          setCreatorEdit({ amount: moneyToMask(selected.amount, moneyCurrency(campaign)), delivery_type: selected.delivery_type || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
                           setEditing(selected);
                         }}
                         className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-600"
@@ -1896,7 +1898,7 @@ function DetailInner() {
                 const isAppApproved = row.application_status === "approved";
                 const isRejected = row.application_status === "rejected";
                 const isUpdating = updatingId === row.id;
-                const amountValue = customAmounts[row.id] !== undefined ? customAmounts[row.id] : suggestedFee(row, campaign);
+                const amountMasked = customAmounts[row.id] ?? moneyToMask(suggestedFee(row, campaign), moneyCurrency(campaign));
                 const location = [row.creator?.city, row.creator?.state].filter(Boolean).join(", ");
                 const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
                 const engagement = metricValue(row.creator?.metrics, ["engagementRate", "engagement_rate"]);
@@ -1971,18 +1973,13 @@ function DetailInner() {
                     <div className="flex shrink-0 flex-col items-stretch gap-4 border-t border-slate-100 pt-3 sm:flex-row sm:items-center lg:flex-col lg:items-end lg:border-t-0 lg:pt-0 xl:flex-row xl:items-center">
                       <div className="flex min-w-[140px] flex-col gap-1">
                         <label className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.agreedFee")}</label>
-                        <div className="relative">
-                          <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-xs font-bold text-slate-400">{currencySymbol(moneyCurrency(campaign), locale)}</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={amountValue}
-                            disabled={!canManage || isAppApproved || campaign.is_barter}
-                            onChange={(event) => setCustomAmounts((prev) => ({ ...prev, [row.id]: Number(event.target.value) }))}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 pl-8 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
-                          />
-                        </div>
+                        <MoneyInput
+                          currency={moneyCurrency(campaign)}
+                          value={amountMasked}
+                          disabled={!canManage || isAppApproved || campaign.is_barter}
+                          onChange={(value) => setCustomAmounts((prev) => ({ ...prev, [row.id]: value }))}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
+                        />
                         <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -2000,7 +1997,7 @@ function DetailInner() {
                             <button type="button" disabled={isUpdating} onClick={() => setRejectModal({ row, reason: "" })} className="flex cursor-pointer items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50">
                               <X size={13} /> {t("campaignDetail.reject")}
                             </button>
-                            <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, amountValue)} className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50">
+                            <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, parseMoneyMask(amountMasked, moneyCurrency(campaign)))} className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50">
                               {isUpdating ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Check size={14} />}
                               {t("campaignDetail.approveCasting")}
                             </button>
@@ -2024,7 +2021,7 @@ function DetailInner() {
                           </>
                         ) : null}
                         {canManage && isRejected ? (
-                          <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, amountValue)} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100 disabled:opacity-50">
+                          <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, parseMoneyMask(amountMasked, moneyCurrency(campaign)))} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100 disabled:opacity-50">
                             <CheckCircle2 size={13} /> {t("campaignDetail.reevaluate")}
                           </button>
                         ) : null}
@@ -2284,7 +2281,7 @@ function DetailInner() {
                             <button
                               type="button"
                               onClick={() => {
-                                setCreatorEdit({ amount: String(row.amount ?? ""), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                 setEditing(row);
                               }}
                               className="font-bold text-brand-primary hover:underline"
@@ -2418,18 +2415,18 @@ function DetailInner() {
                     </div>
                   ) : null}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget")}</label>
-                    <input type="number" step="0.01" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.total_budget} onChange={(event) => setEditForm({ ...editForm, total_budget: event.target.value })} />
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget", { currency: moneyCurrency(campaign) })}</label>
+                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.total_budget} onChange={(value) => setEditForm({ ...editForm, total_budget: value })} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache")}</label>
-                    <input type="number" step="0.01" min="0" disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:bg-slate-100" value={editForm.creator_cache} onChange={(event) => setEditForm({ ...editForm, creator_cache: event.target.value })} />
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache", { currency: moneyCurrency(campaign) })}</label>
+                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.creator_cache} onChange={(value) => setEditForm({ ...editForm, creator_cache: value })} />
                   </div>
                   {isAdmin ? (
                     <AgencyFeePercentField
                       value={editForm.agency_fee_percent}
                       onChange={(value) => setEditForm({ ...editForm, agency_fee_percent: value })}
-                      totalBudget={editForm.is_barter ? 0 : editForm.total_budget ? Number(editForm.total_budget) : 0}
+                      totalBudget={editForm.is_barter ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : 0}
                       formatCurrency={(amount) => formatCurrency(amount, moneyCurrency(campaign))}
                       disabled={editForm.is_barter}
                     />
@@ -2591,7 +2588,7 @@ function DetailInner() {
                 <button type="button" onClick={() => setEditing(null)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
               <form noValidate onSubmit={saveCreatorEdit} className="flex flex-col gap-3 p-5">
-                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.agreedFee")} value={creatorEdit.amount} onChange={(event) => setCreatorEdit({ ...creatorEdit, amount: event.target.value })} />
+                <MoneyInput currency={moneyCurrency(campaign)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-brand-primary" placeholder={t("campaignDetail.agreedFee")} value={creatorEdit.amount} onChange={(value) => setCreatorEdit({ ...creatorEdit, amount: value })} />
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.deliveryFormat")} value={creatorEdit.delivery_type} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_type: event.target.value })} />
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.mediaTitle")} value={creatorEdit.video_url} onChange={(event) => setCreatorEdit({ ...creatorEdit, video_url: event.target.value })} />
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.publishedPost")} value={creatorEdit.published_link} onChange={(event) => setCreatorEdit({ ...creatorEdit, published_link: event.target.value })} />

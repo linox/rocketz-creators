@@ -12,6 +12,7 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { PlanningItem } from "@/lib/types";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
+import { itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { isBrandPosting } from "@/lib/posting-profile";
 
 type Props = {
@@ -67,6 +68,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     uploadManager?.getSubjectProgress("content_planning_item", item.id),
   );
   const isBackgroundUploading = Boolean(item.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("content_planning_item", item.id));
+  const awaitingPauta = itemIsAwaitingPauta(item);
 
   async function submitPublishedUrl() {
     if (!publishedUrl.trim()) {
@@ -86,6 +88,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   }
 
   async function submit() {
+    if (itemIsAwaitingPauta(item)) return;
     if (canSubmitScript) {
       if (!script.trim()) {
         await alertWarning(tp("materialRequiredTitle"), tp("scriptRequired"));
@@ -209,6 +212,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     : videoRevision
       ? (item.video_feedback || item.feedback_note || "")
       : "";
+
+  if (awaitingPauta) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2.5">
+        <p className="m-0 text-[11px] font-medium text-amber-900">{tp("awaitingDemandHint")}</p>
+      </div>
+    );
+  }
 
   if (alreadyPublished) {
     return item.published_url ? (

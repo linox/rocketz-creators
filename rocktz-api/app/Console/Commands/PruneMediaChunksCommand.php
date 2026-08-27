@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\R2MultipartUploader;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,20 @@ class PruneMediaChunksCommand extends Command
 
                 $createdAt = is_string($created) ? Carbon::parse($created) : null;
                 if (! $createdAt || $cutoff->greaterThan($createdAt)) {
+                    if (is_array($meta)
+                        && ($meta['destination'] ?? '') === 'r2'
+                        && filled($meta['object_key'] ?? null)
+                        && filled($meta['multipart_upload_id'] ?? null)
+                    ) {
+                        try {
+                            app(R2MultipartUploader::class)->abort(
+                                (string) $meta['object_key'],
+                                (string) $meta['multipart_upload_id'],
+                            );
+                        } catch (\Throwable $e) {
+                            report($e);
+                        }
+                    }
                     $disk->deleteDirectory($sessionDir);
                 }
             }

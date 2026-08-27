@@ -45,7 +45,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { itemHasPautaBriefing } from "@/lib/pauta-briefing";
+import { itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -76,8 +76,9 @@ import {
   type ContentDeliveryState,
   type CreatorDeliveryActionKind,
 } from "@/lib/content-delivery-status";
-import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, formatBRLMask, parseBRLMask, moneyToMask, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF } from "@/lib/masks";
-import { DEFAULT_COUNTRY, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
+import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF } from "@/lib/masks";
+import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
+import { MoneyInput } from "@/components/MoneyInput";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromPath } from "@/lib/route-id";
@@ -495,6 +496,7 @@ function ProfileInner() {
   const [acceptsPaidTraffic, setAcceptsPaidTraffic] = useState(false);
   const [acceptsExclusivity, setAcceptsExclusivity] = useState(false);
   const [syncingNetwork, setSyncingNetwork] = useState<NetworkKey | "all" | null>(null);
+  const priceCurrency = defaultCurrencyForCountry(country);
 
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
@@ -550,13 +552,13 @@ function ProfileInner() {
       },
     });
     setPrices({
-      story: moneyToMask(data.pricing?.story),
-      reel: moneyToMask(data.pricing?.reel),
-      post: moneyToMask(data.pricing?.post),
-      combo: moneyToMask(data.pricing?.combo),
-      tiktok: moneyToMask(data.pricing?.tiktok),
-      youtube: moneyToMask(data.pricing?.youtube),
-      kwai: moneyToMask(data.pricing?.kwai),
+      story: moneyToMask(data.pricing?.story, defaultCurrencyForCountry(data.country)),
+      reel: moneyToMask(data.pricing?.reel, defaultCurrencyForCountry(data.country)),
+      post: moneyToMask(data.pricing?.post, defaultCurrencyForCountry(data.country)),
+      combo: moneyToMask(data.pricing?.combo, defaultCurrencyForCountry(data.country)),
+      tiktok: moneyToMask(data.pricing?.tiktok, defaultCurrencyForCountry(data.country)),
+      youtube: moneyToMask(data.pricing?.youtube, defaultCurrencyForCountry(data.country)),
+      kwai: moneyToMask(data.pricing?.kwai, defaultCurrencyForCountry(data.country)),
     });
     setAcceptsExchange(data.accepts_exchange);
     setAcceptsPaidTraffic(data.accepts_paid_traffic);
@@ -939,13 +941,13 @@ function ProfileInner() {
         },
         pricing: {
           ...profile.pricing,
-          story: parseBRLMask(prices.story),
-          reel: parseBRLMask(prices.reel),
-          post: parseBRLMask(prices.post),
-          combo: parseBRLMask(prices.combo),
-          tiktok: parseBRLMask(prices.tiktok),
-          youtube: parseBRLMask(prices.youtube),
-          kwai: parseBRLMask(prices.kwai),
+          story: parseMoneyMask(prices.story, priceCurrency),
+          reel: parseMoneyMask(prices.reel, priceCurrency),
+          post: parseMoneyMask(prices.post, priceCurrency),
+          combo: parseMoneyMask(prices.combo, priceCurrency),
+          tiktok: parseMoneyMask(prices.tiktok, priceCurrency),
+          youtube: parseMoneyMask(prices.youtube, priceCurrency),
+          kwai: parseMoneyMask(prices.kwai, priceCurrency),
         },
         accepts_exchange: acceptsExchange,
         accepts_paid_traffic: acceptsPaidTraffic,
@@ -1190,7 +1192,7 @@ function ProfileInner() {
                 socials={creator.socials}
                 pricing={creator.pricing}
                 formatNumber={formatNumber}
-                formatCurrency={formatCurrency}
+                formatCurrency={(value) => formatCurrency(value, defaultCurrencyForCountry(creator.country))}
               />
 
               <h3 className="border-b border-[#F1F5F9] pt-3 pb-3 text-[14px] font-bold tracking-wider text-[#0F172A] uppercase">{tp("contactInfo")}</h3>
@@ -1297,7 +1299,20 @@ function ProfileInner() {
                   </Field>
                   <Field label={tp("whatsappContact")}><input className={inputClass} value={whatsapp} onChange={(e) => setWhatsapp(formatWhatsApp(e.target.value))} /></Field>
                   <Field label={tp("country")}>
-                    <CountrySelect theme="light" value={country} onChange={(value) => { setCountry(value); setState(""); }} />
+                    <CountrySelect theme="light" value={country} onChange={(value) => {
+                      const nextCurrency = defaultCurrencyForCountry(value);
+                      setPrices((current) => ({
+                        story: remaskMoney(current.story, priceCurrency, nextCurrency),
+                        reel: remaskMoney(current.reel, priceCurrency, nextCurrency),
+                        post: remaskMoney(current.post, priceCurrency, nextCurrency),
+                        combo: remaskMoney(current.combo, priceCurrency, nextCurrency),
+                        tiktok: remaskMoney(current.tiktok, priceCurrency, nextCurrency),
+                        youtube: remaskMoney(current.youtube, priceCurrency, nextCurrency),
+                        kwai: remaskMoney(current.kwai, priceCurrency, nextCurrency),
+                      }));
+                      setCountry(value);
+                      setState("");
+                    }} />
                   </Field>
                   <Field label={tp("stateUf")}>
                     <RegionSelect theme="light" country={country} value={state} onChange={setState} />
@@ -1346,6 +1361,7 @@ function ProfileInner() {
                     { label: tp("priceReels"), value: prices.reel, onChange: (value) => patchPrice("reel", value) },
                     { label: tp("priceFeedPost"), value: prices.post, onChange: (value) => patchPrice("post", value) },
                   ]}
+                  currency={priceCurrency}
                 />
                 <NetworkCard
                   title={tp("socialTiktok")}
@@ -1365,6 +1381,7 @@ function ProfileInner() {
                   onFetch={() => void syncNetwork("tiktok")}
                   fetching={syncingNetwork === "tiktok" || syncingNetwork === "all"}
                   prices={[{ label: tp("priceTiktok"), value: prices.tiktok, onChange: (value) => patchPrice("tiktok", value) }]}
+                  currency={priceCurrency}
                 />
                 <NetworkCard
                   title={tp("socialYoutube")}
@@ -1384,6 +1401,7 @@ function ProfileInner() {
                   onFetch={() => void syncNetwork("youtube")}
                   fetching={syncingNetwork === "youtube" || syncingNetwork === "all"}
                   prices={[{ label: tp("priceYoutube"), value: prices.youtube, onChange: (value) => patchPrice("youtube", value) }]}
+                  currency={priceCurrency}
                 />
                 <NetworkCard
                   title={tp("socialKwai")}
@@ -1401,13 +1419,14 @@ function ProfileInner() {
                   onEngagement={(value) => patchNetwork("kwai", { engagement: formatPercentInput(value) })}
                   followersLabel={tp("followers")}
                   prices={[{ label: tp("priceKwai"), value: prices.kwai, onChange: (value) => patchPrice("kwai", value) }]}
+                  currency={priceCurrency}
                 />
                 </div>
               </div>
 
               <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
                 <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <MoneyField label={tp("comboCommercial")} value={prices.combo} onChange={(value) => patchPrice("combo", value)} />
+                  <MoneyField label={tp("comboCommercial")} value={prices.combo} onChange={(value) => patchPrice("combo", value)} currency={priceCurrency} />
                   <div className="flex flex-col justify-end gap-2">
                     <span className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{tp("affinitiesPrefs")}</span>
                     <div className="flex flex-wrap gap-2">
@@ -1810,6 +1829,7 @@ function CreatorWorkActions({
   flow,
   publishedUrl,
   postingProfile,
+  awaitingPauta,
   onOpen,
   layout,
   tp,
@@ -1818,12 +1838,25 @@ function CreatorWorkActions({
   flow?: string | null;
   publishedUrl?: string | null;
   postingProfile?: string | null;
+  awaitingPauta?: boolean;
   onOpen: () => void;
   layout: "stack" | "inline";
   tp: (key: string) => string;
 }) {
-  const action = creatorNextDeliveryAction(deliveryStatus, flow, publishedUrl, postingProfile);
   const stack = layout === "stack";
+  if (awaitingPauta) {
+    return (
+      <div className={cn("flex", stack ? "flex-col gap-2 sm:flex-row sm:flex-wrap" : "flex-wrap items-center justify-end gap-2")}>
+        <span className={cn(
+          "inline-flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 font-bold text-orange-800",
+          stack ? "min-h-11 w-full justify-center px-3 py-2 text-xs sm:w-auto" : "px-3 py-1.5 text-xs",
+        )}>
+          <Clock size={13} /> {tp("awaitingDemand")}
+        </span>
+      </div>
+    );
+  }
+  const action = creatorNextDeliveryAction(deliveryStatus, flow, publishedUrl, postingProfile);
   const briefingClass = stack
     ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
     : "inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50";
@@ -1882,6 +1915,7 @@ function RecurringBriefingModal({
   if (!item) return null;
 
   const hasBriefing = itemHasPautaBriefing(item);
+  const awaitingPauta = itemIsAwaitingPauta(item);
   const lockBackdrop = Boolean(item.pending_upload_id) || uploadManager?.isSubjectUploading("content_planning_item", item.id);
 
   return (
@@ -1902,9 +1936,11 @@ function RecurringBriefingModal({
         {hasBriefing ? (
           <PautaBriefingView collapsible item={item} title={tp("creativeBriefing", { name: item.title })} />
         ) : (
-          <p className="m-0 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500">{tp("noBriefingYet")}</p>
+          <p className="m-0 rounded-2xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-sm font-medium text-orange-800">
+            {awaitingPauta ? tp("awaitingDemandHint") : tp("noBriefingYet")}
+          </p>
         )}
-        <CreatorPautaSubmissionPanel key={item.id} item={item} onSubmitted={onSubmitted} />
+        {awaitingPauta ? null : <CreatorPautaSubmissionPanel key={item.id} item={item} onSubmitted={onSubmitted} />}
       </div>
     </AppModal>
   );
@@ -2062,6 +2098,7 @@ function ActiveRecurringWorksTable({
         {section.pendingRows.map((work) => {
           const { contract, item, deliveryStatus, key } = work;
           const isOpen = expandedKey === key;
+          const awaitingPauta = !item || itemIsAwaitingPauta(item);
 
           return (
             <div key={key} className={cn("p-4", isOpen && "bg-purple-50/40")}>
@@ -2079,9 +2116,9 @@ function ActiveRecurringWorksTable({
                   <CheckCircle2 size={11} />
                   {tp("contractLinked")}
                 </span>
-                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
-                  <DeliveryStatusIcon state={item ? deliveryStatus : "waiting"} />
-                  {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
+                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                  <DeliveryStatusIcon state={item && !awaitingPauta ? deliveryStatus : "waiting"} />
+                  {awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
                 </span>
               </div>
               {item ? (
@@ -2101,6 +2138,7 @@ function ActiveRecurringWorksTable({
                     flow={item.approval_flow}
                     publishedUrl={item.published_url}
                     postingProfile={item.posting_profile}
+                    awaitingPauta={awaitingPauta}
                     onOpen={() => openRow(key)}
                     tp={tp}
                   />
@@ -2132,6 +2170,7 @@ function ActiveRecurringWorksTable({
             {section.pendingRows.map((work) => {
               const { contract, item, deliveryStatus, key } = work;
               const isOpen = expandedKey === key;
+              const awaitingPauta = !item || itemIsAwaitingPauta(item);
 
               return (
                 <tr key={key} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
@@ -2147,9 +2186,9 @@ function ActiveRecurringWorksTable({
                     </div>
                   </td>
                   <td className="p-3.5">
-                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
-                      <DeliveryStatusIcon state={item ? deliveryStatus : "waiting"} />
-                      {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
+                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                      <DeliveryStatusIcon state={item && !awaitingPauta ? deliveryStatus : "waiting"} />
+                      {awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
                     </span>
                     {item ? (
                       <DeliveryUploadProgress
@@ -2169,6 +2208,7 @@ function ActiveRecurringWorksTable({
                         flow={item.approval_flow}
                         publishedUrl={item.published_url}
                         postingProfile={item.posting_profile}
+                        awaitingPauta={awaitingPauta}
                         onOpen={() => openRow(key)}
                         tp={tp}
                       />
@@ -2514,19 +2554,10 @@ function ActiveCampaignsTable({
   );
 }
 
-function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function MoneyField({ label, value, onChange, currency }: { label: string; value: string; onChange: (value: string) => void; currency?: string | null }) {
   return (
     <Field label={label}>
-      <div className="relative">
-        <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
-        <input
-          inputMode="decimal"
-          className={cn(inputClass, "pl-10 font-semibold tabular-nums")}
-          value={value}
-          onChange={(event) => onChange(formatBRLMask(event.target.value))}
-          placeholder="0,00"
-        />
-      </div>
+      <MoneyInput value={value} onChange={onChange} currency={currency} className={cn(inputClass, "font-semibold")} />
     </Field>
   );
 }
@@ -2547,6 +2578,7 @@ function NetworkCard({
   onEngagement,
   followersLabel,
   prices,
+  currency,
   onFetch,
   fetching,
 }: {
@@ -2565,6 +2597,7 @@ function NetworkCard({
   onEngagement: (value: string) => void;
   followersLabel: string;
   prices: { label: string; value: string; onChange: (value: string) => void }[];
+  currency?: string | null;
   onFetch?: () => void;
   fetching?: boolean;
 }) {
@@ -2613,7 +2646,7 @@ function NetworkCard({
           <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("pricingTitle")}</p>
           <div className={cn("grid gap-3", prices.length > 1 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2")}>
             {prices.map((price) => (
-              <MoneyField key={price.label} label={price.label} value={price.value} onChange={price.onChange} />
+              <MoneyField key={price.label} label={price.label} value={price.value} onChange={price.onChange} currency={currency} />
             ))}
           </div>
         </div>

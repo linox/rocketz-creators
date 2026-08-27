@@ -159,6 +159,7 @@ export type Campaign = {
   deliverables?: Record<string, string | number | null> | null;
   applications?: CampaignCreator[];
   pending_applications?: number;
+  accepting_applications?: boolean;
 };
 
 export type PostMetrics = {

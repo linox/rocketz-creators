@@ -6,39 +6,55 @@ export function isPlayableVideoSize(size?: number | null) {
   return !size || size <= PLAYER_MAX_BYTES;
 }
 
-function uploadsRelativePath(url: string): string | null {
+function mediaOrigin(): string {
+  return getApiUrl().replace(/\/api\/?$/, "");
+}
+
+function objectKeyFromUrl(url: string): string | null {
   try {
     const parsed = new URL(url, "http://localhost");
-    const marker = parsed.pathname.includes("/stream/") ? "/stream/" : parsed.pathname.includes("/downloads/") ? "/downloads/" : "/uploads/";
-    if (!parsed.pathname.includes(marker)) return null;
-    return `${parsed.pathname.split(marker)[1] ?? ""}${parsed.search}`;
+    const pathname = parsed.pathname;
+    for (const marker of ["/stream/", "/downloads/", "/uploads/"] as const) {
+      if (pathname.includes(marker)) {
+        const rest = `${pathname.split(marker)[1] ?? ""}${parsed.search}`;
+        return rest || null;
+      }
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    const isR2 =
+      host.includes("r2.cloudflarestorage.com") ||
+      host.endsWith(".r2.dev") ||
+      host === "media.creatorz.digital";
+    if (!isR2) return null;
+
+    const segments = pathname.split("/").filter(Boolean);
+    const folderAt = segments.findIndex((part) => part === "portfolio" || part === "avatars");
+    if (folderAt < 0) return null;
+    return segments.slice(folderAt).join("/");
   } catch {
     return null;
   }
 }
 
-function mediaOrigin(): string {
-  return getApiUrl().replace(/\/api\/?$/, "");
-}
-
 export function mediaPublicUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const raw = url.trim();
-  const relative = uploadsRelativePath(raw);
+  const relative = objectKeyFromUrl(raw);
   if (!relative) return raw;
-  return `${mediaOrigin()}/uploads/${relative}`;
+  return `${mediaOrigin()}/stream/${relative}`;
 }
 
 export function mediaStreamUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const raw = url.trim();
-  const relative = uploadsRelativePath(raw);
+  const relative = objectKeyFromUrl(raw);
   if (!relative) return raw;
   return `${mediaOrigin()}/stream/${relative}`;
 }
 
 export function mediaDownloadUrl(url: string): string {
-  const relative = uploadsRelativePath(url);
+  const relative = objectKeyFromUrl(url);
   if (!relative) return url;
   return `${mediaOrigin()}/downloads/${relative}`;
 }

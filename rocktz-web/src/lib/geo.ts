@@ -57,6 +57,19 @@ export function resolveCurrency(value?: string | null): string {
   return isValidCurrency(code) ? code : DEFAULT_CURRENCY;
 }
 
+export function localeForCurrency(currency?: string | null): string {
+  const code = resolveCurrency(currency);
+  const country = Object.entries(COUNTRIES).find(([, value]) => value === code)?.[0] || DEFAULT_COUNTRY;
+  try {
+    const locale = new Intl.Locale(`und-${country}`).maximize();
+    return locale.baseName || `${locale.language}-${country}`;
+  } catch {
+    if (code === "BRL") return "pt-BR";
+    if (code === "EUR") return "de-DE";
+    return "en-US";
+  }
+}
+
 export function countryLabel(code: string, locale: string): string {
   const normalized = normalizeCountry(code);
   try {

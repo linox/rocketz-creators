@@ -293,16 +293,32 @@ class CampaignController extends Controller
             'delivery_type' => ['nullable', 'string', 'max:80'],
         ]);
 
-        $row = CampaignCreator::query()->updateOrCreate(
-            ['campaign_id' => $campaign->id, 'creator_id' => $creator->id],
-            [
-                'notes' => $data['notes'] ?? null,
-                'amount' => $this->defaultCreatorAmount($campaign),
-                'delivery_type' => $data['delivery_type'] ?? 'ugc',
-                'application_status' => ApplicationStatus::Pending,
-                'delivery_status' => DeliveryStatus::Pending,
-            ],
-        );
+        $row = DB::transaction(function () use ($campaign, $creator, $data) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
+            $existing = CampaignCreator::query()
+                ->where('campaign_id', $locked->id)
+                ->where('creator_id', $creator->id)
+                ->lockForUpdate()
+                ->first();
+            $alreadyOpen = $existing !== null
+                && in_array($existing->application_status, [ApplicationStatus::Pending, ApplicationStatus::Approved], true);
+            abort_unless(
+                $alreadyOpen || $locked->isAcceptingApplications(),
+                403,
+                __('auth.campaign_budget_full'),
+            );
+
+            return CampaignCreator::query()->updateOrCreate(
+                ['campaign_id' => $locked->id, 'creator_id' => $creator->id],
+                [
+                    'notes' => $data['notes'] ?? null,
+                    'amount' => $this->defaultCreatorAmount($locked),
+                    'delivery_type' => $data['delivery_type'] ?? 'ugc',
+                    'application_status' => ApplicationStatus::Pending,
+                    'delivery_status' => DeliveryStatus::Pending,
+                ],
+            );
+        });
 
         $this->notifications->notifyAdmins(
             'Nova candidatura',
