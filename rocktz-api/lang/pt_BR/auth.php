@@ -61,6 +61,8 @@ return [
     'upload_session_invalid' => 'Sessão de envio inválida ou expirada. Envie o arquivo novamente.',
     'upload_chunk_invalid' => 'Parte do vídeo chegou incompleta. Tente enviar novamente.',
     'upload_incomplete' => 'O envio do vídeo não foi concluído. Tente novamente.',
+    'upload_already_in_progress' => 'Já existe um envio em andamento para esta entrega.',
+    'upload_cancelled' => 'Envio cancelado.',
     'creators_only_apply' => 'Somente criadores podem se candidatar.',
     'creator_must_be_approved' => 'Seu cadastro precisa ser confirmado pela curadoria para acessar as campanhas.',
     'invite_code_invalid' => 'Código de convite inválido ou da empresa ainda não aprovada.',

@@ -61,6 +61,8 @@ return [
     'upload_session_invalid' => 'La sesión de envío no es válida o expiró. Envía el archivo de nuevo.',
     'upload_chunk_invalid' => 'Una parte del video llegó incompleta. Intenta enviarlo de nuevo.',
     'upload_incomplete' => 'El envío del video no se completó. Inténtalo de nuevo.',
+    'upload_already_in_progress' => 'Ya hay un envío en curso para esta entrega.',
+    'upload_cancelled' => 'Envío cancelado.',
     'creators_only_apply' => 'Solo los creadores pueden postularse.',
     'creator_must_be_approved' => 'Tu registro debe ser confirmado por curaduría para acceder a las campañas.',
     'invite_code_invalid' => 'Código de invitación inválido o de una empresa aún no aprobada.',

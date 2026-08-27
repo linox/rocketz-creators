@@ -34,6 +34,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'video_feedback',
     'script_submitted_at',
     'video_submitted_at',
+    'pending_upload_id',
+    'upload_progress',
     'signature_status',
     'signature_sent_at',
     'signature_signed_at',

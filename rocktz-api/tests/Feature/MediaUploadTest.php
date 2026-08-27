@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DeliveryStatus;
+use App\Enums\StageApprovalStatus;
+use App\Models\CampaignCreator;
+use App\Models\Creator;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -216,5 +220,61 @@ class MediaUploadTest extends TestCase
             ])
             ->assertStatus(413)
             ->assertJsonPath('message', __('auth.post_too_large'));
+    }
+
+    public function test_submission_chunked_upload_finalizes_participation(): void
+    {
+        Storage::fake('uploads');
+        Storage::fake('local');
+
+        $creator = Creator::factory()->active()->create();
+        $campaignCreator = CampaignCreator::factory()->create([
+            'creator_id' => $creator->id,
+            'video_status' => StageApprovalStatus::Pending,
+            'delivery_status' => DeliveryStatus::Pending,
+        ]);
+        $token = $creator->user->createToken('auth')->plainTextToken;
+        $payload = hex2bin('000000186674797069736f6d0000000069736f6d').str_repeat("\0", 2476);
+
+        $init = $this->withToken($token)->postJson('/api/media/uploads', [
+            'filename' => 'reel.mp4',
+            'size' => strlen($payload),
+            'mime_type' => 'video/mp4',
+            'submission' => [
+                'type' => 'campaign_creator',
+                'id' => $campaignCreator->id,
+                'payload' => [
+                    'video_status' => 'submitted',
+                    'delivery_status' => 'sent',
+                ],
+            ],
+        ]);
+
+        $init->assertCreated();
+        $uploadId = (string) $init->json('data.id');
+        $chunkSize = (int) $init->json('data.chunk_size');
+        $totalChunks = (int) $init->json('data.total_chunks');
+
+        for ($index = 0; $index < $totalChunks; $index++) {
+            $chunk = substr($payload, $index * $chunkSize, $chunkSize);
+            $this->withToken($token)
+                ->call('POST', '/api/media/uploads/'.$uploadId.'/chunks/'.$index, content: $chunk, server: [
+                    'CONTENT_TYPE' => 'application/octet-stream',
+                    'HTTP_ACCEPT' => 'application/json',
+                    'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+                ])
+                ->assertOk();
+        }
+
+        $this->withToken($token)
+            ->postJson('/api/media/uploads/'.$uploadId)
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'done');
+
+        $campaignCreator->refresh();
+        $this->assertSame('submitted', $campaignCreator->video_status?->value);
+        $this->assertSame('sent', $campaignCreator->delivery_status?->value);
+        $this->assertNull($campaignCreator->pending_upload_id);
+        $this->assertNotNull($campaignCreator->content?->video_url);
     }
 }

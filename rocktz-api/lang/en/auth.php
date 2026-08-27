@@ -61,6 +61,8 @@ return [
     'upload_session_invalid' => 'This upload session is invalid or expired. Send the file again.',
     'upload_chunk_invalid' => 'A video part arrived incomplete. Try uploading again.',
     'upload_incomplete' => 'The video upload was not finished. Try again.',
+    'upload_already_in_progress' => 'An upload is already in progress for this delivery.',
+    'upload_cancelled' => 'Upload cancelled.',
     'creators_only_apply' => 'Only creators can apply.',
     'creator_must_be_approved' => 'Your signup must be confirmed by curatorship before you can access campaigns.',
     'invite_code_invalid' => 'Invalid invite code, or the company is not approved yet.',

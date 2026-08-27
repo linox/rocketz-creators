@@ -1,14 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
-import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
+import { VideoSubmissionFields } from "@/components/VideoSubmissionFields";
+import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { PlanningItem } from "@/lib/types";
+import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { isBrandPosting } from "@/lib/posting-profile";
 
 type Props = {
@@ -19,7 +22,7 @@ type Props = {
 export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const { t } = useTranslation("app");
   const { t: tp } = useTranslation("profile");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const uploadManager = useOptionalUploadManager();
 
   const flow = item.approval_flow || "script_and_video";
   const staged = flow === "script_and_video";
@@ -43,6 +46,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
   const [script, setScript] = useState(item.script || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
   const [publishedUrl, setPublishedUrl] = useState(item.published_url || "");
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -58,6 +62,11 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const materialApproved = item.status === "approved" || item.video_status === "approved";
   const awaitingPublishUrl = !alreadyPublished && (materialApproved || flow === "live_link");
   const brandPosts = isBrandPosting(item.posting_profile);
+  const remoteUploadProgress = mergeUploadProgress(
+    item.upload_progress,
+    uploadManager?.getSubjectProgress("content_planning_item", item.id),
+  );
+  const isBackgroundUploading = Boolean(item.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("content_planning_item", item.id));
 
   async function submitPublishedUrl() {
     if (!publishedUrl.trim()) {
@@ -87,12 +96,16 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
         return;
       }
     } else if (canSubmitVideo) {
-      if (requiresNewVideoFile && !videoFile) {
+      if (requiresNewVideoFile && !videoFile && !downloadUrl.trim()) {
         await alertWarning(tp("materialRequiredTitle"), tp("newVideoFileRequired"));
         return;
       }
-      if (!videoFile && !item.media_url && !item.submission_url) {
-        await alertWarning(tp("materialRequiredTitle"), tp("videoRequired"));
+      if (!videoFile && !downloadUrl.trim() && !item.media_url && !item.submission_url) {
+        await alertWarning(tp("materialRequiredTitle"), tp("videoOrLinkRequired"));
+        return;
+      }
+      if (downloadUrl.trim() && !safeHttpUrl(downloadUrl.trim())) {
+        await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
         return;
       }
     } else {
@@ -102,6 +115,43 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     setSubmitting(true);
     setUploadProgress(0);
     try {
+      if (canSubmitVideo && videoFile) {
+        if (uploadManager) {
+          uploadManager.startSubmissionUpload(
+            videoFile,
+            videoFile.name,
+            {
+              type: "content_planning_item",
+              id: item.id,
+              label: item.title || t("recurringDetail.quotaAwaiting"),
+              payload: {
+                status: "review",
+                video_status: "submitted",
+              },
+            },
+            setUploadProgress,
+          );
+          await alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"));
+          setVideoFile(null);
+          onSubmitted();
+          return;
+        }
+      }
+
+      const externalVideoUrl = safeHttpUrl(downloadUrl.trim());
+      if (canSubmitVideo && externalVideoUrl && !videoFile) {
+        await api.updatePlanningItem(item.id, {
+          status: "review",
+          media_url: externalVideoUrl,
+          submission_url: externalVideoUrl,
+          video_status: "submitted",
+        });
+        await alertSuccess(hasRevision ? tp("newVersionSent") : tp("materialSent"));
+        setDownloadUrl("");
+        onSubmitted();
+        return;
+      }
+
       const body: Record<string, unknown> = { status: "review" };
       if (canSubmitScript) {
         body.script = script.trim();
@@ -137,12 +187,16 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     ? Boolean(script.trim()) && (!requiresScriptChange || scriptChanged)
     : false;
   const videoReady = canSubmitVideo
-    ? (requiresNewVideoFile ? Boolean(videoFile) : Boolean(videoFile || item.media_url || item.submission_url))
+    ? (requiresNewVideoFile
+      ? Boolean(videoFile || downloadUrl.trim())
+      : Boolean(videoFile || downloadUrl.trim() || item.media_url || item.submission_url))
     : false;
   const disabled = submitting
+    || isBackgroundUploading
     || awaitingScriptApproval
     || (canSubmitScript ? !scriptReady : canSubmitVideo ? !videoReady : true);
-  const uploadingVideo = submitting && Boolean(videoFile) && canSubmitVideo;
+  const uploadingVideo = (submitting && Boolean(videoFile) && canSubmitVideo) || isBackgroundUploading;
+  const displayProgress = remoteUploadProgress ?? uploadProgress;
 
   const revisionNote = scriptRevision
     ? (item.script_feedback || "")
@@ -279,50 +333,18 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       {canSubmitVideo ? (
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("videoLabel")}</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm,video/*,.mp4,.mov,.webm"
-              className="hidden"
-              disabled={submitting}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                if (!file.type.startsWith("video/")) {
-                  void alertWarning(tp("invalidVideoTitle"), tp("invalidVideo"));
-                  e.target.value = "";
-                  return;
-                }
-                if (file.size > 150 * 1024 * 1024) {
-                  void alertWarning(tp("invalidVideoTitle"), tp("videoTooBig"));
-                  e.target.value = "";
-                  return;
-                }
-                setVideoFile(file);
-              }}
-            />
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => fileRef.current?.click()}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-white px-3 text-[11px] font-bold text-slate-800 shadow-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <UploadCloud size={13} /> {tp("chooseFile")}
-            </button>
-            {videoFile ? (
-              <span className="truncate font-mono text-[10px] text-slate-600">
-                {videoFile.name}
-                {hasRevision ? ` · ${tp("versionBadge", { n: nextVideoVersion })}` : null}
-              </span>
-            ) : item.media_url || item.submission_url ? (
-              <span className={cn("truncate text-[10px] font-semibold", requiresNewVideoFile ? "text-amber-700" : "text-emerald-700")}>
-                {requiresNewVideoFile
-                  ? tp("previousVideoAttachedSelectNew")
-                  : t("recurringDetail.pautaVideoAttached")}
-              </span>
-            ) : null}
-          </div>
+          <VideoSubmissionFields
+            compact
+            file={videoFile}
+            downloadUrl={downloadUrl}
+            onFileSelect={setVideoFile}
+            onDownloadUrlChange={setDownloadUrl}
+            disabled={submitting || isBackgroundUploading}
+            versionBadge={hasRevision ? tp("versionBadge", { n: nextVideoVersion }) : null}
+            requiresNewFile={requiresNewVideoFile}
+            showPreviousAttached={Boolean(!videoFile && !downloadUrl.trim() && (item.media_url || item.submission_url))}
+            attachedHint={requiresNewVideoFile ? tp("previousVideoAttachedSelectNew") : t("recurringDetail.pautaVideoAttached")}
+          />
         </div>
       ) : awaitingVideoApproval && (item.media_url || item.submission_url) ? (
         <div className="flex flex-col gap-1.5">
@@ -333,7 +355,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
       {!awaitingScriptApproval && !awaitingVideoApproval && (canSubmitScript || canSubmitVideo) ? (
         uploadingVideo ? (
-          <UploadProgressBar progress={uploadProgress} />
+          <UploadProgressBar progress={displayProgress ?? 0} />
         ) : (
         <button
           type="button"

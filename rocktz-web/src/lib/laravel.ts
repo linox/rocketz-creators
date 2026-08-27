@@ -101,9 +101,28 @@ export function persistAuth(payload: AuthPayload, afterSignup = false): string {
 
 export type UploadProgressHandler = (percent: number) => void;
 
+export type MediaUploadStatusValue = "uploading" | "processing" | "done" | "failed";
+
+export type MediaUploadState = {
+  status: MediaUploadStatusValue;
+  progress?: number;
+  message?: string;
+  data?: { id: number; url: string; filename: string; path: string; size?: number };
+};
+
+export type SubmissionUploadMeta = {
+  type: "campaign_creator" | "content_planning_item";
+  id: number;
+  payload: Record<string, unknown>;
+  label: string;
+};
+
 const CHUNK_THRESHOLD_BYTES = 2 * 1024 * 1024;
-const CHUNK_CONCURRENCY = 4;
-const CHUNK_RETRIES = 3;
+const CHUNK_CONCURRENCY = 2;
+const CHUNK_RETRIES = 5;
+const CHUNK_TIMEOUT_MS = 180_000;
+const UPLOAD_POLL_MS = 2000;
+const UPLOAD_TIMEOUT_MS = 600_000;
 
 export async function laravelUpload<T>(
   path: string,
@@ -117,6 +136,39 @@ export async function laravelUpload<T>(
   }
 
   return xhrSend<T>("POST", `${getApiUrl()}${path}`, body, onProgress);
+}
+
+export async function initMediaUpload(
+  file: Blob,
+  filename: string,
+  submission?: Pick<SubmissionUploadMeta, "type" | "id" | "payload">,
+) {
+  return laravelFetch<{ data: { id: string; chunk_size: number; total_chunks: number; async: boolean } }>("/media/uploads", {
+    method: "POST",
+    body: JSON.stringify({
+      filename,
+      size: file.size,
+      mime_type: file.type || "",
+      ...(submission ? { submission } : {}),
+    }),
+  });
+}
+
+export async function completeMediaUpload(uploadId: string) {
+  return laravelFetch<{ data: MediaUploadState }>(`/media/uploads/${uploadId}`, { method: "POST" });
+}
+
+export async function laravelSubmissionUpload(
+  file: Blob,
+  filename: string,
+  submission: SubmissionUploadMeta,
+  onProgress?: UploadProgressHandler,
+): Promise<MediaUploadState> {
+  const session = await initMediaUpload(file, filename, submission);
+  const { id: uploadId, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
+  await runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress);
+  const started = await completeMediaUpload(uploadId);
+  return waitForMediaUpload(uploadId, started.data, onProgress);
 }
 
 async function laravelChunkedUpload<T>(
@@ -134,11 +186,25 @@ async function laravelChunkedUpload<T>(
   });
 
   const { id, chunk_size: chunkSize, total_chunks: totalChunks } = session.data;
+  await runUploadChunks(file, id, chunkSize, totalChunks, onProgress);
+
+  const completed = await laravelFetch<T>(`/media/uploads/${id}`, { method: "POST" });
+  onProgress?.(100);
+  return completed;
+}
+
+async function runUploadChunks(
+  file: Blob,
+  uploadId: string,
+  chunkSize: number,
+  totalChunks: number,
+  onProgress?: UploadProgressHandler,
+) {
   const uploaded = new Array<number>(totalChunks).fill(0);
   const report = () => {
     if (!onProgress) return;
     const loaded = uploaded.reduce((sum, value) => sum + value, 0);
-    onProgress(Math.min(99, Math.round((loaded / file.size) * 100)));
+    onProgress(Math.min(90, Math.round((loaded / file.size) * 90)));
   };
 
   const sendChunk = async (index: number) => {
@@ -149,7 +215,7 @@ async function laravelChunkedUpload<T>(
       try {
         await xhrSend<{ data: { index: number } }>(
           "POST",
-          `${getApiUrl()}/media/uploads/${id}/chunks/${index}`,
+          `${getApiUrl()}/media/uploads/${uploadId}/chunks/${index}`,
           chunk,
           (percent) => {
             uploaded[index] = Math.round((percent / 100) * chunk.size);
@@ -177,10 +243,52 @@ async function laravelChunkedUpload<T>(
     }
   });
   await Promise.all(workers);
+}
 
-  const completed = await laravelFetch<T>(`/media/uploads/${id}`, { method: "POST" });
+export async function runMediaUploadChunks(
+  file: Blob,
+  uploadId: string,
+  chunkSize: number,
+  totalChunks: number,
+  onProgress?: UploadProgressHandler,
+) {
+  return runUploadChunks(file, uploadId, chunkSize, totalChunks, onProgress);
+}
+
+export async function getMediaUploadStatus(uploadId: string): Promise<MediaUploadState> {
+  const response = await laravelFetch<{ data: MediaUploadState }>(`/media/uploads/${uploadId}`);
+  return response.data;
+}
+
+export async function waitForMediaUpload(
+  uploadId: string,
+  started: MediaUploadState,
+  onProgress?: UploadProgressHandler,
+): Promise<MediaUploadState> {
+  let current = started;
+  const began = Date.now();
+
+  while (current.status === "uploading" || current.status === "processing") {
+    if (Date.now() - began > UPLOAD_TIMEOUT_MS) {
+      throw new ApiError(i18n.t("profile:uploadTimeout"), 408);
+    }
+    if (typeof current.progress === "number") {
+      onProgress?.(current.progress);
+    }
+    await new Promise((resolve) => setTimeout(resolve, UPLOAD_POLL_MS));
+    current = await getMediaUploadStatus(uploadId);
+  }
+
+  if (current.status === "failed") {
+    throw new ApiError(current.message ?? i18n.t("common:alerts.tryAgain"), 422);
+  }
+
   onProgress?.(100);
-  return completed;
+  return current;
+}
+
+export async function cancelMediaUpload(uploadId: string) {
+  return laravelFetch<{ message: string }>(`/media/uploads/${uploadId}`, { method: "DELETE" });
 }
 
 function xhrSend<T>(
@@ -227,6 +335,11 @@ function xhrSend<T>(
 
     xhr.onabort = () => {
       reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+    };
+
+    xhr.timeout = CHUNK_TIMEOUT_MS;
+    xhr.ontimeout = () => {
+      reject(new ApiError(i18n.t("profile:uploadTimeout"), 408));
     };
 
     xhr.send(body);

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\FinalizeMediaUploadJob;
 use App\Services\MediaStorageException;
 use App\Services\MediaStorageService;
+use App\Services\MediaSubmissionService;
 use App\Support\MediaKind;
+use App\Support\MediaUploadStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -17,14 +20,15 @@ use Throwable;
 
 class MediaController extends Controller
 {
-    public function __construct(private readonly MediaStorageService $media)
-    {
-    }
+    public function __construct(
+        private readonly MediaStorageService $media,
+        private readonly MediaSubmissionService $submissions,
+    ) {}
 
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'max:524288'],
+            'file' => ['required', 'file', 'max:'.(MediaKind::MAX_VIDEO_BYTES / 1024)],
         ]);
 
         /** @var UploadedFile $file */
@@ -43,6 +47,10 @@ class MediaController extends Controller
             'filename' => ['required', 'string', 'max:255'],
             'size' => ['required', 'integer', 'min:1', 'max:'.MediaKind::MAX_VIDEO_BYTES],
             'mime_type' => ['nullable', 'string', 'max:127'],
+            'submission' => ['nullable', 'array'],
+            'submission.type' => ['required_with:submission', 'string', 'in:campaign_creator,content_planning_item'],
+            'submission.id' => ['required_with:submission', 'integer', 'min:1'],
+            'submission.payload' => ['required_with:submission', 'array'],
         ]);
 
         $extension = MediaKind::rawExtension($data['filename']);
@@ -63,8 +71,13 @@ class MediaController extends Controller
         $chunkSize = MediaKind::chunkBytes();
         $totalChunks = (int) ceil($size / $chunkSize);
         $userId = (int) $request->user()->id;
+        $submission = isset($data['submission']) && is_array($data['submission']) ? $data['submission'] : null;
 
-        Storage::disk('local')->put($this->metaPath($userId, $uploadId), json_encode([
+        if ($submission) {
+            $this->submissions->beginSubmission($request->user(), $uploadId, $submission);
+        }
+
+        $meta = [
             'user_id' => $userId,
             'filename' => $data['filename'],
             'size' => $size,
@@ -72,13 +85,22 @@ class MediaController extends Controller
             'chunk_size' => $chunkSize,
             'total_chunks' => $totalChunks,
             'created_at' => now()->toIso8601String(),
-        ], JSON_THROW_ON_ERROR));
+        ];
+
+        if ($submission) {
+            $meta['submission'] = $submission;
+        }
+
+        Storage::disk('local')->put($this->metaPath($userId, $uploadId), json_encode($meta, JSON_THROW_ON_ERROR));
+
+        MediaUploadStatus::put($uploadId, MediaUploadStatus::UPLOADING, ['progress' => 0]);
 
         return response()->json([
             'data' => [
                 'id' => $uploadId,
                 'chunk_size' => $chunkSize,
                 'total_chunks' => $totalChunks,
+                'async' => $submission !== null,
             ],
         ], 201);
     }
@@ -96,18 +118,56 @@ class MediaController extends Controller
             return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
         }
 
-        $bytes = $request->getContent();
         $expected = $index === $totalChunks - 1
             ? (int) $meta['size'] - ($index * $chunkSize)
             : $chunkSize;
 
-        if ($expected < 1 || strlen($bytes) !== $expected) {
+        if ($expected < 1) {
             return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
         }
 
-        Storage::disk('local')->put($this->chunkPath((int) $meta['user_id'], $uploadId, $index), $bytes);
+        $userId = (int) $meta['user_id'];
+        $chunkPath = $this->chunkPath($userId, $uploadId, $index);
+        $bytes = $request->getContent();
+
+        if (strlen($bytes) !== $expected) {
+            return response()->json(['message' => __('auth.upload_chunk_invalid')], 422);
+        }
+
+        Storage::disk('local')->put($chunkPath, $bytes);
+
+        $received = 0;
+        for ($chunkIndex = 0; $chunkIndex < $totalChunks; $chunkIndex++) {
+            $path = $this->chunkPath($userId, $uploadId, $chunkIndex);
+            if (Storage::disk('local')->exists($path)) {
+                $received += $chunkIndex === $totalChunks - 1
+                    ? (int) $meta['size'] - ($chunkIndex * $chunkSize)
+                    : $chunkSize;
+            }
+        }
+
+        $progress = (int) floor(($received / (int) $meta['size']) * 90);
+        MediaUploadStatus::put($uploadId, MediaUploadStatus::UPLOADING, ['progress' => $progress]);
+        $this->submissions->updateLinkedProgress($uploadId, $progress);
 
         return response()->json(['data' => ['index' => $index]]);
+    }
+
+    public function uploadStatus(Request $request, string $uploadId): JsonResponse
+    {
+        $meta = $this->loadMeta($request, $uploadId);
+        if ($meta === null) {
+            $state = MediaUploadStatus::get($uploadId);
+            if ($state === null) {
+                return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+            }
+
+            return response()->json(['data' => $state]);
+        }
+
+        $state = MediaUploadStatus::get($uploadId) ?? ['status' => MediaUploadStatus::UPLOADING, 'progress' => 0];
+
+        return response()->json(['data' => $state]);
     }
 
     public function completeUpload(Request $request, string $uploadId): JsonResponse
@@ -127,43 +187,38 @@ class MediaController extends Controller
             }
         }
 
-        $assembledRelative = $this->sessionDir($userId, $uploadId).'/assembled';
-        $assembledAbsolute = $disk->path($assembledRelative);
-        $disk->makeDirectory($this->sessionDir($userId, $uploadId));
-        $out = fopen($assembledAbsolute, 'wb');
-        if ($out === false) {
-            return response()->json(['message' => __('auth.upload_failed')], 500);
+        $hasSubmission = is_array($meta['submission'] ?? null);
+
+        if ($hasSubmission) {
+            MediaUploadStatus::put($uploadId, MediaUploadStatus::PROCESSING, ['progress' => 90]);
+            $this->submissions->updateLinkedProgress($uploadId, 90);
+
+            $job = new FinalizeMediaUploadJob($userId, $uploadId);
+            if (app()->runningUnitTests()) {
+                dispatch_sync($job);
+            } else {
+                app()->terminating(function () use ($job) {
+                    if (function_exists('fastcgi_finish_request')) {
+                        fastcgi_finish_request();
+                    }
+                    ignore_user_abort(true);
+                    set_time_limit(600);
+                    try {
+                        app()->call([$job, 'handle']);
+                    } catch (Throwable $e) {
+                        report($e);
+                    }
+                });
+            }
+
+            $state = MediaUploadStatus::get($uploadId) ?? ['status' => MediaUploadStatus::PROCESSING, 'progress' => 90];
+            $statusCode = ($state['status'] ?? null) === MediaUploadStatus::DONE ? 201 : 202;
+
+            return response()->json(['data' => $state], $statusCode);
         }
 
         try {
-            for ($index = 0; $index < $totalChunks; $index++) {
-                $in = fopen($disk->path($this->chunkPath($userId, $uploadId, $index)), 'rb');
-                if ($in === false) {
-                    fclose($out);
-                    return response()->json(['message' => __('auth.upload_failed')], 500);
-                }
-                stream_copy_to_stream($in, $out);
-                fclose($in);
-            }
-        } finally {
-            if (is_resource($out)) {
-                fclose($out);
-            }
-        }
-
-        if ((int) filesize($assembledAbsolute) !== (int) $meta['size']) {
-            $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
-
-            return response()->json(['message' => __('auth.upload_failed')], 500);
-        }
-
-        try {
-            $payload = $this->media->storeAssembled(
-                $assembledAbsolute,
-                (string) $meta['filename'],
-                (string) $meta['mime_type'],
-                $request->user(),
-            );
+            $payload = $this->assembleAndStore($meta, $uploadId, $request->user());
         } catch (MediaStorageException $e) {
             $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
 
@@ -175,8 +230,37 @@ class MediaController extends Controller
         }
 
         $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
+        MediaUploadStatus::put($uploadId, MediaUploadStatus::DONE, ['progress' => 100, 'data' => $payload]);
 
         return $this->respondStored($payload);
+    }
+
+    public function cancelUpload(Request $request, string $uploadId): JsonResponse
+    {
+        $meta = $this->loadMeta($request, $uploadId);
+        if ($meta === null) {
+            if (! $this->submissions->userOwnsPendingUpload($request->user(), $uploadId)) {
+                return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+            }
+
+            $this->submissions->clearPending($uploadId);
+            MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
+                'progress' => 0,
+                'message' => __('auth.upload_cancelled'),
+            ]);
+
+            return response()->json(['message' => __('auth.upload_cancelled')]);
+        }
+
+        $userId = (int) $meta['user_id'];
+        Storage::disk('local')->deleteDirectory($this->sessionDir($userId, $uploadId));
+        $this->submissions->clearPending($uploadId);
+        MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
+            'progress' => 0,
+            'message' => __('auth.upload_cancelled'),
+        ]);
+
+        return response()->json(['message' => __('auth.upload_cancelled')]);
     }
 
     public function download(string $folder, string $filename): StreamedResponse
@@ -219,6 +303,52 @@ class MediaController extends Controller
             'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @return array{id: int, url: string, filename: string, path: string, size: int}
+     */
+    private function assembleAndStore(array $meta, string $uploadId, ?\App\Models\User $user): array
+    {
+        $userId = (int) $meta['user_id'];
+        $totalChunks = (int) $meta['total_chunks'];
+        $disk = Storage::disk('local');
+        $sessionDir = $this->sessionDir($userId, $uploadId);
+        $assembledRelative = $sessionDir.'/assembled';
+        $assembledAbsolute = $disk->path($assembledRelative);
+        $disk->makeDirectory($sessionDir);
+        $out = fopen($assembledAbsolute, 'wb');
+        if ($out === false) {
+            throw new MediaStorageException(__('auth.upload_failed'), 500);
+        }
+
+        try {
+            for ($index = 0; $index < $totalChunks; $index++) {
+                $in = fopen($disk->path($this->chunkPath($userId, $uploadId, $index)), 'rb');
+                if ($in === false) {
+                    fclose($out);
+                    throw new MediaStorageException(__('auth.upload_failed'), 500);
+                }
+                stream_copy_to_stream($in, $out);
+                fclose($in);
+            }
+        } finally {
+            if (is_resource($out)) {
+                fclose($out);
+            }
+        }
+
+        if ((int) filesize($assembledAbsolute) !== (int) $meta['size']) {
+            throw new MediaStorageException(__('auth.upload_failed'), 500);
+        }
+
+        return $this->media->storeAssembled(
+            $assembledAbsolute,
+            (string) $meta['filename'],
+            (string) ($meta['mime_type'] ?? ''),
+            $user,
+        );
     }
 
     /**

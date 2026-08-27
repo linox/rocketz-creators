@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, Fragment, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
@@ -48,12 +48,14 @@ import {
 import { itemHasPautaBriefing } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
+import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
+import { DeliveryUploadProgress } from "@/components/DeliveryUploadProgress";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { Select2Field } from "@/components/Select2Field";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -61,6 +63,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { ApiError } from "@/lib/laravel";
 import { cn } from "@/lib/cn";
 import {
   CONTENT_DELIVERY_STATES,
@@ -648,7 +651,7 @@ function ProfileInner() {
       hydrate(res.data);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : tp("notFound"));
+      setError(err instanceof ApiError ? err.message : tp("loadError"));
     } finally {
       setLoading(false);
     }
@@ -683,14 +686,14 @@ function ProfileInner() {
     setContractOpen(true);
   }, [shouldOpenContract, creator, isAdmin, user.creator?.id]);
 
-  async function reloadMyCampaigns() {
-    setLoadingCampaigns(true);
+  async function reloadMyCampaigns(options?: { silent?: boolean }) {
+    if (!options?.silent) setLoadingCampaigns(true);
     try {
       setMyCampaignItems((await api.availableCampaigns()).data);
     } catch {
       /* ignore */
     } finally {
-      setLoadingCampaigns(false);
+      if (!options?.silent) setLoadingCampaigns(false);
     }
   }
 
@@ -701,6 +704,46 @@ function ProfileInner() {
       /* ignore */
     }
   }
+
+  const myCampaignItemsRef = useRef(myCampaignItems);
+  const recurringRef = useRef(recurring);
+  myCampaignItemsRef.current = myCampaignItems;
+  recurringRef.current = recurring;
+
+  useEffect(() => {
+    function refreshUploadTargets() {
+      void reloadMyCampaigns({ silent: true });
+      void reloadRecurring();
+    }
+    window.addEventListener("rocketz:upload-started", refreshUploadTargets);
+    window.addEventListener("rocketz:upload-complete", refreshUploadTargets);
+    return () => {
+      window.removeEventListener("rocketz:upload-started", refreshUploadTargets);
+      window.removeEventListener("rocketz:upload-complete", refreshUploadTargets);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "dashboard" || !id) return;
+
+    const timer = window.setInterval(() => {
+      const hasPendingUpload = myCampaignItemsRef.current.some((campaign) => {
+        const row = campaign.applications?.find((app) => app.creator_id === id);
+        return row?.application_status === "approved" && Boolean(row.pending_upload_id);
+      }) || recurringRef.current.some((contract) => {
+        if (contract.status !== "active") return false;
+        if (!contract.creators?.some((creatorRow) => creatorRow.creator_id === id)) return false;
+        return contract.items?.some((planItem) => Boolean(planItem.pending_upload_id)) ?? false;
+      });
+
+      if (!hasPendingUpload) return;
+
+      void reloadMyCampaigns({ silent: true });
+      void reloadRecurring();
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [tab, id]);
 
   function openSubmission(rowId: number) {
     setExpandedSubmissionId(rowId);
@@ -1834,13 +1877,15 @@ function RecurringBriefingModal({
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const { t: tc } = useTranslation("common");
+  const uploadManager = useOptionalUploadManager();
   const item = work.item;
   if (!item) return null;
 
   const hasBriefing = itemHasPautaBriefing(item);
+  const lockBackdrop = Boolean(item.pending_upload_id) || uploadManager?.isSubjectUploading("content_planning_item", item.id);
 
   return (
-    <AppModal onClose={onClose} zIndexClassName="z-[110]" panelClassName="max-w-2xl">
+    <AppModal onClose={onClose} lockBackdrop={lockBackdrop} zIndexClassName="z-[110]" panelClassName="max-w-2xl">
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0">
           <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
@@ -2039,6 +2084,15 @@ function ActiveRecurringWorksTable({
                   {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
                 </span>
               </div>
+              {item ? (
+                <DeliveryUploadProgress
+                  subjectType="content_planning_item"
+                  subjectId={item.id}
+                  pendingUploadId={item.pending_upload_id}
+                  uploadProgress={item.upload_progress}
+                  onCancelled={() => void reloadRecurring()}
+                />
+              ) : null}
               <div className="mt-3">
                 {item ? (
                   <CreatorWorkActions
@@ -2097,6 +2151,15 @@ function ActiveRecurringWorksTable({
                       <DeliveryStatusIcon state={item ? deliveryStatus : "waiting"} />
                       {item ? deliveryLabel(deliveryStatus) : tp("awaitingDemand")}
                     </span>
+                    {item ? (
+                      <DeliveryUploadProgress
+                        subjectType="content_planning_item"
+                        subjectId={item.id}
+                        pendingUploadId={item.pending_upload_id}
+                        uploadProgress={item.upload_progress}
+                        onCancelled={() => void reloadRecurring()}
+                      />
+                    ) : null}
                   </td>
                   <td className="p-3.5 pr-5 text-right">
                     {item ? (
@@ -2164,9 +2227,11 @@ function CampaignBriefingModal({
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const { t: tc } = useTranslation("common");
+  const uploadManager = useOptionalUploadManager();
+  const lockBackdrop = Boolean(row.pending_upload_id) || uploadManager?.isSubjectUploading("campaign_creator", row.id);
 
   return (
-    <AppModal onClose={onClose} zIndexClassName="z-[110]" panelClassName="max-w-3xl">
+    <AppModal onClose={onClose} lockBackdrop={lockBackdrop} zIndexClassName="z-[110]" panelClassName="max-w-3xl">
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0">
           <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
@@ -2209,7 +2274,7 @@ function ActiveCampaignsTable({
   expandedSubmissionId: number | null;
   openSubmission: (rowId: number) => void;
   onCloseSubmission: () => void;
-  reloadMyCampaigns: () => Promise<void>;
+  reloadMyCampaigns: (options?: { silent?: boolean }) => Promise<void>;
   applicationLabel: (status: string | null | undefined) => string;
   deliveryLabel: (status: string | null | undefined) => string;
   deliveryBadgeClass: (status: string | null | undefined) => string;
@@ -2335,6 +2400,13 @@ function ActiveCampaignsTable({
                   {deliveryLabel(deliveryStatus)}
                 </span>
               </div>
+              <DeliveryUploadProgress
+                subjectType="campaign_creator"
+                subjectId={row.id}
+                pendingUploadId={row.pending_upload_id}
+                uploadProgress={row.upload_progress}
+                onCancelled={() => void reloadMyCampaigns({ silent: true })}
+              />
               <div className="mt-3">{actions}</div>
             </div>
           );
@@ -2397,6 +2469,13 @@ function ActiveCampaignsTable({
                         <DeliveryStatusIcon state={deliveryStatus} />
                         {deliveryLabel(deliveryStatus)}
                       </span>
+                      <DeliveryUploadProgress
+                        subjectType="campaign_creator"
+                        subjectId={row.id}
+                        pendingUploadId={row.pending_upload_id}
+                        uploadProgress={row.upload_progress}
+                        onCancelled={() => void reloadMyCampaigns({ silent: true })}
+                      />
                     </td>
                     <td className="p-3.5 pr-5 text-right">
                       <CreatorWorkActions
@@ -2426,8 +2505,7 @@ function ActiveCampaignsTable({
         row={openCampaign.row}
         onClose={onCloseSubmission}
         onSubmitted={() => {
-          onCloseSubmission();
-          void reloadMyCampaigns();
+          void reloadMyCampaigns({ silent: true });
         }}
         tp={tp}
       />

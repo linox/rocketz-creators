@@ -162,7 +162,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     <AnimatePresence>
       {isOpen ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-0 sm:p-4 app-modal-overlay">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!isUploadingPhoto) onClose(); }} />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

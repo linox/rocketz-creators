@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AppShell } from "@/components/AppShell";
+import { UploadGlobalBanner } from "@/components/UploadGlobalBanner";
+import { UploadManagerProvider } from "@/contexts/UploadManagerContext";
 import { clearToken, fetchMe, getToken, ApiError } from "@/lib/laravel";
 import { cacheAuthUser, isUserCacheFresh, peekCachedUser, peekMemoryUser } from "@/lib/session-cache";
 import { LOCALE_STORAGE_KEY, normalizeLocale } from "@/i18n/locales";
@@ -76,7 +78,10 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   return (
     <AuthUserContext.Provider value={user}>
       <PrivacyProvider>
-        <AppShell user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>
+        <UploadManagerProvider>
+          <UploadGlobalBanner />
+          <AppShell user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>
+        </UploadManagerProvider>
       </PrivacyProvider>
     </AuthUserContext.Provider>
   );

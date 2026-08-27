@@ -221,6 +221,8 @@ export type CampaignCreator = {
   video_feedback: string | null;
   script_submitted_at?: string | null;
   video_submitted_at?: string | null;
+  pending_upload_id?: string | null;
+  upload_progress?: number | null;
   signature_status?: string | null;
   contract_url?: string | null;
   post_date?: string | null;
@@ -327,6 +329,8 @@ export type PlanningItem = {
   video_feedback?: string | null;
   script_submitted_at?: string | null;
   video_submitted_at?: string | null;
+  pending_upload_id?: string | null;
+  upload_progress?: number | null;
   script_version?: number;
   video_version?: number;
   submission_versions?: SubmissionVersionEntry[];

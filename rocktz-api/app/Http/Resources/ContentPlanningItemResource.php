@@ -51,6 +51,8 @@ class ContentPlanningItemResource extends JsonResource
             'video_feedback' => $this->video_feedback,
             'script_submitted_at' => $this->script_submitted_at?->toIso8601String(),
             'video_submitted_at' => $this->video_submitted_at?->toIso8601String(),
+            'pending_upload_id' => $this->pending_upload_id,
+            'upload_progress' => $this->upload_progress !== null ? (int) $this->upload_progress : null,
             'script_version' => (int) ($this->script_version ?? 0),
             'video_version' => (int) ($this->video_version ?? 0),
             'submission_versions' => $this->submission_versions ?? [],

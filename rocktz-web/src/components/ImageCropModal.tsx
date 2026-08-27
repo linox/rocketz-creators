@@ -38,7 +38,7 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
 
   return (
     <div className="app-modal-overlay fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" aria-hidden />
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

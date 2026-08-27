@@ -4,7 +4,7 @@ namespace App\Support;
 
 class MediaKind
 {
-    public const MAX_VIDEO_BYTES = 512 * 1024 * 1024;
+    public const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 
     public const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 

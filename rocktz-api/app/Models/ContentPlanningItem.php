@@ -37,6 +37,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'video_feedback',
     'script_submitted_at',
     'video_submitted_at',
+    'pending_upload_id',
+    'upload_progress',
     'script_version',
     'video_version',
     'submission_versions',

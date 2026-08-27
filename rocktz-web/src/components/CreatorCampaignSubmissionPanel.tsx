@@ -1,16 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, UploadCloud, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, Video } from "lucide-react";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
+import { VideoSubmissionFields } from "@/components/VideoSubmissionFields";
+import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { isBrandPosting } from "@/lib/posting-profile";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 
 function briefingText(campaign: Campaign, key: string) {
   const value = campaign.briefing?.[key];
@@ -27,13 +31,14 @@ type Props = {
 
 export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmitted, showBriefingToggle = true }: Props) {
   const { t: tp } = useTranslation("profile");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const uploadManager = useOptionalUploadManager();
 
   const [briefingOpen, setBriefingOpen] = useState(true);
   const [briefingDetailsOpen, setBriefingDetailsOpen] = useState(false);
   const [script, setScript] = useState(row.content?.script || "");
   const [publishedUrl, setPublishedUrl] = useState(row.content?.published_link || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -78,6 +83,23 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const hashtags = briefingText(campaign, "hashtags") || tp("noHashtags");
   const coupon = briefingText(campaign, "coupon") || tp("noneItem");
   const supportLink = briefingText(campaign, "link");
+  const remoteUploadProgress = mergeUploadProgress(
+    row.upload_progress,
+    uploadManager?.getSubjectProgress("campaign_creator", row.id),
+  );
+  const isBackgroundUploading = Boolean(row.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("campaign_creator", row.id));
+
+  function buildVideoSubmissionPayload(): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      video_status: "submitted",
+      delivery_status: "sent",
+    };
+    if (publishedUrl.trim()) {
+      payload.published_link = publishedUrl.trim();
+      payload.delivery_status = "published";
+    }
+    return payload;
+  }
 
   async function submitMaterial() {
     if (isApproved) {
@@ -98,12 +120,16 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         return;
       }
     } else if (canSubmitVideo) {
-      if (requiresNewVideoFile && !videoFile) {
+      if (requiresNewVideoFile && !videoFile && !downloadUrl.trim()) {
         await alertWarning(tp("materialRequiredTitle"), tp("newVideoFileRequired"));
         return;
       }
-      if (!videoFile && !row.content?.video_url && !publishedUrl.trim()) {
-        await alertWarning(tp("materialRequiredTitle"), tp("videoRequired"));
+      if (!videoFile && !downloadUrl.trim() && !row.content?.video_url && !publishedUrl.trim()) {
+        await alertWarning(tp("materialRequiredTitle"), tp("videoOrLinkRequired"));
+        return;
+      }
+      if (downloadUrl.trim() && !safeHttpUrl(downloadUrl.trim())) {
+        await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
         return;
       }
     } else if (!script.trim() && !videoFile && !publishedUrl.trim()) {
@@ -113,9 +139,49 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     setSubmitting(true);
     setUploadProgress(0);
     try {
+      if (videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
+        if (uploadManager) {
+          uploadManager.startSubmissionUpload(
+            videoFile,
+            videoFile.name,
+            {
+              type: "campaign_creator",
+              id: row.id,
+              label: campaign.name,
+              payload: buildVideoSubmissionPayload(),
+            },
+            setUploadProgress,
+          );
+          await alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"));
+          setVideoFile(null);
+          onSubmitted();
+          onClose();
+          return;
+        }
+      }
+
+      const externalVideoUrl = safeHttpUrl(downloadUrl.trim());
+      if (externalVideoUrl && !videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
+        const body: Record<string, unknown> = {
+          ...buildVideoSubmissionPayload(),
+          video_url: externalVideoUrl,
+          video_file_size: 0,
+        };
+        await api.updateParticipation(row.id, body);
+        await alertSuccess(
+          hasRevision
+            ? tp("newVersionSent")
+            : tp("materialSent"),
+        );
+        setDownloadUrl("");
+        onSubmitted();
+        onClose();
+        return;
+      }
+
       let videoUrl = row.content?.video_url || null;
       let videoFileSize = row.content?.video_file_size ?? 0;
-      if (videoFile && canSubmitVideo) {
+      if (videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
         const uploaded = await api.uploadMedia(videoFile, videoFile.name, setUploadProgress);
         videoUrl = uploaded.data.url;
         videoFileSize = uploaded.data.size ?? videoFile.size;
@@ -184,10 +250,11 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     : false;
   const videoReady = canSubmitVideo
     ? (requiresNewVideoFile
-      ? Boolean(videoFile)
-      : Boolean(videoFile || row.content?.video_url || publishedUrl.trim()))
+      ? Boolean(videoFile || downloadUrl.trim())
+      : Boolean(videoFile || downloadUrl.trim() || row.content?.video_url || publishedUrl.trim()))
     : false;
   const submitDisabled = submitting
+    || isBackgroundUploading
     || awaitingScriptApproval
     || awaitingVideoApproval
     || (isApproved
@@ -197,7 +264,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         : canSubmitVideo
           ? !videoReady
           : !script.trim() && !videoFile && !publishedUrl.trim());
-  const uploadingVideo = submitting && Boolean(videoFile) && canSubmitVideo;
+  const uploadingVideo = (submitting && Boolean(videoFile) && canSubmitVideo) || isBackgroundUploading;
+  const displayProgress = remoteUploadProgress ?? uploadProgress;
 
   return (
     <div className="flex flex-col gap-5 border-l-4 border-l-brand-primary bg-indigo-50/20 p-5 sm:p-6">
@@ -347,51 +415,25 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           ) : null}
 
           {canSubmitVideo ? (
-          <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("videoLabel")}</label>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="video/mp4,video/quicktime,video/webm,video/*,.mp4,.mov,.webm"
-                  className="hidden"
-                  disabled={submitting}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    if (!file.type.startsWith("video/")) {
-                      void alertWarning(tp("invalidVideoTitle"), tp("invalidVideo"));
-                      event.target.value = "";
-                      return;
-                    }
-                    if (file.size > 150 * 1024 * 1024) {
-                      void alertWarning(tp("invalidVideoTitle"), tp("videoTooBig"));
-                      event.target.value = "";
-                      return;
-                    }
-                    setVideoFile(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => fileRef.current?.click()}
-                  className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border-none bg-slate-100 px-3.5 text-[11px] font-bold tracking-wider text-slate-800 uppercase transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <UploadCloud size={14} /> {tp("chooseFile")}
-                </button>
-                {videoFile ? (
-                  <span className="flex items-center truncate rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700">
-                    {videoFile.name}
-                    {hasRevision ? ` · ${tp("versionBadge", { n: nextVideoVersion })}` : ""}
-                  </span>
-                ) : requiresNewVideoFile && row.content?.video_url ? (
-                  <span className="flex items-center truncate rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                    {tp("previousVideoAttachedSelectNew")}
-                  </span>
-                ) : null}
-              </div>
+              {isBackgroundUploading ? (
+                <p className="m-0 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] font-semibold text-indigo-900">
+                  {tp("uploadInProgress")} ({Math.round(displayProgress ?? 0)}%)
+                </p>
+              ) : null}
+              <VideoSubmissionFields
+                file={videoFile}
+                downloadUrl={downloadUrl}
+                onFileSelect={setVideoFile}
+                onDownloadUrlChange={setDownloadUrl}
+                disabled={submitting || isBackgroundUploading}
+                versionBadge={hasRevision ? tp("versionBadge", { n: nextVideoVersion }) : null}
+                requiresNewFile={requiresNewVideoFile}
+                showPreviousAttached={Boolean(requiresNewVideoFile && row.content?.video_url && !videoFile && !downloadUrl.trim())}
+                attachedHint={tp("previousVideoAttachedSelectNew")}
+              />
             </div>
 
             {row.content?.video_url ? (
@@ -456,7 +498,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
           {uploadingVideo ? (
             <div className="mt-2 border-t border-slate-100 pt-3">
-              <UploadProgressBar progress={uploadProgress} />
+              <UploadProgressBar progress={displayProgress ?? 0} />
             </div>
           ) : (
           <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3">

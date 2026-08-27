@@ -98,6 +98,25 @@ export function isApprovedDelivery(state: ContentDeliveryState) {
   return state === "approved" || state === "published";
 }
 
+export function isUploadInProgress(row: { pending_upload_id?: string | null; upload_progress?: number | null }) {
+  return Boolean(row.pending_upload_id);
+}
+
+export function mergeUploadProgress(...values: Array<number | null | undefined>) {
+  const numbers = values.filter((value): value is number => typeof value === "number");
+  if (numbers.length === 0) return null;
+  return Math.max(...numbers);
+}
+
+export function uploadProgressValue(
+  row: { pending_upload_id?: string | null; upload_progress?: number | null },
+  localProgress?: number | null,
+) {
+  const merged = mergeUploadProgress(row.upload_progress, localProgress);
+  if (merged !== null) return merged;
+  return row.pending_upload_id ? 0 : null;
+}
+
 export type CreatorDeliveryActionKind = "send_script" | "send_video" | "send_link" | "view_published";
 
 export type CreatorDeliveryAction = {

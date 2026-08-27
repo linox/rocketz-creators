@@ -9,6 +9,7 @@ type Props = {
   onClose: () => void;
   panelClassName?: string;
   zIndexClassName?: string;
+  lockBackdrop?: boolean;
 };
 
 export function AppModal({
@@ -16,6 +17,7 @@ export function AppModal({
   onClose,
   panelClassName,
   zIndexClassName = "z-[100]",
+  lockBackdrop = false,
 }: Props) {
   const { t: tc } = useTranslation("common");
 
@@ -25,6 +27,7 @@ export function AppModal({
         type="button"
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
         onMouseDown={(event) => {
+          if (lockBackdrop) return;
           if (event.target === event.currentTarget) {
             onClose();
           }

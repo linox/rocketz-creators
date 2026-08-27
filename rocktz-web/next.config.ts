@@ -13,12 +13,16 @@ function isPrivateIpv4(host: string): boolean {
 function allowedDevOrigins(): string[] {
   const hosts = new Set(["localhost", "127.0.0.1"]);
 
-  for (const addrs of Object.values(os.networkInterfaces())) {
-    for (const addr of addrs ?? []) {
-      if (addr.family === "IPv4" && !addr.internal && isPrivateIpv4(addr.address)) {
-        hosts.add(addr.address);
+  try {
+    for (const addrs of Object.values(os.networkInterfaces())) {
+      for (const addr of addrs ?? []) {
+        if (addr.family === "IPv4" && !addr.internal && isPrivateIpv4(addr.address)) {
+          hosts.add(addr.address);
+        }
       }
     }
+  } catch {
+    // Some CI/sandbox hosts block os.networkInterfaces(); localhost is enough there.
   }
 
   const extra = process.env.ALLOWED_DEV_ORIGINS ?? process.env.NEXT_PUBLIC_APP_URL;
