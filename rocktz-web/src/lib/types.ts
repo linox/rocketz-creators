@@ -375,6 +375,9 @@ export type DashboardStats = {
   approved_campaigns?: number;
   pending_applications?: number;
   status?: string;
+  audience?: { network: string; followers: number; views: number; engagement: number }[];
+  fees?: { paid: number; pending: number };
+  activity?: { name: string; value: number }[];
   revenue?: { name: string; value: number }[];
   signatures?: { id: number; creator_name?: string | null; creator_artistic: string; campaign_name: string; status: string }[];
   deliveries?: { id: number; creator_artistic: string; campaign_name: string; type: string; delivery_status: string; date: string }[];

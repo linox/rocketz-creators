@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../l10n/strings.dart';
 import '../models/auth_user.dart';
+import 'biometric_gate.dart';
 import 'token_store.dart';
 
 class SecureTokenStore implements TokenStore {
@@ -13,6 +14,7 @@ class SecureTokenStore implements TokenStore {
 
   final FlutterSecureStorage _storage;
   static const _key = 'rocktz_token';
+  static const _bioKey = 'rocktz_biometric';
 
   @override
   Future<String?> read() => _storage.read(key: _key);
@@ -21,32 +23,69 @@ class SecureTokenStore implements TokenStore {
   Future<void> write(String token) => _storage.write(key: _key, value: token);
 
   @override
-  Future<void> clear() => _storage.delete(key: _key);
+  Future<void> clear() async {
+    await _storage.delete(key: _key);
+    await _storage.delete(key: _bioKey);
+  }
+
+  @override
+  Future<bool> readBiometricEnabled() async {
+    return await _storage.read(key: _bioKey) == '1';
+  }
+
+  @override
+  Future<void> writeBiometricEnabled(bool value) {
+    if (value) {
+      return _storage.write(key: _bioKey, value: '1');
+    }
+    return _storage.delete(key: _bioKey);
+  }
 }
 
 class AuthSession extends ChangeNotifier {
   AuthSession({
     required ApiClient Function(AuthSession session) clientFactory,
     TokenStore? tokenStore,
+    BiometricGate? biometrics,
     String locale = 'pt-BR',
   })  : store = tokenStore ?? SecureTokenStore(),
+        biometrics = biometrics ?? LocalBiometricGate(),
         _locale = AppStrings.normalize(locale) {
     api = clientFactory(this);
   }
 
   final TokenStore store;
+  final BiometricGate biometrics;
   late final ApiClient api;
   AuthUser? user;
   String? token;
   bool ready = false;
+  bool locked = false;
+  bool biometricEnabled = false;
+  bool biometricAvailable = false;
+  bool offerBiometric = false;
+  String biometricLabel = 'biometria';
   String _locale;
 
   String get locale => _locale;
   AppStrings get strings => AppStrings(_locale);
-  bool get isLoggedIn => token != null && user?.isCreator == true;
+  bool get isLoggedIn => token != null && user?.isCreator == true && !locked;
+  bool get canUnlockWithBiometrics => locked && biometricEnabled && token != null;
 
   Future<void> bootstrap() async {
     token = await store.read();
+    biometricEnabled = await store.readBiometricEnabled();
+    biometricAvailable = await biometrics.isAvailable;
+    biometricLabel = await biometrics.label;
+
+    if (token != null && biometricEnabled) {
+      locked = true;
+      ready = true;
+      notifyListeners();
+      await unlockWithBiometrics();
+      return;
+    }
+
     if (token != null) {
       try {
         await refreshMe();
@@ -58,6 +97,55 @@ class AuthSession extends ChangeNotifier {
       }
     }
     ready = true;
+    notifyListeners();
+  }
+
+  Future<bool> unlockWithBiometrics() async {
+    if (token == null) {
+      return false;
+    }
+    final ok = await biometrics.authenticate(strings.t('biometricReason'));
+    if (!ok) {
+      return false;
+    }
+    try {
+      await refreshMe();
+      if (user != null && !user!.isCreator) {
+        await logout();
+        return false;
+      }
+      locked = false;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> enableBiometrics() async {
+    if (!biometricAvailable) {
+      return false;
+    }
+    final ok = await biometrics.authenticate(strings.t('biometricReason'));
+    if (!ok) {
+      return false;
+    }
+    biometricEnabled = true;
+    offerBiometric = false;
+    await store.writeBiometricEnabled(true);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> disableBiometrics() async {
+    biometricEnabled = false;
+    offerBiometric = false;
+    await store.writeBiometricEnabled(false);
+    notifyListeners();
+  }
+
+  void dismissBiometricOffer() {
+    offerBiometric = false;
     notifyListeners();
   }
 
@@ -106,13 +194,13 @@ class AuthSession extends ChangeNotifier {
   Future<void> setLocale(String locale) async {
     _locale = AppStrings.normalize(locale);
     notifyListeners();
-    if (token != null) {
+    if (token != null && !locked) {
       await api.patchJson('/auth/locale', {'locale': _locale});
     }
   }
 
   Future<void> registerDeviceToken(String fcmToken, String platform) async {
-    if (token == null) {
+    if (token == null || locked) {
       return;
     }
     await api.postJson('/device-tokens', {
@@ -133,12 +221,15 @@ class AuthSession extends ChangeNotifier {
   Future<void> logout() async {
     final current = token;
     try {
-      if (current != null) {
+      if (current != null && !locked) {
         await api.postJson('/auth/logout');
       }
     } catch (_) {}
     token = null;
     user = null;
+    locked = false;
+    biometricEnabled = false;
+    offerBiometric = false;
     await store.clear();
     notifyListeners();
   }
@@ -155,8 +246,12 @@ class AuthSession extends ChangeNotifier {
     }
     token = issued;
     user = parsed;
+    locked = false;
     _locale = AppStrings.normalize(parsed.locale);
     await store.write(issued);
+    biometricAvailable = await biometrics.isAvailable;
+    biometricLabel = await biometrics.label;
+    offerBiometric = biometricAvailable && !biometricEnabled;
     notifyListeners();
     return parsed;
   }

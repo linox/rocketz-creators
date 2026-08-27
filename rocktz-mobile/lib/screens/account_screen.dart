@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../app.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 import 'contract_screen.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -75,27 +78,57 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<AuthSession>();
     final t = session.strings.t;
+    final name = session.user?.creator?.artisticName ?? session.user?.name ?? '';
     return Scaffold(
-      appBar: AppBar(title: Text(t('account'))),
+      backgroundColor: AppColors.canvas,
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : PinnedHeroBody(
+              hero: PageHero(title: t('account'), subtitle: name),
               children: [
-                const LanguageSwitcher(),
-                const SizedBox(height: 16),
-                Text(t('mediaKit'), style: Theme.of(context).textTheme.titleMedium),
-                TextField(controller: bio, maxLines: 4, decoration: InputDecoration(labelText: t('bio'))),
-                TextField(controller: pix, decoration: InputDecoration(labelText: t('pix'))),
-                if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                FilledButton(onPressed: _save, child: Text(t('save'))),
-                ListTile(
-                  title: Text(t('contract')),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ContractScreen()),
+                SoftCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const LanguageSwitcher(),
+                        const SizedBox(height: 16),
+                        Text(t('mediaKit'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
+                        const SizedBox(height: 8),
+                        TextField(controller: bio, maxLines: 4, decoration: softField(t('bio'))),
+                        const SizedBox(height: 12),
+                        TextField(controller: pix, decoration: softField(t('pix'))),
+                        if (error != null) ...[
+                          const SizedBox(height: 8),
+                          Text(error!, style: const TextStyle(color: Color(0xFFB91C1C))),
+                        ],
+                        const SizedBox(height: 16),
+                        DarkPillButton(label: t('save'), onPressed: _save),
+                        if (session.biometricAvailable)
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(t('enableBiometric')),
+                            subtitle: Text(session.biometricLabel),
+                            value: session.biometricEnabled,
+                            onChanged: (value) async {
+                              if (value) {
+                                await session.enableBiometrics();
+                              } else {
+                                await session.disableBiometrics();
+                              }
+                            },
+                          ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(t('contract'), style: GoogleFonts.nunito(fontWeight: FontWeight.w700)),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ContractScreen()),
+                          ),
+                        ),
+                        TextButton(onPressed: session.logout, child: Text(t('logout'))),
+                      ],
+                    ),
                   ),
-                ),
-                TextButton(onPressed: session.logout, child: Text(t('logout'))),
               ],
             ),
     );

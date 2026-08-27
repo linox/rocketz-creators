@@ -24,7 +24,7 @@ Quando o design visual chegar, cruzar cada tela do Figma com a tabela abaixo: **
 | Código 2FA | challenge + 6 dígitos | `POST /auth/two-factor/verify`, `POST /auth/two-factor/resend` | API (fluxo já existe; no App entra no MVP para quem já tem 2FA no web) |
 | Cadastro criador | mesmos campos do web | `POST /auth/register/creator` | API |
 | Esqueci senha | email | `POST /auth/forgot-password` (link abre o **web**) | API |
-| Home | KPIs, status, contrato pendente | `GET /dashboard`, `GET /auth/me` | API |
+| Home | KPIs, gráficos de audiência/candidaturas, honorários PIX, contrato pendente | `GET /dashboard` (`audience`, `activity`, `fees` + KPIs), `GET /auth/me` | API |
 | Campanhas disponíveis | lista, filtro implícito geo | `GET /campaigns/available` | API |
 | Detalhe oportunidade | briefing, entregáveis, candidatar (`notes`) | `GET /campaigns/{id}`, `POST /campaigns/{id}/apply` | API. Gate: `active` + contrato |
 | Minhas campanhas | status candidatura / pagamento | `GET /campaigns` (escopo próprio) | API |

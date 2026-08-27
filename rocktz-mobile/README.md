@@ -10,7 +10,7 @@ flutter pub get
 flutter run
 ```
 
-Debug aponta para `http://127.0.0.1:8000/api` (iOS Simulator) ou `http://10.0.2.2:8000/api` (emulador Android). Release usa `https://api.creatorz.digital/api`. Override: `--dart-define=API_URL=https://...`.
+Debug no simulador iOS usa `http://127.0.0.1:8000/api`. **No iPhone físico** o App usa a API de produção (`https://api.creatorz.digital/api`), porque `127.0.0.1` é o próprio aparelho. Override: `--dart-define=API_URL=https://...`.
 
 ## Tipografia
 

@@ -52,6 +52,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Desbloquear o Creatorz com Face ID.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Enviar vídeos de entregas das campanhas.</string>
 	<key>NSMicrophoneUsageDescription</key>

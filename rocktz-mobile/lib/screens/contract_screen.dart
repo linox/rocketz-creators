@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 
 class ContractScreen extends StatefulWidget {
   const ContractScreen({super.key});
@@ -60,15 +62,27 @@ class _ContractScreenState extends State<ContractScreen> {
   Widget build(BuildContext context) {
     final t = context.watch<AuthSession>().strings.t;
     return Scaffold(
-      appBar: AppBar(title: Text(t('contract'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
+        hero: PageHero(showBack: true, title: t('contract')),
         children: [
-          TextField(controller: name, decoration: InputDecoration(labelText: t('fullName'))),
-          TextField(controller: document, decoration: InputDecoration(labelText: t('state'))),
-          TextField(controller: email, decoration: InputDecoration(labelText: t('email'))),
-          if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-          FilledButton(onPressed: loading ? null : _accept, child: Text(t('acceptContract'))),
+          SoftCard(
+            child: Column(
+              children: [
+                TextField(controller: name, decoration: softField(t('fullName'))),
+                const SizedBox(height: 12),
+                TextField(controller: document, decoration: softField(t('document'))),
+                const SizedBox(height: 12),
+                TextField(controller: email, decoration: softField(t('email'))),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(error!, style: const TextStyle(color: Color(0xFFB91C1C))),
+                ],
+                const SizedBox(height: 16),
+                DarkPillButton(label: t('acceptContract'), onPressed: loading ? null : _accept, busy: loading),
+              ],
+            ),
+          ),
         ],
       ),
     );

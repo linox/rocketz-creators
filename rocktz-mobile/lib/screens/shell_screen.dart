@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../session/auth_session.dart';
+import '../widgets/app_ui.dart';
 import 'account_screen.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
@@ -22,7 +23,35 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerBiometrics());
     _refreshNav();
+  }
+
+  Future<void> _offerBiometrics() async {
+    final session = context.read<AuthSession>();
+    if (!session.offerBiometric || !mounted) {
+      return;
+    }
+    final t = session.strings.t;
+    final enable = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(t('enableBiometric')),
+        content: Text(t('enableBiometricBody')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t('later'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(session.biometricLabel)),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (enable == true) {
+      await session.enableBiometrics();
+    } else {
+      session.dismissBiometricOffer();
+    }
   }
 
   Future<void> _refreshNav() async {
@@ -36,7 +65,10 @@ class _ShellScreenState extends State<ShellScreen> {
   Widget build(BuildContext context) {
     final t = context.watch<AuthSession>().strings.t;
     final pages = [
-      HomeScreen(onOpenContract: () => setState(() => index = 4)),
+      HomeScreen(
+        onOpenContract: () => setState(() => index = 4),
+        onOpenTab: (value) => setState(() => index = value),
+      ),
       const OpportunitiesScreen(),
       const WorkScreen(),
       NotificationsScreen(onChanged: _refreshNav),
@@ -44,26 +76,16 @@ class _ShellScreenState extends State<ShellScreen> {
     ];
     return Scaffold(
       body: IndexedStack(index: index, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (value) {
+      bottomNavigationBar: CreatorNavBar(
+        index: index,
+        unread: unread,
+        labels: [t('home'), t('opportunities'), t('work'), t('alerts'), t('account')],
+        onSelect: (value) {
           setState(() => index = value);
-          if (value == 3) _refreshNav();
+          if (value == 3) {
+            _refreshNav();
+          }
         },
-        destinations: [
-          NavigationDestination(icon: const Icon(Icons.home_outlined), label: t('home')),
-          NavigationDestination(icon: const Icon(Icons.auto_awesome_outlined), label: t('opportunities')),
-          NavigationDestination(icon: const Icon(Icons.work_outline), label: t('work')),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: unread > 0,
-              label: Text('$unread'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-            label: t('alerts'),
-          ),
-          NavigationDestination(icon: const Icon(Icons.person_outline), label: t('account')),
-        ],
       ),
     );
   }

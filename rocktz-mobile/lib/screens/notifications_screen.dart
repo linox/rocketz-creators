@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, this.onChanged});
@@ -48,27 +51,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final t = context.watch<AuthSession>().strings.t;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(t('alerts')),
-        actions: [TextButton(onPressed: _readAll, child: Text(t('markAll')))],
-      ),
-      body: RefreshIndicator(
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
         onRefresh: _load,
-        child: items.isEmpty
-            ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(error ?? t('empty')))])
-            : ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index] as Map<String, dynamic>;
-                  final read = item['read'] == true;
-                  return ListTile(
-                    title: Text(item['title'] as String? ?? ''),
-                    subtitle: Text(item['message'] as String? ?? ''),
-                    leading: Icon(read ? Icons.mark_email_read : Icons.mark_email_unread),
-                    onTap: () => _read(item['id'] as int),
-                  );
-                },
-              ),
+        hero: PageHero(
+          title: t('alerts'),
+          trailing: TextButton(
+            onPressed: _readAll,
+            child: Text(t('markAll'), style: GoogleFonts.nunito(color: Colors.white, fontWeight: FontWeight.w800)),
+          ),
+        ),
+        children: [
+          if (items.isEmpty)
+            EmptyHint(error ?? t('empty'))
+          else
+            for (final raw in items)
+              if (raw is Map<String, dynamic>)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SoftCard(
+                    color: raw['read'] == true ? Colors.white : const Color(0xFFF5F3FF),
+                    onTap: () => _read(raw['id'] as int),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          raw['title'] as String? ?? '',
+                          style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          raw['message'] as String? ?? '',
+                          style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ],
       ),
     );
   }

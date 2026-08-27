@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../api/media_upload_client.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 
 class RecurringDetailScreen extends StatefulWidget {
   const RecurringDetailScreen({super.key, required this.contractId});
@@ -65,21 +68,40 @@ class _RecurringDetailScreenState extends State<RecurringDetailScreen> {
     final t = context.watch<AuthSession>().strings.t;
     final items = contract?['items'];
     return Scaffold(
-      appBar: AppBar(title: Text(contract?['title'] as String? ?? t('recurring'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
+        hero: PageHero(
+          showBack: true,
+          title: contract?['title'] as String? ?? t('recurring'),
+        ),
         children: [
           if (error != null) Text(error!),
           if (items is List)
             for (final raw in items)
               if (raw is Map<String, dynamic>)
-                Card(
-                  child: ListTile(
-                    title: Text(raw['title'] as String? ?? t('pauta')),
-                    subtitle: Text(raw['status'] as String? ?? ''),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.upload),
-                      onPressed: () => _submitItem(raw),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SoftCard(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                raw['title'] as String? ?? t('pauta'),
+                                style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16),
+                              ),
+                              const SizedBox(height: 6),
+                              StatusChip(label: raw['status'] as String? ?? ''),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.upload_rounded),
+                          onPressed: () => _submitItem(raw),
+                        ),
+                      ],
                     ),
                   ),
                 ),

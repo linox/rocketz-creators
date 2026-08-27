@@ -11,9 +11,12 @@ class AppConfig {
     if (const bool.fromEnvironment('dart.vm.product')) {
       return productionApi;
     }
-    if (Platform.isAndroid) {
+    if (Platform.isIOS && Platform.environment['SIMULATOR_DEVICE_NAME'] != null) {
+      return 'http://127.0.0.1:8000/api';
+    }
+    if (Platform.isAndroid && Platform.environment.containsKey('ANDROID_EMULATOR')) {
       return 'http://10.0.2.2:8000/api';
     }
-    return 'http://127.0.0.1:8000/api';
+    return productionApi;
   }
 }

@@ -21,6 +21,7 @@ use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
 use App\Services\PermissionService;
+use Database\Seeders\DemoAccounts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -51,6 +52,29 @@ class DomainApiTest extends TestCase
         $this->withToken($token)->getJson('/api/admin-users')->assertOk();
         $this->withToken($token)->getJson('/api/nav')->assertOk()
             ->assertJsonStructure(['unread', 'pending_applications']);
+    }
+
+    public function test_creator_dashboard_includes_audience_activity_and_fees(): void
+    {
+        $this->seed();
+
+        $creator = User::query()->where('email', DemoAccounts::CREATOR_ANA)->first();
+        $token = $creator->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)->getJson('/api/dashboard')->assertOk()
+            ->assertJsonPath('audience.0.network', 'instagram')
+            ->assertJsonPath('audience.0.followers', 82000)
+            ->assertJsonPath('audience.1.network', 'tiktok')
+            ->assertJsonPath('audience.1.followers', 145000)
+            ->assertJsonStructure([
+                'campaigns',
+                'approved_campaigns',
+                'pending_applications',
+                'status',
+                'audience' => [['network', 'followers', 'views', 'engagement']],
+                'fees' => ['paid', 'pending'],
+                'activity' => [['name', 'value']],
+            ]);
     }
 
     public function test_list_endpoints_omit_heavy_relations_until_requested(): void

@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\SignatureStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -109,13 +110,122 @@ class DashboardController extends Controller
     private function creatorStats(int $creatorId): array
     {
         $rows = CampaignCreator::query()->where('creator_id', $creatorId);
+        $creator = $creatorId > 0 ? Creator::query()->find($creatorId) : null;
+        $metrics = is_array($creator?->metrics) ? $creator->metrics : [];
 
         return [
             'campaigns' => (clone $rows)->count(),
             'approved_campaigns' => (clone $rows)->where('application_status', ApplicationStatus::Approved)->count(),
             'pending_applications' => (clone $rows)->where('application_status', ApplicationStatus::Pending)->count(),
-            'status' => Creator::query()->find($creatorId)?->status?->value,
+            'status' => $creator?->status?->value,
+            'audience' => $this->creatorAudience($metrics),
+            'fees' => [
+                'paid' => (float) (clone $rows)->where('payment_status', PaymentStatus::Paid)->sum('amount'),
+                'pending' => (float) (clone $rows)->whereIn('payment_status', [PaymentStatus::Pending, PaymentStatus::Scheduled])->sum('amount'),
+            ],
+            'activity' => $this->creatorActivitySeries($creatorId),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metrics
+     * @return list<array{network: string, followers: float, views: float, engagement: float}>
+     */
+    private function creatorAudience(array $metrics): array
+    {
+        $networks = [
+            'instagram' => [
+                'followers' => ['instagram_followers', 'followers'],
+                'views' => ['instagram_views', 'avgViews', 'avg_views'],
+                'engagement' => ['instagram_engagement', 'avgEngagement', 'engagement_rate'],
+            ],
+            'tiktok' => [
+                'followers' => ['tiktok_followers'],
+                'views' => ['tiktok_views'],
+                'engagement' => ['tiktok_engagement'],
+            ],
+            'youtube' => [
+                'followers' => ['youtube_followers', 'youtube_subscribers'],
+                'views' => ['youtube_views'],
+                'engagement' => ['youtube_engagement'],
+            ],
+            'kwai' => [
+                'followers' => ['kwai_followers'],
+                'views' => ['kwai_views'],
+                'engagement' => ['kwai_engagement'],
+            ],
+        ];
+
+        $audience = [];
+        foreach ($networks as $network => $keys) {
+            $audience[] = [
+                'network' => $network,
+                'followers' => $this->metricNumber($metrics, $keys['followers']),
+                'views' => $this->metricNumber($metrics, $keys['views']),
+                'engagement' => $this->metricNumber($metrics, $keys['engagement']),
+            ];
+        }
+
+        return $audience;
+    }
+
+    /**
+     * @param  array<string, mixed>  $metrics
+     * @param  list<string>  $keys
+     */
+    private function metricNumber(array $metrics, array $keys): float
+    {
+        foreach ($keys as $key) {
+            if (isset($metrics[$key]) && is_numeric($metrics[$key])) {
+                return (float) $metrics[$key];
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @return list<array{name: string, value: int}>
+     */
+    private function creatorActivitySeries(int $creatorId): array
+    {
+        $series = [];
+        foreach ($this->lastSixMonths() as $key => $name) {
+            $series[$key] = ['name' => $name, 'value' => 0];
+        }
+
+        if ($creatorId < 1) {
+            return array_values($series);
+        }
+
+        CampaignCreator::query()
+            ->where('creator_id', $creatorId)
+            ->where('created_at', '>=', now()->startOfMonth()->subMonths(5))
+            ->get(['created_at'])
+            ->each(function (CampaignCreator $row) use (&$series) {
+                $key = $row->created_at?->format('Y-m');
+                if ($key && isset($series[$key])) {
+                    $series[$key]['value']++;
+                }
+            });
+
+        return array_values($series);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function lastSixMonths(): array
+    {
+        $labels = [1 => 'Jan', 2 => 'Fev', 3 => 'Mar', 4 => 'Abr', 5 => 'Mai', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago', 9 => 'Set', 10 => 'Out', 11 => 'Nov', 12 => 'Dez'];
+        $months = [];
+
+        for ($i = 5; $i >= 0; $i--) {
+            $date = now()->startOfMonth()->subMonths($i);
+            $months[$date->format('Y-m')] = $labels[(int) $date->format('n')].' '.substr($date->format('Y'), -2);
+        }
+
+        return $months;
     }
 
     /**
@@ -123,16 +233,9 @@ class DashboardController extends Controller
      */
     private function revenueSeries(): array
     {
-        $labels = [1 => 'Jan', 2 => 'Fev', 3 => 'Mar', 4 => 'Abr', 5 => 'Mai', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago', 9 => 'Set', 10 => 'Out', 11 => 'Nov', 12 => 'Dez'];
         $series = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $date = now()->startOfMonth()->subMonths($i);
-            $key = $date->format('Y-m');
-            $series[$key] = [
-                'name' => $labels[(int) $date->format('n')].' '.substr($date->format('Y'), -2),
-                'value' => 0.0,
-            ];
+        foreach ($this->lastSixMonths() as $key => $name) {
+            $series[$key] = ['name' => $name, 'value' => 0.0];
         }
 
         Campaign::query()

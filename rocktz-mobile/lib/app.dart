@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import 'l10n/strings.dart';
 import 'screens/login_screen.dart';
 import 'screens/shell_screen.dart';
+import 'screens/splash_screen.dart';
 import 'session/auth_session.dart';
+import 'theme/app_colors.dart';
 
 class CreatorzApp extends StatelessWidget {
   const CreatorzApp({super.key});
@@ -18,17 +20,27 @@ class CreatorzApp extends StatelessWidget {
       title: strings.t('appName'),
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6366F1)),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.indigo, surface: AppColors.canvas),
+        scaffoldBackgroundColor: AppColors.canvas,
         useMaterial3: true,
         textTheme: GoogleFonts.nunitoTextTheme(),
         primaryTextTheme: GoogleFonts.nunitoTextTheme(),
         fontFamily: GoogleFonts.nunito().fontFamily,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppColors.ink,
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 20, color: AppColors.ink),
+        ),
+        snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
       ),
-      home: !session.ready
-          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-          : session.isLoggedIn
-              ? const ShellScreen()
-              : const LoginScreen(),
+      home: AppStartup(
+        ready: session.ready,
+        loggedIn: session.isLoggedIn,
+        home: const ShellScreen(),
+        login: const LoginScreen(),
+      ),
     );
   }
 }

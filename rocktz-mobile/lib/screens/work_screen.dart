@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 import 'campaign_detail_screen.dart';
 import 'recurring_detail_screen.dart';
 
@@ -13,8 +16,8 @@ class WorkScreen extends StatefulWidget {
   State<WorkScreen> createState() => _WorkScreenState();
 }
 
-class _WorkScreenState extends State<WorkScreen> with SingleTickerProviderStateMixin {
-  late final TabController tabs;
+class _WorkScreenState extends State<WorkScreen> {
+  int tab = 0;
   List<dynamic> campaigns = [];
   List<dynamic> recurring = [];
   String? error;
@@ -22,14 +25,7 @@ class _WorkScreenState extends State<WorkScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    tabs = TabController(length: 2, vsync: this);
     _load();
-  }
-
-  @override
-  void dispose() {
-    tabs.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -50,56 +46,64 @@ class _WorkScreenState extends State<WorkScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final t = context.watch<AuthSession>().strings.t;
+    final items = tab == 0 ? campaigns : recurring;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(t('work')),
-        bottom: TabBar(controller: tabs, tabs: [
-          Tab(text: t('campaigns')),
-          Tab(text: t('recurring')),
-        ]),
-      ),
-      body: TabBarView(
-        controller: tabs,
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
+        onRefresh: _load,
+        hero: PageHero(title: t('work')),
         children: [
-          RefreshIndicator(
-            onRefresh: _load,
-            child: _list(campaigns, (item) => item['name'] as String? ?? '', (item) {
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => CampaignDetailScreen(campaignId: item['id'] as int),
-              ));
-            }),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SegmentPills(
+              labels: [t('campaigns'), t('recurring')],
+              index: tab,
+              onChanged: (value) => setState(() => tab = value),
+            ),
           ),
-          RefreshIndicator(
-            onRefresh: _load,
-            child: _list(recurring, (item) => item['title'] as String? ?? '', (item) {
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => RecurringDetailScreen(contractId: item['id'] as int),
-              ));
-            }),
-          ),
+          if (error != null && items.isEmpty)
+            EmptyHint(error!)
+          else if (items.isEmpty)
+            EmptyHint(t('empty'))
+          else
+            for (final raw in items)
+              if (raw is Map<String, dynamic>)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SoftCard(
+                    onTap: () {
+                      if (tab == 0) {
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => CampaignDetailScreen(campaignId: raw['id'] as int),
+                        ));
+                      } else {
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => RecurringDetailScreen(contractId: raw['id'] as int),
+                        ));
+                      }
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tab == 0 ? (raw['name'] as String? ?? '') : (raw['title'] as String? ?? ''),
+                                style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 17),
+                              ),
+                              const SizedBox(height: 6),
+                              StatusChip(label: raw['status'] as String? ?? ''),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                      ],
+                    ),
+                  ),
+                ),
         ],
       ),
-    );
-  }
-
-  Widget _list(List<dynamic> items, String Function(Map<String, dynamic>) title, void Function(Map<String, dynamic>) onTap) {
-    final t = context.read<AuthSession>().strings.t;
-    if (error != null && items.isEmpty) {
-      return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(error!))]);
-    }
-    if (items.isEmpty) {
-      return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(t('empty')))]);
-    }
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index] as Map<String, dynamic>;
-        return ListTile(
-          title: Text(title(item)),
-          subtitle: Text(item['status'] as String? ?? ''),
-          onTap: () => onTap(item),
-        );
-      },
     );
   }
 }

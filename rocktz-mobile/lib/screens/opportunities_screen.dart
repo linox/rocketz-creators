@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 import 'campaign_detail_screen.dart';
 
 class OpportunitiesScreen extends StatefulWidget {
@@ -42,26 +45,51 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> {
   Widget build(BuildContext context) {
     final t = context.watch<AuthSession>().strings.t;
     return Scaffold(
-      appBar: AppBar(title: Text(t('opportunities'))),
-      body: RefreshIndicator(
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
         onRefresh: _load,
-        child: loading
-            ? ListView(children: const [SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))])
-            : items.isEmpty
-                ? ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(error ?? t('empty')))])
-                : ListView.builder(
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index] as Map<String, dynamic>;
-                      return ListTile(
-                        title: Text(item['name'] as String? ?? ''),
-                        subtitle: Text(item['company'] is Map ? (item['company']['name'] as String? ?? '') : ''),
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => CampaignDetailScreen(campaignId: item['id'] as int, marketplace: true),
-                        )),
-                      );
-                    },
+        hero: PageHero(title: t('opportunities')),
+        children: [
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (items.isEmpty)
+            EmptyHint(error ?? t('empty'))
+          else
+            for (final raw in items)
+              if (raw is Map<String, dynamic>)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SoftCard(
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => CampaignDetailScreen(campaignId: raw['id'] as int, marketplace: true),
+                    )),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                raw['name'] as String? ?? '',
+                                style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 17),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                raw['company'] is Map ? (raw['company']['name'] as String? ?? '') : '',
+                                style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                      ],
+                    ),
                   ),
+                ),
+        ],
       ),
     );
   }

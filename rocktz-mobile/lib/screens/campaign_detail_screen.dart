@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_exception.dart';
 import '../api/media_upload_client.dart';
 import '../session/auth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 
 class CampaignDetailScreen extends StatefulWidget {
   const CampaignDetailScreen({super.key, required this.campaignId, this.marketplace = false});
@@ -147,45 +150,83 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
     final t = context.watch<AuthSession>().strings.t;
     final briefing = campaign?['briefing'];
     return Scaffold(
-      appBar: AppBar(title: Text(campaign?['name'] as String? ?? t('campaigns'))),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                if (briefing is Map) ...[
-                  Text(t('briefing'), style: Theme.of(context).textTheme.titleMedium),
-                  Text(briefing['key_message'] as String? ?? briefing['product'] as String? ?? ''),
+      backgroundColor: AppColors.canvas,
+      body: PinnedHeroBody(
+        hero: PageHero(
+          showBack: true,
+          title: campaign?['name'] as String? ?? t('campaigns'),
+        ),
+        children: [
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            if (error != null) Text(error!, style: const TextStyle(color: Color(0xFFB91C1C))),
+            if (briefing is Map)
+              SoftCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t('briefing'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Text(
+                      briefing['key_message'] as String? ?? briefing['product'] as String? ?? '',
+                      style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.marketplace && _own == null) ...[
+                    TextField(controller: notes, decoration: softField(t('notes'))),
+                    const SizedBox(height: 16),
+                    DarkPillButton(label: t('apply'), onPressed: busy ? null : _apply, busy: busy),
+                  ],
+                  if (_own != null) ...[
+                    StatusChip(
+                      label: '${_own!['application_status'] ?? ''} · ${_own!['payment_status'] ?? ''}',
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(controller: script, maxLines: 4, decoration: softField(t('script'))),
+                    const SizedBox(height: 12),
+                    DarkPillButton(
+                      label: t('submitScript'),
+                      busy: busy,
+                      onPressed: () => _patch({'script': script.text, 'script_status': 'submitted'}),
+                    ),
+                    if (busy && uploadPercent > 0) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(value: uploadPercent / 100, minHeight: 8),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    DarkPillButton(label: t('submitVideo'), busy: busy, onPressed: _pickVideo),
+                    const SizedBox(height: 12),
+                    TextField(controller: published, decoration: softField(t('publishedLink'))),
+                    const SizedBox(height: 12),
+                    DarkPillButton(
+                      label: t('submitLink'),
+                      busy: busy,
+                      onPressed: () => _patch({
+                        'published_link': published.text.trim(),
+                        'delivery_status': 'published',
+                      }),
+                    ),
+                  ],
                 ],
-                if (widget.marketplace && _own == null) ...[
-                  TextField(controller: notes, decoration: InputDecoration(labelText: t('notes'))),
-                  FilledButton(onPressed: busy ? null : _apply, child: Text(t('apply'))),
-                ],
-                if (_own != null) ...[
-                  Text('${t('status')}: ${_own!['application_status'] ?? ''} · ${_own!['payment_status'] ?? ''}'),
-                  TextField(controller: script, maxLines: 4, decoration: InputDecoration(labelText: t('script'))),
-                  FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () => _patch({'script': script.text, 'script_status': 'submitted'}),
-                    child: Text(t('submitScript')),
-                  ),
-                  if (busy && uploadPercent > 0) LinearProgressIndicator(value: uploadPercent / 100),
-                  FilledButton(onPressed: busy ? null : _pickVideo, child: Text(t('submitVideo'))),
-                  TextField(controller: published, decoration: InputDecoration(labelText: t('publishedLink'))),
-                  FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () => _patch({
-                              'published_link': published.text.trim(),
-                              'delivery_status': 'published',
-                            }),
-                    child: Text(t('submitLink')),
-                  ),
-                ],
-              ],
+              ),
             ),
+          ],
+        ],
+      ),
     );
   }
 }
