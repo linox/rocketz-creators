@@ -449,11 +449,7 @@ function xhrPutPresigned(
         reject(new ApiError(i18n.t("common:alerts.tryAgain"), xhr.status));
         return;
       }
-      const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag");
-      if (!etag) {
-        reject(new ApiError(i18n.t("common:alerts.tryAgain"), 500));
-        return;
-      }
+      const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag") || "";
       resolve(etag);
     };
 

@@ -348,33 +348,23 @@ class MediaController extends Controller
         $userId = (int) $meta['user_id'];
         $totalChunks = (int) $meta['total_chunks'];
         $data = $request->validate([
-            'parts' => ['required', 'array', 'size:'.$totalChunks],
+            'parts' => ['nullable', 'array', 'size:'.$totalChunks],
             'parts.*.index' => ['required', 'integer', 'min:0', 'max:'.max(0, $totalChunks - 1)],
-            'parts.*.etag' => ['required', 'string', 'max:200'],
+            'parts.*.etag' => ['nullable', 'string', 'max:200'],
         ]);
-
-        $seen = [];
-        $awsParts = [];
-        foreach ($data['parts'] as $part) {
-            $index = (int) $part['index'];
-            if (isset($seen[$index])) {
-                return response()->json(['message' => __('auth.upload_incomplete')], 422);
-            }
-            $seen[$index] = true;
-            $etag = trim((string) $part['etag']);
-            if ($etag !== '' && ! str_starts_with($etag, '"')) {
-                $etag = '"'.$etag.'"';
-            }
-            $awsParts[] = [
-                'PartNumber' => $index + 1,
-                'ETag' => $etag,
-            ];
-        }
 
         $key = (string) ($meta['object_key'] ?? '');
         $multipartId = (string) ($meta['multipart_upload_id'] ?? '');
         if ($key === '' || $multipartId === '') {
             return response()->json(['message' => __('auth.upload_session_invalid')], 404);
+        }
+
+        $awsParts = $this->r2PartsFromRequest($data['parts'] ?? null, $totalChunks);
+        if (count($awsParts) !== $totalChunks) {
+            $awsParts = $this->r2->listParts($key, $multipartId);
+        }
+        if (count($awsParts) !== $totalChunks) {
+            return response()->json(['message' => __('auth.upload_incomplete')], 422);
         }
 
         try {
@@ -550,6 +540,37 @@ class MediaController extends Controller
         }
 
         return $disk->response($path, $filename, $headers);
+    }
+
+    /**
+     * @param  list<array{index?: int, etag?: string}>|null  $parts
+     * @return list<array{PartNumber: int, ETag: string}>
+     */
+    private function r2PartsFromRequest(?array $parts, int $totalChunks): array
+    {
+        if ($parts === null || $parts === []) {
+            return [];
+        }
+
+        $seen = [];
+        $awsParts = [];
+        foreach ($parts as $part) {
+            $index = (int) ($part['index'] ?? -1);
+            $etag = trim((string) ($part['etag'] ?? ''));
+            if ($index < 0 || $index >= $totalChunks || $etag === '' || isset($seen[$index])) {
+                return [];
+            }
+            $seen[$index] = true;
+            if (! str_starts_with($etag, '"')) {
+                $etag = '"'.$etag.'"';
+            }
+            $awsParts[] = [
+                'PartNumber' => $index + 1,
+                'ETag' => $etag,
+            ];
+        }
+
+        return count($awsParts) === $totalChunks ? $awsParts : [];
     }
 
     /**

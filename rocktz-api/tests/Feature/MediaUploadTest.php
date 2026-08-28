@@ -307,6 +307,7 @@ class MediaUploadTest extends TestCase
             );
             $mock->shouldReceive('complete')->once();
             $mock->shouldReceive('objectSize')->once()->andReturn($size);
+            $mock->shouldReceive('listParts')->never();
             $mock->shouldReceive('abort')->never();
         });
 
@@ -341,6 +342,66 @@ class MediaUploadTest extends TestCase
             'disk' => 'r2',
             'size' => $size,
         ]);
+    }
+
+    public function test_r2_complete_lists_parts_when_browser_omits_etags(): void
+    {
+        config([
+            'media.disk' => 'r2',
+            'media.r2_min_part_bytes' => 1024,
+            'filesystems.disks.r2.key' => 'key',
+            'filesystems.disks.r2.secret' => 'secret',
+            'filesystems.disks.r2.bucket' => 'media',
+            'filesystems.disks.r2.endpoint' => 'https://example.r2.cloudflarestorage.com',
+            'filesystems.disks.r2.url' => 'https://cdn.test',
+        ]);
+        Storage::fake('r2');
+        Storage::fake('local');
+
+        $payload = hex2bin('000000186674797069736f6d0000000069736f6d').str_repeat("\0", 2476);
+        $size = strlen($payload);
+
+        $totalParts = 0;
+        $this->mock(R2MultipartUploader::class, function ($mock) use ($size, &$totalParts) {
+            $mock->shouldReceive('create')->once()->andReturn('mpu-1');
+            $mock->shouldReceive('presignedPartUrls')->once()->andReturnUsing(
+                function (string $key, string $id, int $total) use (&$totalParts) {
+                    $totalParts = $total;
+
+                    return array_map(
+                        fn (int $index) => 'https://r2.test/part-'.$index,
+                        range(0, $total - 1),
+                    );
+                },
+            );
+            $mock->shouldReceive('listParts')->once()->andReturnUsing(function () use (&$totalParts) {
+                return array_map(
+                    fn (int $index) => ['PartNumber' => $index + 1, 'ETag' => '"etag-'.$index.'"'],
+                    range(0, max(0, $totalParts - 1)),
+                );
+            });
+            $mock->shouldReceive('complete')->once();
+            $mock->shouldReceive('objectSize')->once()->andReturn($size);
+            $mock->shouldReceive('abort')->never();
+        });
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $init = $this->withToken($token)->postJson('/api/media/uploads', [
+            'filename' => 'reel.mp4',
+            'size' => $size,
+            'mime_type' => 'video/mp4',
+        ]);
+        $init->assertCreated();
+        $partUrls = $init->json('data.part_urls');
+        $this->assertIsArray($partUrls);
+        $parts = array_map(fn (int $index) => ['index' => $index, 'etag' => ''], array_keys($partUrls));
+
+        $this->withToken($token)
+            ->postJson('/api/media/uploads/'.(string) $init->json('data.id'), ['parts' => $parts])
+            ->assertCreated()
+            ->assertJsonPath('data.size', $size);
     }
 
     public function test_video_stream_serves_file_when_on_r2(): void

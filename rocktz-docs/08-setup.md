@@ -84,7 +84,7 @@ Depois de alterar o `.env` em produção: `php artisan config:clear`.
 
 O upload local usa o bucket `creatorz`. O servidor precisa das **mesmas** variáveis; sem elas o player em `https://creatorz.digital` recebe 404/403.
 
-No `.env` da API em produção:
+No `.env` da API em produção (não use `<account_id>` nem `media.seudominio.com`):
 
 ```
 MEDIA_DISK=r2
@@ -92,6 +92,7 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET=creatorz
 R2_ENDPOINT=https://6c33ae417c3fd3f476e02ec0c51d3c5f.r2.cloudflarestorage.com
+R2_URL=https://media.creatorz.digital
 R2_REGION=auto
 APP_URL=https://api.creatorz.digital
 FRONTEND_URL=https://creatorz.digital

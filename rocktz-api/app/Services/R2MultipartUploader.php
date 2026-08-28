@@ -69,6 +69,47 @@ class R2MultipartUploader
         ]);
     }
 
+    /**
+     * @return list<array{PartNumber: int, ETag: string}>
+     */
+    public function listParts(string $key, string $uploadId): array
+    {
+        $parts = [];
+        $token = null;
+
+        do {
+            $params = [
+                'Bucket' => $this->bucket(),
+                'Key' => $key,
+                'UploadId' => $uploadId,
+            ];
+            if (is_string($token) && $token !== '') {
+                $params['PartNumberMarker'] = $token;
+            }
+
+            $result = $this->client()->listParts($params);
+            foreach ($result['Parts'] ?? [] as $part) {
+                $etag = trim((string) ($part['ETag'] ?? ''));
+                $number = (int) ($part['PartNumber'] ?? 0);
+                if ($number < 1 || $etag === '') {
+                    continue;
+                }
+                $parts[] = [
+                    'PartNumber' => $number,
+                    'ETag' => $etag,
+                ];
+            }
+
+            $token = ! empty($result['IsTruncated'])
+                ? (string) ($result['NextPartNumberMarker'] ?? '')
+                : null;
+        } while (is_string($token) && $token !== '');
+
+        usort($parts, fn (array $a, array $b) => $a['PartNumber'] <=> $b['PartNumber']);
+
+        return $parts;
+    }
+
     public function objectSize(string $key): int
     {
         $head = $this->client()->headObject([
