@@ -47,6 +47,22 @@ const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", categ
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
 
+function orderedCreatorTags(categories: string[] | undefined, selected: string, limit: number) {
+  const list = categories || [];
+  if (!selected || selected === "all") return list.slice(0, limit);
+  const needle = selected.toLowerCase();
+  const match = list.filter((cat) => cat.toLowerCase() === needle);
+  const rest = list.filter((cat) => cat.toLowerCase() !== needle);
+  return [...match, ...rest].slice(0, limit);
+}
+
+function creatorTagClass(cat: string, selected: string) {
+  const active = selected !== "all" && cat.toLowerCase() === selected.toLowerCase();
+  return active
+    ? "rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-indigo-700 uppercase"
+    : "rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#64748B] uppercase";
+}
+
 function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
   if (!metrics) return 0;
   for (const key of keys) {
@@ -116,6 +132,7 @@ function CreatorCard({
   isAdmin,
   canModerate,
   canRemove,
+  highlightedCategory,
   onApprove,
   onReject,
   onChangePassword,
@@ -126,6 +143,7 @@ function CreatorCard({
   isAdmin: boolean;
   canModerate: boolean;
   canRemove: boolean;
+  highlightedCategory: string;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
@@ -254,8 +272,8 @@ function CreatorCard({
         ) : null}
 
         <div className="mb-4 flex flex-wrap gap-2">
-          {(creator.categories || []).slice(0, 2).map((cat) => (
-            <span key={cat} className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#64748B] uppercase">
+          {orderedCreatorTags(creator.categories, highlightedCategory, 2).map((cat) => (
+            <span key={cat} className={creatorTagClass(cat, highlightedCategory)}>
               {cat}
             </span>
           ))}
@@ -283,6 +301,7 @@ function CreatorListRow({
   isAdmin,
   canModerate,
   canRemove,
+  highlightedCategory,
   onApprove,
   onReject,
   onChangePassword,
@@ -293,6 +312,7 @@ function CreatorListRow({
   isAdmin: boolean;
   canModerate: boolean;
   canRemove: boolean;
+  highlightedCategory: string;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
@@ -343,8 +363,8 @@ function CreatorListRow({
           ) : null}
           {location ? <p className="m-0 truncate text-[11px] text-slate-400">{location}</p> : null}
           <div className="mt-1 flex flex-wrap gap-1">
-            {(creator.categories || []).slice(0, 3).map((cat) => (
-              <span key={cat} className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#64748B] uppercase">
+            {orderedCreatorTags(creator.categories, highlightedCategory, 3).map((cat) => (
+              <span key={cat} className={cn(creatorTagClass(cat, highlightedCategory), "px-1.5 text-[9px]")}>
                 {cat}
               </span>
             ))}
@@ -863,6 +883,7 @@ function CreatorsInner() {
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
               canRemove={canRemove}
+              highlightedCategory={categoryFilter}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}
@@ -876,6 +897,7 @@ function CreatorsInner() {
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
               canRemove={canRemove}
+              highlightedCategory={categoryFilter}
               onApprove={approve}
               onReject={reject}
               onChangePassword={setPasswordCreator}

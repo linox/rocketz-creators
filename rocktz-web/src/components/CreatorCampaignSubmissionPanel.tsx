@@ -152,10 +152,10 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             },
             setUploadProgress,
           );
-          await alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"));
           setVideoFile(null);
           onSubmitted();
           onClose();
+          void alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"), { timerMs: 2000 });
           return;
         }
       }
@@ -168,14 +168,14 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           video_file_size: 0,
         };
         await api.updateParticipation(row.id, body);
-        await alertSuccess(
-          hasRevision
-            ? tp("newVersionSent")
-            : tp("materialSent"),
-        );
         setDownloadUrl("");
         onSubmitted();
         onClose();
+        void alertSuccess(
+          hasRevision ? tp("newVersionSent") : tp("materialSent"),
+          undefined,
+          { timerMs: 2000 },
+        );
         return;
       }
 
@@ -225,7 +225,10 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       }
 
       await api.updateParticipation(row.id, body);
-      await alertSuccess(
+      setVideoFile(null);
+      onSubmitted();
+      onClose();
+      void alertSuccess(
         isApproved
           ? tp("publishedLinkSent")
           : hasRevision
@@ -233,10 +236,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             : canSubmitScript && stagedFlow
               ? tp("scriptSentWaiting")
               : tp("materialSent"),
+        undefined,
+        { timerMs: 2000 },
       );
-      setVideoFile(null);
-      onSubmitted();
-      onClose();
     } catch (err) {
       await alertApiError(err);
     } finally {

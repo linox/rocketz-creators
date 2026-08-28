@@ -57,6 +57,11 @@
     "checkData": "Check the details",
     "couldNotFinish": "Could not complete",
     "tryAgain": "Try again in a moment.",
+    "uploadHttpFailed": "Upload failed (HTTP {{status}}).",
+    "uploadBlockedCors": "The browser blocked the direct upload to R2 (CORS). On the bucket, allow the app origins, GET/PUT/HEAD methods, and ExposeHeaders ETag.",
+    "uploadMissingEtag": "R2 did not return an ETag. In the bucket CORS, include ExposeHeaders: ETag.",
+    "uploadR2Unauthorized": "R2 rejected the credentials. In Cloudflare: R2 → Manage R2 API Tokens, create an S3 token (not an API token), with Object Read & Write on the bucket, in the same account as the endpoint Account ID. Paste into R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.",
+    "uploadR2AccessDenied": "The R2 S3 token has no permission on this bucket (or the endpoint Account ID belongs to another account). Create a new token in R2 → Manage R2 API Tokens with Object Read & Write on that bucket.",
     "profileSoon": "Name and email come from your account. Changes land in a later release."
   },
   "password": {

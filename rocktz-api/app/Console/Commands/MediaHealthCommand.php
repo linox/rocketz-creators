@@ -32,8 +32,14 @@ class MediaHealthCommand extends Command
         try {
             $files = Storage::disk('r2')->files('portfolio');
             $this->line('r2_portfolio_objects='.count($files));
+
+            $probe = 'portfolio/health-'.now()->format('YmdHis').'.txt';
+            Storage::disk('r2')->put($probe, 'ok');
+            $this->line('r2_write='.$probe);
+            Storage::disk('r2')->delete($probe);
+
             if ($files === []) {
-                $this->warn('Bucket is reachable but portfolio/ is empty.');
+                $this->warn('Bucket is reachable and writable, but portfolio/ is empty.');
 
                 return self::SUCCESS;
             }

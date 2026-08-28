@@ -446,16 +446,20 @@ function xhrPutPresigned(
     xhr.onload = () => {
       finish();
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new ApiError(i18n.t("common:alerts.tryAgain"), xhr.status));
+        reject(new ApiError(parseRemoteStorageError(xhr.responseText, xhr.status), xhr.status));
         return;
       }
       const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag") || "";
+      if (!etag.trim()) {
+        reject(new ApiError(i18n.t("common:alerts.uploadMissingEtag"), xhr.status));
+        return;
+      }
       resolve(etag);
     };
 
     xhr.onerror = () => {
       finish();
-      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+      reject(new ApiError(parseRemoteStorageError(xhr.responseText, xhr.status || 0), xhr.status || 0));
     };
 
     xhr.onabort = () => {
@@ -524,7 +528,7 @@ function xhrSend<T>(
       finish();
       const data = parseLaravelJson<T>(xhr.responseText);
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new ApiError(data.message ?? i18n.t("common:alerts.tryAgain"), xhr.status, data.errors));
+        reject(new ApiError(humanizeMediaError(url, data.message) ?? i18n.t("common:alerts.tryAgain"), xhr.status, data.errors));
         return;
       }
       onProgress?.(100);
@@ -559,6 +563,41 @@ function parseLaravelJson<T>(raw: string): T & LaravelError {
   }
 }
 
+function humanizeMediaError(path: string, message?: string): string | undefined {
+  if (!message) {
+    return message;
+  }
+  const isMedia = path.includes("/media") || path.includes("r2.cloudflarestorage.com");
+  if (isMedia && /unauthorized|invalidaccesskeyid|signaturedoesnotmatch/i.test(message)) {
+    return i18n.t("common:alerts.uploadR2Unauthorized");
+  }
+  if (isMedia && /accessdenied|access denied/i.test(message)) {
+    return i18n.t("common:alerts.uploadR2AccessDenied");
+  }
+  return message;
+}
+
+function parseRemoteStorageError(raw: string, status: number): string {
+  const text = String(raw || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  const code = text.match(/<Code>([^<]+)<\/Code>/i)?.[1]?.trim();
+  const message = text.match(/<Message>([^<]+)<\/Message>/i)?.[1]?.trim();
+  const combined = `${code ?? ""} ${message ?? ""} ${text}`.toLowerCase();
+  if (combined.includes("unauthorized") || combined.includes("invalidaccesskeyid") || combined.includes("signaturedoesnotmatch")) {
+    return i18n.t("common:alerts.uploadR2Unauthorized");
+  }
+  if (combined.includes("accessdenied") || combined.includes("access denied")) {
+    return i18n.t("common:alerts.uploadR2AccessDenied");
+  }
+  const detail = [code, message].filter(Boolean).join(": ");
+  if (detail) {
+    return detail;
+  }
+  if (status > 0) {
+    return i18n.t("common:alerts.uploadHttpFailed", { status });
+  }
+  return i18n.t("common:alerts.uploadBlockedCors");
+}
+
 export async function laravelFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
@@ -591,7 +630,7 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;
 
   if (!response.ok) {
-    throw new ApiError(data.message ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors);
+    throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors);
   }
 
   return data;

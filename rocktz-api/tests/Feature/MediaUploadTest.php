@@ -344,6 +344,36 @@ class MediaUploadTest extends TestCase
         ]);
     }
 
+    public function test_r2_init_returns_storage_error_message(): void
+    {
+        config([
+            'media.disk' => 'r2',
+            'media.r2_min_part_bytes' => 1024,
+            'filesystems.disks.r2.key' => 'key',
+            'filesystems.disks.r2.secret' => 'secret',
+            'filesystems.disks.r2.bucket' => 'media',
+            'filesystems.disks.r2.endpoint' => 'https://example.r2.cloudflarestorage.com',
+        ]);
+
+        $this->mock(R2MultipartUploader::class, function ($mock) {
+            $mock->shouldReceive('create')->once()->andThrow(
+                new \RuntimeException('InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records.')
+            );
+        });
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/media/uploads', [
+                'filename' => 'reel.mp4',
+                'size' => 4096,
+                'mime_type' => 'video/mp4',
+            ])
+            ->assertStatus(500)
+            ->assertJsonPath('message', 'InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records.');
+    }
+
     public function test_r2_complete_lists_parts_when_browser_omits_etags(): void
     {
         config([

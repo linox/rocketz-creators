@@ -284,6 +284,40 @@ function needsAgencyAttention(row: CampaignCreator) {
   return false;
 }
 
+function isDeliveredCreator(row: CampaignCreator) {
+  return !hasNoDemand(row) && (row.delivery_status === "approved" || row.delivery_status === "published");
+}
+
+function creatorCardTag(row: CampaignCreator, filter: CreatorFilter): Exclude<CreatorFilter, "all"> | null {
+  if (filter === "attention") return needsAgencyAttention(row) ? "attention" : null;
+  if (filter === "owing") return "owing";
+  if (filter === "delivered") return "delivered";
+  if (filter === "no_demand") return "no_demand";
+  if (needsAgencyAttention(row)) return "attention";
+  return null;
+}
+
+const CREATOR_TAG_PILL: Record<Exclude<CreatorFilter, "all">, string> = {
+  attention: "border-amber-200 bg-amber-100 text-amber-900",
+  owing: "border-rose-200 bg-rose-100 text-rose-800",
+  delivered: "border-emerald-200 bg-emerald-100 text-emerald-800",
+  no_demand: "border-slate-200 bg-slate-100 text-slate-600",
+};
+
+const CREATOR_TAG_CARD: Record<Exclude<CreatorFilter, "all">, string> = {
+  attention: "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70",
+  owing: "border-rose-200/80 bg-rose-50/15",
+  delivered: "border-emerald-200/80 bg-emerald-50/15",
+  no_demand: "border-slate-200 bg-slate-50/50",
+};
+
+const CREATOR_TAG_DOT: Record<Exclude<CreatorFilter, "all">, string> = {
+  attention: "bg-amber-500",
+  owing: "bg-rose-500",
+  delivered: "bg-emerald-500",
+  no_demand: "bg-slate-400",
+};
+
 function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
   if (!metrics) return 0;
   for (const key of keys) {
@@ -570,7 +604,7 @@ function DetailInner() {
     displayCreators.forEach((row) => {
       if (needsAgencyAttention(row)) attention += 1;
       if (hasNoDemand(row)) noDemand += 1;
-      else if (row.delivery_status === "approved" || row.delivery_status === "published") delivered += 1;
+      else if (isDeliveredCreator(row)) delivered += 1;
       else owing += 1;
     });
     return { all: displayCreators.length, attention, owing, delivered, no_demand: noDemand };
@@ -578,17 +612,31 @@ function DetailInner() {
 
   const filteredCreators = useMemo(() => {
     const term = creatorSearch.trim().toLowerCase();
-    return displayCreators.filter((row) => {
-      const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.delivery_type ?? ""}`.toLowerCase();
-      if (term && !name.includes(term)) return false;
-      const none = hasNoDemand(row);
-      if (creatorFilter === "attention") return needsAgencyAttention(row);
-      if (creatorFilter === "no_demand") return none;
-      if (creatorFilter === "delivered") return !none && (row.delivery_status === "approved" || row.delivery_status === "published");
-      if (creatorFilter === "owing") return !none && row.delivery_status !== "approved" && row.delivery_status !== "published";
-      return true;
-    });
-  }, [displayCreators, creatorSearch, creatorFilter]);
+    const rank = (row: CampaignCreator) => {
+      if (needsAgencyAttention(row)) return 0;
+      if (hasNoDemand(row)) return 3;
+      if (isDeliveredCreator(row)) return 2;
+      return 1;
+    };
+    return displayCreators
+      .filter((row) => {
+        const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.delivery_type ?? ""}`.toLowerCase();
+        if (term && !name.includes(term)) return false;
+        const none = hasNoDemand(row);
+        if (creatorFilter === "attention") return needsAgencyAttention(row);
+        if (creatorFilter === "no_demand") return none;
+        if (creatorFilter === "delivered") return isDeliveredCreator(row);
+        if (creatorFilter === "owing") return !none && !isDeliveredCreator(row);
+        return true;
+      })
+      .sort((a, b) => {
+        const byTag = rank(a) - rank(b);
+        if (byTag !== 0) return byTag;
+        const nameA = a.creator?.artistic_name || a.creator?.full_name || "";
+        const nameB = b.creator?.artistic_name || b.creator?.full_name || "";
+        return nameA.localeCompare(nameB, locale, { sensitivity: "base" });
+      });
+  }, [displayCreators, creatorSearch, creatorFilter, locale]);
 
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
@@ -1373,9 +1421,17 @@ function DetailInner() {
                     const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
                     const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.delivery");
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
-                    const needsAttention = needsAgencyAttention(row);
-                    const showAttentionTag = creatorFilter === "all" && needsAttention;
+                    const cardTag = creatorCardTag(row, creatorFilter);
                     const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
+                    const tagLabel = cardTag === "attention"
+                      ? t("campaignDetail.attentionBadge")
+                      : cardTag === "owing"
+                        ? t("campaignDetail.filterOwing")
+                        : cardTag === "delivered"
+                          ? t("campaignDetail.filterDelivered")
+                          : cardTag === "no_demand"
+                            ? t("campaignDetail.filterNoDemand")
+                            : null;
 
                     if (creatorLayout === "grid") {
                       return (
@@ -1383,8 +1439,8 @@ function DetailInner() {
                           key={row.id}
                           className={cn(
                             "group relative flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
-                            needsAttention
-                              ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70"
+                            cardTag
+                              ? CREATOR_TAG_CARD[cardTag]
                               : deliveryState === "waiting" || deliveryState === "scriptRevision" || deliveryState === "videoRevision" || deliveryState === "revision"
                                 ? "border-rose-200/80"
                                 : deliveryState === "published" || deliveryState === "approved"
@@ -1392,10 +1448,10 @@ function DetailInner() {
                                   : "border-slate-200",
                           )}
                         >
-                          {showAttentionTag ? (
-                            <span className="absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-900 uppercase shadow-xs">
-                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-                              {t("campaignDetail.attentionBadge")}
+                          {cardTag && tagLabel ? (
+                            <span className={cn("absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase shadow-xs", CREATOR_TAG_PILL[cardTag])}>
+                              <span className={cn("h-1.5 w-1.5 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
+                              {tagLabel}
                             </span>
                           ) : null}
                           <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="circle" className="mb-2 h-12 w-12 shrink-0 border border-slate-200" textClassName="text-xs font-bold" />
@@ -1434,22 +1490,22 @@ function DetailInner() {
                           "relative flex cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all",
                           selectedId === row.id
                             ? "border-brand-primary/60 bg-indigo-50/50 ring-1 ring-brand-primary/20 shadow-xs"
-                            : showAttentionTag
-                              ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/60 hover:bg-amber-50/70"
+                            : cardTag
+                              ? cn(CREATOR_TAG_CARD[cardTag], "hover:brightness-[0.99]")
                               : "border-slate-200 bg-white hover:bg-slate-50",
                         )}
                       >
-                        {showAttentionTag ? (
-                          <span className="absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-900 uppercase shadow-xs">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-                            {t("campaignDetail.attentionBadge")}
+                        {cardTag && tagLabel ? (
+                          <span className={cn("absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase shadow-xs", CREATOR_TAG_PILL[cardTag])}>
+                            <span className={cn("h-1.5 w-1.5 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
+                            {tagLabel}
                           </span>
                         ) : null}
                         <div className="flex items-center justify-between">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
                             <div className="min-w-0">
-                              <span className="block truncate text-xs font-black text-slate-800">@{row.creator?.artistic_name || "criador"}</span>
+                              <span className="block truncate text-xs font-black text-slate-800">@{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}</span>
                               {row.creator?.full_name ? <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator.full_name}</span> : null}
                             </div>
                           </div>

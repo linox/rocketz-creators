@@ -37,6 +37,7 @@ import type { AuthUser } from "@/lib/auth";
 import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { fetchMe, logoutRequest } from "@/lib/laravel";
+import { companyLandingPath } from "@/lib/landing-origin";
 import { cacheNavBadges, isNavCacheFresh, peekNavBadges } from "@/lib/session-cache";
 import { usePrivacy } from "@/lib/privacy";
 import { useTranslation } from "react-i18next";
@@ -46,6 +47,7 @@ type NavItem = {
   label: string;
   icon: typeof Home;
   badge?: number;
+  external?: boolean;
 };
 
 function normalizePath(path: string) {
@@ -61,19 +63,16 @@ function SidebarItem({
   active,
   badge,
   onClick,
+  external,
 }: NavItem & { active: boolean; onClick: () => void }) {
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex w-full items-center justify-between rounded-lg px-3 py-3 text-sm font-medium transition-all duration-200",
-        active
-          ? "bg-white text-[#8A3FFC] shadow-sm"
-          : "text-white/75 hover:bg-white/10 hover:text-white",
-      )}
-    >
+  const className = cn(
+    "flex w-full items-center justify-between rounded-lg px-3 py-3 text-sm font-medium transition-all duration-200",
+    active
+      ? "bg-white text-[#8A3FFC] shadow-sm"
+      : "text-white/75 hover:bg-white/10 hover:text-white",
+  );
+  const inner = (
+    <>
       <span className="flex items-center gap-3">
         <Icon size={18} className={cn(active && "text-[#8A3FFC]")} />
         <span className={cn(active && "font-semibold")}>{label}</span>
@@ -83,6 +82,20 @@ function SidebarItem({
           {badge}
         </span>
       ) : null}
+    </>
+  );
+
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={onClick} className={className}>
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} onClick={onClick} aria-current={active ? "page" : undefined} className={className}>
+      {inner}
     </Link>
   );
 }
@@ -114,6 +127,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const [pendingCampaigns, setPendingCampaigns] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
+  const [companyPublicLandingSlug, setCompanyPublicLandingSlug] = useState<string | null>(null);
   const needsContract = user.role === "creator" && Boolean(user.creator?.id) && !user.creator?.contract_acceptance;
   const close = () => setOpen(false);
   const handle = (user.email.split("@")[0] || "admin").toUpperCase();
@@ -165,6 +179,30 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
       window.removeEventListener("rocketz:nav-refresh", onNavRefresh);
     };
   }, [user.role]);
+
+  useEffect(() => {
+    if (user.role !== "company" || !user.company?.id) {
+      setCompanyPublicLandingSlug(null);
+      return;
+    }
+
+    let cancelled = false;
+    const companyId = user.company.id;
+
+    api.companyLanding(companyId)
+      .then((res) => {
+        if (cancelled) return;
+        const page = res.data;
+        setCompanyPublicLandingSlug(page.status === "published" && page.slug ? page.slug : null);
+      })
+      .catch(() => {
+        if (!cancelled) setCompanyPublicLandingSlug(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.role, user.company?.id, pathname]);
 
   useEffect(() => {
     setOpen(false);
@@ -272,12 +310,20 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/company-dashboard" label={t("campaignPanel")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
-                <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-                <SidebarItem href="/company-landing" label={t("companyLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
-                <SidebarItem href="/join" label={t("viewLanding")} icon={Globe} active={isJoinActive} onClick={close} />
+                <SidebarItem href="/company-landing" label={t("myLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
+                {companyPublicLandingSlug ? (
+                  <SidebarItem
+                    href={companyLandingPath(companyPublicLandingSlug)}
+                    label={t("viewLanding")}
+                    icon={Globe}
+                    active={false}
+                    external
+                    onClick={close}
+                  />
+                ) : null}
               </>
             ) : (
               <>
@@ -293,7 +339,6 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-                <SidebarItem href="/join" label={t("homeLanding")} icon={Globe} active={isJoinActive} onClick={close} />
               </>
             )}
           </nav>

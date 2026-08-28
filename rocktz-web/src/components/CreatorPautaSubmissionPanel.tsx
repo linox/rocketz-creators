@@ -134,9 +134,9 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
             },
             setUploadProgress,
           );
-          await alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"));
           setVideoFile(null);
           onSubmitted();
+          void alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"), { timerMs: 2000 });
           return;
         }
       }
@@ -149,9 +149,9 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
           submission_url: externalVideoUrl,
           video_status: "submitted",
         });
-        await alertSuccess(hasRevision ? tp("newVersionSent") : tp("materialSent"));
         setDownloadUrl("");
         onSubmitted();
+        void alertSuccess(hasRevision ? tp("newVersionSent") : tp("materialSent"), undefined, { timerMs: 2000 });
         return;
       }
 
@@ -170,14 +170,16 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
         body.video_status = "submitted";
       }
       await api.updatePlanningItem(item.id, body);
-      await alertSuccess(
+      onSubmitted();
+      void alertSuccess(
         hasRevision
           ? tp("newVersionSent")
           : canSubmitScript && staged
             ? tp("scriptSentWaiting")
             : tp("materialSent"),
+        undefined,
+        { timerMs: 2000 },
       );
-      onSubmitted();
     } catch (err) {
       await alertApiError(err);
     } finally {

@@ -3,14 +3,18 @@
 namespace App\Services;
 
 use App\Support\MediaUrl;
+use App\Support\R2Client;
+use App\Support\R2Cors;
 use Aws\S3\S3Client;
-use Illuminate\Filesystem\AwsS3V3Adapter;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 class R2MultipartUploader
 {
     public function create(string $key, string $contentType): string
     {
+        $this->ensureBrowserCors();
+
         $result = $this->client()->createMultipartUpload([
             'Bucket' => $this->bucket(),
             'Key' => $key,
@@ -151,16 +155,24 @@ class R2MultipartUploader
 
     private function client(): S3Client
     {
-        $disk = Storage::disk('r2');
-        if (! $disk instanceof AwsS3V3Adapter) {
-            throw new MediaStorageException(__('auth.upload_failed'), 500);
-        }
-
-        return $disk->getClient();
+        return R2Client::make();
     }
 
     private function bucket(): string
     {
         return (string) config('filesystems.disks.r2.bucket');
+    }
+
+    private function ensureBrowserCors(): void
+    {
+        if (Cache::get('r2-cors-ensured')) {
+            return;
+        }
+
+        try {
+            R2Cors::apply();
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 }

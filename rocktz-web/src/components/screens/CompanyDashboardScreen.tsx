@@ -34,6 +34,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatLocation, moneyCurrency } from "@/lib/geo";
+import { companyLandingPath } from "@/lib/landing-origin";
 import { usePrivacy } from "@/lib/privacy";
 import type { Campaign, Company, CompanyLandingPage, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -497,6 +498,16 @@ function CompanyDashboardInner() {
           <Link href={isAdmin ? `/company-landing?companyId=${companyId}` : "/company-landing"} className="rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white hover:bg-violet-800">
             {t("companyLanding.title")}
           </Link>
+          {landing?.status === "published" && landing.slug ? (
+            <a
+              href={companyLandingPath(landing.slug)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-[11px] font-bold text-violet-800"
+            >
+              {t("companyLanding.openPage")}
+            </a>
+          ) : null}
           <Link href={isAdmin ? `/company-landing/signups?companyId=${companyId}` : "/company-landing/signups"} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-[11px] font-bold text-violet-800">
             {t("companyLanding.viewSignups")}
           </Link>

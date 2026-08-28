@@ -6,6 +6,7 @@ use App\Services\MediaStorageException;
 use App\Services\MediaStorageService;
 use App\Services\MediaSubmissionService;
 use App\Support\MediaUploadStatus;
+use App\Support\StorageError;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -102,7 +103,7 @@ class FinalizeMediaUploadJob
             $this->failUpload($e->getMessage());
         } catch (Throwable $e) {
             report($e);
-            $this->failUpload($e->getMessage() ?: __('auth.upload_failed'));
+            $this->failUpload(StorageError::message($e));
         }
     }
 

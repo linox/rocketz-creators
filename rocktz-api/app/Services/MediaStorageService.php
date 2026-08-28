@@ -8,9 +8,11 @@ use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUrl;
 use App\Support\Mp4Faststart;
+use App\Support\StorageError;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 class MediaStorageService
 {
@@ -153,6 +155,8 @@ class MediaStorageService
 
         try {
             $ok = Storage::disk($disk)->writeStream($path, $stream);
+        } catch (Throwable $e) {
+            throw new MediaStorageException(StorageError::message($e), 500);
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);

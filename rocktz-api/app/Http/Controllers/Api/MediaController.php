@@ -13,6 +13,7 @@ use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUploadStatus;
 use App\Support\MediaUrl;
+use App\Support\StorageError;
 use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +46,10 @@ class MediaController extends Controller
             return $this->respondStored($this->media->storeUploaded($file, $request->user()));
         } catch (MediaStorageException $e) {
             return response()->json(['message' => $e->getMessage()], $e->status);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => StorageError::message($e)], 500);
         }
     }
 
@@ -118,7 +123,7 @@ class MediaController extends Controller
                     $this->submissions->clearPending($uploadId);
                 }
 
-                return response()->json(['message' => __('auth.upload_failed')], 500);
+                return response()->json(['message' => StorageError::message($e)], 500);
             }
         }
 
@@ -267,7 +272,7 @@ class MediaController extends Controller
         } catch (Throwable $e) {
             $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
 
-            return response()->json(['message' => __('auth.upload_failed')], 500);
+            return response()->json(['message' => StorageError::message($e)], 500);
         }
 
         $disk->deleteDirectory($this->sessionDir($userId, $uploadId));
@@ -371,7 +376,10 @@ class MediaController extends Controller
             $this->r2->complete($key, $multipartId, $awsParts);
             $size = $this->r2->objectSize($key);
             if ($size !== (int) $meta['size']) {
-                throw new MediaStorageException(__('auth.upload_failed'), 500);
+                throw new MediaStorageException(__('auth.upload_size_mismatch', [
+                    'expected' => (int) $meta['size'],
+                    'actual' => $size,
+                ]), 500);
             }
 
             $payload = $this->media->registerExisting(
@@ -414,10 +422,10 @@ class MediaController extends Controller
             $this->submissions->clearPending($uploadId);
             MediaUploadStatus::put($uploadId, MediaUploadStatus::FAILED, [
                 'progress' => 0,
-                'message' => __('auth.upload_failed'),
+                'message' => StorageError::message($e),
             ]);
 
-            return response()->json(['message' => __('auth.upload_failed')], 500);
+            return response()->json(['message' => StorageError::message($e)], 500);
         }
     }
 

@@ -361,6 +361,32 @@ function creatorRibbonKind(updateKind: UpdateKind, statusCategory: QuotaCategory
   return null;
 }
 
+function ribbonForFilter(stats: { ribbon: RibbonKind | null; updateKind: UpdateKind; pendingApprovalCount: number; missingPautasCount: number; statusCategory: QuotaCategory }, statusFilter: StatusFilter): RibbonKind | null {
+  if (statusFilter === "pending_approval") {
+    return stats.updateKind === "new_version" ? "new_version" : "pending_approval";
+  }
+  if (statusFilter === "missing_pautas") return "missing_pautas";
+  if (statusFilter === "owing") return "owing";
+  if (statusFilter === "completed") return "completed";
+  if (statusFilter === "no_demand") return null;
+  return stats.ribbon;
+}
+
+function showFilterRibbon(stats: { updateKind: UpdateKind; missingPautasCount: number }, statusFilter: StatusFilter) {
+  if (statusFilter === "all") return Boolean(stats.updateKind || stats.missingPautasCount > 0);
+  return statusFilter !== "no_demand";
+}
+
+function orderedCategories(categories: string[], selected: string) {
+  if (!selected || selected === "all") return categories;
+  const needle = selected.trim().toLowerCase();
+  return [...categories].sort((a, b) => {
+    const aMatch = a.trim().toLowerCase() === needle ? 0 : 1;
+    const bMatch = b.trim().toLowerCase() === needle ? 0 : 1;
+    return aMatch - bMatch;
+  });
+}
+
 const RIBBON_STYLE: Record<RibbonKind, { bar: string; Icon: LucideIcon; dot: string }> = {
   new_version: { bar: "bg-amber-500", Icon: RefreshCw, dot: "bg-amber-500" },
   pending_approval: { bar: "bg-violet-600", Icon: Sparkles, dot: "bg-violet-600" },
@@ -596,7 +622,22 @@ function DetailInner() {
       const info = profile(row);
       return [info.artistic_name, info.full_name, Object.values(info.socials).join(" "), info.city, info.state, info.country, info.categories.join(" ")].join(" ").toLowerCase().includes(term);
     })
-    .sort((a, b) => profile(a).artistic_name.localeCompare(profile(b).artistic_name, locale, { sensitivity: "base" }));
+    .sort((a, b) => {
+      if (statusFilter === "all") {
+        const rank = (row: ContractCreator) => {
+          const stats = summary(row);
+          if (stats.updateKind === "new_version") return 0;
+          if (stats.pendingApprovalCount > 0) return 1;
+          if (stats.missingPautasCount > 0) return 2;
+          if (stats.statusCategory === "owing") return 3;
+          if (stats.statusCategory === "completed") return 4;
+          return 5;
+        };
+        const byTag = rank(a) - rank(b);
+        if (byTag !== 0) return byTag;
+      }
+      return profile(a).artistic_name.localeCompare(profile(b).artistic_name, locale, { sensitivity: "base" });
+    });
 
   const selectedRow = allocated.find((row) => row.creator_id === selectedCreatorId) || filteredCreators[0] || allocated[0];
   const selectedInfo = selectedRow ? profile(selectedRow) : null;
@@ -1182,6 +1223,9 @@ function DetailInner() {
                 {filteredCreators.map((row) => {
                   const info = profile(row);
                   const stats = summary(row);
+                  const visibleRibbon = ribbonForFilter(stats, statusFilter);
+                  const fullRibbon = showFilterRibbon(stats, statusFilter);
+                  const categories = orderedCategories(info.categories, segmentFilter);
                   const deliveries = quotaEntries(row.monthly_deliverables);
                   const selected = selectedRow?.creator_id === row.creator_id;
                   const expanded = expandedIds.includes(row.creator_id);
@@ -1194,15 +1238,15 @@ function DetailInner() {
                         key={row.id}
                         className={cn(
                           "group relative flex flex-col items-center overflow-hidden rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
-                          stats.ribbon ? CARD_TONE[stats.ribbon] : "border-slate-200",
+                          visibleRibbon ? CARD_TONE[visibleRibbon] : "border-slate-200",
                         )}
                       >
-                        {stats.updateKind || stats.missingPautasCount > 0 ? (
-                          <CreatorRibbon kind={stats.ribbon} label={ribbonLabel(stats.ribbon, true)} />
+                        {fullRibbon ? (
+                          <CreatorRibbon kind={visibleRibbon} label={ribbonLabel(visibleRibbon, true)} />
                         ) : (
                           <span
-                            className={cn("absolute top-2 right-2 h-2 w-2 rounded-full", stats.ribbon ? RIBBON_STYLE[stats.ribbon].dot : "bg-slate-300")}
-                            title={ribbonLabel(stats.ribbon)}
+                            className={cn("absolute top-2 right-2 h-2 w-2 rounded-full", visibleRibbon ? RIBBON_STYLE[visibleRibbon].dot : "bg-slate-300")}
+                            title={ribbonLabel(visibleRibbon)}
                           />
                         )}
                         <UserAvatar src={info.photo_url} name={info.artistic_name || info.full_name} size="custom" shape="circle" className="mb-2 h-12 w-12 shrink-0 border border-slate-200" textClassName="text-xs font-bold" />
@@ -1216,10 +1260,10 @@ function DetailInner() {
                           </p>
                         ) : null}
                         {location ? <p className="mt-0.5 w-full truncate px-0.5 text-[9px] text-slate-400">📍 {location}</p> : null}
-                        {info.categories[0] ? (
-                          <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-indigo-700">{info.categories[0]}</span>
+                        {categories[0] ? (
+                          <span className={cn("mt-1 max-w-full truncate rounded-md border px-1.5 py-0.5 text-[8px] font-extrabold", segmentFilter !== "all" ? "border-indigo-300 bg-indigo-100 text-indigo-800" : "border-indigo-100 bg-indigo-50 text-indigo-700")}>{categories[0]}</span>
                         ) : null}
-                        {stats.updateKind || stats.missingPautasCount > 0 ? (
+                        {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && (stats.updateKind || stats.missingPautasCount > 0) ? (
                           <div className="mt-1.5 flex max-w-full flex-wrap items-center justify-center gap-1">
                             {stats.updateKind ? (
                               <span className={cn(
@@ -1270,8 +1314,8 @@ function DetailInner() {
                   }
 
                   return (
-                    <div key={row.id} onClick={() => openCreatorPanel(row.creator_id)} className={cn("relative cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition-all", selected ? "border-brand-primary bg-indigo-50/10 ring-2 ring-indigo-500/10 shadow-md" : stats.ribbon ? CARD_TONE[stats.ribbon] : "border-slate-200 hover:border-slate-300")}>
-                      <CreatorRibbon kind={stats.ribbon} label={ribbonLabel(stats.ribbon)} />
+                    <div key={row.id} onClick={() => openCreatorPanel(row.creator_id)} className={cn("relative cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition-all", selected ? "border-brand-primary bg-indigo-50/10 ring-2 ring-indigo-500/10 shadow-md" : visibleRibbon ? CARD_TONE[visibleRibbon] : "border-slate-200 hover:border-slate-300")}>
+                      <CreatorRibbon kind={visibleRibbon} label={ribbonLabel(visibleRibbon)} />
                       <div className="space-y-3 p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -1281,7 +1325,7 @@ function DetailInner() {
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                 <span className="truncate text-[11px] text-slate-400">{info.socials.instagram ? `@${info.socials.instagram.replace(/^@/, "")}` : t("recurringDetail.partner")}</span>
                                 {formatLocation(locale, info) ? <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600">📍 {formatLocation(locale, info)}</span> : null}
-                                {info.categories.slice(0, 2).map((cat) => <span key={cat} className="rounded-md border border-indigo-100 bg-indigo-50 px-1.5 text-[9px] font-extrabold text-indigo-700">{cat}</span>)}
+                                {categories.slice(0, 2).map((cat) => <span key={cat} className={cn("rounded-md border px-1.5 text-[9px] font-extrabold", segmentFilter !== "all" && cat.trim().toLowerCase() === segmentFilter.toLowerCase() ? "border-indigo-300 bg-indigo-100 text-indigo-800" : "border-indigo-100 bg-indigo-50 text-indigo-700")}>{cat}</span>)}
                               </div>
                             </div>
                           </div>
@@ -1301,7 +1345,7 @@ function DetailInner() {
                             <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.deliveriesMonth", { month: selectedMonth })}</span>
                             <div className="mt-0.5 flex items-center justify-between gap-1.5">
                               <div className="flex min-w-0 flex-wrap items-center gap-1">
-                                {stats.updateKind ? (
+                                {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.updateKind ? (
                                   <span className={cn(
                                     "truncate rounded-md border px-2 py-0.5 text-[10px] font-extrabold",
                                     stats.updateKind === "new_version" ? "border-amber-200 bg-amber-100/80 text-amber-800" : "border-violet-200 bg-violet-100/80 text-violet-700",
@@ -1311,21 +1355,21 @@ function DetailInner() {
                                       : t("recurringDetail.pendingApprovalCount", { count: stats.pendingApprovalCount })}
                                   </span>
                                 ) : null}
-                                {stats.missingPautasCount > 0 ? (
+                                {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.missingPautasCount > 0 ? (
                                   <span className="truncate rounded-md border border-orange-200 bg-orange-100/80 px-2 py-0.5 text-[10px] font-extrabold text-orange-700">
                                     {t("recurringDetail.missingPautasCount", { count: stats.missingPautasCount })}
                                   </span>
                                 ) : null}
-                                {!stats.updateKind && stats.missingPautasCount === 0 && stats.statusCategory === "owing" ? (
+                                {(statusFilter === "owing" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "owing" ? (
                                   <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missing", { missing: stats.missingToComplete, done: stats.completedCount, total: stats.quota })}</span>
                                 ) : null}
-                                {!stats.updateKind && stats.missingPautasCount === 0 && stats.statusCategory === "completed" ? (
+                                {(statusFilter === "completed" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "completed" ? (
                                   <span className="truncate rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700">{t("recurringDetail.doneCount", { done: stats.completedCount, total: stats.quota })}</span>
                                 ) : null}
-                                {!stats.updateKind && stats.missingPautasCount === 0 && stats.statusCategory === "no_demand" ? (
+                                {(statusFilter === "no_demand" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "no_demand" ? (
                                   <span className="truncate rounded-md border border-slate-300/60 bg-slate-200/70 px-2 py-0.5 text-[10px] font-bold text-slate-500">{t(stats.completedCount === 1 ? "recurringDetail.deliveredCount" : "recurringDetail.deliveredCountMany", { count: stats.completedCount })}</span>
                                 ) : null}
-                                {stats.updateKind && stats.statusCategory === "owing" && stats.missingPautasCount === 0 ? (
+                                {statusFilter === "all" && stats.updateKind && stats.statusCategory === "owing" && stats.missingPautasCount === 0 ? (
                                   <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missingShort", { count: stats.missingToComplete })}</span>
                                 ) : null}
                               </div>
@@ -1456,7 +1500,7 @@ function DetailInner() {
                     </h3>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {formatLocation(locale, selectedInfo) ? <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">📍 {formatLocation(locale, selectedInfo)}</span> : null}
-                      {selectedInfo.categories.map((cat) => <span key={cat} className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">🏷️ {cat}</span>)}
+                      {orderedCategories(selectedInfo.categories, segmentFilter).map((cat) => <span key={cat} className={cn("rounded-md border px-2 py-0.5 text-[10px] font-extrabold", segmentFilter !== "all" && cat.trim().toLowerCase() === segmentFilter.toLowerCase() ? "border-indigo-300 bg-indigo-100 text-indigo-800" : "border-indigo-100 bg-indigo-50 text-indigo-700")}>🏷️ {cat}</span>)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

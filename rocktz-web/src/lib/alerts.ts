@@ -37,13 +37,23 @@ export function alertWarning(title: string, text?: string) {
   });
 }
 
-export function alertSuccess(title: string, text?: string) {
+export function alertSuccess(title: string, text?: string, options?: { timerMs?: number }) {
+  const timerMs = options?.timerMs;
+  const timed = typeof timerMs === "number" && timerMs > 0;
+
   return Swal.fire({
     ...base(),
     icon: "success",
     title,
     text,
     confirmButtonText: i18n.t("common:ok"),
+    ...(timed
+      ? {
+          timer: timerMs,
+          timerProgressBar: true,
+          showConfirmButton: false,
+        }
+      : {}),
   });
 }
 
