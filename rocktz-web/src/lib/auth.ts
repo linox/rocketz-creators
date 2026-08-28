@@ -42,6 +42,17 @@ export type AuthUser = {
     currency?: string | null;
     creator_invite_code?: string | null;
   } | null;
+  companies?: {
+    id: number;
+    name: string;
+    status: string;
+    logo_url: string | null;
+    whatsapp?: string | null;
+    city?: string | null;
+    country?: string | null;
+    currency?: string | null;
+    creator_invite_code?: string | null;
+  }[];
 };
 
 export type AuthPayload = {

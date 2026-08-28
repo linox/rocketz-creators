@@ -80,7 +80,7 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
       <PrivacyProvider>
         <UploadManagerProvider>
           <UploadGlobalBanner />
-          <AppShell user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>
+          <AppShell key={`${user.role}-${user.company?.id ?? 0}`} user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>
         </UploadManagerProvider>
       </PrivacyProvider>
     </AuthUserContext.Provider>

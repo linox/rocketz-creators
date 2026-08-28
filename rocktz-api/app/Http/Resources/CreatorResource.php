@@ -92,7 +92,7 @@ class CreatorResource extends JsonResource
      */
     private function landingReviewForViewer(Request $request): ?array
     {
-        $companyId = $request->user()?->companyUser?->company_id;
+        $companyId = $request->user()?->actingCompanyId();
         if (! $companyId) {
             return null;
         }

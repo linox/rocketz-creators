@@ -35,4 +35,19 @@ class CompanyUser extends Model
     {
         return $this->belongsTo(Company::class);
     }
+
+    protected static function booted(): void
+    {
+        static::created(function (CompanyUser $row) {
+            $user = $row->user;
+            if ($user && ! $user->active_company_id) {
+                $user->forceFill(['active_company_id' => $row->company_id])->saveQuietly();
+            }
+        });
+
+        static::deleted(function (CompanyUser $row) {
+            $user = User::query()->find($row->user_id);
+            $user?->ensureActiveCompany();
+        });
+    }
 }

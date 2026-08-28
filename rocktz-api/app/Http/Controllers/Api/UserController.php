@@ -23,7 +23,7 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = User::query()
-            ->with(['creator', 'company', 'companyUser', 'permissionGrants'])
+            ->with(['creator', 'company', 'companyUser', 'companyUsers.company', 'permissionGrants'])
             ->latest();
 
         if ($role = $request->string('role')->toString()) {
@@ -80,7 +80,7 @@ class UserController extends Controller
         });
 
         return response()->json([
-            'data' => new UserResource($user->load(['creator', 'company', 'companyUser', 'permissionGrants'])),
+            'data' => new UserResource($user->loadAuthRelations()),
         ], 201);
     }
 
@@ -109,7 +109,7 @@ class UserController extends Controller
         }
 
         return response()->json([
-            'data' => new UserResource($user->fresh()->load(['creator', 'company', 'companyUser', 'permissionGrants'])),
+            'data' => new UserResource($user->fresh()->loadAuthRelations()),
         ]);
     }
 

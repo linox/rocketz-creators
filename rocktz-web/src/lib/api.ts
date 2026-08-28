@@ -171,12 +171,36 @@ export const api = {
   mailSettings: () => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/settings"),
   updateMailSettings: (body: { sending_enabled: boolean }) => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean }; message: string }>("/mail/settings", { method: "PATCH", body: JSON.stringify(body) }),
   mailMessages: (query = "") => laravelFetch<{ data: Array<{ id: number; email: string; template_key: string; subject: string; status: string; attempts: number; failure_reason: string | null; provider_id: string | null; created_at: string; user?: { role?: string } }> }>(`/mail/messages${query}`),
+  activityLogs: (query = "") =>
+    laravelFetch<{
+      data: Array<{
+        id: number;
+        user_id: number | null;
+        actor_email: string | null;
+        actor_name: string | null;
+        actor_role: string | null;
+        category: string;
+        action: string;
+        method: string | null;
+        path: string | null;
+        status_code: number | null;
+        ip: string | null;
+        user_agent: string | null;
+        subject_type: string | null;
+        subject_id: number | null;
+        properties: Record<string, unknown> | null;
+        created_at: string;
+      }>;
+      meta: { today_logins: number; today_failed: number; today_actions: number };
+    }>(`/activity-logs${query}`),
   uploadMedia: (file: Blob, filename = "file.bin", onProgress?: UploadProgressHandler, signal?: AbortSignal) => {
     const body = new FormData();
     body.append("file", file, filename);
     return laravelUpload<{ data: { id: number; url: string; filename: string; path: string; size?: number } }>("/media", body, onProgress, signal);
   },
   updateMe: (body: { name?: string; avatar_url?: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
+  switchActiveCompany: (companyId: number) =>
+    laravelFetch<{ user: AuthUser; message: string }>("/auth/company", { method: "PATCH", body: JSON.stringify({ company_id: companyId }) }),
 };
 
 export function money(value?: number | null, currency?: string | null) {

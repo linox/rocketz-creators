@@ -39,7 +39,6 @@ class PermissionService
             return;
         }
 
-        $user->loadMissing('companyUser');
-        $user->companyUser?->update(['can_publish_without_approval' => $enabled]);
+        $user->actingCompanyUser()?->update(['can_publish_without_approval' => $enabled]);
     }
 }

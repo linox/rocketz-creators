@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForwardAuthorizationHeader;
 use App\Http\Middleware\LoadActor;
+use App\Http\Middleware\LogActivity;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureUserHasRole::class,
             'permission' => EnsureUserHasPermission::class,
             'actor' => LoadActor::class,
+            'activity' => LogActivity::class,
         ]);
     })
     ->withSchedule(function (Schedule $schedule): void {

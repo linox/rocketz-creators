@@ -44,7 +44,7 @@ class CompanyController extends Controller
         $query = Company::query()->with($relations);
 
         if ($user->role === UserRole::Company) {
-            $query->where('id', $user->companyUser?->company_id);
+            $query->whereIn('id', $user->companyIds() ?: [0]);
         } elseif ($user->role === UserRole::Creator) {
             $query->where('status', CompanyStatus::Active);
         }
@@ -206,9 +206,16 @@ class CompanyController extends Controller
         DB::transaction(function () use ($company) {
             $userIds = $company->companyUsers()->pluck('user_id')->filter()->all();
             $company->delete();
-            if ($userIds !== []) {
-                User::query()->whereIn('id', $userIds)->delete();
+            if ($userIds === []) {
+                return;
             }
+            User::query()->whereIn('id', $userIds)->get()->each(function (User $user) {
+                if ($user->companyUsers()->doesntExist()) {
+                    $user->delete();
+                } else {
+                    $user->ensureActiveCompany();
+                }
+            });
         });
 
         return response()->json(['message' => __('auth.company_removed')]);
@@ -235,15 +242,41 @@ class CompanyController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
+            'email' => ['required', 'email'],
+            'password' => ['nullable', 'string', 'min:8'],
             'can_publish_without_approval' => ['sometimes', 'boolean'],
         ]);
 
-        $row = DB::transaction(function () use ($data, $company) {
+        $email = Str::lower($data['email']);
+        $existing = User::query()->where('email', $email)->first();
+        $publish = (bool) ($data['can_publish_without_approval'] ?? false);
+
+        if ($existing) {
+            if ($existing->role !== UserRole::Company) {
+                return response()->json(['message' => __('auth.user_not_company_role')], 422);
+            }
+            if ($existing->belongsToCompany($company->id)) {
+                return response()->json(['message' => __('auth.company_user_already_linked')], 422);
+            }
+
+            $row = CompanyUser::query()->create([
+                'user_id' => $existing->id,
+                'company_id' => $company->id,
+                'status' => $company->status,
+                'can_publish_without_approval' => $publish,
+            ]);
+
+            return response()->json(['data' => $row->load('user'), 'linked' => true], 201);
+        }
+
+        if (blank($data['password'] ?? null)) {
+            return response()->json(['message' => __('auth.company_user_password_required')], 422);
+        }
+
+        $row = DB::transaction(function () use ($data, $company, $email, $publish) {
             $user = User::query()->create([
                 'name' => $data['name'],
-                'email' => Str::lower($data['email']),
+                'email' => $email,
                 'password' => $data['password'],
                 'role' => UserRole::Company,
             ]);
@@ -252,7 +285,7 @@ class CompanyController extends Controller
                 'user_id' => $user->id,
                 'company_id' => $company->id,
                 'status' => $company->status,
-                'can_publish_without_approval' => (bool) ($data['can_publish_without_approval'] ?? false),
+                'can_publish_without_approval' => $publish,
             ]);
 
             $this->permissions->sync(
@@ -263,7 +296,7 @@ class CompanyController extends Controller
             return $row;
         });
 
-        return response()->json(['data' => $row->load('user')], 201);
+        return response()->json(['data' => $row->load('user'), 'linked' => false], 201);
     }
 
     public function updateUser(Request $request, Company $company, CompanyUser $companyUser): JsonResponse
@@ -276,12 +309,6 @@ class CompanyController extends Controller
             'can_publish_without_approval' => ['required', 'boolean'],
         ]);
         $companyUser->update($data);
-        if ($companyUser->user) {
-            $this->permissions->sync(
-                $companyUser->user,
-                $companyUser->can_publish_without_approval ? [Permission::CampaignsPublishWithoutApproval->value] : [],
-            );
-        }
 
         return response()->json(['data' => $companyUser->fresh()->load('user')]);
     }
@@ -292,7 +319,11 @@ class CompanyController extends Controller
             return response()->json(['message' => __('auth.forbidden')], 404);
         }
 
+        $user = $companyUser->user;
         $companyUser->delete();
+        if ($user && $user->companyUsers()->doesntExist()) {
+            $user->delete();
+        }
 
         return response()->json(['message' => __('auth.company_user_removed')]);
     }
@@ -303,7 +334,7 @@ class CompanyController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $company->id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany($company->id)) {
             return;
         }
         if ($user->role === UserRole::Creator && $company->status === CompanyStatus::Active) {
@@ -318,7 +349,7 @@ class CompanyController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $company->id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany($company->id)) {
             return;
         }
         abort(403, __('auth.forbidden'));

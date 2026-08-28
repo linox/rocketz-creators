@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
-use App\Enums\PostingProfile;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationType;
 use App\Enums\PaymentStatus;
+use App\Enums\PostingProfile;
 use App\Enums\SignatureStatus;
 use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
@@ -89,7 +89,7 @@ class CampaignController extends Controller
         }
 
         if ($user->role === UserRole::Company) {
-            $query->where('company_id', '!=', $user->companyUser?->company_id);
+            $query->whereNotIn('company_id', $user->companyIds() ?: [0]);
         }
 
         if ($user->role === UserRole::Creator && $user->creator) {
@@ -545,7 +545,7 @@ class CampaignController extends Controller
 
         $data = $request->validate($rules);
         if ($user->role === UserRole::Company) {
-            $data['company_id'] = $user->companyUser?->company_id;
+            $data['company_id'] = $user->actingCompanyId();
         }
         if ($creating) {
             abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
@@ -654,7 +654,7 @@ class CampaignController extends Controller
 
         return match ($user->role) {
             UserRole::Admin => $query,
-            UserRole::Company => $query->where('company_id', $user->companyUser?->company_id),
+            UserRole::Company => $query->where('company_id', $user->actingCompanyId()),
             UserRole::Creator => $user->creator?->status === CreatorStatus::Active
                 ? $query->where('status', '!=', CampaignStatus::PendingAgency)
                     ->where(function ($builder) use ($user) {
@@ -684,7 +684,7 @@ class CampaignController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $campaign->company_id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany((int) $campaign->company_id)) {
             return;
         }
         if ($user->role === UserRole::Creator) {
@@ -712,7 +712,7 @@ class CampaignController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $campaign->company_id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany((int) $campaign->company_id)) {
             return;
         }
         abort(403, __('auth.forbidden'));

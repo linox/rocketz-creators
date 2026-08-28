@@ -42,5 +42,6 @@ class DemoSeedTest extends TestCase
         $this->assertSame(2, $counts['companies']);
         $this->assertNotNull(User::query()->where('email', DemoAccounts::ADMIN)->first());
         $this->assertTrue(User::query()->where('email', DemoAccounts::ADMIN)->first()->hasPermission('mail.manage'));
+        $this->assertTrue(User::query()->where('email', DemoAccounts::ADMIN)->first()->hasPermission('logs.view'));
     }
 }

@@ -28,7 +28,7 @@ class DashboardController extends Controller
         }
 
         if ($user->role === UserRole::Company) {
-            return response()->json($this->companyStats((int) $user->companyUser?->company_id));
+            return response()->json($this->companyStats((int) $user->actingCompanyId()));
         }
 
         return response()->json($this->creatorStats((int) $user->creator?->id));

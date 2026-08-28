@@ -58,6 +58,6 @@ class CompanyResource extends JsonResource
         }
 
         return $user->role?->value === 'admin'
-            || $user->companyUser?->company_id === $this->id;
+            || $user->belongsToCompany((int) $this->id);
     }
 }

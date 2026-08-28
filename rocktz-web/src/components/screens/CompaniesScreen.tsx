@@ -465,7 +465,7 @@ function CompaniesInner() {
 
   async function createAccessUser() {
     if (!editing) return;
-    if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password) {
+    if (!newUser.name.trim() || !newUser.email.trim()) {
       await alertWarning(tc("alerts.incompleteTitle"), t("companies.userIncomplete"));
       return;
     }
@@ -473,17 +473,19 @@ function CompaniesInner() {
       await alertWarning(tc("alerts.invalidEmailTitle"), tc("alerts.invalidEmail"));
       return;
     }
-    const issue = passwordError(newUser.password);
-    if (issue) {
-      await alertWarning(tc("alerts.invalidPasswordTitle"), tc(`password.${issue}`));
-      return;
+    if (newUser.password) {
+      const issue = passwordError(newUser.password);
+      if (issue) {
+        await alertWarning(tc("alerts.invalidPasswordTitle"), tc(`password.${issue}`));
+        return;
+      }
     }
     setCreatingUser(true);
     try {
       await api.createCompanyUser(editing.id, {
         name: newUser.name.trim(),
         email: newUser.email.trim(),
-        password: newUser.password,
+        password: newUser.password || undefined,
         can_publish_without_approval: newUser.can_publish_without_approval,
       });
       const res = await api.company(editing.id);
@@ -822,11 +824,12 @@ function CompaniesInner() {
                   </h3>
                   <span className="text-[10px] font-bold text-slate-500">{t("companies.registeredCount", { count: editing.users?.length ?? 0 })}</span>
                 </div>
+                <p className="m-0 text-[11px] leading-snug text-slate-500">{t("companies.accessUsersHint")}</p>
                 <p className="m-0 text-[11px] leading-snug text-slate-500">{t("companies.publishWithoutApprovalHint")}</p>
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   <input className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 font-medium text-slate-800 outline-none" placeholder={t("companies.userName")} value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} disabled={creatingUser} />
                   <input type="email" className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-slate-800 outline-none" placeholder={t("companies.userEmail")} value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} disabled={creatingUser} />
-                  <PasswordField inputClassName="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-slate-800 outline-none h-auto" placeholder={t("companies.userPassword")} value={newUser.password} onChange={(event) => setNewUser({ ...newUser, password: event.target.value })} disabled={creatingUser} />
+                  <PasswordField inputClassName="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-slate-800 outline-none h-auto" placeholder={t("companies.userPasswordOptional")} value={newUser.password} onChange={(event) => setNewUser({ ...newUser, password: event.target.value })} disabled={creatingUser} />
                 </div>
                 <label className="flex cursor-pointer items-start gap-2 text-[11px] font-semibold text-slate-600">
                   <input

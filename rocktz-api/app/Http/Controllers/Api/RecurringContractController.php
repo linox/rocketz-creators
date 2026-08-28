@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApprovalFlowType;
 use App\Enums\ContentPlanningStatus;
-use App\Enums\PostingProfile;
 use App\Enums\ContentType;
 use App\Enums\NotificationType;
+use App\Enums\PostingProfile;
 use App\Enums\RecurringContractStatus;
 use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
@@ -158,7 +158,7 @@ class RecurringContractController extends Controller
         ]);
 
         if ($request->user()->role === UserRole::Company) {
-            $data['company_id'] = $request->user()->companyUser?->company_id;
+            $data['company_id'] = $request->user()->actingCompanyId();
         }
 
         abort_unless($data['company_id'] ?? null, 422, __('auth.company_not_linked'));
@@ -540,7 +540,7 @@ class RecurringContractController extends Controller
     private function scopeContractsForUser(Builder $query, mixed $user): void
     {
         if ($user->role === UserRole::Company) {
-            $query->where('company_id', $user->companyUser?->company_id);
+            $query->where('company_id', $user->actingCompanyId());
         } elseif ($user->role === UserRole::Creator) {
             $query->where('status', '!=', RecurringContractStatus::PendingAgency)
                 ->whereHas('recurringContractCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
@@ -746,7 +746,7 @@ class RecurringContractController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $contract->company_id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany((int) $contract->company_id)) {
             return;
         }
         if ($user->role === UserRole::Creator && $contract->recurringContractCreators()->where('creator_id', $user->creator?->id)->exists()) {
@@ -763,7 +763,7 @@ class RecurringContractController extends Controller
         if ($user->role === UserRole::Admin) {
             return;
         }
-        if ($user->role === UserRole::Company && $user->companyUser?->company_id === $contract->company_id) {
+        if ($user->role === UserRole::Company && $user->belongsToCompany((int) $contract->company_id)) {
             return;
         }
         abort(403, __('auth.forbidden'));
@@ -778,7 +778,7 @@ class RecurringContractController extends Controller
             return;
         }
 
-        $companyId = (int) $request->user()->companyUser?->company_id;
+        $companyId = (int) $request->user()->actingCompanyId();
         abort_unless($companyId, 403, __('auth.company_not_linked'));
 
         $ids = array_values(array_unique(array_map('intval', $creatorIds)));

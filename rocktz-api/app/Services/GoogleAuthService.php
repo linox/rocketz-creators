@@ -122,7 +122,7 @@ class GoogleAuthService
         return match ($user->role) {
             UserRole::Admin => false,
             UserRole::Creator => $user->creator()->doesntExist(),
-            UserRole::Company => $user->companyUser()->doesntExist(),
+            UserRole::Company => $user->companyUsers()->doesntExist(),
         };
     }
 

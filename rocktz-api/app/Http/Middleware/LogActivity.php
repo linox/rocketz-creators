@@ -2,23 +2,23 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ActivityLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class LoadActor
+class LogActivity
 {
+    public function __construct(private readonly ActivityLogger $activityLogger) {}
+
     /**
      * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user();
-        if ($user) {
-            $user->ensureActiveCompany();
-            $user->load(['creator', 'company', 'companyUser.company', 'companyUsers']);
-        }
+        $response = $next($request);
+        $this->activityLogger->fromHttp($request, $response->getStatusCode());
 
-        return $next($request);
+        return $response;
     }
 }

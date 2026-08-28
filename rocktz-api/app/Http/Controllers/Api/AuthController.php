@@ -22,6 +22,7 @@ use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\User;
+use App\Services\ActivityLogger;
 use App\Services\AuthService;
 use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
@@ -45,11 +46,13 @@ class AuthController extends Controller
         private readonly AuthService $authService,
         private readonly GoogleAuthService $googleAuthService,
         private readonly TwoFactorService $twoFactorService,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     public function registerCreator(RegisterCreatorRequest $request): JsonResponse
     {
         $payload = $this->authService->registerCreator($request->validated(), $request);
+        $this->logAccess($request, 'register.creator', $this->userFromPayload($payload), 201);
 
         return response()->json($payload, 201);
     }
@@ -57,6 +60,7 @@ class AuthController extends Controller
     public function registerCompany(RegisterCompanyRequest $request): JsonResponse
     {
         $payload = $this->authService->registerCompany($request->validated(), $request);
+        $this->logAccess($request, 'register.company', $this->userFromPayload($payload), 201);
 
         return response()->json($payload, 201);
     }
@@ -67,12 +71,18 @@ class AuthController extends Controller
         $user = User::query()->where('email', Str::lower($credentials['email']))->first();
 
         if (! $user || ! $user->password || ! Hash::check($credentials['password'], $user->password)) {
+            $this->logAccess($request, 'login.failed', $user, 422, ['email' => Str::lower($credentials['email'])]);
+
             return response()->json(['message' => __('auth.invalid_credentials')], 422);
         }
 
         if ($user->two_factor_enabled) {
+            $this->logAccess($request, 'login.two_factor', $user);
+
             return $this->twoFactorJson(fn () => $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Login));
         }
+
+        $this->logAccess($request, 'login.success', $user);
 
         return response()->json($this->authService->issueToken($user));
     }
@@ -85,6 +95,7 @@ class AuthController extends Controller
                 $request->validated('code'),
                 TwoFactorPurpose::Login,
             );
+            $this->logAccess($request, 'login.success', $user, 200, ['two_factor' => true]);
 
             return $this->authService->issueToken($user);
         });
@@ -119,7 +130,8 @@ class AuthController extends Controller
             }
             $user->forceFill(['two_factor_enabled' => true])->save();
             $request->user()?->forceFill(['two_factor_enabled' => true]);
-            $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+            $user->loadAuthRelations();
+            $this->logAccess($request, 'two_factor.enabled', $user);
 
             return [
                 'message' => __('auth.two_factor_enabled'),
@@ -168,7 +180,8 @@ class AuthController extends Controller
 
         $user->forceFill(['two_factor_enabled' => false])->save();
         $user->twoFactorChallenges()->delete();
-        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+        $user->loadAuthRelations();
+        $this->logAccess($request, 'two_factor.disabled', $user);
 
         return response()->json([
             'message' => __('auth.two_factor_disabled'),
@@ -178,6 +191,7 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        $this->logAccess($request, 'logout', $request->user());
         $request->user()?->currentAccessToken()?->delete();
 
         return response()->json(['message' => __('auth.logged_out')]);
@@ -186,14 +200,28 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->load([
-            'creator.contractAcceptances' => fn ($q) => $q->latest('id'),
-            'company',
-            'companyUser',
-            'permissionGrants',
-        ]);
+        $user->loadAuthRelations();
 
         return response()->json([
+            'user' => new UserResource($user),
+        ]);
+    }
+
+    public function switchCompany(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user->role === UserRole::Company, 403, __('auth.forbidden'));
+
+        $data = $request->validate([
+            'company_id' => ['required', 'integer', 'exists:companies,id'],
+        ]);
+
+        $user->switchActiveCompany((int) $data['company_id']);
+        $user->loadAuthRelations();
+        $this->logAccess($request, 'company.switch', $user, 200, ['company_id' => (int) $data['company_id']]);
+
+        return response()->json([
+            'message' => __('auth.company_switched'),
             'user' => new UserResource($user),
         ]);
     }
@@ -202,7 +230,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
         $user->forceFill(['locale' => $request->validated('locale')])->save();
-        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+        $user->loadAuthRelations();
 
         return response()->json([
             'message' => __('auth.locale_updated'),
@@ -220,6 +248,7 @@ class AuthController extends Controller
         $data = SafeHttpUrl::validateFields($data, ['avatar_url']);
 
         $user->fill($data)->save();
+        $this->logAccess($request, 'profile.update', $user);
 
         if (isset($data['name'])) {
             $user->creator?->update(['full_name' => $data['name']]);
@@ -230,7 +259,7 @@ class AuthController extends Controller
             $user->company?->update(['logo_url' => $data['avatar_url']]);
         }
 
-        $user->load(['creator', 'company', 'companyUser', 'permissionGrants']);
+        $user->loadAuthRelations();
 
         return response()->json([
             'user' => new UserResource($user),
@@ -257,6 +286,8 @@ class AuthController extends Controller
             return response()->json(['message' => __('auth.mail_throttled')], 429);
         }
 
+        $this->logAccess($request, 'password.reset_requested', User::query()->where('email', $email)->first(), 200, ['email' => $email]);
+
         return response()->json([
             'message' => __('auth.reset_sent'),
         ]);
@@ -273,6 +304,9 @@ class AuthController extends Controller
         if ($status !== Password::PASSWORD_RESET) {
             return response()->json(['message' => __('auth.reset_invalid')], 422);
         }
+
+        $resetUser = User::query()->where('email', Str::lower($request->validated('email')))->first();
+        $this->logAccess($request, 'password.reset', $resetUser);
 
         return response()->json(['message' => __('auth.reset_success')]);
     }
@@ -322,6 +356,7 @@ class AuthController extends Controller
             }
 
             if ($user->two_factor_enabled) {
+                $this->logAccess($request, 'login.two_factor', $user, 200, ['provider' => 'google']);
                 $challenge = $this->twoFactorService->startChallenge($user, TwoFactorPurpose::Login);
 
                 return redirect()->away($frontend.'/login#'.http_build_query([
@@ -332,6 +367,7 @@ class AuthController extends Controller
             }
 
             $payload = $this->authService->issueToken($user);
+            $this->logAccess($request, $user->wasRecentlyCreated ? 'register.creator' : 'login.success', $user, 200, ['provider' => 'google']);
             $fragment = ['token' => $payload['token']];
             if ($user->wasRecentlyCreated) {
                 $fragment['signup'] = '1';
@@ -365,6 +401,8 @@ class AuthController extends Controller
             app(MailNotifier::class)->companyRegistered($fresh);
         }
 
+        $this->logAccess($request, $data['type'] === 'creator' ? 'register.creator' : 'register.company', $fresh, 200, ['provider' => 'google']);
+
         return response()->json($this->authService->issueToken($fresh));
     }
 
@@ -388,6 +426,30 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => $e->getMessage()], $status);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function userFromPayload(array $payload): ?User
+    {
+        $resource = $payload['user'] ?? null;
+        if ($resource instanceof UserResource) {
+            $model = $resource->resource;
+
+            return $model instanceof User ? $model : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $properties
+     */
+    private function logAccess(Request $request, string $action, ?User $user = null, int $status = 200, array $properties = []): void
+    {
+        $category = $action === 'profile.update' ? 'action' : 'access';
+        $this->activityLogger->record($request, $action, $category, $user, $properties, $status);
     }
 
     private function attachGoogleProfile(User $user, string $type, Request $request): void

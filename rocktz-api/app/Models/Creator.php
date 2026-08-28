@@ -162,7 +162,7 @@ class Creator extends Model
             return false;
         }
 
-        $companyId = (int) $user->companyUser?->company_id;
+        $companyId = (int) $user->actingCompanyId();
 
         return $companyId > 0 && $this->isInCompanyPool($companyId);
     }

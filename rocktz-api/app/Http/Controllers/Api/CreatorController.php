@@ -41,7 +41,7 @@ class CreatorController extends Controller
         if ($user->role === UserRole::Creator) {
             $query->where('id', $user->creator?->id);
         } elseif ($user->role === UserRole::Company) {
-            $companyId = (int) $user->companyUser?->company_id;
+            $companyId = (int) $user->actingCompanyId();
             abort_unless($companyId, 403, __('auth.company_not_linked'));
             $query->inCompanyPool($companyId)
                 ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
@@ -89,7 +89,7 @@ class CreatorController extends Controller
         }
 
         if ($user->role === UserRole::Company) {
-            $companyId = (int) $user->companyUser?->company_id;
+            $companyId = (int) $user->actingCompanyId();
             if (! $companyId || ! $creator->isAccessibleByCompany($companyId)) {
                 return response()->json(['message' => __('auth.profile_unavailable')], 403);
             }
@@ -463,7 +463,7 @@ class CreatorController extends Controller
             return;
         }
 
-        $companyId = (int) $user->companyUser?->company_id;
+        $companyId = (int) $user->actingCompanyId();
         if ($companyId <= 0) {
             return;
         }

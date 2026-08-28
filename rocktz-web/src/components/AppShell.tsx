@@ -16,6 +16,7 @@ import {
   Menu,
   MoreHorizontal,
   Repeat,
+  ScrollText,
   ShieldCheck,
   Sparkles,
   Users,
@@ -23,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
+import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorContractRequiredBanner } from "@/components/CreatorContractRequiredBanner";
 import { EditProfileModal } from "@/components/EditProfileModal";
@@ -178,7 +180,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
       window.clearInterval(timer);
       window.removeEventListener("rocketz:nav-refresh", onNavRefresh);
     };
-  }, [user.role]);
+  }, [user.role, user.company?.id]);
 
   useEffect(() => {
     if (user.role !== "company" || !user.company?.id) {
@@ -291,6 +293,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                     <SidebarItem href="/mail" label={t("mailTemplates")} icon={Mail} active={isActive("/mail") && !isActive("/mail/log")} onClick={close} />
                     <SidebarItem href="/mail/log" label={t("mailLog")} icon={Mail} active={isActive("/mail/log")} onClick={close} />
                   </>
+                ) : null}
+                {userHasPermission(user, "logs.view") ? (
+                  <SidebarItem href="/logs" label={t("activityLogs")} icon={ScrollText} active={isActive("/logs")} onClick={close} />
                 ) : null}
                 {userHasPermission(user, "users.manage") ? (
                   <SidebarItem href="/users" label={t("users")} icon={ShieldCheck} active={isActive("/users") || isActive("/admin-users")} onClick={close} />
@@ -410,6 +415,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               {privacy.hideValues ? <EyeOff size={16} className="shrink-0 text-amber-600" /> : <Eye size={16} className="shrink-0 text-slate-500" />}
               <span className="hidden truncate lg:inline">{privacy.hideValues ? t("hiddenValues") : t("hideValues")}</span>
             </button>
+            <CompanySwitcher user={user} onUserChange={onUserChange} />
             <button
               type="button"
               onClick={privacy.openLgpd}

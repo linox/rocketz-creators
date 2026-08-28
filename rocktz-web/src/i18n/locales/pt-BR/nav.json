@@ -11,6 +11,7 @@
   "notifications": "Notificações",
   "mailTemplates": "E-mails",
   "mailLog": "Histórico de e-mails",
+  "activityLogs": "Logs",
   "notificationSettings": "Notificações por e-mail",
   "securitySettings": "Segurança da conta",
   "adminUsers": "Usuários",
@@ -59,5 +60,6 @@
   "tabPanel": "Painel",
   "companyLanding": "Landing Page",
   "myLanding": "Minha landing page",
-  "companyLandingSignups": "Cadastros da landing"
+  "companyLandingSignups": "Cadastros da landing",
+  "switchCompany": "Trocar de empresa"
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
@@ -43,6 +44,7 @@ Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::patch('me', [AuthController::class, 'updateMe']);
+        Route::patch('company', [AuthController::class, 'switchCompany']);
         Route::patch('locale', [AuthController::class, 'updateLocale']);
         Route::post('google/complete', [AuthController::class, 'completeGoogleProfile']);
         Route::post('two-factor/enable', [AuthController::class, 'enableTwoFactor'])->middleware('throttle:two-factor');
@@ -52,7 +54,7 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::middleware(['auth:sanctum', 'actor'])->group(function () {
+Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('media', [MediaController::class, 'store']);
     Route::post('media/uploads', [MediaController::class, 'initUpload']);
     Route::post('media/uploads/{uploadId}/chunks/{index}', [MediaController::class, 'storeChunk'])->whereNumber('index');
@@ -160,6 +162,10 @@ Route::middleware(['auth:sanctum', 'actor'])->group(function () {
         Route::middleware('permission:campaigns.approve_agency')->group(function () {
             Route::post('campaigns/{campaign}/approve-agency', [CampaignController::class, 'approveAgency']);
             Route::post('recurring-contracts/{recurringContract}/approve-agency', [RecurringContractController::class, 'approveAgency']);
+        });
+
+        Route::middleware('permission:logs.view')->group(function () {
+            Route::get('activity-logs', [ActivityLogController::class, 'index']);
         });
 
         Route::middleware('permission:mail.manage')->group(function () {

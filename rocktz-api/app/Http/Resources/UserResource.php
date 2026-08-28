@@ -54,23 +54,36 @@ class UserResource extends JsonResource
                     ] : null,
                 ];
             }),
-            'company' => $this->whenLoaded('company', function () {
-                if (! $this->company) {
-                    return null;
-                }
-
-                return [
-                    'id' => $this->company->id,
-                    'name' => $this->company->name,
-                    'status' => $this->company->status?->value,
-                    'logo_url' => $this->company->logo_url,
-                    'whatsapp' => $this->company->whatsapp,
-                    'city' => $this->company->city,
-                    'country' => $this->company->country,
-                    'currency' => $this->company->currency,
-                    'creator_invite_code' => $this->company->creator_invite_code,
-                ];
+            'company' => $this->whenLoaded('company', fn () => $this->companyPayload($this->company)),
+            'companies' => $this->whenLoaded('companyUsers', function () {
+                return $this->companyUsers
+                    ->map(fn ($row) => $this->companyPayload($row->company))
+                    ->filter()
+                    ->values()
+                    ->all();
             }),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function companyPayload(mixed $company): ?array
+    {
+        if (! $company) {
+            return null;
+        }
+
+        return [
+            'id' => $company->id,
+            'name' => $company->name,
+            'status' => $company->status?->value,
+            'logo_url' => $company->logo_url,
+            'whatsapp' => $company->whatsapp,
+            'city' => $company->city,
+            'country' => $company->country,
+            'currency' => $company->currency,
+            'creator_invite_code' => $company->creator_invite_code,
         ];
     }
 }

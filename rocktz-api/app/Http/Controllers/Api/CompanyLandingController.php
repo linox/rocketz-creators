@@ -199,7 +199,7 @@ class CompanyLandingController extends Controller
         }
 
         abort_unless(
-            $user->role === UserRole::Company && $user->companyUser?->company_id === $company->id,
+            $user->role === UserRole::Company && $user->belongsToCompany((int) $company->id),
             403,
             __('auth.forbidden'),
         );

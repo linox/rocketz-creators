@@ -12,6 +12,7 @@ enum Permission: string
     case CampaignsPublishWithoutApproval = 'campaigns.publish_without_approval';
     case DataReset = 'data.reset';
     case MailManage = 'mail.manage';
+    case LogsView = 'logs.view';
 
     /**
      * @return list<self>
@@ -27,6 +28,7 @@ enum Permission: string
                 self::CampaignsApproveAgency,
                 self::DataReset,
                 self::MailManage,
+                self::LogsView,
             ],
             UserRole::Company => [
                 self::CampaignsPublishWithoutApproval,
