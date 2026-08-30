@@ -160,6 +160,10 @@ export const api = {
   createUser: (body: unknown) => laravelFetch<Item<AuthUser>>("/users", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id: number, body: unknown) => laravelFetch<Item<AuthUser>>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteUser: (id: number) => laravelFetch(`/users/${id}`, { method: "DELETE" }),
+  attachUserCompany: (userId: number, body: { company_id: number; can_publish_without_approval?: boolean }) =>
+    laravelFetch<Item<AuthUser>>(`/users/${userId}/companies`, { method: "POST", body: JSON.stringify(body) }),
+  detachUserCompany: (userId: number, companyId: number) =>
+    laravelFetch<Item<AuthUser>>(`/users/${userId}/companies/${companyId}`, { method: "DELETE" }),
   notificationPreferences: () => laravelFetch<{ data: { opportunities: boolean; campaign_updates: boolean; new_demands: boolean; deadline_reminders: boolean; delivery_updates: boolean; promotional: boolean } }>("/notification-preferences"),
   updateNotificationPreferences: (body: unknown) => laravelFetch<{ data: { opportunities: boolean; campaign_updates: boolean; new_demands: boolean; deadline_reminders: boolean; delivery_updates: boolean; promotional: boolean } }>("/notification-preferences", { method: "PATCH", body: JSON.stringify(body) }),
   mailTemplates: () => laravelFetch<{ data: Array<{ id: number; key: string; audience: string; category: string; enabled: boolean; reminder_offsets: number[] | null; required_variables: string[]; variables: string[] }>; sending: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/templates"),

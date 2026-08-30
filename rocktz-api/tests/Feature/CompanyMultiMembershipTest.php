@@ -115,4 +115,39 @@ class CompanyMultiMembershipTest extends TestCase
         ]);
         $this->assertSame($keep->id, $user->fresh()->active_company_id);
     }
+
+    public function test_admin_can_attach_and_detach_company_from_user_endpoint(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->company()->create();
+        $first = Company::factory()->active()->create();
+        $second = Company::factory()->active()->create();
+
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $first->id,
+        ]);
+
+        $listed = $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/users?role=company')
+            ->assertOk()
+            ->json('data');
+        $row = collect($listed)->firstWhere('id', $user->id);
+        $this->assertNotNull($row);
+        $this->assertEquals([$first->id], array_column($row['companies'] ?? [], 'id'));
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/users/{$user->id}/companies", ['company_id' => $second->id])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.companies');
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson("/api/users/{$user->id}/companies/{$second->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.companies');
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson("/api/users/{$user->id}/companies/{$first->id}")
+            ->assertStatus(422);
+    }
 }

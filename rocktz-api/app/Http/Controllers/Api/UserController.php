@@ -121,4 +121,54 @@ class UserController extends Controller
 
         return response()->json(['message' => __('auth.user_removed')]);
     }
+
+    public function attachCompany(Request $request, User $user): JsonResponse
+    {
+        abort_unless($user->role === UserRole::Company, 422, __('auth.user_not_company_role'));
+
+        $data = $request->validate([
+            'company_id' => ['required', 'integer', 'exists:companies,id'],
+            'can_publish_without_approval' => ['sometimes', 'boolean'],
+        ]);
+
+        $company = Company::query()->findOrFail((int) $data['company_id']);
+        if ($user->belongsToCompany($company->id)) {
+            return response()->json(['message' => __('auth.company_user_already_linked')], 422);
+        }
+
+        CompanyUser::query()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+            'status' => $company->status,
+            'can_publish_without_approval' => (bool) ($data['can_publish_without_approval'] ?? false),
+        ]);
+
+        return response()->json([
+            'message' => __('auth.company_user_linked'),
+            'data' => new UserResource($user->fresh()->loadAuthRelations()),
+        ]);
+    }
+
+    public function detachCompany(User $user, Company $company): JsonResponse
+    {
+        abort_unless($user->role === UserRole::Company, 422, __('auth.user_not_company_role'));
+
+        $membership = $user->companyUsers()->where('company_id', $company->id)->first();
+        if (! $membership) {
+            return response()->json(['message' => __('auth.forbidden')], 404);
+        }
+
+        abort_if(
+            $user->companyUsers()->count() <= 1,
+            422,
+            __('auth.company_user_last_membership'),
+        );
+
+        $membership->delete();
+
+        return response()->json([
+            'message' => __('auth.company_user_unlinked'),
+            'data' => new UserResource($user->fresh()->loadAuthRelations()),
+        ]);
+    }
 }

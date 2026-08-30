@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, ShieldCheck, Users } from "lucide-react";
+import { Building2, Plus, Search, ShieldCheck, Users, X } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PasswordField } from "@/components/PasswordField";
@@ -44,6 +44,13 @@ function permissionKey(slug: string) {
 
 const EMPTY_FORM = { name: "", email: "", password: "", role: "admin", company_id: "" };
 
+function linkedCompanies(item: AuthUser) {
+  if (item.companies?.length) {
+    return item.companies;
+  }
+  return item.company ? [item.company] : [];
+}
+
 function UsersInner() {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
@@ -58,6 +65,7 @@ function UsersInner() {
   const [formPerms, setFormPerms] = useState<string[]>([...ADMIN_PERMISSIONS]);
   const [editing, setEditing] = useState<AuthUser | null>(null);
   const [editPerms, setEditPerms] = useState<string[]>([]);
+  const [addCompanyId, setAddCompanyId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const canManage = userHasPermission(me, "users.manage");
@@ -195,6 +203,85 @@ function UsersInner() {
     }
   }
 
+  function openEdit(item: AuthUser) {
+    setEditing(item);
+    setEditPerms(item.permissions ?? []);
+    setAddCompanyId("");
+  }
+
+  function applyEditedUser(next: AuthUser) {
+    setEditing(next);
+    setItems((current) => current.map((item) => (item.id === next.id ? next : item)));
+  }
+
+  async function onAttachCompany() {
+    if (!editing || !addCompanyId) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("users.companyRequired"));
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.attachUserCompany(editing.id, { company_id: Number(addCompanyId) });
+      applyEditedUser(res.data);
+      setAddCompanyId("");
+      await alertSuccess(t("users.companyLinked"));
+      await load();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onDetachCompany(companyId: number, companyName: string) {
+    if (!editing) return;
+    if (!(await alertConfirm(t("users.unlinkCompany"), t("users.unlinkCompanyConfirm", { name: editing.name, company: companyName })))) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.detachUserCompany(editing.id, companyId);
+      applyEditedUser(res.data);
+      await alertSuccess(t("users.companyUnlinked"));
+      await load();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function CompanyLinks({ item, onEdit }: { item: AuthUser; onEdit?: () => void }) {
+    if (item.role === "creator") {
+      return <>{item.creator?.artistic_name || "—"}</>;
+    }
+    const linked = linkedCompanies(item);
+    if (item.role !== "company") {
+      return <>{t("users.noContext")}</>;
+    }
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {linked.length === 0 ? <span>{t("users.noContext")}</span> : null}
+        {linked.map((company) => (
+          <span key={company.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+            <Building2 size={10} className="shrink-0" />
+            <span className="truncate">{company.name}</span>
+          </span>
+        ))}
+        {canManage && onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-emerald-300 bg-white px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50"
+          >
+            <Plus size={10} />
+            {t("users.addCompany")}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   function roleBadge(role: UserRole) {
     const styles = {
       admin: "border-indigo-200 bg-indigo-50 text-indigo-700",
@@ -284,7 +371,7 @@ function UsersInner() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="hidden lg:block">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
@@ -310,28 +397,25 @@ function UsersInner() {
                   </td>
                   <td className="p-3.5">{roleBadge(item.role)}</td>
                   <td className="p-3.5 text-slate-600">
-                    {item.company?.name || item.creator?.artistic_name || "—"}
+                    <CompanyLinks item={item} onEdit={canManage ? () => openEdit(item) : undefined} />
                   </td>
                   <td className="p-3.5 font-semibold text-slate-700">
                     {t("users.permissionCount", { count: (item.permissions ?? []).length })}
                   </td>
                   <td className="p-3.5 pr-5 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       {item.role === "creator" && item.creator?.id ? (
                         <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200">
                           {t("users.openProfile")}
                         </Link>
                       ) : null}
-                      {canManage && permissionsForRole(item.role).length > 0 ? (
+                      {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditing(item);
-                            setEditPerms(item.permissions ?? []);
-                          }}
+                          onClick={() => openEdit(item)}
                           className="rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] font-bold text-brand-primary hover:bg-indigo-100"
                         >
-                          {t("users.editPermissions")}
+                          {item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}
                         </button>
                       ) : null}
                       {canManage && item.id !== me.id ? (
@@ -359,13 +443,13 @@ function UsersInner() {
                 </div>
                 {roleBadge(item.role)}
               </div>
-              <p className="m-0 text-xs text-slate-500">{item.company?.name || item.creator?.artistic_name || t("users.noContext")}</p>
+              <div className="text-xs text-slate-500"><CompanyLinks item={item} onEdit={canManage ? () => openEdit(item) : undefined} /></div>
               <div className="flex flex-wrap gap-2">
                 {item.role === "creator" && item.creator?.id ? (
                   <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.openProfile")}</Link>
                 ) : null}
-                {canManage && permissionsForRole(item.role).length > 0 ? (
-                  <button type="button" onClick={() => { setEditing(item); setEditPerms(item.permissions ?? []); }} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{t("users.editPermissions")}</button>
+                {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
+                  <button type="button" onClick={() => openEdit(item)} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}</button>
                 ) : null}
                 {canManage && item.id !== me.id ? (
                   <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-2 text-[11px] font-bold text-rose-600">{tc("remove")}</button>
@@ -426,19 +510,92 @@ function UsersInner() {
       ) : null}
 
       {editing ? (
-        <AppModal onClose={() => setEditing(null)}>
+        <AppModal onClose={() => setEditing(null)} lockBackdrop zIndexClassName="z-[200]">
           <div className="flex min-h-0 flex-col">
             <div className="border-b border-slate-100 px-5 py-4">
-              <p className="m-0 text-[10px] font-bold tracking-wider text-brand-primary uppercase">{t("users.editPermissions")}</p>
+              <p className="m-0 text-[10px] font-bold tracking-wider text-brand-primary uppercase">
+                {editing.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}
+              </p>
               <h3 className="m-0 mt-1 text-base font-black text-slate-900">{editing.name}</h3>
               <p className="m-0 text-xs text-slate-500">{editing.email}</p>
             </div>
-            <div className="overflow-y-auto p-5">
-              <PermissionList role={editing.role} selected={editPerms} onToggle={(slug) => togglePerm(editPerms, slug, setEditPerms)} />
+            <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-5">
+              {editing.role === "company" ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <p className="m-0 text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.manageCompaniesTitle")}</p>
+                    <p className="m-0 mt-1 text-xs leading-relaxed text-slate-500">{t("users.manageCompaniesHint")}</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {linkedCompanies(editing).length === 0 ? (
+                      <p className="m-0 text-xs text-slate-500">{t("users.noContext")}</p>
+                    ) : (
+                      linkedCompanies(editing).map((company) => (
+                        <div key={company.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                          <span className="min-w-0 truncate text-sm font-bold text-slate-800">{company.name}</span>
+                          {linkedCompanies(editing).length > 1 ? (
+                            <button
+                              type="button"
+                              disabled={saving}
+                              title={t("users.unlinkCompany")}
+                              onClick={() => void onDetachCompany(company.id, company.name)}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              <X size={12} />
+                              {t("users.unlinkCompany")}
+                            </button>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {(() => {
+                    const linkedIds = new Set(linkedCompanies(editing).map((company) => Number(company.id)));
+                    const available = companies.filter((company) => !linkedIds.has(Number(company.id)));
+                    if (companies.length === 0) {
+                      return <p className="m-0 text-xs text-slate-500">{t("users.noCompaniesRegistered")}</p>;
+                    }
+                    if (available.length === 0) {
+                      return <p className="m-0 text-xs text-slate-500">{t("users.noOtherCompanies")}</p>;
+                    }
+                    return (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+                          <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.companyToAdd")}</span>
+                          <Select2Field
+                            theme="light"
+                            value={addCompanyId}
+                            options={available.map((company) => ({ value: String(company.id), label: company.name }))}
+                            placeholder={t("users.companyPh")}
+                            onChange={setAddCompanyId}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          disabled={saving || !addCompanyId}
+                          onClick={() => void onAttachCompany()}
+                          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <Plus size={14} />
+                          {t("users.addCompany")}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+              {permissionsForRole(editing.role).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("users.permissionsTitle")}</p>
+                  <PermissionList role={editing.role} selected={editPerms} onToggle={(slug) => togglePerm(editPerms, slug, setEditPerms)} />
+                </div>
+              ) : null}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
-              <button type="button" onClick={() => setEditing(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
-              <button type="button" disabled={saving} onClick={() => void onSavePermissions()} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("save")}</button>
+              <button type="button" onClick={() => setEditing(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("close")}</button>
+              {permissionsForRole(editing.role).length > 0 ? (
+                <button type="button" disabled={saving} onClick={() => void onSavePermissions()} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("save")}</button>
+              ) : null}
             </div>
           </div>
         </AppModal>

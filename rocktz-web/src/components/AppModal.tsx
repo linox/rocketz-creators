@@ -25,7 +25,7 @@ export function AppModal({
     <div className={cn("app-modal-overlay fixed inset-0 flex items-center justify-center overflow-y-auto p-3 sm:p-4", zIndexClassName)}>
       <button
         type="button"
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+        className="fixed inset-0 z-0 bg-slate-900/60 backdrop-blur-sm"
         onMouseDown={(event) => {
           if (lockBackdrop) return;
           if (event.target === event.currentTarget) {

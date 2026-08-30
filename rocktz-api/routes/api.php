@@ -148,6 +148,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
             Route::get('users', [UserController::class, 'index']);
             Route::post('users', [UserController::class, 'store']);
             Route::patch('users/{user}', [UserController::class, 'update']);
+            Route::post('users/{user}/companies', [UserController::class, 'attachCompany']);
+            Route::delete('users/{user}/companies/{company}', [UserController::class, 'detachCompany']);
             Route::delete('users/{user}', [UserController::class, 'destroy']);
             Route::get('admin-users', [AdminUserController::class, 'index']);
             Route::post('admin-users', [AdminUserController::class, 'store']);
