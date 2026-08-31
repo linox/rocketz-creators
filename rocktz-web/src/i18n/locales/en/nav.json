@@ -61,5 +61,6 @@
   "companyLanding": "Landing page",
   "myLanding": "My landing page",
   "companyLandingSignups": "Landing signups",
-  "switchCompany": "Switch company"
+  "switchCompany": "Switch company",
+  "appVersion": "Version {{version}}"
 }

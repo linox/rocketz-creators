@@ -1,6 +1,9 @@
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import type { NextConfig } from "next";
+
+const { version: appVersion } = createRequire(import.meta.url)("./package.json") as { version: string };
 
 function isPrivateIpv4(host: string): boolean {
   return (
@@ -43,6 +46,9 @@ function allowedDevOrigins(): string[] {
 
 const nextConfig: NextConfig = {
   ...(process.env.NODE_ENV === "production" ? { output: "export" as const } : {}),
+  env: {
+    NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || appVersion,
+  },
   allowedDevOrigins: allowedDevOrigins(),
   turbopack: {
     root: path.join(__dirname),

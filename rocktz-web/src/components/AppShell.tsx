@@ -41,6 +41,7 @@ import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { fetchMe, logoutRequest } from "@/lib/laravel";
 import { companyLandingPath } from "@/lib/landing-origin";
+import { APP_VERSION } from "@/lib/app-version";
 import { cacheNavBadges, isNavCacheFresh, peekNavBadges } from "@/lib/session-cache";
 import { usePrivacy } from "@/lib/privacy";
 import { useTranslation } from "react-i18next";
@@ -370,6 +371,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               onLogout={logout}
               variant="sidebar"
             />
+            <p className="px-1 pt-1 text-center text-[10px] font-medium tracking-wide text-white/45">
+              {t("appVersion", { version: APP_VERSION })}
+            </p>
           </div>
         </div>
       </aside>

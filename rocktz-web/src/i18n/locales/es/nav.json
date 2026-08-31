@@ -61,5 +61,6 @@
   "companyLanding": "Landing page",
   "myLanding": "Mi landing page",
   "companyLandingSignups": "Registros de la landing",
-  "switchCompany": "Cambiar de empresa"
+  "switchCompany": "Cambiar de empresa",
+  "appVersion": "Versión {{version}}"
 }
