@@ -18,6 +18,7 @@ use App\Support\Geo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 class AuthService
 {
@@ -78,7 +79,7 @@ class AuthService
             app(CompanyLandingService::class)->attributeCreator((string) $data['landing_slug'], $user->creator);
         }
 
-        app(MailNotifier::class)->creatorRegistered($user->fresh(['creator']));
+        $this->safelyNotify(fn () => app(MailNotifier::class)->creatorRegistered($user->fresh(['creator'])));
 
         return $this->issueToken($user);
     }
@@ -125,7 +126,7 @@ class AuthService
             return $user;
         });
 
-        app(MailNotifier::class)->companyRegistered($user->fresh(['company']));
+        $this->safelyNotify(fn () => app(MailNotifier::class)->companyRegistered($user->fresh(['company'])));
 
         return $this->issueToken($user);
     }
@@ -142,6 +143,15 @@ class AuthService
             'token' => $token,
             'user' => new UserResource($user),
         ];
+    }
+
+    public function safelyNotify(callable $callback): void
+    {
+        try {
+            $callback();
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     public function recordLgpdConsent(User $user, Request $request): Consent

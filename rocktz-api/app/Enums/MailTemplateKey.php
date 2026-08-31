@@ -98,9 +98,7 @@ enum MailTemplateKey: string
             self::PasswordReset,
             self::TwoFactorCode,
             self::CreatorRegistered,
-            self::CompanyRegistered,
-            self::AdminCreatorPending,
-            self::AdminCompanyPending => true,
+            self::CompanyRegistered => true,
             default => false,
         };
     }

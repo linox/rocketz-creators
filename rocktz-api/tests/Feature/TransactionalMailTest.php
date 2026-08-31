@@ -18,6 +18,8 @@ use App\Models\UserNotificationPreference;
 use App\Services\Mail\TransactionalMailService;
 use Database\Seeders\MailTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -53,6 +55,28 @@ class TransactionalMailTest extends TestCase
             'template_key' => MailTemplateKey::CreatorRegistered->value,
             'status' => MailMessageStatus::Sent->value,
         ]);
+    }
+
+    public function test_creator_registration_succeeds_when_mail_provider_fails(): void
+    {
+        Event::listen(MessageSending::class, function () {
+            throw new \RuntimeException('provider down');
+        });
+
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Maria Silva',
+            'artistic_name' => 'mariasilva',
+            'email' => 'maria.mailfail@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999999999',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'instagram' => 'mariasilva',
+            'category' => 'UGC Content',
+            'lgpd_accepted' => true,
+        ])->assertCreated()
+            ->assertJsonStructure(['token', 'user']);
     }
 
     public function test_operational_mail_goes_to_default_queue(): void

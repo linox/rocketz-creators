@@ -29,7 +29,7 @@ class TwoFactorService
      */
     public function startChallenge(User $user, TwoFactorPurpose $purpose): array
     {
-        if (! $this->mail->sendingEnabled()) {
+        if (! $this->mail->providerConfigured()) {
             throw new RuntimeException(__('auth.mail_not_configured'), 503);
         }
 

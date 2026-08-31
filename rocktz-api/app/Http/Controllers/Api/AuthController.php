@@ -27,6 +27,7 @@ use App\Services\AuthService;
 use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
 use App\Services\Mail\MailNotifier;
+use App\Services\Mail\TransactionalMailService;
 use App\Services\TwoFactorService;
 use App\Support\FrontendUrl;
 use App\Support\Geo;
@@ -268,7 +269,7 @@ class AuthController extends Controller
 
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        if (config('mail.default') === 'resend' && blank(config('services.resend.key'))) {
+        if (! app(TransactionalMailService::class)->providerConfigured()) {
             return response()->json(['message' => __('auth.mail_not_configured')], 503);
         }
 
@@ -395,11 +396,13 @@ class AuthController extends Controller
         $this->authService->recordLgpdConsent($user, $request);
 
         $fresh = $user->fresh(['creator', 'company']);
-        if ($data['type'] === 'creator') {
-            app(MailNotifier::class)->creatorRegistered($fresh);
-        } else {
-            app(MailNotifier::class)->companyRegistered($fresh);
-        }
+        $this->authService->safelyNotify(function () use ($data, $fresh) {
+            if ($data['type'] === 'creator') {
+                app(MailNotifier::class)->creatorRegistered($fresh);
+            } else {
+                app(MailNotifier::class)->companyRegistered($fresh);
+            }
+        });
 
         $this->logAccess($request, $data['type'] === 'creator' ? 'register.creator' : 'register.company', $fresh, 200, ['provider' => 'google']);
 

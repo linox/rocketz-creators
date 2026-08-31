@@ -41,60 +41,75 @@ class TransactionalMailService
             return null;
         }
 
-        $user->loadMissing(['creator', 'company', 'notificationPreference']);
+        try {
+            $user->loadMissing(['creator', 'company', 'notificationPreference']);
 
-        if (! $this->recipientAllowed($user, $key)) {
-            return null;
-        }
-
-        $template = MailTemplate::query()->where('key', $key->value)->first();
-        if ($template && ! $template->enabled) {
-            return null;
-        }
-
-        if (! $this->prefers($user, $key)) {
-            return null;
-        }
-
-        $locale = $user->preferredLocale();
-        $copy = $this->copyFor($key, $locale, $template);
-        $variables = $this->withDefaults($user, $context);
-        $subject = $this->renderer->render($copy['subject'], $variables);
-
-        $message = $this->insertMessage(
-            $key,
-            $user,
-            $related,
-            $occurrence,
-            $subject,
-            $variables,
-            $copy,
-            $initialStatus ?? MailMessageStatus::Queued,
-        );
-
-        if (! $message || $message->status === MailMessageStatus::Scheduled) {
-            return $message;
-        }
-
-        if ($this->sendsImmediately($key)) {
-            try {
-                $this->deliver($message);
-            } catch (Throwable $e) {
-                report($e);
-                $message->update([
-                    'status' => MailMessageStatus::TemporaryFailed,
-                    'failure_reason' => mb_substr($e->getMessage(), 0, 2000),
-                ]);
-
+            if (! $this->recipientAllowed($user, $key)) {
                 return null;
             }
 
-            return $message->fresh();
+            $template = MailTemplate::query()->where('key', $key->value)->first();
+            if ($template && ! $template->enabled && ! $key->isAuthPriority()) {
+                return null;
+            }
+
+            if (! $this->prefers($user, $key)) {
+                return null;
+            }
+
+            $locale = $user->preferredLocale();
+            $copy = $this->copyFor($key, $locale, $template);
+            $variables = $this->withDefaults($user, $context);
+            $subject = $this->renderer->render($copy['subject'], $variables);
+
+            $message = $this->insertMessage(
+                $key,
+                $user,
+                $related,
+                $occurrence,
+                $subject,
+                $variables,
+                $copy,
+                $initialStatus ?? MailMessageStatus::Queued,
+            );
+
+            if (! $message || $message->status === MailMessageStatus::Scheduled) {
+                return $message;
+            }
+
+            if ($this->sendsImmediately($key)) {
+                try {
+                    $this->deliver($message);
+                } catch (Throwable $e) {
+                    report($e);
+                    $message->update([
+                        'status' => MailMessageStatus::TemporaryFailed,
+                        'failure_reason' => mb_substr($e->getMessage(), 0, 2000),
+                    ]);
+
+                    return null;
+                }
+
+                return $message->fresh();
+            }
+
+            SendTransactionalMailJob::dispatch($message->id)->onQueue($key->queueName());
+
+            return $message;
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    public function providerConfigured(): bool
+    {
+        if (! $this->sendingEnabled()) {
+            return false;
         }
 
-        SendTransactionalMailJob::dispatch($message->id)->onQueue($key->queueName());
-
-        return $message;
+        return ! (config('mail.default') === 'resend' && blank(config('services.resend.key')));
     }
 
     public function sendsImmediately(MailTemplateKey $key): bool

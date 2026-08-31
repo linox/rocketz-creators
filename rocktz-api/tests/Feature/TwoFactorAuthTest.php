@@ -5,9 +5,13 @@ namespace Tests\Feature;
 use App\Enums\MailTemplateKey;
 use App\Jobs\SendTransactionalMailJob;
 use App\Mail\TransactionalMailable;
+use App\Models\MailTemplate;
 use App\Models\User;
 use App\Services\Mail\TransactionalMailService;
+use Database\Seeders\MailTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -93,6 +97,48 @@ class TwoFactorAuthTest extends TestCase
             'template_key' => MailTemplateKey::TwoFactorCode->value,
             'status' => 'sent',
         ]);
+    }
+
+    public function test_two_factor_sends_even_when_template_is_disabled(): void
+    {
+        Mail::fake();
+        $this->seed(MailTemplateSeeder::class);
+        MailTemplate::query()->where('key', MailTemplateKey::TwoFactorCode->value)->update(['enabled' => false]);
+        $user = $this->userWithTwoFactor();
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'secret123',
+        ])->assertOk()
+            ->assertJsonPath('two_factor_required', true);
+
+        Mail::assertSent(TransactionalMailable::class);
+    }
+
+    public function test_two_factor_login_fails_when_mail_provider_throws(): void
+    {
+        Event::listen(MessageSending::class, function () {
+            throw new \RuntimeException('provider down');
+        });
+        $user = $this->userWithTwoFactor();
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'secret123',
+        ])->assertStatus(503)
+            ->assertJsonPath('message', __('auth.mail_failed'));
+    }
+
+    public function test_two_factor_login_fails_when_resend_key_is_missing(): void
+    {
+        config(['mail.default' => 'resend', 'services.resend.key' => '']);
+        $user = $this->userWithTwoFactor();
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'secret123',
+        ])->assertStatus(503)
+            ->assertJsonPath('message', __('auth.mail_not_configured'));
     }
 
     public function test_resend_is_throttled_within_one_minute(): void
