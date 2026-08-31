@@ -49,6 +49,9 @@ class UserResource extends JsonResource
                     'can_access_all_countries' => (bool) $this->creator->can_access_all_countries,
                     'categories' => $this->creator->categories ?? [],
                     'socials' => $this->creator->socials ?? [],
+                    'portfolio_count' => $this->creator->relationLoaded('portfolioVideos')
+                        ? $this->creator->portfolioVideos->count()
+                        : $this->creator->portfolioVideos()->count(),
                     'contract_acceptance' => $latestContract ? [
                         'id' => $latestContract->id,
                         'status' => $latestContract->status?->value,

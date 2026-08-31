@@ -46,7 +46,8 @@ class AuthTest extends TestCase
             ->assertJsonPath('user.role', 'creator')
             ->assertJsonPath('user.creator.status', 'review')
             ->assertJsonPath('user.locale', 'pt-BR')
-            ->assertJsonPath('user.lgpd_accepted', true);
+            ->assertJsonPath('user.lgpd_accepted', true)
+            ->assertJsonPath('user.creator.portfolio_count', 0);
 
         $this->assertDatabaseHas('users', [
             'email' => 'maria@example.com',

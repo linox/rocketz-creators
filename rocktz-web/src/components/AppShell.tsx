@@ -27,6 +27,7 @@ import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorContractRequiredBanner } from "@/components/CreatorContractRequiredBanner";
+import { CreatorFirstPortfolioBanner } from "@/components/CreatorFirstPortfolioBanner";
 import { EditProfileModal } from "@/components/EditProfileModal";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LgpdBanner } from "@/components/LgpdBanner";
@@ -131,6 +132,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const [contractOpen, setContractOpen] = useState(false);
   const [companyPublicLandingSlug, setCompanyPublicLandingSlug] = useState<string | null>(null);
   const needsContract = user.role === "creator" && Boolean(user.creator?.id) && !user.creator?.contract_acceptance;
+  const needsFirstPortfolio = user.role === "creator" && Boolean(user.creator?.id) && (user.creator?.portfolio_count ?? 0) < 1;
   const close = () => setOpen(false);
   const handle = (user.email.split("@")[0] || "admin").toUpperCase();
   const creatorProfileBase = user.creator?.id ? `/creators/${user.creator.id}` : null;
@@ -457,9 +459,12 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
           />
         </header>
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10">
-          {needsContract ? (
-            <div className="mb-4 sm:mb-6">
-              <CreatorContractRequiredBanner onSign={() => setContractOpen(true)} />
+          {needsContract || needsFirstPortfolio ? (
+            <div className="mb-4 flex flex-col gap-3 sm:mb-6">
+              {needsContract ? <CreatorContractRequiredBanner onSign={() => setContractOpen(true)} /> : null}
+              {needsFirstPortfolio && creatorProfileBase ? (
+                <CreatorFirstPortfolioBanner href={`${creatorProfileBase}?tab=portfolio`} />
+              ) : null}
             </div>
           ) : null}
           {children}

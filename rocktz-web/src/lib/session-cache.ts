@@ -73,6 +73,11 @@ export function emitNavRefresh() {
   window.dispatchEvent(new Event("rocketz:nav-refresh"));
 }
 
+export function emitAuthRefresh() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("rocketz:auth-refresh"));
+}
+
 export function clearSessionCache() {
   memoryUser = null;
   userCachedAt = 0;

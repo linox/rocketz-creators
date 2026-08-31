@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { isUploadCancelled } from "@/lib/laravel";
+import { emitAuthRefresh } from "@/lib/session-cache";
 import type { Creator } from "@/lib/types";
 
 const PLAYER_MAX_BYTES = 200 * 1024 * 1024;
@@ -109,6 +110,7 @@ export function CreatorPortfolioPanel({
       setUploadFile(null);
       setTitle("");
       setDescription("");
+      emitAuthRefresh();
       onChanged();
     } catch (err) {
       if (!isUploadCancelled(err)) {
@@ -130,6 +132,7 @@ export function CreatorPortfolioPanel({
     try {
       await api.removePortfolio(creator.id, video.id);
       await alertSuccess(t("videoRemoved"));
+      emitAuthRefresh();
       onChanged();
     } catch (err) {
       await alertApiError(err);
