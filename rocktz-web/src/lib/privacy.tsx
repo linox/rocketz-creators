@@ -3,10 +3,33 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { laravelFetch } from "@/lib/laravel";
 import { resolveCurrency } from "@/lib/geo";
+import { cacheAuthUser } from "@/lib/session-cache";
+import type { AuthUser } from "@/lib/auth";
 
 const HIDE_KEY = "rocktz_hide_values";
-const LGPD_KEY = "rocktz_lgpd_accepted";
+export const LGPD_KEY = "rocktz_lgpd_accepted";
+
+export function persistLgpdAccepted(userId?: number | null) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LGPD_KEY, "1");
+    if (userId) localStorage.setItem(`${LGPD_KEY}:${userId}`, "1");
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readLgpdAccepted(userId?: number | null): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (userId && localStorage.getItem(`${LGPD_KEY}:${userId}`) === "1") return true;
+    return localStorage.getItem(LGPD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 type PrivacyContextValue = {
   hideValues: boolean;
@@ -22,17 +45,30 @@ type PrivacyContextValue = {
 
 const PrivacyContext = createContext<PrivacyContextValue | null>(null);
 
-export function PrivacyProvider({ children }: { children: ReactNode }) {
+export function PrivacyProvider({
+  children,
+  userId,
+  serverLgpdAccepted = false,
+}: {
+  children: ReactNode;
+  userId?: number;
+  serverLgpdAccepted?: boolean;
+}) {
   const { i18n } = useTranslation();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const [hideValues, setHideValues] = useState(false);
-  const [lgpdAccepted, setLgpdAccepted] = useState(true);
+  const [lgpdAccepted, setLgpdAccepted] = useState(() => serverLgpdAccepted || readLgpdAccepted(userId));
   const [lgpdOpen, setLgpdOpen] = useState(false);
 
   useEffect(() => {
     setHideValues(localStorage.getItem(HIDE_KEY) === "1");
-    setLgpdAccepted(localStorage.getItem(LGPD_KEY) === "1");
-  }, []);
+    if (serverLgpdAccepted) {
+      persistLgpdAccepted(userId);
+      setLgpdAccepted(true);
+      return;
+    }
+    setLgpdAccepted(readLgpdAccepted(userId));
+  }, [serverLgpdAccepted, userId]);
 
   const toggleHideValues = useCallback(() => {
     setHideValues((current) => {
@@ -43,10 +79,15 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const acceptLgpd = useCallback(() => {
-    localStorage.setItem(LGPD_KEY, "1");
+    persistLgpdAccepted(userId);
     setLgpdAccepted(true);
     setLgpdOpen(false);
-  }, []);
+    void laravelFetch<{ user: AuthUser }>("/auth/lgpd", { method: "POST" })
+      .then((payload) => {
+        if (payload.user) cacheAuthUser(payload.user);
+      })
+      .catch(() => undefined);
+  }, [userId]);
 
   const formatCurrency = useCallback(
     (value?: number | null, currency?: string | null) => {

@@ -77,7 +77,7 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
 
   return (
     <AuthUserContext.Provider value={user}>
-      <PrivacyProvider>
+      <PrivacyProvider userId={user.id} serverLgpdAccepted={Boolean(user.lgpd_accepted)}>
         <UploadManagerProvider>
           <UploadGlobalBanner />
           <AppShell key={`${user.role}-${user.company?.id ?? 0}`} user={user} onUserChange={(next) => { cacheAuthUser(next); setUser(next); }}>{children}</AppShell>

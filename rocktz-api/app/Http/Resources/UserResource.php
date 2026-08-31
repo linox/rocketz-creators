@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\ConsentType;
 use App\Support\AppLocale;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,6 +25,7 @@ class UserResource extends JsonResource
             'can_publish_without_approval' => $this->canPublishWithoutApproval(),
             'two_factor_enabled' => (bool) $this->two_factor_enabled,
             'has_password' => filled($this->password),
+            'lgpd_accepted' => $this->consents()->where('type', ConsentType::LgpdSignup)->exists(),
             'creator' => $this->whenLoaded('creator', function () {
                 if (! $this->creator) {
                     return null;

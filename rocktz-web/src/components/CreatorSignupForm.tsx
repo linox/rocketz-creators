@@ -52,12 +52,11 @@ export function ModalField({
 
 type Props = {
   landingSlug?: string | null;
-  hideInviteCode?: boolean;
   accentColor?: string;
   onSuccess: (payload: AuthPayload) => void;
 };
 
-export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentColor = "#7C3AED", onSuccess }: Props) {
+export function CreatorSignupForm({ landingSlug, accentColor = "#7C3AED", onSuccess }: Props) {
   const { t } = useTranslation();
   const ta = (key: string, options?: Record<string, unknown>) => t(`auth:${key}`, options);
   const tc = (key: string, options?: Record<string, unknown>) => t(`common:${key}`, options);
@@ -75,7 +74,6 @@ export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentC
     email: "",
     password: "",
     password_confirmation: "",
-    invite_code: "",
     lgpd_accepted: false,
   });
 
@@ -142,7 +140,6 @@ export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentC
         body: JSON.stringify({
           ...creator,
           instagram: instagramHandle(creator.instagram),
-          invite_code: hideInviteCode ? undefined : creator.invite_code.trim() || undefined,
           landing_slug: landingSlug || getLandingOrigin() || undefined,
           locale: getAppLocale(),
         }),
@@ -248,17 +245,6 @@ export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentC
             <ModalField label={ta("fields.confirmYourPassword")} required>
               <PasswordField placeholder={ta("repeatPassword")} autoComplete="new-password" inputClassName={creatorModalInput} value={creator.password_confirmation} onChange={(e) => setCreator({ ...creator, password_confirmation: e.target.value })} />
             </ModalField>
-            {hideInviteCode ? null : (
-              <ModalField label={ta("fields.inviteCode")}>
-                <input
-                  placeholder={ta("fields.inviteCodePh")}
-                  className={`${creatorModalInput} uppercase`}
-                  value={creator.invite_code}
-                  onChange={(e) => setCreator({ ...creator, invite_code: e.target.value.toUpperCase() })}
-                />
-                <p className="m-0 mt-1 text-[11px] text-slate-500">{ta("fields.inviteCodeHint")}</p>
-              </ModalField>
-            )}
             <label className="flex cursor-pointer items-start gap-2.5 pt-2">
               <input type="checkbox" checked={creator.lgpd_accepted} onChange={(e) => setCreator({ ...creator, lgpd_accepted: e.target.checked })} className="mt-1 rounded text-purple-600" />
               <span className="text-[11px] leading-snug text-slate-600">{ta("lgpdCreator")}</span>

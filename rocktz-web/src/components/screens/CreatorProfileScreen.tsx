@@ -8,6 +8,7 @@ import { safeHttpUrl } from "@/lib/safe-http-url";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import {
   ArrowLeft,
+  ArrowRight,
   Briefcase,
   Building2,
   Calendar,
@@ -1061,6 +1062,24 @@ function ProfileInner() {
               </button>
               <button type="button" onClick={async () => { if (!(await alertConfirm(tp("rejectTitle"), tp("rejectText"), tp("reject")))) return; await api.rejectCreator(creator.id).catch(alertApiError); load(); }} className="rounded-xl border border-rose-200 bg-rose-100 px-3 py-2 text-xs font-bold text-rose-800 hover:bg-rose-200">{tp("reject")}</button>
             </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isCreatorSelf && creator.status === "review" && !(creator.portfolio?.length) ? (
+        <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-indigo-50 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm"><Video size={22} /></div>
+            <div>
+              <h4 className="m-0 text-sm font-bold text-indigo-950">{tp("firstPortfolioTitle")}</h4>
+              <p className="mt-0.5 max-w-xl text-xs text-indigo-800">{tp("firstPortfolioBody")}</p>
+            </div>
+          </div>
+          {tab !== "portfolio" ? (
+            <button type="button" onClick={() => goTab("portfolio")} className="flex w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-indigo-700 sm:w-auto">
+              {tp("firstPortfolioCta")}
+              <ArrowRight size={14} />
+            </button>
           ) : null}
         </div>
       ) : null}

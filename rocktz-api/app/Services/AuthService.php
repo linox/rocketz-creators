@@ -156,6 +156,14 @@ class AuthService
 
     public function recordLgpdConsent(User $user, Request $request): Consent
     {
+        $existing = $user->consents()
+            ->where('type', ConsentType::LgpdSignup)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
         return Consent::query()->create([
             'user_id' => $user->id,
             'type' => ConsentType::LgpdSignup,

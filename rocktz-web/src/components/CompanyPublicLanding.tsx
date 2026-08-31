@@ -225,7 +225,6 @@ export function CompanyPublicLanding({
                 <>
                   <CreatorSignupForm
                     landingSlug={page.slug}
-                    hideInviteCode
                     accentColor={button}
                     onSuccess={(payload) => void afterAuth(payload)}
                   />

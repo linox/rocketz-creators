@@ -142,6 +142,14 @@ export function clearToken() {
 export function persistAuth(payload: AuthPayload, afterSignup = false): string {
   setToken(payload.token);
   cacheAuthUser(payload.user);
+  if (afterSignup || payload.user.lgpd_accepted) {
+    try {
+      localStorage.setItem("rocktz_lgpd_accepted", "1");
+      localStorage.setItem(`rocktz_lgpd_accepted:${payload.user.id}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }
   if (afterSignup && payload.user.role === "creator" && payload.user.creator?.id) {
     return `/creators/${payload.user.creator.id}?tab=portfolio`;
   }

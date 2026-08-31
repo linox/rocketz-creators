@@ -208,6 +208,17 @@ class AuthController extends Controller
         ]);
     }
 
+    public function acceptLgpd(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $this->authService->recordLgpdConsent($user, $request);
+        $user->loadAuthRelations();
+
+        return response()->json([
+            'user' => new UserResource($user),
+        ]);
+    }
+
     public function switchCompany(Request $request): JsonResponse
     {
         $user = $request->user();

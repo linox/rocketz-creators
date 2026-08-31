@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\CompanyStatus;
+use App\Enums\ConsentType;
 use App\Enums\CreatorStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\UserRole;
@@ -44,7 +45,8 @@ class AuthTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('user.role', 'creator')
             ->assertJsonPath('user.creator.status', 'review')
-            ->assertJsonPath('user.locale', 'pt-BR');
+            ->assertJsonPath('user.locale', 'pt-BR')
+            ->assertJsonPath('user.lgpd_accepted', true);
 
         $this->assertDatabaseHas('users', [
             'email' => 'maria@example.com',
@@ -306,5 +308,34 @@ class AuthTest extends TestCase
     public function test_forgot_password_requires_email(): void
     {
         $this->postJson('/api/auth/forgot-password', [])->assertUnprocessable();
+    }
+
+    public function test_user_can_accept_lgpd_once(): void
+    {
+        $user = User::factory()->admin()->create([
+            'email' => 'lgpd@rocketz.test',
+        ]);
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson('/api/auth/me')
+            ->assertOk()
+            ->assertJsonPath('user.lgpd_accepted', false);
+
+        $this->withToken($token)
+            ->postJson('/api/auth/lgpd')
+            ->assertOk()
+            ->assertJsonPath('user.lgpd_accepted', true);
+
+        $this->withToken($token)
+            ->postJson('/api/auth/lgpd')
+            ->assertOk()
+            ->assertJsonPath('user.lgpd_accepted', true);
+
+        $this->assertDatabaseCount('consents', 1);
+        $this->assertDatabaseHas('consents', [
+            'user_id' => $user->id,
+            'type' => ConsentType::LgpdSignup->value,
+        ]);
     }
 }

@@ -11,6 +11,7 @@ export type AuthUser = {
   can_publish_without_approval?: boolean;
   two_factor_enabled?: boolean;
   has_password?: boolean;
+  lgpd_accepted?: boolean;
   creator?: {
     id: number;
     full_name: string;

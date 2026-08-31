@@ -44,6 +44,7 @@ Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::patch('me', [AuthController::class, 'updateMe']);
+        Route::post('lgpd', [AuthController::class, 'acceptLgpd']);
         Route::patch('company', [AuthController::class, 'switchCompany']);
         Route::patch('locale', [AuthController::class, 'updateLocale']);
         Route::post('google/complete', [AuthController::class, 'completeGoogleProfile']);
