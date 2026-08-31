@@ -70,7 +70,7 @@ function UsersInner() {
 
   const canManage = userHasPermission(me, "users.manage");
 
-  async function load() {
+  async function load(selectUserId?: number) {
     try {
       const params = new URLSearchParams();
       if (roleFilter !== "all") params.set("role", roleFilter);
@@ -82,6 +82,12 @@ function UsersInner() {
       ]);
       setItems(usersRes.data);
       setCompanies(companiesRes.data);
+      if (selectUserId) {
+        const next = usersRes.data.find((item) => item.id === selectUserId);
+        if (next) {
+          setEditing(next);
+        }
+      }
     } catch (err) {
       await alertApiError(err);
     }
@@ -209,11 +215,6 @@ function UsersInner() {
     setAddCompanyId("");
   }
 
-  function applyEditedUser(next: AuthUser) {
-    setEditing(next);
-    setItems((current) => current.map((item) => (item.id === next.id ? next : item)));
-  }
-
   async function onAttachCompany() {
     if (!editing || !addCompanyId) {
       await alertWarning(tc("alerts.incompleteTitle"), t("users.companyRequired"));
@@ -221,11 +222,10 @@ function UsersInner() {
     }
     setSaving(true);
     try {
-      const res = await api.attachUserCompany(editing.id, { company_id: Number(addCompanyId) });
-      applyEditedUser(res.data);
+      await api.attachUserCompany(editing, Number(addCompanyId));
       setAddCompanyId("");
       await alertSuccess(t("users.companyLinked"));
-      await load();
+      await load(editing.id);
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -233,17 +233,21 @@ function UsersInner() {
     }
   }
 
-  async function onDetachCompany(companyId: number, companyName: string) {
+  async function onDetachCompany(companyId: number, companyName: string, companyUserId?: number) {
     if (!editing) return;
     if (!(await alertConfirm(t("users.unlinkCompany"), t("users.unlinkCompanyConfirm", { name: editing.name, company: companyName })))) {
       return;
     }
+    const pivotId = companyUserId ?? linkedCompanies(editing).find((company) => company.id === companyId)?.company_user_id;
+    if (!pivotId) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("users.unlinkCompany"));
+      return;
+    }
     setSaving(true);
     try {
-      const res = await api.detachUserCompany(editing.id, companyId);
-      applyEditedUser(res.data);
+      await api.detachUserCompany(companyId, pivotId);
       await alertSuccess(t("users.companyUnlinked"));
-      await load();
+      await load(editing.id);
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -538,7 +542,7 @@ function UsersInner() {
                               type="button"
                               disabled={saving}
                               title={t("users.unlinkCompany")}
-                              onClick={() => void onDetachCompany(company.id, company.name)}
+                              onClick={() => void onDetachCompany(company.id, company.name, company.company_user_id)}
                               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                             >
                               <X size={12} />

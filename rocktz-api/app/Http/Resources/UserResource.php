@@ -57,7 +57,15 @@ class UserResource extends JsonResource
             'company' => $this->whenLoaded('company', fn () => $this->companyPayload($this->company)),
             'companies' => $this->whenLoaded('companyUsers', function () {
                 return $this->companyUsers
-                    ->map(fn ($row) => $this->companyPayload($row->company))
+                    ->map(function ($row) {
+                        $payload = $this->companyPayload($row->company);
+                        if (! $payload) {
+                            return null;
+                        }
+                        $payload['company_user_id'] = $row->id;
+
+                        return $payload;
+                    })
                     ->filter()
                     ->values()
                     ->all();

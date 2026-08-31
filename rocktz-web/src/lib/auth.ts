@@ -47,6 +47,7 @@ export type AuthUser = {
     name: string;
     status: string;
     logo_url: string | null;
+    company_user_id?: number;
     whatsapp?: string | null;
     city?: string | null;
     country?: string | null;
