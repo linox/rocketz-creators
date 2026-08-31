@@ -237,7 +237,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           title: "PROTECCIÓN DE DATOS PERSONALES",
           items: [
             "18.1. DIGITAL ROCKET podrá recopilar y tratar datos personales necesarios para la operación de Rocketz Creators, la selección de CREADORES, la ejecución de las campañas, los pagos y el cumplimiento de obligaciones legales.",
-            "18.2. Podrán tratarse, según sea necesario:\na) nombre;\nb) CPF o CNPJ;\nc) datos de contacto;\nd) dirección;\ne) datos bancarios;\nf) perfiles de redes sociales;\ng) métricas de audiencia;\nh) información profesional;\ni) datos fiscales;\nj) documentos necesarios para la contratación.",
+            "18.2. Podrán tratarse, según sea necesario:\na) nombre;\nb) {{TAX_DOCS}};\nc) datos de contacto;\nd) dirección;\ne) datos bancarios;\nf) perfiles de redes sociales;\ng) métricas de audiencia;\nh) información profesional;\ni) datos fiscales;\nj) documentos necesarios para la contratación.",
             "18.3. Los datos podrán compartirse con EMPRESAS SOCIAS cuando sea necesario para la selección, contratación, ejecución y seguimiento de campañas.",
             "18.4. El tratamiento de los datos deberá observar la legislación brasileña aplicable, especialmente la Ley General de Protección de Datos Personales – LGPD.",
             "18.5. DIGITAL ROCKET adoptará medidas técnicas y administrativas razonables destinadas a la protección de los datos tratados por la plataforma.",
@@ -269,7 +269,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           title: "ACEPTACIÓN ELECTRÓNICA Y REGISTROS",
           items: [
             "21.1. El CREADOR reconoce como válida la manifestación de voluntad realizada electrónicamente a través de Rocketz Creators.",
-            "21.2. DIGITAL ROCKET podrá mantener registros destinados a comprobar la aceptación, incluyendo:\na) nombre del CREADOR;\nb) CPF o CNPJ;\nc) e-mail;\nd) fecha;\ne) horario;\nf) versión del Término;\ng) identificadores técnicos disponibles;\nh) historial de aceptación de campañas;\ni) condiciones específicas presentadas y aceptadas.",
+            "21.2. DIGITAL ROCKET podrá mantener registros destinados a comprobar la aceptación, incluyendo:\na) nombre del CREADOR;\nb) {{TAX_DOCS}};\nc) e-mail;\nd) fecha;\ne) horario;\nf) versión del Término;\ng) identificadores técnicos disponibles;\nh) historial de aceptación de campañas;\ni) condiciones específicas presentadas y aceptadas.",
             "21.3. La aceptación electrónica de este Término tendrá validez jurídica conforme a la legislación aplicable.",
             "21.4. Cada campaña podrá tener una aceptación electrónica propia, quedando sus condiciones vinculadas al registro del CREADOR.",
           ],

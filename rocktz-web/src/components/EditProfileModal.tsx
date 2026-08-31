@@ -1,18 +1,19 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Camera, Check, Instagram, Mail, MapPin, Smartphone, Sparkles, UploadCloud, User, X } from "lucide-react";
+import { Check, Instagram, Mail, MapPin, Smartphone, Sparkles, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { ImageCropModal } from "@/components/ImageCropModal";
+import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
-import { UserAvatar } from "@/components/UserAvatar";
+import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import { fetchMe } from "@/lib/laravel";
 import { formatInstagram, formatTikTok, formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
 import { DEFAULT_COUNTRY, hasRegions, isValidRegion } from "@/lib/geo";
+import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 
 type EditProfileModalProps = {
   isOpen: boolean;
@@ -24,7 +25,7 @@ type EditProfileModalProps = {
 export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: EditProfileModalProps) {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t: tp } = useTranslation("profile");
   const hasCreator = Boolean(user.creator?.id);
   const isCompany = user.role === "company";
   const [fullName, setFullName] = useState("");
@@ -38,14 +39,12 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [state, setState] = useState("");
   const [bio, setBio] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setCropSrc(null);
     setFullName(user.creator?.full_name || user.name);
     setArtisticName(user.creator?.artistic_name || "");
     setCompanyName(user.company?.name || "");
@@ -57,47 +56,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     setCountry(user.creator?.country || user.company?.country || DEFAULT_COUNTRY);
     setState(user.creator?.state || "");
     setBio("");
+    setCategories(normalizeCreatorCategories(user.creator?.categories ?? []));
   }, [isOpen, user]);
-
-  function pickFile() {
-    fileInputRef.current?.click();
-  }
-
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      void alertWarning(t("editProfile.invalidImageTitle"), t("editProfile.invalidImage"));
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      void alertWarning(t("editProfile.fileTooLargeTitle"), t("editProfile.fileTooLarge"));
-      return;
-    }
-    setCropSrc(URL.createObjectURL(file));
-  }
-
-  async function handleCropped(blob: Blob) {
-    const preview = cropSrc;
-    setCropSrc(null);
-    if (preview) URL.revokeObjectURL(preview);
-
-    setIsUploadingPhoto(true);
-    setUploadProgress(20);
-    try {
-      setUploadProgress(55);
-      const uploaded = await api.uploadMedia(blob, "avatar.jpg");
-      setUploadProgress(100);
-      setPhotoUrl(uploaded.data.url);
-      await alertSuccess(t("editProfile.photoUploaded"));
-    } catch (err) {
-      await alertApiError(err);
-    } finally {
-      setIsUploadingPhoto(false);
-      setUploadProgress(0);
-    }
-  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -130,6 +90,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           country,
           state: state || user.creator.state,
           bio: bio.trim() || undefined,
+          categories: normalizeCreatorCategories(categories),
           socials: {
             ...(user.creator.socials ?? {}),
             instagram: instagramHandle(instagram),
@@ -185,45 +146,12 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
             </div>
 
             <form noValidate onSubmit={handleSubmit} className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 sm:p-6">
-              <div className="flex flex-col items-center gap-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 sm:flex-row">
-                <div className="group relative shrink-0">
-                  <UserAvatar src={photoUrl} name={artisticName || fullName || user.email} size="custom" shape="rounded-2xl" className="h-20 w-20 border-2 border-white shadow-md sm:h-24 sm:w-24" textClassName="text-2xl font-bold" />
-                  <button
-                    type="button"
-                    onClick={pickFile}
-                    disabled={isUploadingPhoto}
-                    className="absolute -right-2 -bottom-2 cursor-pointer rounded-xl bg-brand-primary p-2 text-white shadow-md transition-colors hover:bg-indigo-600 disabled:opacity-50"
-                    title={t("editProfile.changePhoto")}
-                  >
-                    <Camera size={14} />
-                  </button>
-                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
-                </div>
-                <div className="w-full flex-1 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.photoLabel")}</label>
-                    {isUploadingPhoto ? <span className="animate-pulse text-[10px] font-bold text-brand-primary">{t("editProfile.uploading", { progress: uploadProgress })}</span> : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={photoUrl}
-                      onChange={(event) => setPhotoUrl(event.target.value)}
-                      placeholder={t("editProfile.photoUrlPh")}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 outline-none focus:border-brand-primary"
-                    />
-                    <button
-                      type="button"
-                      onClick={pickFile}
-                      disabled={isUploadingPhoto}
-                      className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      <UploadCloud size={14} /> {t("editProfile.upload")}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400">{t("editProfile.photoHint")}</p>
-                </div>
-              </div>
+              <ProfilePhotoPicker
+                photoUrl={photoUrl}
+                name={artisticName || fullName || user.email}
+                onPhotoUrlChange={setPhotoUrl}
+                onUploadingChange={setIsUploadingPhoto}
+              />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
@@ -303,6 +231,13 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                 </div>
               </div>
 
+              {hasCreator ? (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{tp("nicheCategories")}</label>
+                  <CategoryTagsField values={categories} onChange={setCategories} />
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.bio")}</label>
                 <textarea
@@ -337,16 +272,6 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
               </div>
             </form>
           </motion.div>
-          {cropSrc ? (
-            <ImageCropModal
-              imageSrc={cropSrc}
-              onCancel={() => {
-                URL.revokeObjectURL(cropSrc);
-                setCropSrc(null);
-              }}
-              onConfirm={handleCropped}
-            />
-          ) : null}
         </div>
       ) : null}
     </AnimatePresence>

@@ -45,6 +45,7 @@ class UserResource extends JsonResource
                     'state' => $this->creator->state,
                     'document' => $this->creator->document,
                     'can_access_all_countries' => (bool) $this->creator->can_access_all_countries,
+                    'categories' => $this->creator->categories ?? [],
                     'socials' => $this->creator->socials ?? [],
                     'contract_acceptance' => $latestContract ? [
                         'id' => $latestContract->id,

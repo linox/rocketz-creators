@@ -21,6 +21,8 @@
   "edit": "Edit",
   "search": "Search...",
   "select": "Select",
+  "orConjunction": "or",
+  "taxIdFallback": "tax ID",
   "noOptions": "No options",
   "all": "All",
   "status": "Status",

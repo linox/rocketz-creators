@@ -77,6 +77,7 @@ return [
     'landing_signup_title' => 'Novo creator pela sua Landing Page',
     'landing_signup_message' => ':name concluiu o cadastro e está aguardando sua análise.',
     'creator_must_accept_contract' => 'Você precisa assinar o contrato de uso de imagem para se candidatar às campanhas.',
+    'creator_must_accept_campaign_contract' => 'Você precisa aceitar o contrato personalizado desta campanha para se candidatar.',
     'campaign_country_restricted' => 'Esta campanha não está disponível no seu país.',
     'campaign_city_restricted' => 'Esta campanha está limitada a outra cidade ou região.',
     'campaign_budget_full' => 'Esta campanha já atingiu o orçamento dos criadores aprovados e não recebe novas candidaturas.',

@@ -237,7 +237,7 @@ Para os fins deste Termo, serão consideradas “EMPRESAS PARCEIRAS” as empres
         title: "PROTEÇÃO DE DADOS PESSOAIS",
         items: [
           "18.1. A DIGITAL ROCKET poderá coletar e tratar dados pessoais necessários à operação da Rocketz Creators, seleção de CRIADORES, execução das campanhas, pagamentos e cumprimento de obrigações legais.",
-          "18.2. Poderão ser tratados, conforme necessário:\na) nome;\nb) CPF ou CNPJ;\nc) dados de contato;\nd) endereço;\ne) dados bancários;\nf) perfis de redes sociais;\ng) métricas de audiência;\nh) informações profissionais;\ni) dados fiscais;\nj) documentos necessários à contratação.",
+          "18.2. Poderão ser tratados, conforme necessário:\na) nome;\nb) {{TAX_DOCS}};\nc) dados de contato;\nd) endereço;\ne) dados bancários;\nf) perfis de redes sociais;\ng) métricas de audiência;\nh) informações profissionais;\ni) dados fiscais;\nj) documentos necessários à contratação.",
           "18.3. Os dados poderão ser compartilhados com EMPRESAS PARCEIRAS quando necessário para seleção, contratação, execução e acompanhamento de campanhas.",
           "18.4. O tratamento dos dados deverá observar a legislação brasileira aplicável, especialmente a Lei Geral de Proteção de Dados Pessoais – LGPD.",
           "18.5. A DIGITAL ROCKET adotará medidas técnicas e administrativas razoáveis destinadas à proteção dos dados tratados pela plataforma."
@@ -269,7 +269,7 @@ Para os fins deste Termo, serão consideradas “EMPRESAS PARCEIRAS” as empres
         title: "ACEITE ELETRÔNICO E REGISTROS",
         items: [
           "21.1. O CRIADOR reconhece como válida a manifestação de vontade realizada eletronicamente através da Rocketz Creators.",
-          "21.2. A DIGITAL ROCKET poderá manter registros destinados à comprovação do aceite, incluindo:\na) nome do CRIADOR;\nb) CPF ou CNPJ;\nc) e-mail;\nd) data;\ne) horário;\nf) versão do Termo;\ng) identificadores técnicos disponíveis;\nh) histórico de aceite de campanhas;\ni) condições específicas apresentadas e aceitas.",
+          "21.2. A DIGITAL ROCKET poderá manter registros destinados à comprovação do aceite, incluindo:\na) nome do CRIADOR;\nb) {{TAX_DOCS}};\nc) e-mail;\nd) data;\ne) horário;\nf) versão do Termo;\ng) identificadores técnicos disponíveis;\nh) histórico de aceite de campanhas;\ni) condições específicas apresentadas e aceitas.",
           "21.3. O aceite eletrônico deste Termo possuirá validade jurídica nos termos da legislação aplicável.",
           "21.4. Cada campanha poderá possuir aceite eletrônico próprio, ficando suas condições vinculadas ao cadastro do CRIADOR."
         ]

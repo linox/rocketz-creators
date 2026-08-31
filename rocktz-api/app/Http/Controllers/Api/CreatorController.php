@@ -111,7 +111,7 @@ class CreatorController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'country' => Geo::countryRules(false),
             'state' => Geo::regionRules($request->string('country')->toString() ?: null, false),
-            'cpf' => ['nullable', 'string', 'max:20'],
+            'cpf' => ['nullable', 'string', 'max:40'],
             'photo_url' => ['nullable', 'string', 'max:2048'],
             'instagram' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],
@@ -171,7 +171,7 @@ class CreatorController extends Controller
             'state' => Geo::regionRules($request->input('country') ?: $creator->country, false),
             'bio' => ['nullable', 'string'],
             'document' => ['nullable', 'string', 'max:40'],
-            'cpf' => ['nullable', 'string', 'max:20'],
+            'cpf' => ['nullable', 'string', 'max:40'],
             'pix_key' => ['nullable', 'string', 'max:255'],
             'bank_details' => ['nullable', 'string'],
             'socials' => ['nullable', 'array'],
@@ -180,7 +180,8 @@ class CreatorController extends Controller
             'socials.youtube' => ['nullable', 'string', 'max:255'],
             'socials.kwai' => ['nullable', 'string', 'max:255'],
             'metrics' => ['nullable', 'array'],
-            'categories' => ['nullable', 'array'],
+            'categories' => ['nullable', 'array', 'max:20'],
+            'categories.*' => ['nullable', 'string', 'max:120'],
             'pricing' => ['nullable', 'array'],
             'work_affinities' => ['nullable', 'array'],
             'accepts_exchange' => ['sometimes', 'boolean'],
@@ -205,6 +206,16 @@ class CreatorController extends Controller
         }
 
         $data = SafeHttpUrl::validateFields($data, ['photo_url']);
+
+        if (array_key_exists('categories', $data)) {
+            $data['categories'] = collect($data['categories'] ?? [])
+                ->map(fn ($item) => trim((string) $item))
+                ->filter()
+                ->unique()
+                ->take(20)
+                ->values()
+                ->all();
+        }
 
         $creator->fill($data)->save();
 

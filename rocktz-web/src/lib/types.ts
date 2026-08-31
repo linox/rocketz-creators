@@ -154,6 +154,8 @@ export type Campaign = {
   state?: string | null;
   city?: string | null;
   barter_details: string | null;
+  has_custom_contract?: boolean;
+  custom_contract_terms?: string | null;
   approval_flow: string | null;
   posting_profile?: "creator" | "brand" | string | null;
   briefing?: Record<string, string | string[] | null> | null;
@@ -227,6 +229,7 @@ export type CampaignCreator = {
   upload_progress?: number | null;
   signature_status?: string | null;
   contract_url?: string | null;
+  custom_contract_accepted_at?: string | null;
   post_date?: string | null;
   content?: {
     script: string | null;

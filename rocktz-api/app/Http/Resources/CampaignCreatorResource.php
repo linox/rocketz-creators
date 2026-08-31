@@ -73,6 +73,7 @@ class CampaignCreatorResource extends JsonResource
             'upload_progress' => $this->upload_progress !== null ? (int) $this->upload_progress : null,
             'signature_status' => $this->signature_status?->value,
             'contract_url' => $this->contract_url,
+            'custom_contract_accepted_at' => $this->custom_contract_accepted_at?->toIso8601String(),
             'content' => $this->whenLoaded('content', fn () => $this->content ? [
                 'script' => $this->content->script,
                 'video_url' => $this->content->video_url,

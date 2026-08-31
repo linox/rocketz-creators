@@ -23,6 +23,7 @@ export type AuthUser = {
     state?: string | null;
     document?: string | null;
     can_access_all_countries?: boolean;
+    categories?: string[];
     socials?: Record<string, string>;
     contract_acceptance?: {
       id: number;

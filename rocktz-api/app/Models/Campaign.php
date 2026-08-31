@@ -37,6 +37,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'state',
     'city',
     'barter_details',
+    'has_custom_contract',
+    'custom_contract_terms',
     'approval_flow',
     'posting_profile',
 ])]
@@ -81,6 +83,7 @@ class Campaign extends Model
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
             'limit_by_city' => 'boolean',
+            'has_custom_contract' => 'boolean',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
         ];
@@ -142,6 +145,11 @@ class Campaign extends Model
     public function creatorsBudgetLimit(): float
     {
         return round((float) ($this->creators_budget ?? 0), 2);
+    }
+
+    public function requiresCustomContract(): bool
+    {
+        return (bool) $this->has_custom_contract && filled($this->custom_contract_terms);
     }
 
     public function isAcceptingApplications(): bool

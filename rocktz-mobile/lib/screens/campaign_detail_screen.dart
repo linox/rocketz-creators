@@ -26,6 +26,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
   String? error;
   bool loading = true;
   bool busy = false;
+  bool acceptedCustom = false;
   int uploadPercent = 0;
   final script = TextEditingController();
   final published = TextEditingController();
@@ -78,10 +79,16 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
   }
 
   Future<void> _apply() async {
+    final hasCustom = campaign?['has_custom_contract'] == true;
+    if (hasCustom && !acceptedCustom) {
+      setState(() => error = context.read<AuthSession>().strings.t('acceptCustomContractRequired'));
+      return;
+    }
     setState(() => busy = true);
     try {
       await context.read<AuthSession>().api.postJson('/campaigns/${widget.campaignId}/apply', {
         'notes': notes.text.trim(),
+        if (hasCustom) 'custom_contract_accepted': true,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -184,6 +191,27 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (widget.marketplace && _own == null) ...[
+                    if (campaign?['has_custom_contract'] == true) ...[
+                      Text(t('customContract'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 180),
+                        child: SingleChildScrollView(
+                          child: Text(
+                            '${campaign?['custom_contract_terms'] ?? ''}',
+                            style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                      CheckboxListTile(
+                        value: acceptedCustom,
+                        onChanged: (value) => setState(() => acceptedCustom = value ?? false),
+                        title: Text(t('acceptCustomContract'), style: GoogleFonts.nunito(fontWeight: FontWeight.w700, fontSize: 13)),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     TextField(controller: notes, decoration: softField(t('notes'))),
                     const SizedBox(height: 16),
                     DarkPillButton(label: t('apply'), onPressed: busy ? null : _apply, busy: busy),

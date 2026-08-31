@@ -13,36 +13,21 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
-import { formatCPF, formatIntegerMask, isValidCPF, isValidEmail, parseIntegerMask, parseMoneyMask } from "@/lib/masks";
+import { formatIntegerMask, isValidEmail, parseIntegerMask, parseMoneyMask } from "@/lib/masks";
 import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
+import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentPlaceholder, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
+import { CREATOR_CATEGORY_VALUES, creatorCategoryOptions } from "@/lib/creatorCategories";
 import { useAuth } from "@/lib/use-auth";
 import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
-const CATEGORIES = [
-  "Beleza",
-  "Gastronomia",
-  "Lifestyle",
-  "Fitness",
-  "Maternidade",
-  "Pets",
-  "Automotivo",
-  "Tecnologia",
-  "Saúde",
-  "Humor",
-  "Moda",
-  "Educação",
-  "Casa e Decoração",
-  "UGC Content",
-];
-
 const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
 type CatalogLayout = "list" | "grid";
 
-const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "Beleza", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
+const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "UGC Content", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
 
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
@@ -458,6 +443,7 @@ function CreatorsInner() {
   const user = useAuth();
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
+  const { t: tAuth } = useTranslation("auth");
   const isAdmin = user.role === "admin";
   const isCompany = user.role === "company";
   const canRemove = userHasPermission(user, "users.manage");
@@ -475,13 +461,19 @@ function CreatorsInner() {
   const [maxPrice, setMaxPrice] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const formDocumentsLabel = taxDocumentsLabel(form.country, tc("orConjunction"), tc("taxIdFallback"));
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
   const [layout, setLayout] = useState<CatalogLayout>("list");
   const filterCurrency = moneyCurrency(user.company);
 
+  const categoryLabels = tAuth("categories", { returnObjects: true }) as Record<string, string>;
+  const knownCategoryOptions = useMemo(
+    () => creatorCategoryOptions(categoryLabels, creators.flatMap((creator) => creator.categories ?? [])),
+    [categoryLabels, creators],
+  );
   const categoryOptions = useMemo(
-    () => [{ value: "all", label: t("creators.allCategories").toUpperCase() }, ...CATEGORIES.map((cat) => ({ value: cat, label: cat.toUpperCase() }))],
-    [t],
+    () => [{ value: "all", label: t("creators.allCategories").toUpperCase() }, ...knownCategoryOptions.map((option) => ({ value: option.value, label: option.label.toUpperCase() }))],
+    [knownCategoryOptions, t],
   );
 
   const statusOptions = useMemo(
@@ -617,8 +609,8 @@ function CreatorsInner() {
       await alertWarning(t("creators.invalidEmailTitle"), t("creators.invalidEmail"));
       return;
     }
-    if (form.cpf && !isValidCPF(form.cpf)) {
-      await alertWarning(t("creators.invalidCpfTitle"), t("creators.invalidCpf"));
+    if (form.cpf && !isValidTaxDocument(form.country, form.cpf)) {
+      await alertWarning(t("creators.invalidCpfTitle", { documents: formDocumentsLabel }), t("creators.invalidCpf", { documents: formDocumentsLabel }));
       return;
     }
     if (!isValidCountry(form.country)) {
@@ -938,13 +930,13 @@ function CreatorsInner() {
                   <input placeholder={t("creators.artisticPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.artistic_name} onChange={(e) => setForm({ ...form, artistic_name: e.target.value })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.cpf")}</label>
+                  <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.cpf", { documents: formDocumentsLabel })}</label>
                   <input
-                    placeholder="000.000.000-00"
-                    maxLength={14}
+                    placeholder={taxDocumentPlaceholder(form.country, formDocumentsLabel)}
+                    maxLength={taxDocumentMaxLength(form.country)}
                     className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary"
                     value={form.cpf}
-                    onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, cpf: formatTaxDocument(form.country, e.target.value) })}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -953,7 +945,7 @@ function CreatorsInner() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.country")}</label>
-                  <CountrySelect theme="light" value={form.country} onChange={(country) => setForm({ ...form, country, state: "" })} />
+                  <CountrySelect theme="light" value={form.country} onChange={(country) => setForm({ ...form, country, state: "", cpf: formatTaxDocument(country, form.cpf) })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.region")}</label>
@@ -964,7 +956,7 @@ function CreatorsInner() {
                   <Select2Field
                     theme="light"
                     value={form.category}
-                    options={CATEGORIES.map((cat) => ({ value: cat, label: cat }))}
+                    options={CREATOR_CATEGORY_VALUES.map((cat) => ({ value: cat, label: categoryLabels[cat] ?? cat }))}
                     onChange={(value) => setForm({ ...form, category: value })}
                   />
                 </div>

@@ -25,16 +25,7 @@ import {
   isValidCountry,
   isValidRegion,
 } from "@/lib/geo";
-
-export const CREATOR_CATEGORY_VALUES = [
-  "UGC Content",
-  "Influenciador",
-  "Ator / Apresentador",
-  "Moda & Beleza",
-  "Fitness & Saúde",
-  "Gastronomia",
-  "Tecnologia & Games",
-] as const;
+import { CREATOR_CATEGORY_VALUES } from "@/lib/creatorCategories";
 
 export const creatorModalInput =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition-colors focus:border-purple-600";
@@ -89,7 +80,7 @@ export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentC
   });
 
   const categoryLabels = t("auth:categories", { returnObjects: true }) as Record<string, string>;
-  const creatorCategoryOptions = useMemo(
+  const categorySelectOptions = useMemo(
     () => CREATOR_CATEGORY_VALUES.map((value) => ({ value, label: categoryLabels[value] ?? value })),
     [categoryLabels],
   );
@@ -204,7 +195,7 @@ export function CreatorSignupForm({ landingSlug, hideInviteCode = false, accentC
                 placeholder={ta("fields.stylePh")}
                 searchable
                 value={creator.category}
-                options={creatorCategoryOptions}
+                options={categorySelectOptions}
                 onChange={(value) => setCreator({ ...creator, category: value })}
               />
             </ModalField>

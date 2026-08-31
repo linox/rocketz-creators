@@ -20,6 +20,7 @@ import {
   MapPin,
   Megaphone,
   Search,
+  Scale,
   Send,
   Sparkles,
   UserCheck,
@@ -82,6 +83,7 @@ function AvailableInner() {
   const [briefing, setBriefing] = useState<Campaign | null>(null);
   const [applying, setApplying] = useState<Campaign | null>(null);
   const [notes, setNotes] = useState("");
+  const [customContractAccepted, setCustomContractAccepted] = useState(false);
   const [sending, setSending] = useState(false);
 
   async function load() {
@@ -180,6 +182,7 @@ function AvailableInner() {
     setBriefing(null);
     setApplying(campaign);
     setNotes("");
+    setCustomContractAccepted(false);
   }
 
   async function onApply(event: FormEvent) {
@@ -189,11 +192,16 @@ function AvailableInner() {
       await alertWarning(t("available.notesRequired"), t("available.notesRequiredText"));
       return;
     }
+    if (applying.has_custom_contract && !customContractAccepted) {
+      await alertWarning(t("available.customContractRequired"), t("available.customContractRequiredText"));
+      return;
+    }
     setSending(true);
     try {
       await api.applyCampaign(applying.id, {
         notes: notes.trim(),
         delivery_type: applying.is_barter ? "barter" : "ugc",
+        custom_contract_accepted: applying.has_custom_contract ? true : undefined,
       });
       await alertSuccess(t("available.sentTitle"), t("available.sent", { name: applying.name }));
       setApplying(null);
@@ -437,6 +445,12 @@ function AvailableInner() {
                         <span>{campaignLocationLabel(locale, campaign)}</span>
                       </div>
                     ) : null}
+                    {campaign.has_custom_contract ? (
+                      <div className="flex items-center gap-2 text-[11px] font-semibold text-indigo-700">
+                        <Scale size={13} className="shrink-0 text-indigo-500" />
+                        <span>{t("campaigns.customContract")}</span>
+                      </div>
+                    ) : null}
                     {briefingStr(campaign, "product") ? (
                       <div className="flex flex-col gap-0.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
                         <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">{t("available.productFocus")}</span>
@@ -511,6 +525,7 @@ function AvailableInner() {
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-600">
                       <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 font-semibold"><Calendar size={13} className="text-slate-400" /> {t("available.period", { start: fmtDate(campaign.start_date), end: fmtDate(campaign.end_date) })}</div>
                       {campaignLocationLabel(locale, campaign) ? <div className="flex items-center gap-1.5 rounded-xl bg-sky-50 px-3 py-1.5 font-semibold text-sky-800"><MapPin size={13} className="text-sky-500" /> {campaignLocationLabel(locale, campaign)}</div> : null}
+                      {campaign.has_custom_contract ? <div className="flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-1.5 font-semibold text-indigo-800"><Scale size={13} className="text-indigo-500" /> {t("campaigns.customContract")}</div> : null}
                       {briefingStr(campaign, "hashtags") ? <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-1.5 font-mono text-[11px] text-indigo-700">{briefingStr(campaign, "hashtags")}</div> : null}
                       {briefingStr(campaign, "coupon") ? <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700">{t("available.coupon", { code: briefingStr(campaign, "coupon") })}</div> : null}
                     </div>
@@ -600,6 +615,12 @@ function AvailableInner() {
                     ) : <span className="text-xs text-slate-400">{t("available.noLink")}</span>}
                   </div>
                 </div>
+                {briefing.has_custom_contract && briefing.custom_contract_terms ? (
+                  <div className="flex flex-col gap-1.5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase"><Scale size={13} /> {t("available.customContractTitle")}</span>
+                    <p className="m-0 max-h-40 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap text-slate-800">{briefing.custom_contract_terms}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 sm:p-6">
                 <button type="button" onClick={() => setBriefing(null)} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200">{tc("close")}</button>
@@ -619,7 +640,7 @@ function AvailableInner() {
       <AnimatePresence>
         {applying ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-6">
                 <div className="flex items-center gap-2.5">
                   <div className="rounded-xl bg-indigo-50 p-2.5 text-brand-primary"><Send size={20} /></div>
@@ -630,7 +651,7 @@ function AvailableInner() {
                 </div>
                 <button type="button" onClick={() => setApplying(null)} className="cursor-pointer rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button>
               </div>
-              <form noValidate onSubmit={onApply} className="flex flex-col gap-5 p-6 text-xs font-medium">
+              <form noValidate onSubmit={onApply} className="flex min-h-0 flex-col gap-5 overflow-y-auto p-6 text-xs font-medium">
                 <div className="flex flex-col gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 text-slate-700">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-extrabold tracking-wider text-brand-primary uppercase">{t("available.howItWorks")}</span>
@@ -643,6 +664,18 @@ function AvailableInner() {
                 {applying.is_barter ? (
                   <div className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 p-3.5 text-xs font-bold text-purple-900">
                     <Gift size={16} /> {t("available.barterBanner")}
+                  </div>
+                ) : null}
+                {applying.has_custom_contract && applying.custom_contract_terms ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <span className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">
+                      <Scale size={13} /> {t("available.customContractTitle")}
+                    </span>
+                    <p className="m-0 max-h-44 overflow-y-auto rounded-xl border border-indigo-100 bg-white p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-800">{applying.custom_contract_terms}</p>
+                    <label className="flex cursor-pointer items-start gap-2.5 text-xs font-bold text-slate-800">
+                      <input type="checkbox" checked={customContractAccepted} onChange={(e) => setCustomContractAccepted(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                      <span>{t("available.customContractAccept")}</span>
+                    </label>
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-1.5">

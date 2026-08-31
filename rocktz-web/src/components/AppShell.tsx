@@ -540,6 +540,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         creatorName={user.creator?.full_name || user.name}
         creatorEmail={user.email}
         creatorDocument={user.creator?.document || ""}
+        creatorCountry={user.creator?.country}
         onAccept={async (audit) => {
           if (!user.creator?.id) {
             setContractOpen(false);

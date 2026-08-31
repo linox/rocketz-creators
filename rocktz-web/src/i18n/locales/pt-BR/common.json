@@ -21,6 +21,8 @@
   "edit": "Editar",
   "search": "Buscar...",
   "select": "Selecione",
+  "orConjunction": "ou",
+  "taxIdFallback": "documento fiscal",
   "noOptions": "Nenhuma opção",
   "all": "Todos",
   "status": "Status",

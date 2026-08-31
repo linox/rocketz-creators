@@ -291,9 +291,11 @@ class CampaignController extends Controller
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
             'delivery_type' => ['nullable', 'string', 'max:80'],
+            'custom_contract_accepted' => ['sometimes', 'boolean'],
         ]);
+        $acceptedCustom = $request->boolean('custom_contract_accepted');
 
-        $row = DB::transaction(function () use ($campaign, $creator, $data) {
+        $row = DB::transaction(function () use ($campaign, $creator, $data, $acceptedCustom) {
             $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
             $existing = CampaignCreator::query()
                 ->where('campaign_id', $locked->id)
@@ -308,15 +310,25 @@ class CampaignController extends Controller
                 __('auth.campaign_budget_full'),
             );
 
+            $payload = [
+                'notes' => $data['notes'] ?? null,
+                'amount' => $this->defaultCreatorAmount($locked),
+                'delivery_type' => $data['delivery_type'] ?? 'ugc',
+                'application_status' => ApplicationStatus::Pending,
+                'delivery_status' => DeliveryStatus::Pending,
+            ];
+            if ($locked->requiresCustomContract()) {
+                abort_unless(
+                    $existing?->custom_contract_accepted_at || $acceptedCustom,
+                    403,
+                    __('auth.creator_must_accept_campaign_contract'),
+                );
+                $payload['custom_contract_accepted_at'] = $existing?->custom_contract_accepted_at ?? now();
+            }
+
             return CampaignCreator::query()->updateOrCreate(
                 ['campaign_id' => $locked->id, 'creator_id' => $creator->id],
-                [
-                    'notes' => $data['notes'] ?? null,
-                    'amount' => $this->defaultCreatorAmount($locked),
-                    'delivery_type' => $data['delivery_type'] ?? 'ugc',
-                    'application_status' => ApplicationStatus::Pending,
-                    'delivery_status' => DeliveryStatus::Pending,
-                ],
+                $payload,
             );
         });
 
@@ -537,6 +549,13 @@ class CampaignController extends Controller
             'state' => ['nullable', 'string', 'max:12'],
             'city' => ['nullable', 'string', 'max:120'],
             'barter_details' => ['nullable', 'string'],
+            'has_custom_contract' => ['sometimes', 'boolean'],
+            'custom_contract_terms' => [
+                Rule::requiredIf(fn () => $request->boolean('has_custom_contract')),
+                'nullable',
+                'string',
+                'max:50000',
+            ],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
             'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'briefing' => ['nullable', 'array'],
@@ -557,6 +576,7 @@ class CampaignController extends Controller
             $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         }
         $data = $this->withLocationLimit($request, $data, $creating, $company);
+        $data = $this->withCustomContract($request, $data);
         if (! $user->canPublishWithoutApproval()) {
             if ($creating) {
                 $data['status'] = CampaignStatus::PendingAgency;
@@ -613,6 +633,40 @@ class CampaignController extends Controller
         $data['limit_by_city'] = true;
         $data['city'] = trim((string) $validated['city']);
         $data['state'] = $needsRegion ? Geo::normalizeRegion($validated['state'] ?? null) : null;
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withCustomContract(Request $request, array $data): array
+    {
+        if (! array_key_exists('has_custom_contract', $data) && ! array_key_exists('custom_contract_terms', $data)) {
+            return $data;
+        }
+
+        $enabled = array_key_exists('has_custom_contract', $data)
+            ? (bool) $data['has_custom_contract']
+            : $request->boolean('has_custom_contract');
+
+        if (! $enabled) {
+            $data['has_custom_contract'] = false;
+            $data['custom_contract_terms'] = null;
+
+            return $data;
+        }
+
+        $terms = trim((string) ($data['custom_contract_terms'] ?? ''));
+        if ($terms === '') {
+            throw ValidationException::withMessages([
+                'custom_contract_terms' => __('validation.required'),
+            ]);
+        }
+
+        $data['has_custom_contract'] = true;
+        $data['custom_contract_terms'] = $terms;
 
         return $data;
     }

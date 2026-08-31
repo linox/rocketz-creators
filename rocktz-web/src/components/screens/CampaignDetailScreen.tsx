@@ -43,6 +43,7 @@ import {
   Package,
   Play,
   Plus,
+  Scale,
   ScrollText,
   Search,
   Sparkles,
@@ -459,6 +460,8 @@ function DetailInner() {
     is_secret: false,
     is_direct_contract: false,
     is_barter: false,
+    has_custom_contract: false,
+    custom_contract_terms: "",
     limit_by_city: false,
     state: "",
     city: "",
@@ -844,6 +847,8 @@ function DetailInner() {
       is_secret: campaign.is_secret,
       is_direct_contract: campaign.is_direct_contract,
       is_barter: campaign.is_barter,
+      has_custom_contract: Boolean(campaign.has_custom_contract),
+      custom_contract_terms: campaign.custom_contract_terms || "",
       limit_by_city: Boolean(campaign.limit_by_city),
       state: campaign.state || "",
       city: campaign.city || "",
@@ -887,6 +892,10 @@ function DetailInner() {
         return;
       }
     }
+    if (editForm.has_custom_contract && !editForm.custom_contract_terms.trim()) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
+      return;
+    }
     try {
       await api.updateCampaign(campaign.id, {
         name: editForm.name,
@@ -904,6 +913,8 @@ function DetailInner() {
         is_secret: editForm.is_secret,
         is_direct_contract: editForm.is_direct_contract,
         is_barter: editForm.is_barter,
+        has_custom_contract: editForm.has_custom_contract,
+        custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
         limit_by_city: editForm.limit_by_city,
         state: editForm.limit_by_city ? editForm.state || null : null,
         city: editForm.limit_by_city ? editForm.city.trim() : null,
@@ -1082,6 +1093,11 @@ function DetailInner() {
                   {campaign.is_barter ? (
                     <span className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">
                       <Gift size={9} /> {t("campaigns.barter")}
+                    </span>
+                  ) : null}
+                  {campaign.has_custom_contract ? (
+                    <span className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-700">
+                      <Scale size={9} /> {t("campaigns.customContract")}
                     </span>
                   ) : null}
                   {campaign.limit_by_city ? (
@@ -2180,6 +2196,14 @@ function DetailInner() {
               </div>
             </div>
           </div>
+          {campaign.has_custom_contract && campaign.custom_contract_terms ? (
+            <div className="flex flex-col gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+              <span className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">
+                <Scale size={14} /> {t("campaignDetail.customContract")}
+              </span>
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{campaign.custom_contract_terms}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -2591,6 +2615,24 @@ function DetailInner() {
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_secret} onChange={(event) => setEditForm({ ...editForm, is_secret: event.target.checked })} /> {t("deliveries.secretNda")}</label>
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_direct_contract} onChange={(event) => setEditForm({ ...editForm, is_direct_contract: event.target.checked })} /> {t("deliveries.directCompany")}</label>
                   <label className="flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" checked={editForm.is_barter} onChange={(event) => setEditForm({ ...editForm, is_barter: event.target.checked })} /> {t("deliveries.barterProducts")}</label>
+                </div>
+                <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <label className="flex items-start gap-2 text-xs font-bold">
+                    <input type="checkbox" checked={editForm.has_custom_contract} onChange={(event) => setEditForm({ ...editForm, has_custom_contract: event.target.checked })} className="mt-0.5" />
+                    <span>
+                      {t("campaigns.customContractTitle")}
+                      <span className="mt-1 block text-[10px] font-medium text-slate-500">{t("campaigns.customContractHint")}</span>
+                    </span>
+                  </label>
+                  {editForm.has_custom_contract ? (
+                    <textarea
+                      rows={8}
+                      placeholder={t("campaigns.customContractTermsPh")}
+                      className="w-full resize-y rounded-xl border border-slate-200 p-2.5 text-xs font-medium"
+                      value={editForm.custom_contract_terms}
+                      onChange={(event) => setEditForm({ ...editForm, custom_contract_terms: event.target.value })}
+                    />
+                  ) : null}
                 </div>
                 <CampaignLocationFields
                   country={companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country}

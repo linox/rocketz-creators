@@ -17,7 +17,15 @@ import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getCreatorContract, type CreatorContractAuditRecord } from "@/data/creatorContractTerms";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
-import { formatCPF, isValidCPF } from "@/lib/cpfValidation";
+import { DEFAULT_COUNTRY } from "@/lib/geo";
+import {
+  formatTaxDocument,
+  isValidTaxDocument,
+  taxDocumentKindLabel,
+  taxDocumentMaxLength,
+  taxDocumentPlaceholder,
+  taxDocumentsLabel,
+} from "@/lib/taxDocuments";
 
 interface CreatorContractModalProps {
   isOpen: boolean;
@@ -32,6 +40,7 @@ interface CreatorContractModalProps {
   prefilledEmail?: string;
   creatorDocument?: string;
   prefilledDocument?: string;
+  creatorCountry?: string | null;
 }
 
 export function CreatorContractModal({
@@ -46,13 +55,19 @@ export function CreatorContractModal({
   creatorEmail = '',
   prefilledEmail = '',
   creatorDocument = '',
-  prefilledDocument = ''
+  prefilledDocument = '',
+  creatorCountry = null,
 }: CreatorContractModalProps) {
   const { t, i18n } = useTranslation("profile");
   const { t: tc } = useTranslation("common");
   const locale = normalizeLocale(i18n.language);
   const dateLocale = intlLocale(locale);
-  const contract = React.useMemo(() => getCreatorContract(locale), [locale]);
+  const country = creatorCountry || DEFAULT_COUNTRY;
+  const documentsLabel = taxDocumentsLabel(country, tc("orConjunction"), tc("taxIdFallback"));
+  const contract = React.useMemo(
+    () => getCreatorContract(locale, documentsLabel),
+    [locale, documentsLabel],
+  );
   const { metadata, preamble, parts, declarations } = contract;
 
   const finalExistingAudit = existingAuditRecord || existingAudit || null;
@@ -135,13 +150,13 @@ export function CreatorContractModal({
     }
 
     if (!documentInput.trim()) {
-      setErrorValidation(t("termModal.needCpf"));
+      setErrorValidation(t("termModal.needCpf", { documents: documentsLabel }));
       return;
     }
 
-    const formattedCpf = formatCPF(documentInput);
-    if (!isValidCPF(documentInput)) {
-      setErrorValidation(t("termModal.invalidCpf"));
+    const formattedDocument = formatTaxDocument(country, documentInput);
+    if (!isValidTaxDocument(country, documentInput)) {
+      setErrorValidation(t("termModal.invalidCpf", { documents: documentsLabel }));
       return;
     }
 
@@ -150,7 +165,7 @@ export function CreatorContractModal({
       termId: generatedTermId,
       version: metadata.version,
       fullName: nameInput.trim() || t("termModal.creatorFallback"),
-      document: formattedCpf,
+      document: formattedDocument,
       email: emailInput.trim(),
       acceptedAt: now.toISOString(),
       formattedDate: now.toLocaleDateString(dateLocale, {
@@ -522,26 +537,28 @@ export function CreatorContractModal({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-slate-300 block">
-                        {t("termModal.cpfLabel")}
+                        {t("termModal.cpfLabel", { documents: documentsLabel })}
                       </label>
                       {documentInput && (
-                        <span className={`text-[10px] font-bold ${isValidCPF(documentInput) ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {isValidCPF(documentInput) ? t("termModal.cpfValid") : "000.000.000-00"}
+                        <span className={`text-[10px] font-bold ${isValidTaxDocument(country, documentInput) ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {isValidTaxDocument(country, documentInput)
+                            ? t("termModal.cpfValid", { kind: taxDocumentKindLabel(country, documentInput, documentsLabel) })
+                            : taxDocumentPlaceholder(country, documentsLabel)}
                         </span>
                       )}
                     </div>
                     <input
                       type="text"
-                      maxLength={14}
+                      maxLength={taxDocumentMaxLength(country)}
                       disabled={readOnly || !!existingAuditRecord}
                       value={documentInput}
                       onChange={(e) => {
-                        setDocumentInput(formatCPF(e.target.value));
+                        setDocumentInput(formatTaxDocument(country, e.target.value));
                         if (errorValidation) setErrorValidation(null);
                       }}
-                      placeholder="000.000.000-00"
+                      placeholder={taxDocumentPlaceholder(country, documentsLabel)}
                       className={`w-full px-3.5 py-2 rounded-xl bg-white/10 border text-white text-xs outline-none transition-all disabled:opacity-70 ${
-                        documentInput && !isValidCPF(documentInput) && documentInput.length === 14
+                        documentInput && !isValidTaxDocument(country, documentInput) && documentInput.length >= taxDocumentMaxLength(country)
                           ? 'border-rose-400/80 bg-rose-950/20 focus:border-rose-400'
                           : 'border-white/15 focus:border-purple-400 focus:bg-white/20'
                       }`}

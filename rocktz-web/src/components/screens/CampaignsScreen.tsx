@@ -26,6 +26,7 @@ import {
   Megaphone,
   Package,
   Plus,
+  Scale,
   Trash2,
   Users,
   Video,
@@ -169,6 +170,11 @@ function CampaignCard({
             {campaign.is_barter ? (
               <span className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-amber-300 uppercase backdrop-blur-md">
                 <Gift size={10} /> {t("campaigns.barter")}
+              </span>
+            ) : null}
+            {campaign.has_custom_contract ? (
+              <span className="flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-indigo-200 uppercase backdrop-blur-md">
+                <Scale size={10} /> {t("campaigns.customContract")}
               </span>
             ) : null}
             {campaign.limit_by_city ? (

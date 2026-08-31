@@ -40,6 +40,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'signature_sent_at',
     'signature_signed_at',
     'contract_url',
+    'custom_contract_accepted_at',
 ])]
 class CampaignCreator extends Model
 {
@@ -66,6 +67,7 @@ class CampaignCreator extends Model
             'signature_status' => SignatureStatus::class,
             'signature_sent_at' => 'datetime',
             'signature_signed_at' => 'datetime',
+            'custom_contract_accepted_at' => 'datetime',
         ];
     }
 

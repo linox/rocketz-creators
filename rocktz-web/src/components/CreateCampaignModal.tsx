@@ -12,6 +12,7 @@ import {
   Lock,
   Megaphone,
   Package,
+  Scale,
   Sparkles,
   Video,
 } from "lucide-react";
@@ -34,6 +35,8 @@ import type { PostingProfile } from "@/lib/posting-profile";
 
 type Tab = "geral" | "entregas" | "briefing";
 type Flow = "script_and_video" | "video_only" | "script_only";
+
+const TABS: Tab[] = ["geral", "entregas", "briefing"];
 
 function formatSummary(counts: Record<string, number>) {
   const parts: string[] = [];
@@ -104,6 +107,7 @@ export function CreateCampaignModal({
   const { t: tc } = useTranslation("common");
   const { formatCurrency } = usePrivacy();
   const [tab, setTab] = useState<Tab>("geral");
+  const [farthestTab, setFarthestTab] = useState<Tab>("geral");
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -116,6 +120,8 @@ export function CreateCampaignModal({
   const [isSecret, setIsSecret] = useState(false);
   const [isDirect, setIsDirect] = useState(false);
   const [isBarter, setIsBarter] = useState(false);
+  const [hasCustomContract, setHasCustomContract] = useState(false);
+  const [customContractTerms, setCustomContractTerms] = useState("");
   const [limitByCity, setLimitByCity] = useState(false);
   const [regionState, setRegionState] = useState("");
   const [city, setCity] = useState("");
@@ -149,8 +155,17 @@ export function CreateCampaignModal({
   const counts = { reels, stories, tiktok, ugc, posts, youtube };
   const autoSummary = formatSummary(counts);
 
+  function goToTab(id: Tab) {
+    const targetIdx = TABS.indexOf(id);
+    const farthestIdx = TABS.indexOf(farthestTab);
+    if (targetIdx > farthestIdx + 1) return;
+    setTab(id);
+    if (targetIdx > farthestIdx) setFarthestTab(id);
+  }
+
   function reset() {
     setTab("geral");
+    setFarthestTab("geral");
     setName("");
     setCompanyId("");
     setImageUrl("");
@@ -162,6 +177,8 @@ export function CreateCampaignModal({
     setIsSecret(false);
     setIsDirect(false);
     setIsBarter(false);
+    setHasCustomContract(false);
+    setCustomContractTerms("");
     setLimitByCity(false);
     setRegionState("");
     setCity("");
@@ -187,6 +204,11 @@ export function CreateCampaignModal({
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (tab !== "briefing" || farthestTab !== "briefing") {
+      if (tab === "geral") goToTab("entregas");
+      else if (tab === "entregas") goToTab("briefing");
+      return;
+    }
     if (!name.trim() || (isAdmin && !companyId) || !startDate || !endDate) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.incomplete"));
@@ -223,6 +245,11 @@ export function CreateCampaignModal({
         return;
       }
     }
+    if (hasCustomContract && !customContractTerms.trim()) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
+      return;
+    }
     const feePercent = parseAgencyFeePercent(agencyFeePercent);
     if (isAdmin && !isBarter && feePercent == null) {
       setTab("geral");
@@ -243,6 +270,8 @@ export function CreateCampaignModal({
         is_secret: isSecret,
         is_direct_contract: isDirect,
         is_barter: isBarter,
+        has_custom_contract: hasCustomContract,
+        custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
         limit_by_city: limitByCity,
         state: limitByCity ? regionState || null : null,
         city: limitByCity ? city.trim() : null,
@@ -274,19 +303,24 @@ export function CreateCampaignModal({
     }
   }
 
-  const tabBtn = (id: Tab, Icon: typeof Megaphone, label: string, dot?: boolean) => (
+  const tabBtn = (id: Tab, Icon: typeof Megaphone, label: string, dot?: boolean) => {
+    const locked = TABS.indexOf(id) > TABS.indexOf(farthestTab) + 1;
+    return (
     <button
       type="button"
-      onClick={() => setTab(id)}
+      onClick={() => goToTab(id)}
+      disabled={locked}
       className={cn(
-        "flex cursor-pointer items-center gap-1.5 rounded-t-xl border-b-2 px-4 py-2.5 text-xs font-bold transition-all",
+        "flex items-center gap-1.5 rounded-t-xl border-b-2 px-4 py-2.5 text-xs font-bold transition-all",
         tab === id ? "border-brand-primary bg-white text-brand-primary shadow-xs" : "border-transparent text-slate-500 hover:text-slate-800",
+        locked ? "cursor-not-allowed opacity-40 hover:text-slate-500" : "cursor-pointer",
       )}
     >
       <Icon size={14} /> {label}
       {dot ? <span className="h-2 w-2 rounded-full bg-emerald-500" /> : null}
     </button>
-  );
+    );
+  };
 
   const flowCard = (id: Flow, Icon: typeof FileText, title: string, hint: string, badge: string, recommended?: boolean) => (
     <button
@@ -442,6 +476,23 @@ export function CreateCampaignModal({
                     </div>
                   ) : null}
                 </div>
+                <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input type="checkbox" checked={hasCustomContract} onChange={(e) => setHasCustomContract(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                        <Scale size={12} className="text-indigo-600" /> {t("campaigns.customContractTitle")}
+                      </span>
+                      <span className="mt-1 block text-[10px] leading-relaxed text-[#64748B]">{t("campaigns.customContractHint")}</span>
+                    </span>
+                  </label>
+                  {hasCustomContract ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.customContractTermsLabel")}</label>
+                      <textarea value={customContractTerms} onChange={(e) => setCustomContractTerms(e.target.value)} placeholder={t("campaigns.customContractTermsPh")} className="h-36 w-full resize-y rounded-lg border border-[#E2E8F0] px-3 py-2 text-xs outline-none focus:border-brand-primary" />
+                    </div>
+                  ) : null}
+                </div>
               </>
             ) : null}
 
@@ -550,18 +601,20 @@ export function CreateCampaignModal({
             </button>
             <div className="flex items-center gap-2">
               {tab === "geral" ? (
-                <button type="button" onClick={() => setTab("entregas")} className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200">
+                <button type="button" onClick={() => goToTab("entregas")} className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200">
                   {t("campaigns.nextDeliverables")}
                 </button>
               ) : null}
               {tab === "entregas" ? (
-                <button type="button" onClick={() => setTab("briefing")} className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200">
+                <button type="button" onClick={() => goToTab("briefing")} className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-200">
                   {t("campaigns.nextBriefing")}
                 </button>
               ) : null}
-              <button disabled={saving} className="flex items-center gap-1.5 rounded-xl bg-brand-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-600 disabled:opacity-60">
-                <Sparkles size={16} /> {t("campaigns.saveCreate")}
-              </button>
+              {tab === "briefing" ? (
+                <button disabled={saving} className="flex items-center gap-1.5 rounded-xl bg-brand-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-600 disabled:opacity-60">
+                  <Sparkles size={16} /> {t("campaigns.saveCreate")}
+                </button>
+              ) : null}
             </div>
           </div>
         </form>

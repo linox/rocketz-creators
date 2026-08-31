@@ -46,6 +46,8 @@ class CampaignResource extends JsonResource
             'state' => $this->state,
             'city' => $this->city,
             'barter_details' => $this->barter_details,
+            'has_custom_contract' => $this->requiresCustomContract(),
+            'custom_contract_terms' => $this->requiresCustomContract() ? $this->custom_contract_terms : null,
             'approval_flow' => $this->approval_flow?->value,
             'posting_profile' => $this->posting_profile?->value ?? 'creator',
             'briefing' => $this->whenLoaded('briefing', fn () => $this->briefing ? [

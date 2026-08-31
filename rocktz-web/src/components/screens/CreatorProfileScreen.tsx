@@ -54,8 +54,10 @@ import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordMo
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
+import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
 import { DeliveryUploadProgress } from "@/components/DeliveryUploadProgress";
+import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { Select2Field } from "@/components/Select2Field";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -76,8 +78,10 @@ import {
   type ContentDeliveryState,
   type CreatorDeliveryActionKind,
 } from "@/lib/content-delivery-status";
-import { formatCPF, formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask, isValidCPF } from "@/lib/masks";
+import { formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask } from "@/lib/masks";
 import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
+import { normalizeCreatorCategories } from "@/lib/creatorCategories";
+import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
@@ -454,7 +458,7 @@ function ProfileInner() {
   const { t: tp } = useTranslation("profile");
   const { t: ta } = useTranslation("app");
   const { t: tc } = useTranslation("common");
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { formatCurrency, formatNumber, hideValues } = usePrivacy();
   const pathname = usePathname();
   const router = useRouter();
@@ -495,8 +499,11 @@ function ProfileInner() {
   const [acceptsExchange, setAcceptsExchange] = useState(false);
   const [acceptsPaidTraffic, setAcceptsPaidTraffic] = useState(false);
   const [acceptsExclusivity, setAcceptsExclusivity] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [photoUrl, setPhotoUrl] = useState("");
   const [syncingNetwork, setSyncingNetwork] = useState<NetworkKey | "all" | null>(null);
   const priceCurrency = defaultCurrencyForCountry(country);
+  const documentsLabel = taxDocumentsLabel(country, tc("orConjunction"), tc("taxIdFallback"));
 
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
@@ -563,6 +570,8 @@ function ProfileInner() {
     setAcceptsExchange(data.accepts_exchange);
     setAcceptsPaidTraffic(data.accepts_paid_traffic);
     setAcceptsExclusivity(data.accepts_exclusivity);
+    setCategories(normalizeCreatorCategories(data.categories ?? []));
+    setPhotoUrl(data.photo_url ?? "");
   }
 
   function patchNetwork(key: NetworkKey, patch: Partial<NetworkForm>) {
@@ -895,8 +904,8 @@ function ProfileInner() {
       await alertWarning(tp("incompleteTitle"), tp("incompleteProfile"));
       return;
     }
-    if (cpf && !isValidCPF(cpf)) {
-      await alertWarning(tp("invalidCpfTitle"), tp("invalidCpf"));
+    if (cpf && !isValidTaxDocument(country, cpf)) {
+      await alertWarning(tp("invalidCpfTitle", { documents: documentsLabel }), tp("invalidCpf", { documents: documentsLabel }));
       return;
     }
     if (hasRegions(country) && !isValidRegion(country, state)) {
@@ -952,7 +961,15 @@ function ProfileInner() {
         accepts_exchange: acceptsExchange,
         accepts_paid_traffic: acceptsPaidTraffic,
         accepts_exclusivity: acceptsExclusivity,
+        categories: normalizeCreatorCategories(categories),
+        photo_url: photoUrl.trim() || null,
       });
+      if (user.creator?.id === profile.id) {
+        await api.updateMe({
+          name: fullName.trim(),
+          avatar_url: photoUrl.trim() || null,
+        });
+      }
       await alertSuccess(tp("updated"));
       if (showCreatorTabs) goTab("about");
       else setEditing(false);
@@ -1211,7 +1228,7 @@ function ProfileInner() {
                     <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("nicheCategories")}</span>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {creator.categories.map((cat) => (
-                        <span key={cat} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-[#0F172A] uppercase">{cat}</span>
+                        <span key={cat} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-[#0F172A] uppercase">{(t("auth:categories", { returnObjects: true }) as Record<string, string>)[cat] ?? cat}</span>
                       ))}
                     </div>
                   </div>
@@ -1289,6 +1306,14 @@ function ProfileInner() {
                   <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><UserCheck size={20} className="text-brand-primary" /> {tp("professionalDataTitle")}</h3>
                   <p className="mt-1 text-[12px] text-[#64748B]">{tp("professionalDataHint")}</p>
                 </div>
+                <div className="mb-5">
+                  <ProfilePhotoPicker photoUrl={photoUrl} name={artisticName || fullName} onPhotoUrlChange={setPhotoUrl} />
+                </div>
+                <div className="mb-5">
+                  <Field label={tp("nicheCategories")}>
+                    <CategoryTagsField values={categories} onChange={setCategories} />
+                  </Field>
+                </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label={tp("fullName")}><input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
                   <Field label={tp("artisticName")}>
@@ -1312,13 +1337,14 @@ function ProfileInner() {
                       }));
                       setCountry(value);
                       setState("");
+                      setCpf((current) => formatTaxDocument(value, current));
                     }} />
                   </Field>
                   <Field label={tp("stateUf")}>
                     <RegionSelect theme="light" country={country} value={state} onChange={setState} />
                   </Field>
                   <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-                  <Field label={tp("cpfCreator")}><input className={inputClass} value={cpf} maxLength={14} onChange={(e) => setCpf(formatCPF(e.target.value))} /></Field>
+                  <Field label={tp("cpfCreator", { documents: documentsLabel })}><input className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(e) => setCpf(formatTaxDocument(country, e.target.value))} /></Field>
                 </div>
               </div>
 
@@ -1742,6 +1768,7 @@ function ProfileInner() {
           creatorName={creator.full_name ?? undefined}
           creatorEmail={creator.email ?? user.email ?? undefined}
           creatorDocument={creator.document || creator.cpf || ""}
+          creatorCountry={creator.country}
           existingAudit={creator.contract_acceptance ? {
             termId: "rocketz-2026",
             version: CONTRACT_METADATA.version,
