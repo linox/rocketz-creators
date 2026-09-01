@@ -8,14 +8,14 @@ export const creatorContractEs: CreatorContractContent = {
     lastUpdated: "17 de agosto de 2026",
     companyName: "DIGITAL ROCKET PUBLICIDADE E MARKETING LTDA.",
     cnpj: "36.138.131/0001-87",
-    platform: "Rocketz Creators",
+    platform: "Creatorz",
   },
 
-  preamble: `El presente Término regula la participación de creadores de contenido, influenciadores digitales, UGC Creators, actores, modelos y demás profesionales registrados en la plataforma Rocketz Creators, operada por DIGITAL ROCKET PUBLICIDADE E MARKETING LTDA., inscrita en el CNPJ n.º 36.138.131/0001-87, en adelante denominada simplemente “DIGITAL ROCKET”.
+  preamble: `El presente Término regula la participación de creadores de contenido, influenciadores digitales, UGC Creators, actores, modelos y demás profesionales registrados en la plataforma Creatorz, operada por DIGITAL ROCKET PUBLICIDADE E MARKETING LTDA., inscrita en el CNPJ n.º 36.138.131/0001-87, en adelante denominada simplemente “DIGITAL ROCKET”.
 
 La persona física o jurídica que realice su registro en la plataforma, en adelante denominada “CREADOR”, declara, al aceptar electrónicamente este Término, que ha leído, comprendido y acepta íntegramente las condiciones establecidas a continuación.
 
-A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empresas, marcas, anunciantes, agencias, clientes y demás personas jurídicas que utilicen o contraten Rocketz Creators para la creación, contratación, gestión o ejecución de campañas que involucren a creadores de contenido.`,
+A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empresas, marcas, anunciantes, agencias, clientes y demás personas jurídicas que utilicen o contraten Creatorz para la creación, contratación, gestión o ejecución de campañas que involucren a creadores de contenido.`,
 
   parts: [
     {
@@ -29,8 +29,8 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "1",
           title: "OBJETO",
           items: [
-            "1.1. El presente Término establece las condiciones generales para la participación del CREADOR en la plataforma Rocketz Creators, incluyendo:\na) registro y disponibilidad del perfil profesional;\nb) participación en campañas publicitarias, promocionales, institucionales y comerciales;\nc) producción y entrega de contenidos;\nd) autorización para el uso de nombre, imagen y voz;\ne) licencia de los contenidos producidos;\nf) uso comercial de los materiales por las EMPRESAS SOCIAS;\ng) uso de los materiales por DIGITAL ROCKET para operar, divulgar y promocionar Rocketz Creators;\nh) presentación del CREADOR a posibles contratantes y EMPRESAS SOCIAS.",
-            "1.2. El registro en Rocketz Creators no obliga al CREADOR a aceptar campañas, salvo aquellas que ya hayan sido aceptadas expresamente.",
+            "1.1. El presente Término establece las condiciones generales para la participación del CREADOR en la plataforma Creatorz, incluyendo:\na) registro y disponibilidad del perfil profesional;\nb) participación en campañas publicitarias, promocionales, institucionales y comerciales;\nc) producción y entrega de contenidos;\nd) autorización para el uso de nombre, imagen y voz;\ne) licencia de los contenidos producidos;\nf) uso comercial de los materiales por las EMPRESAS SOCIAS;\ng) uso de los materiales por DIGITAL ROCKET para operar, divulgar y promocionar Creatorz;\nh) presentación del CREADOR a posibles contratantes y EMPRESAS SOCIAS.",
+            "1.2. El registro en Creatorz no obliga al CREADOR a aceptar campañas, salvo aquellas que ya hayan sido aceptadas expresamente.",
             "1.3. Del mismo modo, el registro no garantiza al CREADOR una cantidad mínima de campañas, trabajos, remuneración o contratación.",
           ],
         },
@@ -38,7 +38,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "2",
           title: "FUNCIONAMIENTO DE ROCKETZ CREATORS",
           items: [
-            "2.1. Rocketz Creators funciona como una plataforma de conexión, selección, contratación, gestión y seguimiento de campañas entre CREADORES y EMPRESAS SOCIAS.",
+            "2.1. Creatorz funciona como una plataforma de conexión, selección, contratación, gestión y seguimiento de campañas entre CREADORES y EMPRESAS SOCIAS.",
             "2.2. DIGITAL ROCKET podrá ofrecer oportunidades de campañas a los CREADORES registrados de acuerdo con los criterios definidos para cada proyecto.",
             "2.3. Cada campaña podrá tener condiciones específicas, incluyendo:\na) identificación de la empresa o marca;\nb) descripción de la campaña;\nc) alcance del trabajo;\nd) cantidad y formato de los contenidos;\ne) canales de publicación;\nf) plazo de producción y entrega;\ng) período previsto de publicación;\nh) remuneración;\ni) eventual envío de productos;\nj) permutas o beneficios;\nk) plazo de uso de la imagen y del contenido;\nl) canales autorizados de uso;\nm) uso en medios pagos;\nn) impulsión;\no) Partnership Ads, Spark Ads, whitelisting o formatos equivalentes;\np) exclusividad;\nq) territorio de uso;\nr) otras condiciones específicas necesarias para la campaña.",
             "2.4. Las condiciones específicas presentadas al CREADOR en el momento de la aceptación de la campaña pasan a integrar este Término.",
@@ -69,11 +69,11 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "4",
           title: "AUTORIZACIÓN DE USO DE NOMBRE, IMAGEN Y VOZ",
           items: [
-            "4.1. El CREADOR autoriza a DIGITAL ROCKET a utilizar su nombre, nombre artístico, imagen, voz, fotografías, videos, biografía profesional, información pública de perfil, usuarios de redes sociales y demás elementos de identificación proporcionados a Rocketz Creators para fines relacionados con la operación de la plataforma.",
-            "4.2. Esta autorización comprende el uso para:\na) creación y mantenimiento del perfil del CREADOR;\nb) presentación del CREADOR a las EMPRESAS SOCIAS;\nc) selección para campañas;\nd) propuestas comerciales;\ne) divulgación de Rocketz Creators;\nf) portafolio institucional de DIGITAL ROCKET;\ng) presentación de cases;\nh) divulgación de campañas realizadas a través de la plataforma;\ni) materiales comerciales e institucionales de Rocketz Creators.",
+            "4.1. El CREADOR autoriza a DIGITAL ROCKET a utilizar su nombre, nombre artístico, imagen, voz, fotografías, videos, biografía profesional, información pública de perfil, usuarios de redes sociales y demás elementos de identificación proporcionados a Creatorz para fines relacionados con la operación de la plataforma.",
+            "4.2. Esta autorización comprende el uso para:\na) creación y mantenimiento del perfil del CREADOR;\nb) presentación del CREADOR a las EMPRESAS SOCIAS;\nc) selección para campañas;\nd) propuestas comerciales;\ne) divulgación de Creatorz;\nf) portafolio institucional de DIGITAL ROCKET;\ng) presentación de cases;\nh) divulgación de campañas realizadas a través de la plataforma;\ni) materiales comerciales e institucionales de Creatorz.",
             "4.3. Al aceptar una campaña, el CREADOR también autoriza a la EMPRESA SOCIA responsable de esa campaña a utilizar su nombre, imagen y voz para las finalidades comerciales, promocionales y publicitarias expresamente autorizadas en las condiciones de la campaña.",
             "4.4. La autorización concedida a una EMPRESA SOCIA no permite que otra empresa utilice la imagen del CREADOR automáticamente.",
-            "4.5. El simple registro del CREADOR en Rocketz Creators no autoriza a una EMPRESA SOCIA a utilizar comercialmente su imagen para anunciar productos o servicios sin que exista campaña, contratación o autorización correspondiente.",
+            "4.5. El simple registro del CREADOR en Creatorz no autoriza a una EMPRESA SOCIA a utilizar comercialmente su imagen para anunciar productos o servicios sin que exista campaña, contratación o autorización correspondiente.",
           ],
         },
         {
@@ -90,7 +90,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "6",
           title: "USO COMERCIAL POR EMPRESAS SOCIAS",
           items: [
-            "6.1. El CREADOR declara estar consciente de que Rocketz Creators tiene finalidad comercial y conecta creadores con empresas interesadas en la producción y el uso de contenidos publicitarios.",
+            "6.1. El CREADOR declara estar consciente de que Creatorz tiene finalidad comercial y conecta creadores con empresas interesadas en la producción y el uso de contenidos publicitarios.",
             "6.2. Al aceptar una campaña determinada, el CREADOR autoriza a la EMPRESA SOCIA responsable de la campaña a utilizar comercialmente los contenidos producidos, así como su imagen, nombre y voz incorporados en esos materiales, dentro de las condiciones presentadas y aceptadas.",
             "6.3. La autorización podrá abarcar la divulgación y promoción de:\na) productos;\nb) servicios;\nc) marcas;\nd) promociones;\ne) lanzamientos;\nf) eventos;\ng) campañas institucionales;\nh) campañas comerciales.",
             "6.4. DIGITAL ROCKET podrá almacenar, organizar, procesar y poner a disposición los contenidos aprobados a las EMPRESAS SOCIAS responsables de las respectivas campañas.",
@@ -151,9 +151,9 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "11",
           title: "PORTAFOLIO Y DIVULGACIÓN DE DIGITAL ROCKET",
           items: [
-            "11.1. El CREADOR autoriza a DIGITAL ROCKET a utilizar contenidos de campañas realizadas a través de Rocketz Creators para presentar su portafolio institucional.",
+            "11.1. El CREADOR autoriza a DIGITAL ROCKET a utilizar contenidos de campañas realizadas a través de Creatorz para presentar su portafolio institucional.",
             "11.2. DIGITAL ROCKET podrá presentar:\na) contenidos producidos;\nb) imágenes de las campañas;\nc) nombre o identificación profesional del CREADOR;\nd) marca participante;\ne) resultados generales de la campaña;\nf) formatos utilizados;\ng) fragmentos de los materiales producidos.",
-            "11.3. Estos materiales podrán utilizarse en el sitio de DIGITAL ROCKET y/o Rocketz Creators, presentaciones comerciales, redes sociales, propuestas, materiales institucionales y cases.",
+            "11.3. Estos materiales podrán utilizarse en el sitio de DIGITAL ROCKET y/o Creatorz, presentaciones comerciales, redes sociales, propuestas, materiales institucionales y cases.",
           ],
         },
       ],
@@ -190,7 +190,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           title: "REMUNERACIÓN",
           items: [
             "14.1. La remuneración se establecerá individualmente en cada campaña.",
-            "14.2. El simple registro en Rocketz Creators no genera derecho a remuneración alguna.",
+            "14.2. El simple registro en Creatorz no genera derecho a remuneración alguna.",
             "14.3. Las campañas podrán involucrar:\na) pago financiero;\nb) permuta;\nc) recepción de productos;\nd) beneficios;\ne) experiencias;\nf) combinación de las modalidades anteriores.",
             "14.4. Las condiciones deberán presentarse al CREADOR antes de la aceptación de la campaña.",
             "14.5. Cuando haya pago financiero, las condiciones y plazos serán los presentados en la campaña o instrumento complementario correspondiente.",
@@ -218,7 +218,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "17",
           title: "CONFIDENCIALIDAD",
           items: [
-            "17.1. El CREADOR se compromete a mantener confidenciales las informaciones no públicas recibidas con motivo de campañas realizadas por Rocketz Creators.",
+            "17.1. El CREADOR se compromete a mantener confidenciales las informaciones no públicas recibidas con motivo de campañas realizadas por Creatorz.",
             "17.2. Podrán considerarse confidenciales, entre otras:\na) información sobre lanzamientos aún no divulgados;\nb) precios y condiciones comerciales no públicas;\nc) estrategias de marketing;\nd) briefings confidenciales;\ne) datos internos de las EMPRESAS SOCIAS;\nf) información de campañas aún no lanzadas.",
             "17.3. La obligación de confidencialidad no se aplica a la información que ya sea pública por medios legítimos.",
           ],
@@ -236,7 +236,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "18",
           title: "PROTECCIÓN DE DATOS PERSONALES",
           items: [
-            "18.1. DIGITAL ROCKET podrá recopilar y tratar datos personales necesarios para la operación de Rocketz Creators, la selección de CREADORES, la ejecución de las campañas, los pagos y el cumplimiento de obligaciones legales.",
+            "18.1. DIGITAL ROCKET podrá recopilar y tratar datos personales necesarios para la operación de Creatorz, la selección de CREADORES, la ejecución de las campañas, los pagos y el cumplimiento de obligaciones legales.",
             "18.2. Podrán tratarse, según sea necesario:\na) nombre;\nb) {{TAX_DOCS}};\nc) datos de contacto;\nd) dirección;\ne) datos bancarios;\nf) perfiles de redes sociales;\ng) métricas de audiencia;\nh) información profesional;\ni) datos fiscales;\nj) documentos necesarios para la contratación.",
             "18.3. Los datos podrán compartirse con EMPRESAS SOCIAS cuando sea necesario para la selección, contratación, ejecución y seguimiento de campañas.",
             "18.4. El tratamiento de los datos deberá observar la legislación brasileña aplicable, especialmente la Ley General de Protección de Datos Personales – LGPD.",
@@ -247,7 +247,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "19",
           title: "RELACIÓN ENTRE LAS PARTES",
           items: [
-            "19.1. El registro y la participación en Rocketz Creators no establecen vínculo laboral entre el CREADOR y DIGITAL ROCKET.",
+            "19.1. El registro y la participación en Creatorz no establecen vínculo laboral entre el CREADOR y DIGITAL ROCKET.",
             "19.2. Tampoco se establecerá automáticamente vínculo laboral entre el CREADOR y las EMPRESAS SOCIAS.",
             "19.3. El CREADOR realizará sus actividades con autonomía, respetando los compromisos asumidos en cada campaña.",
             "19.4. Este Término no constituye sociedad, asociación, representación comercial permanente ni exclusividad entre las partes.",
@@ -258,7 +258,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "20",
           title: "CIERRE DE LA CUENTA",
           items: [
-            "20.1. El CREADOR podrá solicitar el cierre de su cuenta en Rocketz Creators.",
+            "20.1. El CREADOR podrá solicitar el cierre de su cuenta en Creatorz.",
             "20.2. El cierre impedirá nuevas contrataciones a través del perfil, después del procesamiento de la solicitud.",
             "20.3. El cierre no perjudicará:\na) campañas ya aceptadas;\nb) pagos pendientes;\nc) obligaciones ya asumidas;\nd) licencias de contenido aún vigentes;\ne) autorizaciones concedidas para campañas dentro del plazo contratado;\nf) obligaciones legales de DIGITAL ROCKET.",
             "20.4. Finalizados los respectivos períodos de uso, deberán observarse las condiciones previstas en este Término y en la campaña correspondiente.",
@@ -268,7 +268,7 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
           number: "21",
           title: "ACEPTACIÓN ELECTRÓNICA Y REGISTROS",
           items: [
-            "21.1. El CREADOR reconoce como válida la manifestación de voluntad realizada electrónicamente a través de Rocketz Creators.",
+            "21.1. El CREADOR reconoce como válida la manifestación de voluntad realizada electrónicamente a través de Creatorz.",
             "21.2. DIGITAL ROCKET podrá mantener registros destinados a comprobar la aceptación, incluyendo:\na) nombre del CREADOR;\nb) {{TAX_DOCS}};\nc) e-mail;\nd) fecha;\ne) horario;\nf) versión del Término;\ng) identificadores técnicos disponibles;\nh) historial de aceptación de campañas;\ni) condiciones específicas presentadas y aceptadas.",
             "21.3. La aceptación electrónica de este Término tendrá validez jurídica conforme a la legislación aplicable.",
             "21.4. Cada campaña podrá tener una aceptación electrónica propia, quedando sus condiciones vinculadas al registro del CREADOR.",
@@ -308,13 +308,13 @@ A los efectos de este Término, se considerarán “EMPRESAS SOCIAS” las empre
   declarations: [
     {
       id: "decl_read_and_agree",
-      label: "He leído y acepto el Término de Adhesión, Licencia de Contenido y Autorización de Uso de Imagen de Rocketz Creators.",
+      label: "He leído y acepto el Término de Adhesión, Licencia de Contenido y Autorización de Uso de Imagen de Creatorz.",
       emphasis: "He leído y acepto",
       required: true,
     },
     {
       id: "decl_auth_digital_rocket",
-      label: "Autorizo a DIGITAL ROCKET a utilizar mi nombre, imagen, voz, perfil e información profesional para el funcionamiento de Rocketz Creators, presentación a posibles contratantes, divulgación de la plataforma, portafolio y cases, conforme a este Término.",
+      label: "Autorizo a DIGITAL ROCKET a utilizar mi nombre, imagen, voz, perfil e información profesional para el funcionamiento de Creatorz, presentación a posibles contratantes, divulgación de la plataforma, portafolio y cases, conforme a este Término.",
       emphasis: "Autorizo a DIGITAL ROCKET",
       required: true,
     },
