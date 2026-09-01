@@ -70,19 +70,19 @@ function SidebarItem({
   external,
 }: NavItem & { active: boolean; onClick: () => void }) {
   const className = cn(
-    "flex w-full items-center justify-between rounded-lg px-3 py-3 text-sm font-medium transition-all duration-200",
+    "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium leading-none tracking-tight transition-all duration-200",
     active
       ? "bg-white text-[#8A3FFC] shadow-sm"
-      : "text-white/75 hover:bg-white/10 hover:text-white",
+      : "text-white/80 hover:bg-white/10 hover:text-white",
   );
   const inner = (
     <>
-      <span className="flex items-center gap-3">
-        <Icon size={18} className={cn(active && "text-[#8A3FFC]")} />
-        <span className={cn(active && "font-semibold")}>{label}</span>
+      <Icon size={17} strokeWidth={1.85} className="shrink-0" />
+      <span className={cn("min-w-0 flex-1 truncate", active && "font-semibold")} title={label}>
+        {label}
       </span>
       {badge ? (
-        <span className="min-w-[16px] rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-black text-white">
+        <span className="min-w-[18px] shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white">
           {badge}
         </span>
       ) : null}
@@ -271,16 +271,16 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-full w-[min(240px,86vw)] shrink-0 flex-col bg-[#8A3FFC] text-white/80 transition-transform lg:static lg:w-[240px] lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex h-full w-[min(16.75rem,86vw)] shrink-0 flex-col bg-[#8A3FFC] text-white/80 transition-transform lg:static lg:w-[16.75rem] lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-full flex-col p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-          <div className="mb-8 flex items-center justify-center px-2 py-2">
+        <div className="flex h-full flex-col px-3.5 py-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <div className="mb-6 flex items-center justify-center px-1 py-1">
             <RocketzLogo variant="sidebar" size="md" href={home} />
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto">
+          <nav className="flex-1 space-y-0.5 overflow-y-auto">
             {user.role === "admin" ? (
               <>
                 <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("agency")}</div>
@@ -356,7 +356,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             <button
               type="button"
               onClick={privacy.openLgpd}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-bold tracking-wider text-emerald-200 uppercase hover:bg-white/10 hover:text-white"
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap text-emerald-200 uppercase hover:bg-white/10 hover:text-white"
             >
               <ShieldCheck size={16} className="shrink-0" />
               {t("lgpdPrivacy")}

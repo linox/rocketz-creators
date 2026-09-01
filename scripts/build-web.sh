@@ -7,6 +7,7 @@ WEB_ROOT="$REPO_ROOT/rocktz-web"
 API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}"
 APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
 DEPLOY=0
+BUMP=1
 
 usage() {
   cat <<EOF
@@ -21,6 +22,7 @@ Opções:
   --api URL   NEXT_PUBLIC_API_URL (API Laravel, com /api no final)
   --app URL   NEXT_PUBLIC_APP_URL (domínio do site)
   --deploy    envia dist-cpanel para o FTP creatorsrocketz (inclui .htaccess)
+  --no-bump   não incrementa a versão do rodapé (package.json)
   -h, --help  mostra esta ajuda
 
 Saída:
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --deploy)
       DEPLOY=1
+      shift
+      ;;
+    --no-bump)
+      BUMP=0
       shift
       ;;
     -h|--help)
@@ -67,12 +73,20 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
+if [[ "$BUMP" -eq 1 ]]; then
+  echo "Incrementando versão do rodapé (patch)…"
+  npm version patch --no-git-tag-version
+fi
+
+APP_VERSION="$(node -p "require('./package.json').version")"
 echo "Build estático"
 echo "  API: $API_URL"
 echo "  APP: $APP_URL"
+echo "  Versão: $APP_VERSION"
 
 export NEXT_PUBLIC_API_URL="$API_URL"
 export NEXT_PUBLIC_APP_URL="$APP_URL"
+export NEXT_PUBLIC_APP_VERSION="$APP_VERSION"
 
 npm run build
 node "$SCRIPTS_DIR/package-cpanel.mjs"
