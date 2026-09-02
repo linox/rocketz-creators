@@ -1,0 +1,172 @@
+# Deploy produção: creatorz.digital (front estático) + api.creatorz.digital (Laravel).
+#
+# FTP (contas distintas, mesmo servidor 187.45.187.66):
+#   web → Host creatorz.digital, user creatorz, pasta /public_html/
+#   api → Host api.creatorz.digital, user apicreatorzdig, pasta /public_html/
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   CPANEL_FTP_PASSWORD     senha FTP (a mesma nas duas contas)
+#   CPANEL_WEB_REMOTE_DIR   opcional; padrão /public_html/
+#   CPANEL_API_REMOTE_DIR   opcional; padrão /public_html/ (raiz Laravel nesta conta)
+#
+# O .env da API não é enviado.
+
+name: Deploy cPanel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rocktz-web/**"
+      - "scripts/**"
+      - "rocktz-api/**"
+      - ".github/workflows/deploy-cpanel.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cpanel-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detectar o que mudou
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.set.outputs.web }}
+      api: ${{ steps.set.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push'
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            web:
+              - "rocktz-web/**"
+              - "scripts/**"
+              - ".github/workflows/deploy-cpanel.yml"
+            api:
+              - "rocktz-api/**"
+              - ".github/workflows/deploy-cpanel.yml"
+
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "api=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=${{ steps.filter.outputs.web }}" >> "$GITHUB_OUTPUT"
+            echo "api=${{ steps.filter.outputs.api }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  web:
+    name: Front (creatorz.digital)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: rocktz-web/package-lock.json
+
+      - name: Build estático cPanel
+        run: ./scripts/build-web.sh --no-bump --api https://api.creatorz.digital/api --app https://creatorz.digital
+
+      - name: Conferir dist-cpanel
+        run: |
+          test -f rocktz-web/dist-cpanel/index.html
+          test -f rocktz-web/dist-cpanel/.htaccess
+
+      - name: Diretório remoto (web)
+        id: remote
+        env:
+          RAW: ${{ secrets.CPANEL_WEB_REMOTE_DIR }}
+        run: |
+          d="${RAW:-/public_html/}"
+          case "$d" in */) ;; *) d="${d}/" ;; esac
+          echo "server_dir=$d" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: creatorz.digital
+          username: creatorz
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          security: loose
+          local-dir: ./rocktz-web/dist-cpanel/
+          server-dir: ${{ steps.remote.outputs.server_dir }}
+          timeout: 600000
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.well-known/**
+            **/cgi-bin/**
+
+  api:
+    name: API (api.creatorz.digital)
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+          tools: composer
+
+      - name: Composer (produção)
+        working-directory: rocktz-api
+        run: composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+      - name: Diretório remoto (API)
+        id: remote
+        env:
+          RAW: ${{ secrets.CPANEL_API_REMOTE_DIR }}
+        run: |
+          d="${RAW:-/public_html/}"
+          case "$d" in */) ;; *) d="${d}/" ;; esac
+          echo "server_dir=$d" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: api.creatorz.digital
+          username: apicreatorzdig
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          security: loose
+          local-dir: ./rocktz-api/
+          server-dir: ${{ steps.remote.outputs.server_dir }}
+          timeout: 600000
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.env
+            **/.env.*
+            **/node_modules/**
+            **/tests/**
+            **/.phpunit.cache/**
+            **/phpunit.xml
+            **/phpunit.xml.dist
+            **/storage/logs/**
+            **/storage/framework/cache/**
+            **/storage/framework/sessions/**
+            **/storage/framework/views/**
+            **/public/uploads/**
+            **/public/hot
+            **/public/storage
+            **/public/build/**
