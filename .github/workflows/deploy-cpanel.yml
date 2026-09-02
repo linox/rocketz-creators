@@ -13,6 +13,9 @@
 #   CPANEL_API_REMOTE_DIR   opcional; padrão /
 #
 # O .env da API não é enviado.
+# O vendor da API também não: instale localmente e envie por FTP quando composer.lock mudar.
+# Antes do primeiro deploy com esse exclude, apague no cPanel da API
+# (.ftp-deploy-sync-state.json na raiz do FTP). Sem isso, o sync apaga o vendor já publicado.
 
 name: Deploy cPanel
 
@@ -124,16 +127,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.5"
-          coverage: none
-          tools: composer
-
-      - name: Composer (produção)
-        working-directory: rocktz-api
-        run: composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
-
       - name: Diretório remoto (API)
         id: remote
         env:
@@ -160,6 +153,7 @@ jobs:
             **/.git*/**
             **/.env
             **/.env.*
+            **/vendor/**
             **/node_modules/**
             **/tests/**
             **/.phpunit.cache/**
