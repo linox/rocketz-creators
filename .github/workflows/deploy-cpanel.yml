@@ -1,8 +1,8 @@
 # Deploy produção: creatorz.digital (front estático) + api.creatorz.digital (Laravel).
 #
 # FTP (contas distintas, mesmo servidor 187.45.187.66):
-#   web → Host creatorz.digital, user creatorz, pasta /public_html/
-#   api → Host api.creatorz.digital, user apicreatorzdig, pasta /public_html/
+#   web → Host creatorz.digital, user creatorz@creatorz.digital, pasta /public_html/
+#   api → Host api.creatorz.digital, user apicreatorzdig@api.creatorz.digital, pasta /public_html/
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   CPANEL_FTP_PASSWORD     senha FTP (a mesma nas duas contas)
@@ -99,7 +99,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: creatorz.digital
-          username: creatorz
+          username: creatorz@creatorz.digital
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ftp
           port: 21
@@ -123,7 +123,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
+          php-version: "8.5"
           coverage: none
           tools: composer
 
@@ -144,7 +144,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: api.creatorz.digital
-          username: apicreatorzdig
+          username: apicreatorzdig@api.creatorz.digital
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ftp
           port: 21
