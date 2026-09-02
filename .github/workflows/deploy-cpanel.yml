@@ -1,13 +1,16 @@
 # Deploy produção: creatorz.digital (front estático) + api.creatorz.digital (Laravel).
 #
-# FTP (contas distintas, mesmo servidor 187.45.187.66):
-#   web → Host creatorz.digital, user creatorz@creatorz.digital, pasta /public_html/
-#   api → Host api.creatorz.digital, user apicreatorzdig@api.creatorz.digital, pasta /public_html/
+# FTP (contas criadas em cPanel → Contas de FTP, não o usuário principal do painel):
+#   web → Host creatorz.digital, user gitaction@creatorz.digital
+#         Diretório no cPanel: /home/creatorz/public_html
+#   api → Host api.creatorz.digital, user gitaction@api.creatorz.digital
+#         Diretório no cPanel: /home/apicreatorzdig/public_html
+# O FTP já abre em public_html, então o remote dir padrão é /.
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   CPANEL_FTP_PASSWORD     senha FTP (a mesma nas duas contas)
-#   CPANEL_WEB_REMOTE_DIR   opcional; padrão /public_html/
-#   CPANEL_API_REMOTE_DIR   opcional; padrão /public_html/ (raiz Laravel nesta conta)
+#   CPANEL_WEB_REMOTE_DIR   opcional; padrão / (conta já restrita a public_html)
+#   CPANEL_API_REMOTE_DIR   opcional; padrão /
 #
 # O .env da API não é enviado.
 
@@ -91,7 +94,7 @@ jobs:
         env:
           RAW: ${{ secrets.CPANEL_WEB_REMOTE_DIR }}
         run: |
-          d="${RAW:-/public_html/}"
+          d="${RAW:-/}"
           case "$d" in */) ;; *) d="${d}/" ;; esac
           echo "server_dir=$d" >> "$GITHUB_OUTPUT"
 
@@ -99,7 +102,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: creatorz.digital
-          username: creatorz@creatorz.digital
+          username: gitaction@creatorz.digital
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ftp
           port: 21
@@ -136,7 +139,7 @@ jobs:
         env:
           RAW: ${{ secrets.CPANEL_API_REMOTE_DIR }}
         run: |
-          d="${RAW:-/public_html/}"
+          d="${RAW:-/}"
           case "$d" in */) ;; *) d="${d}/" ;; esac
           echo "server_dir=$d" >> "$GITHUB_OUTPUT"
 
@@ -144,7 +147,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: api.creatorz.digital
-          username: apicreatorzdig@api.creatorz.digital
+          username: gitaction@api.creatorz.digital
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ftp
           port: 21
