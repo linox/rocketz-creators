@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { LOCALE_BOOTSTRAP_SCRIPT } from "@/i18n/locales";
+import { APP_TITLE } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rocketz Creators",
+  title: APP_TITLE,
   description:
     "Plataforma para gestão de casting de criadores, campanhas publicitárias e trabalhos recorrentes.",
   formatDetection: {

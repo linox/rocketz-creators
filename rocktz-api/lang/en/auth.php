@@ -119,9 +119,9 @@ return [
     'not_admin' => 'User is not an admin.',
     'cannot_remove_self' => 'You cannot remove your own account.',
     'mail' => [
-        'reset_subject' => 'Reset password — Rocketz Creators',
+        'reset_subject' => 'Reset password — Creatorz by Rocketz',
         'reset_greeting' => 'Hello!',
-        'reset_line' => 'We received a request to reset the password for your Rocketz Creators account.',
+        'reset_line' => 'We received a request to reset the password for your Creatorz by Rocketz account.',
         'reset_action' => 'Reset password',
         'reset_expire' => 'This link expires in :minutes minutes.',
         'reset_ignore' => 'If you did not request this, ignore this email.',

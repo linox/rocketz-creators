@@ -119,9 +119,9 @@ return [
     'not_admin' => 'Usuário não é admin.',
     'cannot_remove_self' => 'Você não pode remover a própria conta.',
     'mail' => [
-        'reset_subject' => 'Redefinir senha — Rocketz Creators',
+        'reset_subject' => 'Redefinir senha — Creatorz by Rocketz',
         'reset_greeting' => 'Olá!',
-        'reset_line' => 'Recebemos um pedido para redefinir a senha da sua conta na Rocketz Creators.',
+        'reset_line' => 'Recebemos um pedido para redefinir a senha da sua conta no Creatorz by Rocketz.',
         'reset_action' => 'Redefinir senha',
         'reset_expire' => 'Este link expira em :minutes minutos.',
         'reset_ignore' => 'Se você não fez essa solicitação, ignore este e-mail.',

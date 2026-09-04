@@ -2119,7 +2119,7 @@
     "noEmailTitle": "Sem e-mail",
     "noEmailBody": "Este criador não possui um endereço de e-mail cadastrado.",
     "linkSent": "Link enviado",
-    "accessTemplate": "*Acesso à Plataforma Rocketz Creators*\n👤 *Usuário / E-mail:* {{email}}\n🔑 *Senha:* {{password}}\n🔗 *Link:* {{link}}"
+    "accessTemplate": "*Acesso à Plataforma Creatorz by Rocketz*\n👤 *Usuário / E-mail:* {{email}}\n🔑 *Senha:* {{password}}\n🔗 *Link:* {{link}}"
   },
   "editProfile": {
     "title": "Editar Meu Perfil de Usuário",

@@ -17,6 +17,21 @@ class MediaUrlTest extends TestCase
         );
     }
 
+    public function test_public_absolute_rewrites_stream_and_keeps_external_https(): void
+    {
+        config(['app.url' => 'https://api.creatorz.digital']);
+
+        $this->assertSame(
+            'https://api.creatorz.digital/stream/avatars/banner.jpg',
+            MediaUrl::publicAbsolute('http://localhost:8000/stream/avatars/banner.jpg'),
+        );
+        $this->assertSame(
+            'https://cdn.example.com/banner.jpg',
+            MediaUrl::publicAbsolute('https://cdn.example.com/banner.jpg'),
+        );
+        $this->assertNull(MediaUrl::publicAbsolute(''));
+    }
+
     public function test_object_key_from_stream_uploads_and_r2_urls(): void
     {
         $this->assertSame(

@@ -502,7 +502,6 @@ function DetailInner() {
   useEffect(() => {
     load();
     if (isAdmin) {
-      api.creators("?status=active").then((res) => setCreators(res.data)).catch(() => undefined);
       api.companies("?status=active").then((res) => setCompanies(res.data)).catch(() => undefined);
     }
     const param = new URLSearchParams(window.location.search).get("tab");
@@ -511,6 +510,13 @@ function DetailInner() {
     if (param === "financeiro") setTab("financeiro");
     if (param === "metricas") setTab("metricas");
   }, [id, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || !campaign?.company_id) return;
+    api.creators(`?status=active&company_id=${campaign.company_id}&include_global=1`)
+      .then((res) => setCreators(res.data))
+      .catch(() => undefined);
+  }, [isAdmin, campaign?.company_id]);
 
   useEffect(() => {
     if (!campaign) return;

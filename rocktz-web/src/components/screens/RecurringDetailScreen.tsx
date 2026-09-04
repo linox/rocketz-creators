@@ -485,8 +485,16 @@ function DetailInner() {
 
   useEffect(() => {
     load();
-    if (user.role !== "creator") api.creators("?status=active").then((res) => setCatalog(res.data)).catch(() => undefined);
   }, [id, user.role]);
+
+  useEffect(() => {
+    if (user.role === "creator") return;
+    const query = user.role === "admin" && contract?.company_id
+      ? `?status=active&company_id=${contract.company_id}&include_global=1`
+      : "?status=active";
+    if (user.role === "admin" && !contract?.company_id) return;
+    api.creators(query).then((res) => setCatalog(res.data)).catch(() => undefined);
+  }, [id, user.role, contract?.company_id]);
 
   useEffect(() => {
     try {

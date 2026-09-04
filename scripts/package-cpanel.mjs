@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +24,12 @@ cpSync(exported, out, { recursive: true });
 
 if (existsSync(htaccess)) {
   cpSync(htaccess, join(out, ".htaccess"));
+}
+
+const landingSeoSrc = join(scriptsDir, "landing-seo.php");
+if (existsSync(landingSeoSrc)) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.creatorz.digital/api";
+  writeFileSync(join(out, "landing-seo.php"), readFileSync(landingSeoSrc, "utf8").replaceAll("__API_URL__", apiUrl));
 }
 
 function stripJunk(dir) {

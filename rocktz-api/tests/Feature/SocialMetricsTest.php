@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Creator;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -77,6 +78,7 @@ HTML, 200),
         ]);
 
         Http::fake([
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
             'https://www.instagram.com/*' => Http::response($this->instagramHtml(), 200),
             'https://www.tiktok.com/*' => Http::response($this->tiktokHtml(), 200),
         ]);
@@ -130,7 +132,7 @@ HTML, 200),
         [$creator, $token] = $this->creatorWithToken(['instagram' => 'mihpocket']);
 
         Http::fake([
-            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+            'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
                 'data' => [
                     'user' => [
                         'username' => 'mihpocket',
@@ -167,12 +169,83 @@ HTML, 200),
             ->assertJsonPath('data.socials.instagram', 'mihpocket');
     }
 
+    public function test_instagram_accepts_official_instagram_handle(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'demo']);
+
+        Http::fake([
+            'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+                'data' => [
+                    'user' => [
+                        'username' => 'instagram',
+                        'edge_followed_by' => ['count' => 680000000],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@instagram',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 680000000)
+            ->assertJsonPath('data.socials.instagram', 'instagram');
+    }
+
+    public function test_instagram_uses_android_app_profile_info_when_web_requires_login(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'pausaprorole']);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'i.instagram.com') && str_contains($request->header('User-Agent')[0] ?? '', 'Instagram ')) {
+                return Http::response([
+                    'data' => [
+                        'user' => [
+                            'username' => 'pausaprorole',
+                            'edge_followed_by' => ['count' => 4167],
+                            'edge_owner_to_timeline_media' => [
+                                'edges' => [
+                                    ['node' => [
+                                        'video_view_count' => 800,
+                                        'edge_liked_by' => ['count' => 50],
+                                    ]],
+                                    ['node' => [
+                                        'video_view_count' => 400,
+                                        'edge_liked_by' => ['count' => 20],
+                                    ]],
+                                ],
+                            ],
+                        ],
+                    ],
+                ], 200);
+            }
+
+            return Http::response(['message' => 'require_login', 'status' => 'fail'], 401);
+        });
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@pausaprorole',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 4167)
+            ->assertJsonPath('sync.instagram.views', 600)
+            ->assertJsonPath('data.socials.instagram', 'pausaprorole');
+    }
+
     public function test_instagram_reads_video_play_count_as_avg_views(): void
     {
         [$creator, $token] = $this->creatorWithToken(['instagram' => 'larissamilene']);
 
         Http::fake([
-            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+            'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
                 'data' => [
                     'user' => [
                         'username' => 'larissamilene',
@@ -213,6 +286,7 @@ HTML, 200),
         [$creator, $token] = $this->creatorWithToken(['instagram' => 'demo']);
 
         Http::fake([
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
             'https://www.instagram.com/*' => Http::response(
                 '<html><head><meta property="og:description" content="12.3K Followers, 200 Following, 80 Posts" /></head><body>"video_play_count":8000 "video_play_count":4000</body></html>',
                 200
@@ -304,7 +378,7 @@ HTML, 200),
 
         Http::fake([
             'https://api.scrapecreators.com/*' => Http::response(['error' => 'not found'], 404),
-            'https://www.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+            'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
                 'data' => [
                     'user' => [
                         'username' => 'tw2o',

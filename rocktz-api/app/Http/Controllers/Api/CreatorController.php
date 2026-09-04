@@ -45,6 +45,14 @@ class CreatorController extends Controller
             abort_unless($companyId, 403, __('auth.company_not_linked'));
             $query->inCompanyPool($companyId)
                 ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
+        } elseif ($user->role === UserRole::Admin && $request->filled('company_id')) {
+            $data = $request->validate([
+                'company_id' => ['required', 'integer', 'exists:companies,id'],
+                'include_global' => ['sometimes', 'boolean'],
+            ]);
+            $companyId = (int) $data['company_id'];
+            $query->availableToCompanyContext($companyId, (bool) ($data['include_global'] ?? false))
+                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
         }
 
         if ($status = $request->string('status')->toString()) {

@@ -100,6 +100,12 @@ export type CompanyLandingPage = {
   socials: Record<string, string>;
   status: "draft" | "published" | "disabled" | string;
   published_at?: string | null;
+  seo?: {
+    title: string;
+    description: string;
+    image: string | null;
+    url: string;
+  } | null;
   metrics?: CompanyLandingMetrics | null;
   created_at?: string | null;
   updated_at?: string | null;

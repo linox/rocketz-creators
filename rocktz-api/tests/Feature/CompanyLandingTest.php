@@ -11,6 +11,7 @@ use App\Models\Campaign;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
+use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\CreatorContractAcceptance;
 use App\Models\Notification;
@@ -71,6 +72,8 @@ class CompanyLandingTest extends TestCase
         $this->getJson('/api/landings/cricut')
             ->assertOk()
             ->assertJsonPath('data.slug', 'cricut')
+            ->assertJsonPath('data.seo.title', 'Creatorz - Cricut')
+            ->assertJsonPath('data.seo.image', 'https://example.com/banner-v2.jpg')
             ->assertJsonMissingPath('data.metrics');
     }
 
@@ -356,6 +359,56 @@ class CompanyLandingTest extends TestCase
             ->getJson("/api/creators/{$globalCreator->id}")
             ->assertForbidden()
             ->assertJsonPath('message', __('auth.profile_unavailable'));
+    }
+
+    public function test_landing_creators_appear_only_for_owner_company_and_admin(): void
+    {
+        $this->seed();
+
+        $ownerUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $owner = $ownerUser->company;
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+
+        $other = Company::factory()->active()->create();
+        $otherUser = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $otherUser->id,
+            'company_id' => $other->id,
+        ]);
+        $otherUser->forceFill(['active_company_id' => $other->id])->save();
+
+        $page = CompanyLandingPage::factory()->published()->create([
+            'company_id' => $owner->id,
+            'slug' => 'cricut-pool',
+            'display_name' => 'Cricut',
+        ]);
+        $landingCreator = Creator::factory()->review()->create(['artistic_name' => 'Landing Exclusivo']);
+        CompanyLandingSignup::query()->create([
+            'company_id' => $owner->id,
+            'company_landing_page_id' => $page->id,
+            'creator_id' => $landingCreator->id,
+            'status' => LandingSignupStatus::Pending,
+        ]);
+
+        $this->actingAs($ownerUser)->getJson('/api/creators')->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Landing Exclusivo']);
+
+        $this->actingAs($otherUser)->getJson('/api/creators')->assertOk()
+            ->assertJsonMissing(['artistic_name' => 'Landing Exclusivo']);
+
+        $this->actingAs($admin)->getJson('/api/creators')->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Landing Exclusivo']);
+
+        $this->actingAs($admin)->getJson('/api/creators?company_id='.$owner->id)->assertOk()
+            ->assertJsonFragment(['artistic_name' => 'Landing Exclusivo']);
+
+        $this->actingAs($admin)->getJson('/api/creators?company_id='.$other->id)->assertOk()
+            ->assertJsonMissing(['artistic_name' => 'Landing Exclusivo']);
+
+        $this->actingAs($admin)
+            ->getJson('/api/creators?company_id='.$other->id.'&include_global=1')
+            ->assertOk()
+            ->assertJsonMissing(['artistic_name' => 'Landing Exclusivo']);
     }
 
     public function test_global_creator_can_see_and_apply_to_company_campaign_and_company_can_open_applicant_profile(): void

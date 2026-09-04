@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\CompanyLandingSeo;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -38,6 +39,7 @@ class CompanyLandingPageResource extends JsonResource
             'website_url' => $this->website_url,
             'socials' => $this->socials ?? [],
             'status' => $this->status?->value,
+            'seo' => CompanyLandingSeo::for($this->resource),
             'published_at' => $this->published_at?->toIso8601String(),
             'metrics' => $this->when($includePrivate && is_array($metrics), $metrics),
             'created_at' => $this->created_at?->toIso8601String(),

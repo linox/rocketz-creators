@@ -13,7 +13,11 @@ class SocialHandleTest extends TestCase
         $this->assertSame('ana.ugc', SocialHandle::instagram('@ana.ugc'));
         $this->assertSame('ana.ugc', SocialHandle::instagram('https://www.instagram.com/ana.ugc/'));
         $this->assertSame('ana.ugc', SocialHandle::instagram('instagram.com/ana.ugc?hl=pt'));
+        $this->assertSame('instagram', SocialHandle::instagram('@instagram'));
+        $this->assertSame('pausaprorole', SocialHandle::instagram('@pausaprorole'));
         $this->assertSame('', SocialHandle::instagram('https://www.instagram.com/'));
+        $this->assertSame('', SocialHandle::instagram('instagram.com'));
+        $this->assertSame('', SocialHandle::instagram('www.instagram.com'));
     }
 
     public function test_it_normalizes_tiktok_and_youtube(): void

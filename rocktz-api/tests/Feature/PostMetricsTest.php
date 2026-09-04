@@ -310,7 +310,7 @@ HTML, 200),
         );
 
         Http::fake([
-            'https://www.instagram.com/api/v1/users/web_profile_info/*' => Http::response([
+            'https://i.instagram.com/api/v1/users/web_profile_info/*' => Http::response([
                 'data' => [
                     'user' => [
                         'username' => 'mihpocket',

@@ -25,6 +25,10 @@ class PostMetricsService
 
     private const IG_APP_ID = '936619743392459';
 
+    private const IG_ANDROID_APP_ID = '567067343352427';
+
+    private const IG_ANDROID_UA = 'Instagram 192.168.1.2.75 Android (33/13; 420dpi; 1080x2400; Google; Pixel 7; panther; panther; en_US; 458229258)';
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -337,28 +341,53 @@ class PostMetricsService
      */
     private function instagramStatsFromProfile(string $handle, string $shortcode): array
     {
-        $profileUrl = 'https://www.instagram.com/'.$handle.'/';
-        $infoUrl = 'https://www.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle);
-
-        try {
-            $response = $this->http()
-                ->withHeaders([
+        $query = '?username='.rawurlencode($handle);
+        $attempts = [
+            [
+                'https://i.instagram.com/api/v1/users/web_profile_info/'.$query,
+                self::IG_ANDROID_UA,
+                [
+                    'Accept' => 'application/json',
+                    'X-IG-App-ID' => self::IG_ANDROID_APP_ID,
+                ],
+            ],
+            [
+                'https://www.instagram.com/api/v1/users/web_profile_info/'.$query,
+                null,
+                [
                     'Accept' => 'application/json, text/plain, */*',
                     'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
                     'X-IG-App-ID' => self::IG_APP_ID,
-                    'Referer' => $profileUrl,
+                    'Referer' => 'https://www.instagram.com/'.$handle.'/',
                     'Origin' => 'https://www.instagram.com',
-                ])
-                ->get($infoUrl);
-        } catch (\Throwable) {
-            return [null, null, null];
+                ],
+            ],
+        ];
+
+        $json = null;
+        foreach ($attempts as [$infoUrl, $userAgent, $headers]) {
+            try {
+                $response = $this->http($userAgent)
+                    ->withHeaders($headers)
+                    ->get($infoUrl);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (! $response->successful()) {
+                continue;
+            }
+
+            $payload = $response->json();
+            if (is_array($payload) && data_get($payload, 'data.user')) {
+                $json = $payload;
+                break;
+            }
         }
 
-        if (! $response->successful()) {
+        if (! is_array($json)) {
             return [null, null, null];
         }
-
-        $json = $response->json();
         $edges = array_merge(
             data_get($json, 'data.user.edge_owner_to_timeline_media.edges', []) ?: [],
             data_get($json, 'data.user.edge_felix_video_timeline.edges', []) ?: [],

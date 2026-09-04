@@ -10,6 +10,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { PasswordField } from "@/components/PasswordField";
 import { RocketzLogo } from "@/components/RocketzLogo";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
+import { promptAndSendPasswordReset } from "@/lib/forgot-password";
 import type { AuthPayload, AuthUser, TwoFactorChallenge } from "@/lib/auth";
 import { homePathForUser, isTwoFactorChallenge } from "@/lib/auth";
 import { TwoFactorForm } from "@/components/TwoFactorForm";
@@ -20,6 +21,7 @@ import { clearToken, fetchMe, getToken, laravelFetch, persistAuth } from "@/lib/
 import { mediaPublicUrl } from "@/lib/media-playback";
 import { isValidEmail } from "@/lib/masks";
 import type { CompanyLandingPage } from "@/lib/types";
+import { applyCompanyLandingDocumentSeo } from "@/lib/company-landing-seo";
 
 type Modal = "none" | "creator" | "login";
 
@@ -61,8 +63,9 @@ export function CompanyPublicLanding({
     if (!preview && page.slug) {
       setLandingOrigin(page.slug);
       void api.trackLandingEvent(page.slug, "view").catch(() => undefined);
+      applyCompanyLandingDocumentSeo(page);
     }
-  }, [page.slug, preview]);
+  }, [page, preview]);
 
   useEffect(() => {
     document.body.style.overflow = modal !== "none" ? "hidden" : "unset";
@@ -129,6 +132,10 @@ export function CompanyPublicLanding({
     }
   }
 
+  async function onForgotPassword() {
+    await promptAndSendPasswordReset(login.email);
+  }
+
   return (
     <div className="relative flex min-h-screen w-full flex-col font-sans antialiased" style={{ backgroundColor: background }}>
       {preview ? (
@@ -158,7 +165,7 @@ export function CompanyPublicLanding({
         {bannerSrc ? (
           <div className="mb-8 overflow-hidden rounded-3xl border border-black/5 shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerSrc} alt="" referrerPolicy="no-referrer" className="h-48 w-full object-cover sm:h-72" />
+            <img src={bannerSrc} alt={name} referrerPolicy="no-referrer" className="h-48 w-full object-cover sm:h-72" />
           </div>
         ) : (
           <div className="mb-8 h-40 rounded-3xl sm:h-56" style={{ background: `linear-gradient(135deg, ${primary} 0%, ${button} 100%)` }} />
@@ -248,6 +255,9 @@ export function CompanyPublicLanding({
                   <form className="space-y-3" noValidate onSubmit={onLoginSubmit}>
                     <input type="email" placeholder={ta("email")} autoComplete="email" className={creatorModalInput} value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} />
                     <PasswordField placeholder={ta("password")} autoComplete="current-password" inputClassName={creatorModalInput} value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} />
+                    <button type="button" onClick={() => void onForgotPassword()} className="block text-left text-sm font-semibold hover:opacity-80" style={{ color: primary }}>
+                      {ta("forgotPassword")}
+                    </button>
                     <button disabled={loading} type="submit" style={{ backgroundColor: button }} className="w-full rounded-xl py-3 font-bold text-white disabled:opacity-50">
                       {loading ? ta("loggingIn") : ta("login")}
                     </button>

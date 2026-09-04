@@ -133,6 +133,23 @@ class Creator extends Model
         });
     }
 
+    public function scopeAvailableToCompanyContext(Builder $query, int $companyId, bool $includeGlobalCasting = false): Builder
+    {
+        if (! $includeGlobalCasting) {
+            return $query->inCompanyPool($companyId);
+        }
+
+        return $query->where(function (Builder $builder) use ($companyId) {
+            $builder->where(function (Builder $pool) use ($companyId) {
+                $pool->where('invited_by_company_id', $companyId)
+                    ->orWhereHas('landingSignups', fn (Builder $inner) => $inner->where('company_id', $companyId));
+            })->orWhere(function (Builder $global) {
+                $global->whereNull('invited_by_company_id')
+                    ->whereDoesntHave('landingSignups');
+            });
+        });
+    }
+
     public function isInCompanyPool(int $companyId): bool
     {
         if ($this->invited_by_company_id && (int) $this->invited_by_company_id === $companyId) {

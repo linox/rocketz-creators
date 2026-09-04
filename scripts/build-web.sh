@@ -96,6 +96,11 @@ if [[ ! -f dist-cpanel/.htaccess ]]; then
   exit 1
 fi
 
+if [[ ! -f dist-cpanel/landing-seo.php ]]; then
+  echo "Erro: dist-cpanel/landing-seo.php não foi copiado." >&2
+  exit 1
+fi
+
 if [[ ! -f dist-cpanel/index.html ]]; then
   echo "Erro: dist-cpanel/index.html não foi gerado." >&2
   exit 1

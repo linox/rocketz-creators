@@ -119,9 +119,9 @@ return [
     'not_admin' => 'El usuario no es admin.',
     'cannot_remove_self' => 'No puedes eliminar tu propia cuenta.',
     'mail' => [
-        'reset_subject' => 'Restablecer contraseña — Rocketz Creators',
+        'reset_subject' => 'Restablecer contraseña — Creatorz by Rocketz',
         'reset_greeting' => '¡Hola!',
-        'reset_line' => 'Recibimos una solicitud para restablecer la contraseña de tu cuenta en Rocketz Creators.',
+        'reset_line' => 'Recibimos una solicitud para restablecer la contraseña de tu cuenta en Creatorz by Rocketz.',
         'reset_action' => 'Restablecer contraseña',
         'reset_expire' => 'Este enlace expira en :minutes minutos.',
         'reset_ignore' => 'Si no hiciste esta solicitud, ignora este e-mail.',

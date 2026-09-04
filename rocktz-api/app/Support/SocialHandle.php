@@ -31,7 +31,7 @@ class SocialHandle
         $handle = (string) preg_replace('/\s+/', '', $handle);
         $handle = (string) preg_replace('/[^a-zA-Z0-9._]/', '', $handle);
 
-        if ($handle === '' || in_array(strtolower($handle), ['http', 'https', 'www', 'instagramcom', 'instagram'], true)) {
+        if ($handle === '' || in_array(strtolower($handle), ['http', 'https', 'www', 'instagramcom'], true)) {
             return '';
         }
 

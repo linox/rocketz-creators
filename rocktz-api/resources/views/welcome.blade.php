@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex">
-        <title>{{ config('app.name', 'Rocketz Creators') }} · API</title>
+        <title>{{ config('app.name', 'Creatorz by Rocketz') }} · API</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -251,7 +251,7 @@
             <div class="glow glow-b" aria-hidden="true"></div>
 
             <main class="card">
-                <div class="logo" aria-label="Rocketz Creators">
+                <div class="logo" aria-label="Creatorz by Rocketz">
                     <div class="logo-word">rocket<span class="logo-z">z</span></div>
                     <div class="logo-sub">Creators</div>
                 </div>
@@ -260,7 +260,7 @@
                     <div class="badge">API</div>
                     <h1>Backend da plataforma</h1>
                     <p class="lead">
-                        Esta é a API da Rocketz Creators — casting, campanhas e trabalhos recorrentes entre marcas e criadores.
+                        Esta é a API do Creatorz by Rocketz — casting, campanhas e trabalhos recorrentes entre marcas e criadores.
                     </p>
                 </div>
 

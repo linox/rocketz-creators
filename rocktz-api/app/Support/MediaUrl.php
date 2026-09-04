@@ -22,6 +22,38 @@ class MediaUrl
         return rtrim((string) config('app.url'), '/').'/'.$prefix.'/'.ltrim($path, '/');
     }
 
+    public static function publicAbsolute(?string $url): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+        $needsStream = str_contains($host, 'r2.cloudflarestorage.com')
+            || str_ends_with($host, '.r2.dev')
+            || str_contains($url, '/stream/')
+            || str_contains($url, '/uploads/')
+            || str_contains($url, '/downloads/');
+
+        if ($needsStream) {
+            $key = self::objectKeyFromPublicUrl($url);
+            if ($key) {
+                return self::playback($key);
+            }
+        }
+
+        if (str_starts_with($url, 'https://') || str_starts_with($url, 'http://')) {
+            return $url;
+        }
+
+        if (str_starts_with($url, '/')) {
+            return rtrim((string) config('app.url'), '/').$url;
+        }
+
+        return self::playback($url);
+    }
+
     public static function objectKeyFromPublicUrl(?string $url): ?string
     {
         if (! $url) {

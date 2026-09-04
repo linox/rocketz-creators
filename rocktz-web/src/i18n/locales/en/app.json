@@ -2119,7 +2119,7 @@
     "noEmailTitle": "No email",
     "noEmailBody": "This creator does not have an email address on file.",
     "linkSent": "Link sent",
-    "accessTemplate": "*Rocketz Creators platform access*\n👤 *User / Email:* {{email}}\n🔑 *Password:* {{password}}\n🔗 *Link:* {{link}}"
+    "accessTemplate": "*Creatorz by Rocketz platform access*\n👤 *User / Email:* {{email}}\n🔑 *Password:* {{password}}\n🔗 *Link:* {{link}}"
   },
   "editProfile": {
     "title": "Edit my user profile",

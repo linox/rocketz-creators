@@ -24,6 +24,10 @@ class SocialMetricsService
 
     private const IG_ASBD_ID = '129477';
 
+    private const IG_ANDROID_APP_ID = '567067343352427';
+
+    private const IG_ANDROID_UA = 'Instagram 192.168.1.2.75 Android (33/13; 420dpi; 1080x2400; Google; Pixel 7; panther; panther; en_US; 458229258)';
+
     /** @var array<string, string> */
     private array $instagramCookies = [];
 
@@ -431,9 +435,23 @@ class SocialMetricsService
 
     private function fetchInstagramPublic(string $handle): SocialSnapshot
     {
+        $infoQuery = '?username='.rawurlencode($handle);
+        $appSnapshot = $this->instagramSnapshotFromInfoUrl(
+            $handle,
+            'https://i.instagram.com/api/v1/users/web_profile_info/'.$infoQuery,
+            self::IG_ANDROID_UA,
+            [
+                'Accept' => 'application/json',
+                'X-IG-App-ID' => self::IG_ANDROID_APP_ID,
+            ],
+        );
+        if ($appSnapshot !== null) {
+            return $appSnapshot;
+        }
+
         $infoUrls = [
-            'https://www.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle),
-            'https://i.instagram.com/api/v1/users/web_profile_info/?username='.rawurlencode($handle),
+            'https://www.instagram.com/api/v1/users/web_profile_info/'.$infoQuery,
+            'https://i.instagram.com/api/v1/users/web_profile_info/'.$infoQuery,
         ];
 
         foreach ($infoUrls as $infoUrl) {
@@ -472,29 +490,34 @@ class SocialMetricsService
         throw new SocialMetricsException(__('auth.social_profile_unavailable'));
     }
 
-    private function instagramSnapshotFromInfoUrl(string $handle, string $infoUrl): ?SocialSnapshot
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function instagramSnapshotFromInfoUrl(string $handle, string $infoUrl, ?string $userAgent = null, array $headers = []): ?SocialSnapshot
     {
         $profileUrl = SocialHandle::publicUrl('instagram', $handle);
         $csrf = $this->cookieValue('csrftoken') ?? '';
+        $requestHeaders = $headers !== [] ? $headers : [
+            'Accept' => '*/*',
+            'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
+            'X-IG-App-ID' => self::IG_APP_ID,
+            'X-ASBD-ID' => self::IG_ASBD_ID,
+            'X-CSRFToken' => $csrf,
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Referer' => $profileUrl,
+            'Origin' => 'https://www.instagram.com',
+            'Sec-Fetch-Dest' => 'empty',
+            'Sec-Fetch-Mode' => 'cors',
+            'Sec-Fetch-Site' => 'same-origin',
+            'sec-ch-ua' => '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+            'sec-ch-ua-mobile' => '?0',
+            'sec-ch-ua-platform' => '"macOS"',
+        ];
 
         try {
-            $response = $this->instagramHttp()
-                ->withHeaders([
-                    'Accept' => '*/*',
-                    'Accept-Language' => 'en-US,en;q=0.9,pt-BR;q=0.8',
-                    'X-IG-App-ID' => self::IG_APP_ID,
-                    'X-ASBD-ID' => self::IG_ASBD_ID,
-                    'X-CSRFToken' => $csrf,
-                    'X-Requested-With' => 'XMLHttpRequest',
-                    'Referer' => $profileUrl,
-                    'Origin' => 'https://www.instagram.com',
-                    'Sec-Fetch-Dest' => 'empty',
-                    'Sec-Fetch-Mode' => 'cors',
-                    'Sec-Fetch-Site' => 'same-origin',
-                    'sec-ch-ua' => '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    'sec-ch-ua-mobile' => '?0',
-                    'sec-ch-ua-platform' => '"macOS"',
-                ])
+            $client = $userAgent !== null ? $this->http($userAgent) : $this->instagramHttp();
+            $response = $client
+                ->withHeaders($requestHeaders)
                 ->get($infoUrl);
         } catch (\Throwable) {
             return null;

@@ -14,7 +14,8 @@ DirectoryIndex index.html
     RewriteRule ^creators/ /creators/_/index.html [L]
     RewriteRule ^campaigns/ /campaigns/_/index.html [L]
     RewriteRule ^recurring/ /recurring/_/index.html [L]
-    RewriteRule ^l/ /l/_/index.html [L]
+    RewriteRule ^l/_/ - [L]
+    RewriteRule ^l/([^/]+)/?$ /landing-seo.php?slug=$1 [L,QSA]
 </IfModule>
 
 ErrorDocument 404 /404.html

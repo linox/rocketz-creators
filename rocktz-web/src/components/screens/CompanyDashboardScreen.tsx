@@ -128,7 +128,7 @@ function CompanyDashboardInner() {
       api.company(companyId).then((res) => setCompany(res.data)),
       api.campaigns("?include=content").then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
       api.recurring("?include=items").then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
-      api.creators().then((res) => setCreators(res.data)),
+      api.creators(`?company_id=${companyId}`).then((res) => setCreators(res.data)),
       api.companyLanding(companyId).then((res) => setLanding(res.data)).catch(() => setLanding(null)),
     ])
       .catch(alertApiError)
