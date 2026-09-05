@@ -1,3 +1,4 @@
+import { namedPautaTitle } from "@/lib/pauta-briefing";
 import type { Campaign, CampaignCreator, PlanningItem, RecurringContract } from "@/lib/types";
 
 export type DeliverySourceType = "campaign" | "recurring";
@@ -185,10 +186,7 @@ function creatorLabel(row: { artistic_name?: string | null; full_name?: string |
 }
 
 function namedPlanningTitle(title?: string | null) {
-  const value = (title ?? "").trim();
-  if (!value) return "";
-  if (/\s+\d+\/\d+$/.test(value)) return "";
-  return value;
+  return namedPautaTitle(title);
 }
 
 function mapContentType(raw?: string | null): DeliveryContentType {

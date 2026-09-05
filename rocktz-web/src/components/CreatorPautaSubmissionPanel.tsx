@@ -12,7 +12,7 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { PlanningItem } from "@/lib/types";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
-import { itemIsAwaitingPauta } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { isBrandPosting } from "@/lib/posting-profile";
 
 type Props = {
@@ -126,7 +126,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
             {
               type: "content_planning_item",
               id: item.id,
-              label: item.title || t("recurringDetail.quotaAwaiting"),
+              label: creatorPautaHeading(item.title, tp("awaitingDemand")),
               payload: {
                 status: "review",
                 video_status: "submitted",

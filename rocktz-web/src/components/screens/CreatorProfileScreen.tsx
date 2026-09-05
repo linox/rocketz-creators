@@ -45,7 +45,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -138,6 +138,30 @@ function quotaEntries(deliverables?: Record<string, number>) {
 
 function quotaTotal(deliverables?: Record<string, number>) {
   return quotaEntries(deliverables).reduce((sum, entry) => sum + entry.count, 0);
+}
+
+function contentFormatLabel(type: string | null | undefined, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (!type) return "";
+  return String(t(`recurring.shortFormats.${type}`, { defaultValue: type }));
+}
+
+function RecurringDeliveryName({
+  title,
+  formatLabel,
+}: {
+  title: string;
+  formatLabel?: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-sm font-bold break-words text-slate-900">{title}</span>
+      {formatLabel ? (
+        <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-slate-600 uppercase">
+          {formatLabel}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 type CompanyGroup<T> = {
@@ -1937,6 +1961,7 @@ function RecurringBriefingModal({
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const { t: tc } = useTranslation("common");
+  const { t: ta } = useTranslation("app");
   const uploadManager = useOptionalUploadManager();
   const item = work.item;
   if (!item) return null;
@@ -1944,16 +1969,22 @@ function RecurringBriefingModal({
   const hasBriefing = itemHasPautaBriefing(item);
   const awaitingPauta = itemIsAwaitingPauta(item);
   const lockBackdrop = Boolean(item.pending_upload_id) || uploadManager?.isSubjectUploading("content_planning_item", item.id);
+  const formatLabel = contentFormatLabel(item.content_type, ta);
 
   return (
     <AppModal onClose={onClose} lockBackdrop={lockBackdrop} zIndexClassName="z-[110]" panelClassName="max-w-2xl">
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0">
           <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
-          <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{item.title || work.contract.title}</h3>
+          <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{creatorPautaHeading(item.title, tp("awaitingDemand"))}</h3>
           <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">
             {[work.contract.company?.name, work.contract.title].filter(Boolean).join(" · ")}
           </p>
+          {formatLabel ? (
+            <span className="mt-1.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-slate-600 uppercase">
+              {formatLabel}
+            </span>
+          ) : null}
         </div>
         <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={tc("close")}>
           <X size={16} />
@@ -1961,7 +1992,7 @@ function RecurringBriefingModal({
       </div>
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
         {hasBriefing ? (
-          <PautaBriefingView collapsible item={item} title={tp("creativeBriefing", { name: item.title })} />
+          <PautaBriefingView collapsible item={item} title={tp("creativeBriefing", { name: creatorPautaHeading(item.title, tp("awaitingDemand")) })} />
         ) : (
           <p className="m-0 rounded-2xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-sm font-medium text-orange-800">
             {awaitingPauta ? tp("awaitingDemandHint") : tp("noBriefingYet")}
@@ -2126,12 +2157,14 @@ function ActiveRecurringWorksTable({
           const { contract, item, deliveryStatus, key } = work;
           const isOpen = expandedKey === key;
           const awaitingPauta = !item || itemIsAwaitingPauta(item);
+          const deliveryTitle = creatorPautaHeading(item?.title, tp("awaitingDemand"));
+          const formatLabel = contentFormatLabel(item?.content_type, ta);
 
           return (
             <div key={key} className={cn("p-4", isOpen && "bg-purple-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="m-0 text-sm font-bold break-words text-slate-900">{item?.title || contract.title}</p>
+                  <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2198,13 +2231,13 @@ function ActiveRecurringWorksTable({
               const { contract, item, deliveryStatus, key } = work;
               const isOpen = expandedKey === key;
               const awaitingPauta = !item || itemIsAwaitingPauta(item);
+              const deliveryTitle = creatorPautaHeading(item?.title, tp("awaitingDemand"));
+              const formatLabel = contentFormatLabel(item?.content_type, ta);
 
               return (
                 <tr key={key} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
                   <td className="p-3.5 pl-5">
-                    <span className="text-sm font-bold text-slate-900">
-                      {item?.title || contract.title}
-                    </span>
+                    <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
                   </td>
                   <td className="p-3.5 text-slate-700">
                     <div className="flex items-center gap-1 font-semibold">

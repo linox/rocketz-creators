@@ -62,7 +62,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
-import { itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
+import { itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import { usePrivacy } from "@/lib/privacy";
 import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
@@ -276,13 +276,6 @@ function creatorCost(row: ContractCreator) {
 
 function itemInMonth(item: PlanningItem, month: string) {
   return item.month === month || Boolean(item.planned_date?.startsWith(month));
-}
-
-function namedPautaTitle(title?: string | null) {
-  const value = (title ?? "").trim();
-  if (!value) return "";
-  if (/\s+\d+\/\d+$/.test(value)) return "";
-  return value;
 }
 
 function pautaSlot(monthItems: PlanningItem[], item: PlanningItem) {
@@ -1739,7 +1732,7 @@ function DetailInner() {
                                     className="mt-1 w-full min-w-[12rem] rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm font-bold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400 focus:border-brand-primary"
                                   />
                                 ) : (
-                                  <h4 className="text-sm font-bold text-slate-900">{displayTitle || t("recurringDetail.untitledPauta")}</h4>
+                                  <h4 className="text-sm font-bold text-slate-900">{displayTitle || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</h4>
                                 )}
                               </div>
                             </div>
@@ -2043,7 +2036,7 @@ function DetailInner() {
                               )}
                             >
                               <div className="flex items-center justify-between gap-1">
-                                <span className="truncate font-bold text-slate-800">{namedPautaTitle(item.title) || t("recurringDetail.untitledPauta")}</span>
+                                <span className="truncate font-bold text-slate-800">{namedPautaTitle(item.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</span>
                                 <span className="shrink-0 text-[8px] font-extrabold tracking-wider text-indigo-700 uppercase">{t(`recurring.shortFormats.${item.content_type}`, { defaultValue: item.content_type })}</span>
                               </div>
                               <span className="truncate text-[9px] text-slate-500">{item.creator?.artistic_name || allocated.find((row) => row.creator_id === item.creator_id)?.creator?.artistic_name}</span>
@@ -2172,7 +2165,7 @@ function DetailInner() {
                   </span>
                   <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold text-slate-700 uppercase">{t(`recurring.itemStatus.${viewingPauta.status}`, { defaultValue: viewingPauta.status })}</span>
                 </div>
-                <h3 className="text-lg font-black text-slate-900">{namedPautaTitle(viewingPauta.title) || t("recurringDetail.untitledPauta")}</h3>
+                <h3 className="text-lg font-black text-slate-900">{namedPautaTitle(viewingPauta.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</h3>
                 <p className="mt-1 text-xs font-medium text-slate-500">
                   {viewingPauta.planned_date
                     ? t("recurringDetail.pautaDeadline", { date: new Date(`${viewingPauta.planned_date}T00:00:00`).toLocaleDateString(locale) })
@@ -2350,7 +2343,7 @@ function DetailInner() {
                   <h3 className="text-base font-black text-slate-900">
                     {t(reviseModal.stage === "video" ? "recurringDetail.reviseVideoTitle" : "recurringDetail.reviseScriptTitle")}
                   </h3>
-                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">{namedPautaTitle(reviseModal.item.title) || t("recurringDetail.untitledPauta")}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">{namedPautaTitle(reviseModal.item.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</p>
                 </div>
               </div>
               <button

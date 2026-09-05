@@ -74,3 +74,15 @@ export function itemIsAwaitingPauta(item: PautaBriefingItemLike & {
   if (isLivePautaType(item.content_type)) return false;
   return item.status === "planned" && !itemHasPautaBriefing(item);
 }
+
+/** Real pauta name, ignoring auto titles like "Reel 1/4". */
+export function namedPautaTitle(title?: string | null) {
+  const value = (title ?? "").trim();
+  if (!value) return "";
+  if (/\s+\d+\/\d+$/.test(value)) return "";
+  return value;
+}
+
+export function creatorPautaHeading(title: string | null | undefined, awaitingLabel: string) {
+  return namedPautaTitle(title) || awaitingLabel;
+}

@@ -49,7 +49,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
-import { emptyPautaBriefing, itemHasPautaBriefing, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
 import { formatMoneyGroups, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask, remaskMoney } from "@/lib/masks";
@@ -964,7 +964,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                             <span className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-brand-primary uppercase">{item.company?.name || contracts.find((c) => c.id === item.recurring_contract_id)?.company?.name}</span>
                             <TypeBadge type={item.content_type} short />
                           </div>
-                          <h4 className="mt-1 text-sm font-bold text-slate-900">{item.title}</h4>
+                          <h4 className="mt-1 text-sm font-bold text-slate-900">{creatorPautaHeading(item.title, t("recurringDetail.awaitingBriefing"))}</h4>
                         </div>
                         <div className="w-[140px]">
                           <Select2Field theme="light" value={item.status} options={ITEM_STATUSES.map((status) => ({ value: status, label: t(`recurring.itemStatus.${status}`) }))} onChange={(value) => onStatusChange(item, value)} triggerClassName={cn("h-7 rounded-full px-2 text-[10px] font-bold uppercase", itemStatusClass(item.status))} />
@@ -1220,7 +1220,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                   <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-brand-primary uppercase">{viewingItem.company?.name || contracts.find((c) => c.id === viewingItem.recurring_contract_id)?.company?.name}</span>
                   <TypeBadge type={viewingItem.content_type} short />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900">{viewingItem.title}</h3>
+                <h3 className="text-xl font-bold text-slate-900">{isCreator ? creatorPautaHeading(viewingItem.title, t("recurringDetail.awaitingBriefing")) : (namedPautaTitle(viewingItem.title) || viewingItem.title || t("recurringDetail.untitledPauta"))}</h3>
                 <p className="mt-1 text-xs text-slate-500">{t("recurring.responsible")} <strong className="text-slate-800">{viewingItem.creator?.artistic_name || viewingItem.creator?.full_name}</strong></p>
               </div>
               <button type="button" onClick={() => setViewingItem(null)} className="cursor-pointer rounded-lg p-2 text-slate-400 hover:bg-slate-100">{tc("cancel")}</button>
