@@ -27,6 +27,7 @@ export type AuthUser = {
     categories?: string[];
     socials?: Record<string, string>;
     portfolio_count?: number;
+    storefront_unlocked?: boolean;
     contract_acceptance?: {
       id: number;
       status: string;

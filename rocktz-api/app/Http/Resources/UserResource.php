@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\ConsentType;
+use App\Services\CreatorStorefrontService;
 use App\Support\AppLocale;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -52,6 +53,7 @@ class UserResource extends JsonResource
                     'portfolio_count' => $this->creator->relationLoaded('portfolioVideos')
                         ? $this->creator->portfolioVideos->count()
                         : $this->creator->portfolioVideos()->count(),
+                    'storefront_unlocked' => $this->storefrontUnlocked($this->creator),
                     'contract_acceptance' => $latestContract ? [
                         'id' => $latestContract->id,
                         'status' => $latestContract->status?->value,
@@ -99,5 +101,14 @@ class UserResource extends JsonResource
             'currency' => $company->currency,
             'creator_invite_code' => $company->creator_invite_code,
         ];
+    }
+
+    private function storefrontUnlocked(mixed $creator): bool
+    {
+        try {
+            return app(CreatorStorefrontService::class)->isUnlocked($creator);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

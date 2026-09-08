@@ -41,6 +41,7 @@ class CampaignFactory extends Factory
             'is_secret' => false,
             'is_direct_contract' => false,
             'is_barter' => false,
+            'restrict_to_landing' => false,
             'barter_details' => null,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
             'posting_profile' => PostingProfile::Creator,

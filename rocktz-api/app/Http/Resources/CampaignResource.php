@@ -43,6 +43,7 @@ class CampaignResource extends JsonResource
             'is_direct_contract' => (bool) $this->is_direct_contract,
             'is_barter' => (bool) $this->is_barter,
             'limit_by_city' => (bool) $this->limit_by_city,
+            'restrict_to_landing' => (bool) $this->restrict_to_landing,
             'state' => $this->state,
             'city' => $this->city,
             'barter_details' => $this->barter_details,
@@ -60,6 +61,8 @@ class CampaignResource extends JsonResource
                 'link' => $this->briefing->link,
                 'coupon' => $this->briefing->coupon,
                 'attachments' => $this->briefing->attachments ?? [],
+                'script_file_url' => $this->briefing->script_file_url,
+                'script_file_name' => $this->briefing->script_file_name,
             ] : null),
             'deliverables' => $this->whenLoaded('deliverable', fn () => $this->deliverable ? [
                 'summary' => $this->deliverable->summary,

@@ -54,6 +54,8 @@ import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { RecurringMetricsPanel } from "@/components/RecurringMetricsPanel";
+import { ScriptDocumentField } from "@/components/ScriptDocumentField";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { Select2Field } from "@/components/Select2Field";
 import { MoneyInput } from "@/components/MoneyInput";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -67,8 +69,10 @@ import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/
 import { usePrivacy } from "@/lib/privacy";
 import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
+import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 type ContractCreator = NonNullable<RecurringContract["creators"]>[number];
@@ -157,6 +161,8 @@ const EMPTY_PAUTA = {
   status: "planned",
   approval_flow: "script_and_video" as "script_and_video" | "video_only",
   posting_profile: "creator" as PostingProfile,
+  pauta_script_file_url: "",
+  pauta_script_file_name: "",
 };
 
 function isLivePauta(type: string) {
@@ -291,8 +297,9 @@ function isDone(status: string) {
 }
 
 function needsScriptApproval(item: PlanningItem) {
-  if (isLivePauta(item.content_type) || item.approval_flow === "video_only") return false;
-  if (item.script_status === "approved" || !item.script?.trim()) return false;
+  if (item.approval_flow === "video_only") return false;
+  const hasScript = Boolean(item.script?.trim() || item.script_file_url);
+  if (item.script_status === "approved" || !hasScript) return false;
   return item.script_status === "submitted"
     || (!item.script_status && (item.status === "review" || item.status === "in_production"));
 }
@@ -337,7 +344,10 @@ function isPublished(item: PlanningItem) {
 
 function isAwaitingPublishedLink(item: PlanningItem) {
   if (isPublished(item) || isAwaitingBriefing(item)) return false;
-  if (isLivePauta(item.content_type)) return true;
+  if (isLivePauta(item.content_type)) {
+    if (item.script_status === "submitted" || item.script_status === "revision") return false;
+    return item.script_status === "approved";
+  }
   return item.status === "approved" || item.video_status === "approved";
 }
 
@@ -413,7 +423,8 @@ function DetailInner() {
   const { t: tc } = useTranslation("common");
   const { formatCurrency: formatCurrencyRaw, formatNumber } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
-  const id = usePathname().split("/").filter(Boolean).pop() ?? "";
+  const pathname = usePathname();
+  const id = String(numericIdFromBrowser("recurring", pathname) ?? "");
   const canManage = user.role === "admin" || user.role === "company";
   const isAdmin = user.role === "admin";
   const isCreator = user.role === "creator";
@@ -441,6 +452,7 @@ function DetailInner() {
   const [pautaModal, setPautaModal] = useState(false);
   const [editingPauta, setEditingPauta] = useState<PlanningItem | null>(null);
   const [pautaForm, setPautaForm] = useState(EMPTY_PAUTA);
+  const [pautaScriptFile, setPautaScriptFile] = useState<File | null>(null);
   const [pautaCreatorId, setPautaCreatorId] = useState<number | null>(null);
   const [viewingPauta, setViewingPauta] = useState<PlanningItem | null>(null);
   const [viewingPautaFocus, setViewingPautaFocus] = useState<PautaViewSection | null>(null);
@@ -699,10 +711,14 @@ function DetailInner() {
         status: PAUTA_STATUSES.includes(item.status as (typeof PAUTA_STATUSES)[number]) ? item.status : "planned",
         approval_flow: item.approval_flow === "video_only" ? "video_only" : "script_and_video",
         posting_profile: normalizePostingProfile(item.posting_profile),
+        pauta_script_file_url: item.pauta_script_file_url || "",
+        pauta_script_file_name: item.pauta_script_file_name || "",
       });
+      setPautaScriptFile(null);
     } else {
       setEditingPauta(null);
       setPautaForm({ ...EMPTY_PAUTA, planned_date: `${selectedMonth}-01`, briefing: emptyPautaBriefing() });
+      setPautaScriptFile(null);
     }
     setPautaModal(true);
   }
@@ -814,8 +830,8 @@ function DetailInner() {
     event.preventDefault();
     if (!contract) return;
     const live = isLivePauta(pautaForm.content_type);
-    if (!pautaCreatorId || !pautaForm.title.trim() || !pautaForm.content_type || !pautaForm.planned_date || (!live && !pautaBriefingHasContent(pautaForm.briefing))) {
-      await alertWarning(tc("alerts.incompleteTitle"), live ? t("recurringDetail.pautaLiveIncompleteText") : t("recurringDetail.pautaIncompleteText"));
+    if (!pautaCreatorId || !pautaForm.title.trim() || !pautaForm.content_type || !pautaForm.planned_date || !pautaBriefingHasContent(pautaForm.briefing)) {
+      await alertWarning(tc("alerts.incompleteTitle"), t(live ? "recurringDetail.livePautaIncompleteText" : "recurringDetail.pautaIncompleteText"));
       return;
     }
     const body: Record<string, unknown> = {
@@ -826,8 +842,8 @@ function DetailInner() {
       month: pautaForm.planned_date.slice(0, 7),
       briefing: pautaBriefingSummary(pautaForm.briefing),
       briefing_fields: pautaForm.briefing,
-      script: live ? null : pautaForm.script.trim() || null,
-      references: live ? null : pautaForm.references.trim() || null,
+      script: pautaForm.script.trim() || null,
+      references: pautaForm.references.trim() || null,
       status: live && pautaForm.live_link.trim() ? "published" : pautaForm.status,
     };
     if (live) {
@@ -838,6 +854,14 @@ function DetailInner() {
     }
     body.posting_profile = pautaForm.posting_profile;
     try {
+      if (pautaScriptFile) {
+        const uploaded = await uploadScriptDocument(pautaScriptFile);
+        body.pauta_script_file_url = uploaded.url;
+        body.pauta_script_file_name = uploaded.filename;
+      } else {
+        body.pauta_script_file_url = pautaForm.pauta_script_file_url.trim() || null;
+        body.pauta_script_file_name = pautaForm.pauta_script_file_name.trim() || null;
+      }
       if (editingPauta) {
         await api.updatePlanningItem(editingPauta.id, body);
         await alertSuccess(t("recurringDetail.pautaUpdated"));
@@ -932,7 +956,11 @@ function DetailInner() {
   }
 
   async function onApproveScript(item: PlanningItem) {
-    if (!(await alertConfirm(t("recurringDetail.approveScriptTitle"), t("recurringDetail.approveScriptText")))) return;
+    const live = isLivePauta(item.content_type);
+    if (!(await alertConfirm(
+      t(live ? "recurringDetail.liveApproveScriptTitle" : "recurringDetail.approveScriptTitle"),
+      t(live ? "recurringDetail.liveApproveScriptText" : "recurringDetail.approveScriptText"),
+    ))) return;
     try {
       await api.updatePlanningItem(item.id, {
         script_status: "approved",
@@ -940,7 +968,7 @@ function DetailInner() {
         status: "in_production",
         feedback_note: "",
       });
-      await alertSuccess(t("recurringDetail.approveScriptOk"));
+      await alertSuccess(t(live ? "recurringDetail.liveApproveScriptOk" : "recurringDetail.approveScriptOk"));
       if (viewingPauta?.id === item.id) closePautaView();
       load();
     } catch (err) {
@@ -1644,10 +1672,18 @@ function DetailInner() {
                       const videoRevisionRequested = isVideoRevisionRequested(item);
                       const scriptRevisionRequested = isScriptRevisionRequested(item);
                       const revisionRequested = scriptRevisionRequested || videoRevisionRequested;
-                      const hasDetails = !live && Boolean(briefing || item.script || item.references || videoUrl || videoVersions.length);
+                      const hasDetails = Boolean(
+                        briefing
+                        || item.script
+                        || item.pauta_script_file_url
+                        || item.script_file_url
+                        || item.references
+                        || videoUrl
+                        || videoVersions.length,
+                      );
                       const awaitingBriefing = isAwaitingBriefing(item);
                       const deadline = item.planned_date
-                        ? t("recurringDetail.pautaDeadline", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) })
+                        ? t(live ? "recurringDetail.livePautaDeadline" : "recurringDetail.pautaDeadline", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) })
                         : t("recurringDetail.pautaNoDate");
                       const slot = pautaSlot(selectedSummary?.items ?? selectedPautas, item);
                       const displayTitle = namedPautaTitle(item.title);
@@ -1703,7 +1739,7 @@ function DetailInner() {
                                             ? t("recurringDetail.scriptPendingBadge")
                                             : needsVideoApproval(item)
                                               ? t("recurringDetail.videoPendingBadge")
-                                            : item.script_status === "approved" && item.video_status !== "approved" && item.video_status !== "submitted" && item.video_status !== "revision"
+                                            : !live && item.script_status === "approved" && item.video_status !== "approved" && item.video_status !== "submitted" && item.video_status !== "revision"
                                               ? t("recurringDetail.waitingVideoBadge")
                                             : isAwaitingPublishedLink(item)
                                               ? t("recurringDetail.awaitingPublishedLink")
@@ -1744,7 +1780,7 @@ function DetailInner() {
                               </div>
                             ) : null}
                           </div>
-                          {live ? (
+                          {live && (item.published_url || canManage) && !isCreator ? (
                             <div className="flex flex-col gap-2 rounded-xl border border-purple-100 bg-purple-50/40 p-3">
                               <span className="text-[10px] font-bold tracking-wider text-purple-700 uppercase">{t("recurringDetail.liveLinkLabel")}</span>
                               {item.published_url ? (
@@ -1773,7 +1809,8 @@ function DetailInner() {
                                 </div>
                               ) : null}
                             </div>
-                          ) : hasDetails ? (
+                          ) : null}
+                          {hasDetails ? (
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                                 {briefing ? (
@@ -1781,7 +1818,7 @@ function DetailInner() {
                                     <FileText size={12} /> {t("recurringDetail.viewBriefing")}
                                   </button>
                                 ) : null}
-                                {item.script ? (
+                                {item.script || item.pauta_script_file_url || item.script_file_url ? (
                                   <button type="button" onClick={() => openPautaView(item, "script")} className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-brand-primary transition-colors hover:border-indigo-200 hover:bg-white">
                                     <ScrollText size={12} /> {t("recurringDetail.viewScript")}
                                   </button>
@@ -1907,7 +1944,7 @@ function DetailInner() {
                                   <p className="mt-1 mb-0 text-[11px] font-medium text-amber-900">{t("recurringDetail.videoNewVersionHint")}</p>
                                 </div>
                               ) : null}
-                              {canManage && pendingApproval && (item.script?.trim() || videoUrl) ? (
+                              {canManage && pendingApproval && (item.script?.trim() || item.script_file_url || videoUrl) ? (
                                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
                                   <p className="mb-2 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">{t("recurringDetail.submittedMaterialTitle")}</p>
                                   <div className={cn("grid grid-cols-1 items-start gap-3", item.script?.trim() && videoUrl ? "md:grid-cols-2" : "")}>
@@ -1919,6 +1956,16 @@ function DetailInner() {
                                         <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 bg-white p-3 text-[11px] leading-relaxed font-medium whitespace-pre-wrap text-slate-700">
                                           {item.script}
                                         </div>
+                                        {item.script_file_url ? (
+                                          <ScriptDocumentLink url={item.script_file_url} filename={item.script_file_name} />
+                                        ) : null}
+                                      </div>
+                                    ) : item.script_file_url ? (
+                                      <div className="flex min-w-0 flex-col gap-1.5">
+                                        <span className="flex items-center gap-1 text-[10px] font-black tracking-wider text-slate-600 uppercase">
+                                          <ScrollText size={12} className="text-brand-primary" /> {t("recurringDetail.submittedScriptLabel")}
+                                        </span>
+                                        <ScriptDocumentLink url={item.script_file_url} filename={item.script_file_name} />
                                       </div>
                                     ) : null}
                                     {videoUrl ? (
@@ -1936,7 +1983,11 @@ function DetailInner() {
                           ) : awaitingBriefing ? (
                             <div className="flex flex-col gap-2 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                               <p className="m-0 text-[11px] font-medium text-amber-800">
-                                {t(isCreator ? "recurringDetail.awaitingBriefingHintCreator" : "recurringDetail.awaitingBriefingHint")}
+                                {t(
+                                  live
+                                    ? (isCreator ? "recurringDetail.liveAwaitingBriefingHintCreator" : "recurringDetail.liveAwaitingBriefingHint")
+                                    : (isCreator ? "recurringDetail.awaitingBriefingHintCreator" : "recurringDetail.awaitingBriefingHint"),
+                                )}
                               </p>
                               {canManage ? (
                                 <button
@@ -2168,7 +2219,7 @@ function DetailInner() {
                 <h3 className="text-lg font-black text-slate-900">{namedPautaTitle(viewingPauta.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</h3>
                 <p className="mt-1 text-xs font-medium text-slate-500">
                   {viewingPauta.planned_date
-                    ? t("recurringDetail.pautaDeadline", { date: new Date(`${viewingPauta.planned_date}T00:00:00`).toLocaleDateString(locale) })
+                    ? t(isLivePauta(viewingPauta.content_type) ? "recurringDetail.livePautaDeadline" : "recurringDetail.pautaDeadline", { date: new Date(`${viewingPauta.planned_date}T00:00:00`).toLocaleDateString(locale) })
                     : t("recurringDetail.pautaNoDate")}
                 </p>
               </div>
@@ -2181,17 +2232,33 @@ function DetailInner() {
                 <div id="pauta-view-briefing">
                   <PautaBriefingView
                     item={viewingPauta}
-                    title={t("recurringDetail.pautaBriefingLabel")}
+                    title={t(isLivePauta(viewingPauta.content_type) ? "recurringDetail.livePautaBriefing" : "recurringDetail.pautaBriefingLabel")}
                     highlight={viewingPautaFocus === "briefing"}
                   />
                 </div>
               ) : null}
-              {viewingPauta.script ? (
+              {viewingPauta.script || viewingPauta.pauta_script_file_url || viewingPauta.script_file_url ? (
                 <div id="pauta-view-script" className={cn(viewingPautaFocus === "script" && "rounded-2xl ring-2 ring-indigo-200 ring-offset-2")}>
                   <span className="mb-1.5 block text-[10px] font-bold tracking-wider text-brand-primary uppercase">
-                    {viewingPauta.script_status ? t("recurringDetail.submittedScriptLabel") : t("recurringDetail.pautaScriptLabel")}
+                    {viewingPauta.script_status
+                      ? t("recurringDetail.submittedScriptLabel")
+                      : t(isLivePauta(viewingPauta.content_type) ? "recurringDetail.livePautaScriptLabel" : "recurringDetail.pautaScriptLabel")}
                   </span>
-                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingPauta.script}</p>
+                  {viewingPauta.script ? (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-line text-slate-700">{viewingPauta.script}</p>
+                  ) : null}
+                  {viewingPauta.pauta_script_file_url ? (
+                    <div className="mt-2">
+                      <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.pautaScriptFile")}</span>
+                      <ScriptDocumentLink url={viewingPauta.pauta_script_file_url} filename={viewingPauta.pauta_script_file_name} />
+                    </div>
+                  ) : null}
+                  {viewingPauta.script_file_url ? (
+                    <div className="mt-2">
+                      <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.submittedScriptFile")}</span>
+                      <ScriptDocumentLink url={viewingPauta.script_file_url} filename={viewingPauta.script_file_name} />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {pautaVideoUrl(viewingPauta) ? (
@@ -2456,7 +2523,9 @@ function DetailInner() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="flex items-center gap-2 text-base font-black text-slate-900">
                 <FileText size={18} className="text-brand-primary" />
-                {editingPauta ? t("recurringDetail.pautaEdit") : t("recurringDetail.pautaModal")}
+                {editingPauta
+                  ? t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaEdit" : "recurringDetail.pautaEdit")
+                  : t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaModal" : "recurringDetail.pautaModal")}
               </h3>
               <button type="button" onClick={() => setPautaModal(false)} className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
                 <X size={18} />
@@ -2483,15 +2552,15 @@ function DetailInner() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-700">{t("recurringDetail.pautaTitle")} *</label>
+                <label className="font-bold text-slate-700">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaTitle" : "recurringDetail.pautaTitle")} *</label>
                 <input
                   type="text"
                   value={pautaForm.title}
                   onChange={(e) => setPautaForm({ ...pautaForm, title: e.target.value })}
-                  placeholder={t("recurringDetail.pautaTitlePh")}
+                  placeholder={t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaTitlePh" : "recurringDetail.pautaTitlePh")}
                   className={FIELD_INPUT}
                 />
-                <p className="m-0 text-[10px] font-medium text-slate-400">{t("recurringDetail.pautaTitleHint")}</p>
+                <p className="m-0 text-[10px] font-medium text-slate-400">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaTitleHint" : "recurringDetail.pautaTitleHint")}</p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2508,7 +2577,7 @@ function DetailInner() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-slate-700">{t("recurringDetail.pautaDate")} *</label>
+                  <label className="font-bold text-slate-700">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaDate" : "recurringDetail.pautaDate")} *</label>
                   <input
                     type="date"
                     value={pautaForm.planned_date}
@@ -2593,13 +2662,47 @@ function DetailInner() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="flex items-center justify-between font-bold text-slate-700">
-                  <span>{isLivePauta(pautaForm.content_type) ? t("recurringDetail.pautaBriefingOptional") : `${t("recurringDetail.pautaBriefing")} *`}</span>
-                  {!isLivePauta(pautaForm.content_type) ? <span className="text-[10px] font-normal text-slate-400">{t("recurringDetail.pautaBriefingHint")}</span> : null}
+                  <span>{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaBriefing" : "recurringDetail.pautaBriefing")} *</span>
+                  <span className="text-[10px] font-normal text-slate-400">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaBriefingHint" : "recurringDetail.pautaBriefingHint")}</span>
                 </label>
                 <PautaBriefingFieldsForm
                   value={pautaForm.briefing}
                   onChange={(briefing) => setPautaForm({ ...pautaForm, briefing })}
-                  optional={isLivePauta(pautaForm.content_type)}
+                  forLive={isLivePauta(pautaForm.content_type)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3">
+                <label className="flex items-center justify-between font-bold text-slate-700">
+                  <span>{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaScriptOrFile" : "recurringDetail.pautaScriptOrFile")}</span>
+                  <span className="text-[10px] font-normal text-slate-400">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaScriptOrFileHint" : "recurringDetail.pautaScriptOrFileHint")}</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={pautaForm.script}
+                  onChange={(e) => setPautaForm({ ...pautaForm, script: e.target.value })}
+                  placeholder={t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaScriptPh" : "recurringDetail.pautaScriptPh")}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 font-mono text-[11px] outline-none focus:border-brand-primary"
+                />
+                <p className="m-0 text-center text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaScriptOrFileDivider")}</p>
+                <ScriptDocumentField
+                  label={t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaScriptFile" : "recurringDetail.pautaScriptFile")}
+                  hint={t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaScriptFileHint" : "recurringDetail.pautaScriptFileHint")}
+                  file={pautaScriptFile}
+                  existing={parseScriptDocument(pautaForm.pauta_script_file_url, pautaForm.pauta_script_file_name)}
+                  onFileSelect={setPautaScriptFile}
+                  onClearExisting={() => setPautaForm({ ...pautaForm, pauta_script_file_url: "", pauta_script_file_name: "" })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-700">{t("recurringDetail.pautaReferences")}</label>
+                <input
+                  type="url"
+                  value={pautaForm.references}
+                  onChange={(e) => setPautaForm({ ...pautaForm, references: e.target.value })}
+                  placeholder={t("recurringDetail.pautaReferencesPh")}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs outline-none focus:border-brand-primary"
                 />
               </div>
 
@@ -2615,34 +2718,7 @@ function DetailInner() {
                   />
                   <p className="text-[10px] text-slate-400">{t("recurringDetail.liveLinkHint")}</p>
                 </div>
-              ) : (
-                <>
-              <div className="flex flex-col gap-1.5">
-                <label className="flex items-center justify-between font-bold text-slate-700">
-                  <span>{t("recurringDetail.pautaScript")}</span>
-                  <span className="text-[10px] font-normal text-slate-400">{t("recurringDetail.pautaScriptHint")}</span>
-                </label>
-                <textarea
-                  rows={3}
-                  value={pautaForm.script}
-                  onChange={(e) => setPautaForm({ ...pautaForm, script: e.target.value })}
-                  placeholder={t("recurringDetail.pautaScriptPh")}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-[11px] outline-none focus:border-brand-primary"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-700">{t("recurringDetail.pautaReferences")}</label>
-                <input
-                  type="url"
-                  value={pautaForm.references}
-                  onChange={(e) => setPautaForm({ ...pautaForm, references: e.target.value })}
-                  placeholder={t("recurringDetail.pautaReferencesPh")}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs outline-none focus:border-brand-primary"
-                />
-              </div>
-                </>
-              )}
+              ) : null}
             </div>
 
             <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">

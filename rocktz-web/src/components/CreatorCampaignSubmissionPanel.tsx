@@ -12,9 +12,12 @@ import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
+import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { isBrandPosting } from "@/lib/posting-profile";
 import { safeHttpUrl } from "@/lib/safe-http-url";
+import { ScriptDocumentField } from "@/components/ScriptDocumentField";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 
 function briefingText(campaign: Campaign, key: string) {
   const value = campaign.briefing?.[key];
@@ -36,6 +39,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const [briefingOpen, setBriefingOpen] = useState(true);
   const [briefingDetailsOpen, setBriefingDetailsOpen] = useState(false);
   const [script, setScript] = useState(row.content?.script || "");
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
+  const [clearedScriptFile, setClearedScriptFile] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState(row.content?.published_link || "");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
@@ -66,13 +71,14 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const canSubmitVideo = canSubmitVideoBase && !awaitingVideoApproval && (videoRevision || deliveryRevision || !videoSubmitted);
   const showScriptField = !isApproved
     && flow !== "video_only"
-    && flow !== "live_link"
-    && (canSubmitScript || awaitingScriptApproval || Boolean(row.content?.script) || scriptApproved);
+    && (canSubmitScript || awaitingScriptApproval || Boolean(row.content?.script) || Boolean(row.content?.script_file_url) || scriptApproved || flow === "live_link");
   const currentVideoVersion = row.content?.video_version ?? 0;
   const currentScriptVersion = row.content?.script_version ?? 0;
   const nextVideoVersion = currentVideoVersion + 1;
   const nextScriptVersion = currentScriptVersion + 1;
-  const scriptChanged = script.trim() !== (row.content?.script || "").trim();
+  const scriptChanged = script.trim() !== (row.content?.script || "").trim() || Boolean(scriptFile);
+  const existingScriptFile = clearedScriptFile ? null : parseScriptDocument(row.content?.script_file_url, row.content?.script_file_name);
+  const brandScriptFile = briefingScriptDocument(campaign.briefing as Record<string, unknown> | null);
   const requiresNewVideoFile = (videoRevision || deliveryRevision) && canSubmitVideo;
   const requiresScriptChange = scriptRevision && canSubmitScript;
   const product = briefingText(campaign, "product") || tp("notSpecified");
@@ -111,7 +117,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         return;
       }
     } else if (canSubmitScript) {
-      if (!script.trim()) {
+      if (!script.trim() && !scriptFile && !existingScriptFile) {
         await alertWarning(tp("materialRequiredTitle"), tp("scriptRequired"));
         return;
       }
@@ -192,7 +198,15 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         body.published_link = publishedUrl.trim();
         body.delivery_status = "published";
       } else if (canSubmitScript) {
-        body.script = script.trim();
+        if (scriptFile) {
+          const uploaded = await uploadScriptDocument(scriptFile);
+          body.script_file_url = uploaded.url;
+          body.script_file_name = uploaded.filename;
+        } else if (existingScriptFile) {
+          body.script_file_url = existingScriptFile.url;
+          body.script_file_name = existingScriptFile.filename;
+        }
+        body.script = script.trim() || null;
         body.script_status = "submitted";
         body.delivery_status = "sent";
       } else if (canSubmitVideo) {
@@ -254,7 +268,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   }
 
   const scriptReady = canSubmitScript
-    ? Boolean(script.trim()) && (!requiresScriptChange || scriptChanged)
+    ? Boolean(script.trim() || scriptFile || existingScriptFile) && (!requiresScriptChange || scriptChanged)
     : false;
   const videoReady = canSubmitVideo
     ? (requiresNewVideoFile
@@ -345,6 +359,12 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 <p className="text-slate-500">{tp("noneItem")}</p>
               )}
             </div>
+            {brandScriptFile ? (
+              <div className="md:col-span-2">
+                <span className="mb-1 block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("pautaScriptFile")}</span>
+                <ScriptDocumentLink url={brandScriptFile.url} filename={brandScriptFile.filename} />
+              </div>
+            ) : null}
               </>
             ) : null}
           </div>
@@ -409,7 +429,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           {!isApproved ? (
             <>
           {showScriptField ? (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <label className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("scriptLabel")}</label>
             <textarea
               rows={4}
@@ -418,6 +438,19 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
               onChange={(event) => setScript(event.target.value)}
               disabled={scriptApproved || scriptSubmitted || awaitingScriptApproval}
               className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs font-medium transition-all outline-none focus:border-brand-primary focus:bg-white disabled:opacity-60"
+            />
+            <ScriptDocumentField
+              compact
+              label={tp("scriptFileLabel")}
+              hint={tp("scriptFileHint")}
+              file={scriptFile}
+              existing={existingScriptFile}
+              onFileSelect={(next) => {
+                setScriptFile(next);
+                if (next) setClearedScriptFile(false);
+              }}
+              onClearExisting={() => setClearedScriptFile(true)}
+              disabled={scriptApproved || scriptSubmitted || awaitingScriptApproval}
             />
           </div>
           ) : null}

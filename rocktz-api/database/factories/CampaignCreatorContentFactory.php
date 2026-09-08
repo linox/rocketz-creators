@@ -19,6 +19,8 @@ class CampaignCreatorContentFactory extends Factory
         return [
             'campaign_creator_id' => CampaignCreator::factory(),
             'script' => fake()->optional()->paragraphs(2, true),
+            'script_file_url' => null,
+            'script_file_name' => null,
             'video_url' => fake()->optional()->url(),
             'image_url' => fake()->boolean(40) ? 'https://placehold.co/600x800?text=Content' : null,
             'published_link' => fake()->optional()->url(),

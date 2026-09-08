@@ -49,7 +49,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
-import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
 import { formatMoneyGroups, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask, remaskMoney } from "@/lib/masks";
@@ -1171,14 +1171,15 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             <Select2Field theme="light" placeholder={t("recurringDetail.creator")} value={contentForm.creator_id} options={contentCreatorOptions.length ? contentCreatorOptions : fallbackCreatorOptions} onChange={(value) => setContentForm({ ...contentForm, creator_id: value })} />
             <Select2Field theme="light" placeholder={t("recurring.contentType")} value={contentForm.content_type} options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))} onChange={(value) => setContentForm({ ...contentForm, content_type: value })} />
             <label className="block text-xs font-bold text-slate-600">
-              {t("recurring.contentTitle")}
-              <input className="mt-1 h-11 w-full rounded-xl border px-4 text-sm font-semibold" placeholder={t("recurringDetail.pautaTitlePh")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
+              {t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaTitle" : "recurring.contentTitle")}
+              <input className="mt-1 h-11 w-full rounded-xl border px-4 text-sm font-semibold" placeholder={t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaTitlePh" : "recurringDetail.pautaTitlePh")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
             </label>
-            <label className="text-xs font-bold text-slate-500">{t("recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
+            <label className="text-xs font-bold text-slate-500">{t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaDate" : "recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
             <PautaBriefingFieldsForm
               value={contentForm.briefing}
               onChange={(briefing) => setContentForm({ ...contentForm, briefing })}
               optional
+              forLive={isLivePautaType(contentForm.content_type)}
             />
             <div className="flex gap-2">
               <button type="button" onClick={() => setContentModal(false)} className="flex-1 rounded-xl border py-3 font-bold">{tc("cancel")}</button>
@@ -1228,7 +1229,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             <div className="max-h-[70vh] space-y-4 overflow-y-auto p-6 text-sm text-slate-600">
               {viewingItem.description ? <p>{viewingItem.description}</p> : null}
               {itemHasPautaBriefing(viewingItem) ? (
-                <PautaBriefingView item={viewingItem} title={t("recurringDetail.pautaBriefingLabel")} />
+                <PautaBriefingView item={viewingItem} title={t(isLivePautaType(viewingItem.content_type) ? "recurringDetail.livePautaBriefing" : "recurringDetail.pautaBriefingLabel")} />
               ) : null}
               {viewingItem.script ? (
                 <div>

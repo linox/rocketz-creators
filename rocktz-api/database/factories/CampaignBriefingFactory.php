@@ -27,6 +27,8 @@ class CampaignBriefingFactory extends Factory
             'link' => fake()->url(),
             'coupon' => strtoupper(fake()->bothify('ROCKETZ##')),
             'attachments' => [],
+            'script_file_url' => null,
+            'script_file_name' => null,
         ];
     }
 }

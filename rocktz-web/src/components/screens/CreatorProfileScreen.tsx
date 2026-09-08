@@ -36,6 +36,7 @@ import {
   Send,
   Smartphone,
   Sparkles,
+  Store,
   Trash2,
   User,
   UserCheck,
@@ -48,6 +49,7 @@ import {
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
@@ -56,6 +58,7 @@ import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
+import { CreatorStorefrontPanel } from "@/components/CreatorStorefrontPanel";
 import { DeliveryUploadProgress } from "@/components/DeliveryUploadProgress";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
@@ -85,7 +88,7 @@ import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumen
 import { MoneyInput } from "@/components/MoneyInput";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
-import { numericIdFromPath } from "@/lib/route-id";
+import { numericIdFromBrowser } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
@@ -390,10 +393,10 @@ const ROLE_OPTION_VALUES = [
   { value: "admin", labelKey: "roleAdministrator" as const },
 ];
 
-type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about";
+type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront";
 
 function resolveProfileTab(value: string | null, creatorSelf: boolean): ProfileTab {
-  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about") {
+  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront") {
     return value;
   }
   return creatorSelf ? "dashboard" : "portfolio";
@@ -486,7 +489,8 @@ function ProfileInner() {
   const { formatCurrency, formatNumber, hideValues } = usePrivacy();
   const pathname = usePathname();
   const router = useRouter();
-  const id = numericIdFromPath(pathname, "creators");
+  const pathId = numericIdFromBrowser("creators", pathname);
+  const id = pathId ?? (user.role === "creator" ? user.creator?.id ?? null : null);
 
   const [creator, setCreator] = useState<Creator | null>(null);
   const [error, setError] = useState("");
@@ -682,11 +686,16 @@ function ProfileInner() {
     }
     try {
       const res = await api.creator(id);
+      if (!res.data) {
+        setCreator(null);
+        setError(tp("notFound"));
+        return;
+      }
       setCreator(res.data);
       hydrate(res.data);
       setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : tp("loadError"));
+      setError(err instanceof ApiError ? err.message || tp("loadError") : tp("loadError"));
     } finally {
       setLoading(false);
     }
@@ -814,8 +823,11 @@ function ProfileInner() {
         <div className="mb-4 rounded-full bg-red-50 p-3 text-red-500"><Info size={28} /></div>
         <p className="mb-2 font-bold text-[#0F172A]">{tp("loadError")}</p>
         <p className="mb-6 text-sm text-[#64748B]">{error || tp("notFound")}</p>
-        <Link href="/creators" className="flex h-10 items-center gap-2 rounded-lg bg-brand-primary px-6 text-sm font-bold text-white shadow-lg hover:bg-indigo-600">
-          <ArrowLeft size={16} /> {tp("backToCasting")}
+        <Link
+          href={user.role === "creator" && user.creator?.id ? `/creators/${user.creator.id}?tab=dashboard` : "/creators"}
+          className="flex h-10 items-center gap-2 rounded-lg bg-brand-primary px-6 text-sm font-bold text-white shadow-lg hover:bg-indigo-600"
+        >
+          <ArrowLeft size={16} /> {user.role === "creator" ? tp("goToMyProfile") : tp("backToCasting")}
         </Link>
       </div>
     );
@@ -1190,6 +1202,25 @@ function ProfileInner() {
                   <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">{tp("accessAllCountriesHint")}</span>
                 </span>
               </label>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600"
+                  checked={Boolean(creator.storefront_enabled)}
+                  onChange={async (event) => {
+                    try {
+                      await api.updateCreator(creator.id, { storefront_enabled: event.target.checked });
+                      load();
+                    } catch (err) {
+                      await alertApiError(err);
+                    }
+                  }}
+                />
+                <span>
+                  <span className="block text-[11px] font-bold text-slate-800">{tp("enableStorefront")}</span>
+                  <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">{tp("enableStorefrontHint")}</span>
+                </span>
+              </label>
             </div>
           </div>
         ) : canEdit ? (
@@ -1317,6 +1348,9 @@ function ProfileInner() {
               </button>
               <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[130px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "portfolio" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Video size={14} /> {tp("tabPortfolio")}
+              </button>
+              <button type="button" onClick={() => goTab("storefront")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Store size={14} /> {tp("tabStorefront")}
               </button>
               <button type="button" onClick={() => goTab("about")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "about" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <User size={14} /> {tp("tabAbout")}
@@ -1771,6 +1805,8 @@ function ProfileInner() {
             </div>
           ) : showCreatorTabs && tab === "portfolio" ? (
             <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} />
+          ) : showCreatorTabs && tab === "storefront" ? (
+            <CreatorStorefrontPanel creatorId={creator.id} />
           ) : (
             <>
               {!showCreatorTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
@@ -1998,6 +2034,12 @@ function RecurringBriefingModal({
             {awaitingPauta ? tp("awaitingDemandHint") : tp("noBriefingYet")}
           </p>
         )}
+        {item.pauta_script_file_url ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("pautaScriptFile")}</span>
+            <ScriptDocumentLink url={item.pauta_script_file_url} filename={item.pauta_script_file_name} />
+          </div>
+        ) : null}
         {awaitingPauta ? null : <CreatorPautaSubmissionPanel key={item.id} item={item} onSubmitted={onSubmitted} />}
       </div>
     </AppModal>

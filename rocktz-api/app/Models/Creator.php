@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 #[Fillable([
     'user_id',
@@ -42,6 +43,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'status',
     'can_access_all_countries',
     'invited_by_company_id',
+    'storefront_enabled',
+    'storefront_show_banner',
+    'storefront_banner_url',
+    'storefront_slug',
 ])]
 class Creator extends Model
 {
@@ -65,6 +70,8 @@ class Creator extends Model
             'work_affinities' => 'array',
             'status' => CreatorStatus::class,
             'can_access_all_countries' => 'boolean',
+            'storefront_enabled' => 'boolean',
+            'storefront_show_banner' => 'boolean',
         ];
     }
 
@@ -125,6 +132,16 @@ class Creator extends Model
         return $this->hasMany(CompanyLandingSignup::class);
     }
 
+    public function storefrontCategories(): HasMany
+    {
+        return $this->hasMany(CreatorStorefrontCategory::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function storefrontItems(): HasMany
+    {
+        return $this->hasMany(CreatorStorefrontItem::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function scopeInCompanyPool(Builder $query, int $companyId): Builder
     {
         return $query->where(function (Builder $builder) use ($companyId) {
@@ -163,6 +180,26 @@ class Creator extends Model
         }
 
         return $this->landingSignups()->where('company_id', $companyId)->exists();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function originCompanyIds(): array
+    {
+        $ids = [];
+        if ($this->invited_by_company_id) {
+            $ids[] = (int) $this->invited_by_company_id;
+        }
+
+        $signups = $this->relationLoaded('landingSignups')
+            ? $this->landingSignups
+            : $this->landingSignups()->get(['company_id']);
+        foreach ($signups as $signup) {
+            $ids[] = (int) $signup->company_id;
+        }
+
+        return array_values(array_unique(array_filter($ids)));
     }
 
     public function canBeModeratedBy(?User $user): bool
@@ -218,5 +255,27 @@ class Creator extends Model
         $companyCountry = $company?->countryCode() ?: Geo::DEFAULT_COUNTRY;
 
         return $this->countryCode() === $companyCountry;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function storefrontReservedSlugs(): array
+    {
+        return array_values(array_unique(array_merge(CompanyLandingPage::RESERVED_SLUGS, [
+            'c',
+            'settings',
+            'storefront',
+        ])));
+    }
+
+    public static function normalizeStorefrontSlug(?string $slug): string
+    {
+        return Str::slug((string) $slug);
+    }
+
+    public static function isReservedStorefrontSlug(string $slug): bool
+    {
+        return in_array($slug, self::storefrontReservedSlugs(), true);
     }
 }

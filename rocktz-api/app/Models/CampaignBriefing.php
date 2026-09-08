@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'link',
     'coupon',
     'attachments',
+    'script_file_url',
+    'script_file_name',
 ])]
 class CampaignBriefing extends Model
 {

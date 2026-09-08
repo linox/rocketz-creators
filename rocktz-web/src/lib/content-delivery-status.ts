@@ -38,7 +38,7 @@ export function campaignCreatorDeliveryState(row: CampaignCreator, flow?: string
   const scriptOnly = flow === "script_only";
   const scriptApproved = row.script_status === "approved";
   const videoApproved = row.video_status === "approved";
-  const hasScript = Boolean(row.content?.script?.trim());
+  const hasScript = Boolean(row.content?.script?.trim() || row.content?.script_file_url);
   const hasVideo = Boolean(row.content?.video_url?.trim());
 
   if (videoApproved && (!staged || scriptApproved || scriptOnly)) return "approved";

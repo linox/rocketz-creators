@@ -197,12 +197,13 @@ class CreatorController extends Controller
             'accepts_exclusivity' => ['sometimes', 'boolean'],
             'internal_notes' => ['nullable', 'string'],
             'can_access_all_countries' => ['sometimes', 'boolean'],
+            'storefront_enabled' => ['sometimes', 'boolean'],
             'status' => ['nullable', Rule::enum(CreatorStatus::class)],
         ]);
 
         $isAdmin = $user->role === UserRole::Admin;
         if (! $isAdmin) {
-            unset($data['status'], $data['internal_notes'], $data['can_access_all_countries'], $data['metrics']);
+            unset($data['status'], $data['internal_notes'], $data['can_access_all_countries'], $data['metrics'], $data['storefront_enabled']);
         }
 
         if (isset($data['country'])) {

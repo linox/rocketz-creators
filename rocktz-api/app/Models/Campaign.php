@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_direct_contract',
     'is_barter',
     'limit_by_city',
+    'restrict_to_landing',
     'state',
     'city',
     'barter_details',
@@ -83,6 +84,7 @@ class Campaign extends Model
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
             'limit_by_city' => 'boolean',
+            'restrict_to_landing' => 'boolean',
             'has_custom_contract' => 'boolean',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
@@ -188,6 +190,18 @@ class Campaign extends Model
         return $state !== '' || $city !== '';
     }
 
+    public function matchesCreatorOrigin(?Creator $creator): bool
+    {
+        if (! $this->restrict_to_landing) {
+            return true;
+        }
+        if (! $creator) {
+            return false;
+        }
+
+        return $creator->isInCompanyPool((int) $this->company_id);
+    }
+
     public function scopeMatchingCreatorLocation($query, Creator $creator)
     {
         return $query->where(function ($builder) use ($creator) {
@@ -207,6 +221,22 @@ class Campaign extends Model
         });
     }
 
+    public function scopeMatchingCreatorOrigin($query, Creator $creator)
+    {
+        $companyIds = $creator->originCompanyIds();
+
+        return $query->where(function ($builder) use ($companyIds) {
+            $builder->where('restrict_to_landing', false);
+            if ($companyIds === []) {
+                return;
+            }
+            $builder->orWhere(function ($limited) use ($companyIds) {
+                $limited->where('restrict_to_landing', true)
+                    ->whereIn('company_id', $companyIds);
+            });
+        });
+    }
+
     public function scopeForCreatorMarketplace($query, Creator $creator)
     {
         if (! $creator->canAccessAllCountries()) {
@@ -214,8 +244,10 @@ class Campaign extends Model
         }
 
         return $query->where(function ($builder) use ($creator) {
-            $builder->matchingCreatorLocation($creator)
-                ->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $creator->id));
+            $builder->where(function ($eligible) use ($creator) {
+                $eligible->matchingCreatorLocation($creator)
+                    ->matchingCreatorOrigin($creator);
+            })->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $creator->id));
         });
     }
 }

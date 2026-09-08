@@ -10,6 +10,9 @@ import type {
   CompanyLandingSignup,
   CompanyLandingMetrics,
   Creator,
+  CreatorStorefront,
+  StorefrontCategory,
+  StorefrontItem,
   DashboardStats,
   MetricsJobStatus,
   PlanningItem,
@@ -77,6 +80,27 @@ export const api = {
   trackLandingEvent: (slug: string, event: "view" | "cta_click" | "signup_started") =>
     laravelFetch<{ ok: boolean }>(`/landings/${encodeURIComponent(slug)}/events`, { method: "POST", body: JSON.stringify({ event }) }),
   claimLanding: (slug: string) => laravelFetch<Item<CompanyLandingSignup>>(`/landings/${encodeURIComponent(slug)}/claim`, { method: "POST" }),
+  publicStorefront: (creatorKey: number | string) =>
+    laravelFetch<Item<CreatorStorefront>>(`/storefronts/${encodeURIComponent(String(creatorKey))}`),
+  likeStorefrontItem: (creatorKey: number | string, itemId: number) =>
+    laravelFetch<{ liked: boolean; likes_count: number }>(`/storefronts/${encodeURIComponent(String(creatorKey))}/items/${itemId}/like`, { method: "POST" }),
+  shareStorefrontItem: (creatorKey: number | string, itemId: number) =>
+    laravelFetch<{ shares_count: number }>(`/storefronts/${encodeURIComponent(String(creatorKey))}/items/${itemId}/share`, { method: "POST" }),
+  creatorStorefront: (creatorId: number) => laravelFetch<Item<CreatorStorefront>>(`/creators/${creatorId}/storefront`),
+  updateCreatorStorefront: (creatorId: number, body: unknown) =>
+    laravelFetch<Item<CreatorStorefront>>(`/creators/${creatorId}/storefront`, { method: "PATCH", body: JSON.stringify(body) }),
+  createStorefrontCategory: (creatorId: number, name: string) =>
+    laravelFetch<Item<StorefrontCategory>>(`/creators/${creatorId}/storefront/categories`, { method: "POST", body: JSON.stringify({ name }) }),
+  updateStorefrontCategory: (creatorId: number, categoryId: number, body: unknown) =>
+    laravelFetch<Item<StorefrontCategory>>(`/creators/${creatorId}/storefront/categories/${categoryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteStorefrontCategory: (creatorId: number, categoryId: number) =>
+    laravelFetch<{ ok: boolean }>(`/creators/${creatorId}/storefront/categories/${categoryId}`, { method: "DELETE" }),
+  createStorefrontItem: (creatorId: number, body: unknown) =>
+    laravelFetch<Item<StorefrontItem>>(`/creators/${creatorId}/storefront/items`, { method: "POST", body: JSON.stringify(body) }),
+  updateStorefrontItem: (creatorId: number, itemId: number, body: unknown) =>
+    laravelFetch<Item<StorefrontItem>>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteStorefrontItem: (creatorId: number, itemId: number) =>
+    laravelFetch<{ ok: boolean }>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "DELETE" }),
   companyLanding: (companyId: number) => laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`),
   updateCompanyLanding: (companyId: number, body: unknown) =>
     laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -181,6 +205,9 @@ export const api = {
   testMailTemplate: (id: number) => laravelFetch<{ message: string }>(`/mail/templates/${id}/test`, { method: "POST" }),
   mailSettings: () => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean } }>("/mail/settings"),
   updateMailSettings: (body: { sending_enabled: boolean }) => laravelFetch<{ data: { sending_enabled: boolean; env_enabled: boolean; stored_enabled: boolean }; message: string }>("/mail/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  storefrontSettings: () => laravelFetch<{ data: { min_completed_campaigns: number } }>("/storefront/settings"),
+  updateStorefrontSettings: (body: { min_completed_campaigns: number }) =>
+    laravelFetch<{ data: { min_completed_campaigns: number }; message: string }>("/storefront/settings", { method: "PATCH", body: JSON.stringify(body) }),
   mailMessages: (query = "") => laravelFetch<{ data: Array<{ id: number; email: string; template_key: string; subject: string; status: string; attempts: number; failure_reason: string | null; provider_id: string | null; created_at: string; user?: { role?: string } }> }>(`/mail/messages${query}`),
   activityLogs: (query = "") =>
     laravelFetch<{

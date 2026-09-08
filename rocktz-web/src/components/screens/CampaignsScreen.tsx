@@ -21,6 +21,7 @@ import {
   Handshake,
   Instagram,
   Layers,
+  LayoutTemplate,
   Lock,
   MapPin,
   Megaphone,
@@ -175,6 +176,11 @@ function CampaignCard({
             {campaign.has_custom_contract ? (
               <span className="flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-indigo-200 uppercase backdrop-blur-md">
                 <Scale size={10} /> {t("campaigns.customContract")}
+              </span>
+            ) : null}
+            {campaign.restrict_to_landing ? (
+              <span className="flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-violet-200 uppercase backdrop-blur-md">
+                <LayoutTemplate size={10} /> {t("campaigns.landingLimited")}
               </span>
             ) : null}
             {campaign.limit_by_city ? (

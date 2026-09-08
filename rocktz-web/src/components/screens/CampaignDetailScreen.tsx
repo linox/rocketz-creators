@@ -36,6 +36,7 @@ import {
   Instagram,
   Layers,
   LayoutGrid,
+  LayoutTemplate,
   Lock,
   MapPin,
   Megaphone,
@@ -59,6 +60,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
+import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
@@ -66,6 +68,8 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { CampaignMetricsPanel } from "@/components/CampaignMetricsPanel";
+import { ScriptDocumentField } from "@/components/ScriptDocumentField";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { api } from "@/lib/api";
 import { agencyFeeFromBudget, currentAgencyFeePercent, parseAgencyFeePercent } from "@/lib/agency-fee";
 import { isPendingAgency } from "@/lib/agency-approval";
@@ -74,10 +78,12 @@ import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
+import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
+import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
@@ -169,6 +175,7 @@ function deliveryClass(state: ContentDeliveryState) {
 function hasSubmittedMaterial(row: CampaignCreator) {
   const content = row.content;
   if (content?.script?.trim()) return true;
+  if (content?.script_file_url?.trim()) return true;
   if (content?.video_url?.trim()) return true;
   if (content?.image_url?.trim()) return true;
   const status = row.delivery_status;
@@ -229,20 +236,31 @@ function campaignChangeHistory(row: CampaignCreator): CampaignHistoryEntry[] {
 
 function campaignScriptVersions(row: CampaignCreator) {
   const current = row.content?.script?.trim() || "";
-  const byVersion = new Map<number, { version: number; script: string; submittedAt?: string }>();
+  const currentFileUrl = row.content?.script_file_url || "";
+  const currentFileName = row.content?.script_file_name || "";
+  const byVersion = new Map<number, { version: number; script: string; submittedAt?: string; script_file_url?: string | null; script_file_name?: string | null }>();
   for (const entry of row.content?.submission_versions ?? []) {
     if (entry.stage !== "script") continue;
     const script = (entry.script || "").trim();
-    if (!script) continue;
-    byVersion.set(entry.version, { version: entry.version, script, submittedAt: entry.submitted_at });
+    const fileUrl = entry.script_file_url || "";
+    if (!script && !fileUrl) continue;
+    byVersion.set(entry.version, {
+      version: entry.version,
+      script,
+      submittedAt: entry.submitted_at,
+      script_file_url: entry.script_file_url,
+      script_file_name: entry.script_file_name,
+    });
   }
   const currentVersion = row.content?.script_version
-    || (byVersion.size ? Math.max(...byVersion.keys()) : current ? 1 : 0);
-  if (current && ![...byVersion.values()].some((entry) => entry.script === current)) {
+    || (byVersion.size ? Math.max(...byVersion.keys()) : (current || currentFileUrl) ? 1 : 0);
+  if ((current || currentFileUrl) && ![...byVersion.values()].some((entry) => entry.script === current && (entry.script_file_url || "") === currentFileUrl)) {
     byVersion.set(currentVersion || 1, {
       version: currentVersion || 1,
       script: current,
       submittedAt: row.script_submitted_at ?? undefined,
+      script_file_url: currentFileUrl || null,
+      script_file_name: currentFileName || null,
     });
   }
   return [...byVersion.values()].sort((a, b) => b.version - a.version);
@@ -406,7 +424,8 @@ function DetailInner() {
   const { t: tc } = useTranslation("common");
   const { formatCurrency, formatNumber } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
-  const id = usePathname().split("/").filter(Boolean).pop() ?? "";
+  const pathname = usePathname();
+  const id = String(numericIdFromBrowser("campaigns", pathname) ?? "");
   const isAdmin = user.role === "admin";
   const isCreator = user.role === "creator";
   const ownCreatorId = user.creator?.id ?? null;
@@ -445,6 +464,7 @@ function DetailInner() {
   const [imageOpen, setImageOpen] = useState(false);
   const [editing, setEditing] = useState<CampaignCreator | null>(null);
   const [imageUrl, setImageUrl] = useState("");
+  const [briefingScriptFile, setBriefingScriptFile] = useState<File | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     company_id: "",
@@ -463,6 +483,7 @@ function DetailInner() {
     has_custom_contract: false,
     custom_contract_terms: "",
     limit_by_city: false,
+    restrict_to_landing: false,
     state: "",
     city: "",
     barter_details: "",
@@ -473,6 +494,8 @@ function DetailInner() {
     cta: "",
     coupon: "",
     hashtags: "",
+    script_file_url: "",
+    script_file_name: "",
     reels: "0",
     stories: "0",
     tiktok: "0",
@@ -856,6 +879,7 @@ function DetailInner() {
       has_custom_contract: Boolean(campaign.has_custom_contract),
       custom_contract_terms: campaign.custom_contract_terms || "",
       limit_by_city: Boolean(campaign.limit_by_city),
+      restrict_to_landing: Boolean(campaign.restrict_to_landing),
       state: campaign.state || "",
       city: campaign.city || "",
       barter_details: campaign.barter_details || "",
@@ -866,6 +890,8 @@ function DetailInner() {
       cta: String(campaign.briefing?.cta ?? ""),
       coupon: String(campaign.briefing?.coupon ?? ""),
       hashtags: String(campaign.briefing?.hashtags ?? ""),
+      script_file_url: String(campaign.briefing?.script_file_url ?? ""),
+      script_file_name: String(campaign.briefing?.script_file_name ?? ""),
       reels: String(campaign.deliverables?.reels ?? 0),
       stories: String(campaign.deliverables?.stories ?? 0),
       tiktok: String(campaign.deliverables?.tiktok ?? 0),
@@ -876,6 +902,7 @@ function DetailInner() {
       summary: String(campaign.deliverables?.summary ?? ""),
       guidelines: String(campaign.deliverables?.guidelines ?? ""),
     });
+    setBriefingScriptFile(null);
     setEditOpen(true);
   }
 
@@ -903,6 +930,13 @@ function DetailInner() {
       return;
     }
     try {
+      let scriptFileUrl = editForm.script_file_url.trim() || null;
+      let scriptFileName = editForm.script_file_name.trim() || null;
+      if (briefingScriptFile) {
+        const uploaded = await uploadScriptDocument(briefingScriptFile);
+        scriptFileUrl = uploaded.url;
+        scriptFileName = uploaded.filename;
+      }
       await api.updateCampaign(campaign.id, {
         name: editForm.name,
         company_id: isAdmin ? Number(editForm.company_id) : undefined,
@@ -922,6 +956,7 @@ function DetailInner() {
         has_custom_contract: editForm.has_custom_contract,
         custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
         limit_by_city: editForm.limit_by_city,
+        restrict_to_landing: editForm.restrict_to_landing,
         state: editForm.limit_by_city ? editForm.state || null : null,
         city: editForm.limit_by_city ? editForm.city.trim() : null,
         barter_details: editForm.is_barter ? editForm.barter_details : null,
@@ -933,6 +968,8 @@ function DetailInner() {
           cta: editForm.cta,
           coupon: editForm.coupon,
           hashtags: editForm.hashtags,
+          script_file_url: scriptFileUrl,
+          script_file_name: scriptFileName,
         },
         deliverables: {
           reels: Number(editForm.reels) || 0,
@@ -1007,7 +1044,7 @@ function DetailInner() {
       return;
     }
     const needsScriptRevision = row.script_status === "submitted"
-      || (Boolean(row.content?.script) && row.script_status !== "approved" && !row.content?.video_url);
+      || (Boolean(row.content?.script || row.content?.script_file_url) && row.script_status !== "approved" && !row.content?.video_url);
     await patch(row, needsScriptRevision
       ? { delivery_status: "revision", revision_details: note, script_status: "revision", script_feedback: note }
       : { delivery_status: "revision", revision_details: note, video_status: "revision", video_feedback: note });
@@ -1104,6 +1141,11 @@ function DetailInner() {
                   {campaign.has_custom_contract ? (
                     <span className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-700">
                       <Scale size={9} /> {t("campaigns.customContract")}
+                    </span>
+                  ) : null}
+                  {campaign.restrict_to_landing ? (
+                    <span className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
+                      <LayoutTemplate size={9} /> {t("campaigns.landingLimited")}
                     </span>
                   ) : null}
                   {campaign.limit_by_city ? (
@@ -1679,18 +1721,18 @@ function DetailInner() {
 
                 {hasSubmittedMaterial(selected) ? (
                   <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                    {(selected.content?.script?.trim() || selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
+                    {(selected.content?.script?.trim() || selected.content?.script_file_url?.trim() || selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
                       <div className="flex flex-col gap-3">
                         <span className="text-[10px] font-black tracking-wider text-slate-700 uppercase">{t("campaignDetail.submittedMaterialTitle")}</span>
                         <div className="flex flex-wrap items-center gap-2">
-                          {selected.content?.script?.trim() ? (
+                          {selected.content?.script?.trim() || selected.content?.script_file_url ? (
                             <button
                               type="button"
                               onClick={() => setScriptPreviewOpen(true)}
                               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-bold whitespace-nowrap text-brand-primary transition-colors hover:border-indigo-200 hover:bg-white"
                             >
                               <ScrollText size={13} />
-                              {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url)
+                              {selected.script_status === "submitted" || ((selected.content?.script || selected.content?.script_file_url) && selected.script_status !== "approved" && !selected.content?.video_url)
                                 ? t("campaignDetail.viewScriptForApproval")
                                 : t("campaignDetail.viewScript")}
                               {selected.content?.script_version ? (
@@ -2200,6 +2242,15 @@ function DetailInner() {
                 <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.hashtags")}</span>
                 <span className="text-xs font-bold text-brand-primary">{String(campaign.briefing?.hashtags || t("campaignDetail.noneItem"))}</span>
               </div>
+              {briefingScriptDocument(campaign.briefing as Record<string, unknown> | null) ? (
+                <div>
+                  <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaigns.briefingScriptFile")}</span>
+                  <ScriptDocumentLink
+                    url={String(campaign.briefing?.script_file_url)}
+                    filename={String(campaign.briefing?.script_file_name || "")}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
           {campaign.has_custom_contract && campaign.custom_contract_terms ? (
@@ -2640,6 +2691,10 @@ function DetailInner() {
                     />
                   ) : null}
                 </div>
+                <CampaignLandingFields
+                  enabled={editForm.restrict_to_landing}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, restrict_to_landing: value })}
+                />
                 <CampaignLocationFields
                   country={companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country}
                   enabled={editForm.limit_by_city}
@@ -2672,6 +2727,14 @@ function DetailInner() {
                     <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm[key]} onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })} />
                   </div>
                 ))}
+                <ScriptDocumentField
+                  label={t("campaigns.briefingScriptFile")}
+                  hint={t("campaigns.briefingScriptFileHint")}
+                  file={briefingScriptFile}
+                  existing={parseScriptDocument(editForm.script_file_url, editForm.script_file_name)}
+                  onFileSelect={setBriefingScriptFile}
+                  onClearExisting={() => setEditForm({ ...editForm, script_file_url: "", script_file_name: "" })}
+                />
                 <div className="flex justify-end gap-3 border-t border-slate-100 pt-3">
                   <button type="button" onClick={() => setEditOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
                   <button className="rounded-xl bg-brand-primary px-5 py-2 text-xs font-extrabold text-white shadow-md hover:bg-indigo-600">{t("campaignDetail.saveChanges")}</button>
@@ -2804,7 +2867,7 @@ function DetailInner() {
         ) : null}
       </AnimatePresence>
 
-      {scriptPreviewOpen && selected?.content?.script?.trim() ? (
+      {scriptPreviewOpen && (selected?.content?.script?.trim() || selected?.content?.script_file_url) ? (
         <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4">
           <div className="app-modal-panel flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
@@ -2846,7 +2909,12 @@ function DetailInner() {
                       <span className="text-[10px] font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleString(locale)}</span>
                     ) : null}
                   </div>
-                  <p className="m-0 rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-slate-700">{version.script}</p>
+                  <p className="m-0 rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-slate-700">{version.script || t("campaignDetail.noScript")}</p>
+                  {version.script_file_url ? (
+                    <ScriptDocumentLink url={version.script_file_url} filename={version.script_file_name} />
+                  ) : index === 0 && selected.content?.script_file_url ? (
+                    <ScriptDocumentLink url={selected.content.script_file_url} filename={selected.content.script_file_name} />
+                  ) : null}
                 </div>
               ))}
             </div>

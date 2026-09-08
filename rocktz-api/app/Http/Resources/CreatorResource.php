@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\CompanyLandingSignup;
+use App\Services\CreatorStorefrontService;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
 use Illuminate\Http\Request;
@@ -46,6 +47,17 @@ class CreatorResource extends JsonResource
             'internal_notes' => $this->when($request->user()?->role?->value === 'admin', $this->internal_notes),
             'status' => $this->status?->value,
             'can_access_all_countries' => (bool) $this->can_access_all_countries,
+            'storefront_enabled' => $this->when($request->user()?->role?->value === 'admin' || $request->user()?->creator?->id === (int) $this->id, (bool) $this->storefront_enabled),
+            'storefront' => $this->when(
+                (bool) $request->route('creator'),
+                function () {
+                    try {
+                        return app(CreatorStorefrontService::class)->eligibility($this->resource);
+                    } catch (\Throwable) {
+                        return null;
+                    }
+                },
+            ),
             'invited_by_company_id' => $this->invited_by_company_id,
             'can_moderate' => $this->canBeModeratedBy($request->user()),
             'invited_by_company' => $this->whenLoaded('invitedByCompany', fn () => $this->invitedByCompany ? [

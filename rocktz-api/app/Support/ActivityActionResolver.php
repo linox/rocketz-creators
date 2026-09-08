@@ -84,6 +84,7 @@ class ActivityActionResolver
         'POST mail/templates/*/restore' => 'mail.template.restore',
         'POST mail/templates/*/test' => 'mail.template.test',
         'PATCH mail/settings' => 'mail.settings.update',
+        'PATCH storefront/settings' => 'storefront.settings.update',
         'POST media' => 'media.upload',
         'POST media/uploads/*' => 'media.upload.complete',
         'DELETE media/uploads/*' => 'media.upload.cancel',

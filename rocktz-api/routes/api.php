@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
 use App\Http\Controllers\Api\CreatorController;
+use App\Http\Controllers\Api\CreatorStorefrontController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\HealthController;
@@ -28,6 +29,9 @@ Route::get('mail/unsubscribe/{user}', MailUnsubscribeController::class)->name('m
 
 Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic']);
 Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track'])->middleware('throttle:60,1');
+Route::get('storefronts/{storefront}', [CreatorStorefrontController::class, 'showPublic'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:60,1');
+Route::post('storefronts/{storefront}/items/{item}/like', [CreatorStorefrontController::class, 'like'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
+Route::post('storefronts/{storefront}/items/{item}/share', [CreatorStorefrontController::class, 'share'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
 
 Route::prefix('auth')->group(function () {
     Route::post('register/creator', [AuthController::class, 'registerCreator'])->middleware('throttle:auth-public');
@@ -76,6 +80,14 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('creators/{creator}/contract', [CreatorController::class, 'acceptContract']);
     Route::post('creators/{creator}/social-sync', [CreatorController::class, 'syncSocials'])->middleware('throttle:20,1');
     Route::get('creators/{creator}/social-sync', [CreatorController::class, 'socialSyncStatus'])->middleware('throttle:60,1');
+    Route::get('creators/{creator}/storefront', [CreatorStorefrontController::class, 'show']);
+    Route::patch('creators/{creator}/storefront', [CreatorStorefrontController::class, 'update']);
+    Route::post('creators/{creator}/storefront/categories', [CreatorStorefrontController::class, 'storeCategory']);
+    Route::patch('creators/{creator}/storefront/categories/{category}', [CreatorStorefrontController::class, 'updateCategory']);
+    Route::delete('creators/{creator}/storefront/categories/{category}', [CreatorStorefrontController::class, 'destroyCategory']);
+    Route::post('creators/{creator}/storefront/items', [CreatorStorefrontController::class, 'storeItem']);
+    Route::patch('creators/{creator}/storefront/items/{item}', [CreatorStorefrontController::class, 'updateItem']);
+    Route::delete('creators/{creator}/storefront/items/{item}', [CreatorStorefrontController::class, 'destroyItem']);
 
     Route::get('companies', [CompanyController::class, 'index']);
     Route::get('companies/{company}', [CompanyController::class, 'show']);
@@ -182,6 +194,9 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
             Route::patch('mail/settings', [MailTemplateController::class, 'updateSettings']);
             Route::get('mail/messages', [MailMessageController::class, 'index']);
         });
+
+        Route::get('storefront/settings', [CreatorStorefrontController::class, 'settings']);
+        Route::patch('storefront/settings', [CreatorStorefrontController::class, 'updateSettings']);
 
         Route::middleware('permission:data.reset')->group(function () {
             Route::post('creators/reset-casting', [CreatorController::class, 'resetCasting']);

@@ -287,6 +287,11 @@ class CampaignController extends Controller
             403,
             __('auth.campaign_city_restricted'),
         );
+        abort_unless(
+            $campaign->matchesCreatorOrigin($creator),
+            403,
+            __('auth.campaign_landing_restricted'),
+        );
 
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
@@ -363,6 +368,8 @@ class CampaignController extends Controller
             'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
             'delivery_date' => ['nullable', 'date'],
             'script' => ['nullable', 'string'],
+            'script_file_url' => ['nullable', 'string', 'max:2048'],
+            'script_file_name' => ['nullable', 'string', 'max:255'],
             'video_url' => ['nullable', 'string', 'max:2048'],
             'video_file_size' => ['nullable', 'integer', 'min:0'],
             'image_url' => ['nullable', 'string', 'max:2048'],
@@ -372,10 +379,10 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing('campaign');
         abort_unless($campaignCreator->campaign, 404);
         $data = $this->authorizeParticipationUpdate($request, $campaignCreator, $data);
-        $data = SafeHttpUrl::validateFields($data, ['video_url', 'image_url', 'published_link']);
+        $data = SafeHttpUrl::validateFields($data, ['video_url', 'image_url', 'published_link', 'script_file_url']);
 
-        $contentFields = array_intersect_key($data, array_flip(['script', 'video_url', 'video_file_size', 'image_url', 'published_link']));
-        unset($data['script'], $data['video_url'], $data['video_file_size'], $data['image_url'], $data['published_link']);
+        $contentFields = array_intersect_key($data, array_flip(['script', 'script_file_url', 'script_file_name', 'video_url', 'video_file_size', 'image_url', 'published_link']));
+        unset($data['script'], $data['script_file_url'], $data['script_file_name'], $data['video_url'], $data['video_file_size'], $data['image_url'], $data['published_link']);
 
         $approvedStatus = ApplicationStatus::Approved->value;
         $nextStatus = isset($data['application_status'])
@@ -448,6 +455,8 @@ class CampaignController extends Controller
                 ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
             SubmissionVersioning::append($content, 'script', [
                 'script' => $content->script,
+                'script_file_url' => $content->script_file_url,
+                'script_file_name' => $content->script_file_name,
             ]);
         }
 
@@ -546,6 +555,7 @@ class CampaignController extends Controller
             'is_direct_contract' => ['sometimes', 'boolean'],
             'is_barter' => ['sometimes', 'boolean'],
             'limit_by_city' => ['sometimes', 'boolean'],
+            'restrict_to_landing' => ['sometimes', 'boolean'],
             'state' => ['nullable', 'string', 'max:12'],
             'city' => ['nullable', 'string', 'max:120'],
             'barter_details' => ['nullable', 'string'],
@@ -559,10 +569,15 @@ class CampaignController extends Controller
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
             'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'briefing' => ['nullable', 'array'],
+            'briefing.script_file_url' => ['nullable', 'string', 'max:2048'],
+            'briefing.script_file_name' => ['nullable', 'string', 'max:255'],
             'deliverables' => ['nullable', 'array'],
         ];
 
         $data = $request->validate($rules);
+        if (isset($data['briefing']) && is_array($data['briefing'])) {
+            $data['briefing'] = SafeHttpUrl::validateFields($data['briefing'], ['link', 'script_file_url']);
+        }
         if ($user->role === UserRole::Company) {
             $data['company_id'] = $user->actingCompanyId();
         }
@@ -576,6 +591,9 @@ class CampaignController extends Controller
             $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         }
         $data = $this->withLocationLimit($request, $data, $creating, $company);
+        if ($creating && ! array_key_exists('restrict_to_landing', $data)) {
+            $data['restrict_to_landing'] = false;
+        }
         $data = $this->withCustomContract($request, $data);
         if (! $user->canPublishWithoutApproval()) {
             if ($creating) {
@@ -716,14 +734,16 @@ class CampaignController extends Controller
                         if ($user->creator?->canAccessAllCountries()) {
                             $builder->orWhere(function ($open) use ($user) {
                                 $open->where('is_secret', false)
-                                    ->matchingCreatorLocation($user->creator);
+                                    ->matchingCreatorLocation($user->creator)
+                                    ->matchingCreatorOrigin($user->creator);
                             });
                         } else {
                             $country = $user->creator?->countryCode() ?: Geo::DEFAULT_COUNTRY;
                             $builder->orWhere(function ($inner) use ($country, $user) {
                                 $inner->where('is_secret', false)
                                     ->whereHas('company', fn ($q) => $q->where('country', $country))
-                                    ->matchingCreatorLocation($user->creator);
+                                    ->matchingCreatorLocation($user->creator)
+                                    ->matchingCreatorOrigin($user->creator);
                             });
                         }
                     })
@@ -754,6 +774,7 @@ class CampaignController extends Controller
             $campaign->loadMissing('company');
             abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
             abort_unless($user->creator && $campaign->matchesCreatorLocation($user->creator), 403, __('auth.campaign_city_restricted'));
+            abort_unless($user->creator && $campaign->matchesCreatorOrigin($user->creator), 403, __('auth.campaign_landing_restricted'));
 
             return;
         }
@@ -802,6 +823,8 @@ class CampaignController extends Controller
     {
         $allowed = [
             'script',
+            'script_file_url',
+            'script_file_name',
             'video_url',
             'video_file_size',
             'image_url',

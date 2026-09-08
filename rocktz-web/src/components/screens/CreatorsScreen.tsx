@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Clock, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
@@ -441,6 +442,7 @@ function CreatorListRow({
 
 function CreatorsInner() {
   const user = useAuth();
+  const router = useRouter();
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const { t: tAuth } = useTranslation("auth");
@@ -488,6 +490,7 @@ function CreatorsInner() {
   );
 
   async function load() {
+    if (user.role === "creator") return;
     try {
       const [creatorsRes, recurringRes] = await Promise.all([
         api.creators(),
@@ -501,6 +504,10 @@ function CreatorsInner() {
   }
 
   useEffect(() => {
+    if (user.role === "creator" && user.creator?.id) {
+      router.replace(`/creators/${user.creator.id}?tab=dashboard`);
+      return;
+    }
     load();
     const params = new URLSearchParams(window.location.search);
     if (params.get("filters") === "true") setShowAdvancedFilters(true);
@@ -640,6 +647,14 @@ function CreatorsInner() {
     } catch (err) {
       await alertApiError(err);
     }
+  }
+
+  if (user.role === "creator") {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-brand-primary/20 border-t-brand-primary" />
+      </div>
+    );
   }
 
   return (

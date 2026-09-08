@@ -141,9 +141,9 @@ class MailNotifier
                     $query->orWhere('country', $country);
                 }
             })
-            ->with('user')
+            ->with(['user', 'landingSignups'])
             ->get()
-            ->filter(fn (Creator $creator) => $campaign->matchesCreatorLocation($creator))
+            ->filter(fn (Creator $creator) => $campaign->matchesCreatorLocation($creator) && $campaign->matchesCreatorOrigin($creator))
             ->each(function (Creator $creator) use ($campaign) {
                 if (! $creator->user) {
                     return;

@@ -8,6 +8,8 @@ class MediaKind
 
     public const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+    public const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
     public const CHUNK_BYTES = 4 * 1024 * 1024;
 
     public static function chunkBytes(): int
@@ -22,6 +24,24 @@ class MediaKind
 
     /** @var list<string> */
     public const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+
+    /** @var list<string> */
+    public const DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx'];
+
+    /** @var list<string> */
+    public const DOCUMENT_MIMES = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.ms-word',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/x-pdf',
+    ];
+
+    /** @var list<string> */
+    public const DOCUMENT_ZIP_MIMES = [
+        'application/zip',
+        'application/x-zip-compressed',
+    ];
 
     public static function detect(string $detectedMime, string $clientMime, string $extension): ?string
     {
@@ -41,6 +61,10 @@ class MediaKind
             return 'image';
         }
 
+        if (self::isDocument($detected, $client, $extension)) {
+            return 'document';
+        }
+
         $ambiguous = $detected === '' || in_array($detected, ['application/octet-stream', 'application/download', 'binary/octet-stream'], true);
         if ($ambiguous) {
             if (in_array($extension, self::VIDEO_EXTENSIONS, true) || str_starts_with($client, 'video/')) {
@@ -49,9 +73,28 @@ class MediaKind
             if (in_array($extension, self::IMAGE_EXTENSIONS, true) || (str_starts_with($client, 'image/') && $client !== 'image/svg+xml')) {
                 return 'image';
             }
+            if (in_array($extension, self::DOCUMENT_EXTENSIONS, true)) {
+                return 'document';
+            }
         }
 
         return null;
+    }
+
+    public static function isDocument(string $detectedMime, string $clientMime, string $extension): bool
+    {
+        if (! in_array($extension, self::DOCUMENT_EXTENSIONS, true)) {
+            return false;
+        }
+
+        if (in_array($detectedMime, self::DOCUMENT_MIMES, true) || in_array($clientMime, self::DOCUMENT_MIMES, true)) {
+            return true;
+        }
+
+        return $extension === 'docx' && (
+            in_array($detectedMime, self::DOCUMENT_ZIP_MIMES, true)
+            || in_array($clientMime, self::DOCUMENT_ZIP_MIMES, true)
+        );
     }
 
     public static function isDangerousMime(string $mime): bool
@@ -75,13 +118,21 @@ class MediaKind
     public static function safeExtension(string $extension, string $kind): string
     {
         $extension = strtolower($extension);
-        $allowed = $kind === 'video' ? self::VIDEO_EXTENSIONS : self::IMAGE_EXTENSIONS;
+        $allowed = match ($kind) {
+            'video' => self::VIDEO_EXTENSIONS,
+            'document' => self::DOCUMENT_EXTENSIONS,
+            default => self::IMAGE_EXTENSIONS,
+        };
 
         if (in_array($extension, $allowed, true)) {
             return $extension === 'qt' ? 'mov' : $extension;
         }
 
-        return $kind === 'video' ? 'mp4' : 'jpg';
+        return match ($kind) {
+            'video' => 'mp4',
+            'document' => 'pdf',
+            default => 'jpg',
+        };
     }
 
     public static function storedMime(string $detectedMime, string $kind, string $extension): string
@@ -96,7 +147,14 @@ class MediaKind
             'png' => 'image/png',
             'webp' => 'image/webp',
             'gif' => 'image/gif',
-            default => $kind === 'video' ? 'video/mp4' : 'image/jpeg',
+            'pdf' => 'application/pdf',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            default => match ($kind) {
+                'video' => 'video/mp4',
+                'document' => 'application/pdf',
+                default => 'image/jpeg',
+            },
         };
     }
 }

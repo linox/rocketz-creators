@@ -38,6 +38,13 @@ class MediaStorageService
             ]), 422);
         }
 
+        if ($kind === 'document' && $file->getSize() > MediaKind::MAX_DOCUMENT_BYTES) {
+            throw new MediaStorageException(__('validation.max.file', [
+                'attribute' => __('validation.attributes.file'),
+                'max' => 20480,
+            ]), 422);
+        }
+
         $extension = MediaKind::safeExtension(
             strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension())),
             $kind,
@@ -89,6 +96,13 @@ class MediaStorageService
             ]), 422);
         }
 
+        if ($kind === 'document' && $size > MediaKind::MAX_DOCUMENT_BYTES) {
+            throw new MediaStorageException(__('validation.max.file', [
+                'attribute' => __('validation.attributes.file'),
+                'max' => 20480,
+            ]), 422);
+        }
+
         $safeExtension = MediaKind::safeExtension($extension, $kind);
 
         return $this->storeLocalFile(
@@ -107,8 +121,16 @@ class MediaStorageService
      */
     public function allocatePath(string $kind, string $extension): array
     {
-        $folder = $kind === 'video' ? 'portfolio' : 'avatars';
-        $prefix = $kind === 'video' ? 'video' : 'avatar';
+        $folder = match ($kind) {
+            'video' => 'portfolio',
+            'document' => 'documents',
+            default => 'avatars',
+        };
+        $prefix = match ($kind) {
+            'video' => 'video',
+            'document' => 'document',
+            default => 'avatar',
+        };
         $filename = $prefix.'-'.now()->format('YmdHis').'-'.Str::lower(Str::random(8)).'.'.$extension;
 
         return [
@@ -170,13 +192,13 @@ class MediaStorageService
             throw new MediaStorageException(__('auth.upload_failed'), 500);
         }
 
-        return $this->record($disk, $path, $allocated['filename'], $mime, $size, $user);
+        return $this->record($disk, $path, $allocated['filename'], $mime, $size, $user, $kind);
     }
 
     /**
      * @return array{id: int, url: string, filename: string, path: string, size: int}
      */
-    private function record(string $disk, string $path, string $filename, string $mime, int $size, ?User $user): array
+    private function record(string $disk, string $path, string $filename, string $mime, int $size, ?User $user, string $kind = 'image'): array
     {
         $media = MediaFile::query()->create([
             'filename' => $filename,
@@ -191,7 +213,7 @@ class MediaStorageService
 
         return [
             'id' => $media->id,
-            'url' => MediaUrl::playback($path),
+            'url' => $kind === 'document' ? MediaUrl::download($path) : MediaUrl::playback($path),
             'filename' => $filename,
             'path' => $path,
             'size' => $size,

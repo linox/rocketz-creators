@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Store,
   Users,
   Video,
 } from "lucide-react";
@@ -262,6 +263,12 @@ export function UserProfileMenu({
               <div className="flex items-center gap-2.5">
                 <Video size={15} className="text-teal-500" />
                 <span>{t("portfolioVideos")}</span>
+              </div>
+            </Link>
+            <Link href={`/creators/${user.creator.id}?tab=storefront`} onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
+              <div className="flex items-center gap-2.5">
+                <Store size={15} className="text-violet-500" />
+                <span>{t("storefront")}</span>
               </div>
             </Link>
           </>

@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'campaign_creator_id',
     'script',
+    'script_file_url',
+    'script_file_name',
     'video_url',
     'video_file_size',
     'image_url',

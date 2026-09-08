@@ -20,8 +20,10 @@ import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
+import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
+import { ScriptDocumentField } from "@/components/ScriptDocumentField";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { DEFAULT_AGENCY_FEE_PERCENT, parseAgencyFeePercent } from "@/lib/agency-fee";
@@ -30,6 +32,7 @@ import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
 import { parseMoneyMask, remaskMoney } from "@/lib/masks";
+import { uploadScriptDocument } from "@/lib/script-document";
 import { usePrivacy } from "@/lib/privacy";
 import type { PostingProfile } from "@/lib/posting-profile";
 
@@ -123,6 +126,7 @@ export function CreateCampaignModal({
   const [hasCustomContract, setHasCustomContract] = useState(false);
   const [customContractTerms, setCustomContractTerms] = useState("");
   const [limitByCity, setLimitByCity] = useState(false);
+  const [restrictToLanding, setRestrictToLanding] = useState(false);
   const [regionState, setRegionState] = useState("");
   const [city, setCity] = useState("");
   const [barterDetails, setBarterDetails] = useState("");
@@ -146,7 +150,10 @@ export function CreateCampaignModal({
     coupon: "",
     hashtags: "",
     link: "",
+    script_file_url: "",
+    script_file_name: "",
   });
+  const [briefingScriptFile, setBriefingScriptFile] = useState<File | null>(null);
   const selectedCompany = companies.find((company) => String(company.id) === (isAdmin ? companyId : String(defaultCompanyId || "")));
   const currency = moneyCurrency(selectedCompany);
 
@@ -194,7 +201,8 @@ export function CreateCampaignModal({
     setSummary("");
     setDeadlineDays(5);
     setGuidelines("");
-    setBriefing({ product: "", key_message: "", must_have: "", donts: "", cta: "", coupon: "", hashtags: "", link: "" });
+    setBriefing({ product: "", key_message: "", must_have: "", donts: "", cta: "", coupon: "", hashtags: "", link: "", script_file_url: "", script_file_name: "" });
+    setBriefingScriptFile(null);
   }
 
   function close() {
@@ -258,6 +266,15 @@ export function CreateCampaignModal({
     }
     setSaving(true);
     try {
+      let briefingPayload = { ...briefing };
+      if (briefingScriptFile) {
+        const uploaded = await uploadScriptDocument(briefingScriptFile);
+        briefingPayload = {
+          ...briefingPayload,
+          script_file_url: uploaded.url,
+          script_file_name: uploaded.filename,
+        };
+      }
       const created = await api.createCampaign({
         name: name.trim(),
         company_id: isAdmin ? Number(companyId) : defaultCompanyId,
@@ -273,6 +290,7 @@ export function CreateCampaignModal({
         has_custom_contract: hasCustomContract,
         custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
         limit_by_city: limitByCity,
+        restrict_to_landing: restrictToLanding,
         state: limitByCity ? regionState || null : null,
         city: limitByCity ? city.trim() : null,
         barter_details: isBarter ? barterDetails : null,
@@ -290,7 +308,7 @@ export function CreateCampaignModal({
           deadline_days: deadlineDays,
           guidelines: guidelines || null,
         },
-        briefing,
+        briefing: briefingPayload,
       });
       await alertSuccess(created.data.status === "pending_agency" ? t("campaigns.createdPending") : t("campaigns.created"));
       reset();
@@ -426,6 +444,7 @@ export function CreateCampaignModal({
                     />
                   ) : null}
                 </div>
+                <CampaignLandingFields enabled={restrictToLanding} onEnabledChange={setRestrictToLanding} />
                 <CampaignLocationFields
                   country={selectedCompany?.country}
                   enabled={limitByCity}
@@ -591,6 +610,13 @@ export function CreateCampaignModal({
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.briefingLink")}</label>
                   <input value={briefing.link} onChange={(e) => setBriefing({ ...briefing, link: e.target.value })} placeholder="https://..." className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2 text-xs font-medium outline-none focus:border-brand-primary" />
                 </div>
+                <ScriptDocumentField
+                  label={t("campaigns.briefingScriptFile")}
+                  hint={t("campaigns.briefingScriptFileHint")}
+                  file={briefingScriptFile}
+                  existing={null}
+                  onFileSelect={setBriefingScriptFile}
+                />
               </>
             ) : null}
           </div>

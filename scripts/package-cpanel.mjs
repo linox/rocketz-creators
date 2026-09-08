@@ -27,9 +27,15 @@ if (existsSync(htaccess)) {
 }
 
 const landingSeoSrc = join(scriptsDir, "landing-seo.php");
-if (existsSync(landingSeoSrc)) {
+const storefrontSeoSrc = join(scriptsDir, "storefront-seo.php");
+if (existsSync(landingSeoSrc) || existsSync(storefrontSeoSrc)) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.creatorz.digital/api";
-  writeFileSync(join(out, "landing-seo.php"), readFileSync(landingSeoSrc, "utf8").replaceAll("__API_URL__", apiUrl));
+  if (existsSync(landingSeoSrc)) {
+    writeFileSync(join(out, "landing-seo.php"), readFileSync(landingSeoSrc, "utf8").replaceAll("__API_URL__", apiUrl));
+  }
+  if (existsSync(storefrontSeoSrc)) {
+    writeFileSync(join(out, "storefront-seo.php"), readFileSync(storefrontSeoSrc, "utf8").replaceAll("__API_URL__", apiUrl));
+  }
 }
 
 function stripJunk(dir) {

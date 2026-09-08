@@ -19,6 +19,7 @@ import {
   ScrollText,
   ShieldCheck,
   Sparkles,
+  Store,
   Users,
   Video,
   X,
@@ -238,6 +239,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const isCreatorRecurringActive = onCreatorProfile && creatorTab === "recurring"
     || isActive("/recurring");
   const isCreatorPortfolioActive = onCreatorProfile && creatorTab === "portfolio";
+  const isCreatorStorefrontActive = onCreatorProfile && creatorTab === "storefront";
   const isCreatorProfileActive = onCreatorProfile && creatorTab === "about";
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
@@ -303,6 +305,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 {userHasPermission(user, "users.manage") ? (
                   <SidebarItem href="/users" label={t("users")} icon={ShieldCheck} active={isActive("/users") || isActive("/admin-users")} onClick={close} />
                 ) : null}
+                <SidebarItem href="/settings/storefront" label={t("storefrontSettings")} icon={Store} active={isActive("/settings/storefront")} onClick={close} />
                 <div className="mt-6 border-t border-white/20 pt-6">
                   <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("shortcuts")}</div>
                   <SidebarItem href="/available-campaigns?view=creator" label={t("viewAsCreator")} icon={Sparkles} active={false} onClick={close} />
@@ -345,6 +348,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                   <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 )}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
+                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
               </>

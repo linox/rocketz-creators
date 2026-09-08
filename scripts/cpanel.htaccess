@@ -16,6 +16,8 @@ DirectoryIndex index.html
     RewriteRule ^recurring/ /recurring/_/index.html [L]
     RewriteRule ^l/_/ - [L]
     RewriteRule ^l/([^/]+)/?$ /landing-seo.php?slug=$1 [L,QSA]
+    RewriteRule ^c/_/ - [L]
+    RewriteRule ^c/([^/]+)/?$ /storefront-seo.php?slug=$1 [L,QSA]
 </IfModule>
 
 ErrorDocument 404 /404.html

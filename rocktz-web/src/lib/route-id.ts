@@ -18,3 +18,11 @@ export function numericIdFromPath(pathname: string, segment: string): number | n
   const id = Number(raw);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
+
+/** Next `usePathname()` pode ser `/creators/_` no export estático; a URL do browser ainda tem o id. */
+export function numericIdFromBrowser(segment: string, nextPathname: string): number | null {
+  return (
+    numericIdFromPath(nextPathname, segment) ??
+    (typeof window === "undefined" ? null : numericIdFromPath(window.location.pathname, segment))
+  );
+}

@@ -12,8 +12,12 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { PlanningItem } from "@/lib/types";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
-import { creatorPautaHeading, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType } from "@/lib/pauta-briefing";
+import { PautaBriefingView } from "@/components/PautaBriefingView";
+import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { isBrandPosting } from "@/lib/posting-profile";
+import { ScriptDocumentField } from "@/components/ScriptDocumentField";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 
 type Props = {
   item: PlanningItem;
@@ -26,6 +30,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const uploadManager = useOptionalUploadManager();
 
   const flow = item.approval_flow || "script_and_video";
+  const isLive = flow === "live_link" || isLivePautaType(item.content_type);
   const staged = flow === "script_and_video";
   const videoOnly = flow === "video_only";
   const done = item.status === "approved" || item.status === "published";
@@ -37,15 +42,17 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const scriptRevision = item.script_status === "revision";
   const videoRevision = item.video_status === "revision";
   const hasRevision = scriptRevision || videoRevision;
-  const awaitingScriptApproval = staged && scriptSubmitted && !scriptApproved;
+  const awaitingScriptApproval = (staged || isLive) && scriptSubmitted && !scriptApproved;
   const awaitingVideoApproval = videoSubmitted && !videoApproved && !videoRevision;
-  const canSubmitScript = staged && !scriptApproved && item.script_status !== "submitted";
+  const canSubmitScript = (staged || isLive) && !scriptApproved && item.script_status !== "submitted";
   const canSubmitVideoBase = (staged && scriptApproved && !videoApproved)
     || (videoOnly && !videoApproved && item.status !== "approved")
     || (!staged && !videoOnly && flow !== "live_link" && !done);
   const canSubmitVideo = canSubmitVideoBase && !awaitingVideoApproval && (videoRevision || !videoSubmitted);
 
   const [script, setScript] = useState(item.script || "");
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
+  const [clearedScriptFile, setClearedScriptFile] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [publishedUrl, setPublishedUrl] = useState(item.published_url || "");
@@ -56,12 +63,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const currentScriptVersion = item.script_version ?? 0;
   const nextVideoVersion = currentVideoVersion + 1;
   const nextScriptVersion = currentScriptVersion + 1;
-  const scriptChanged = script.trim() !== (item.script || "").trim();
+  const scriptChanged = script.trim() !== (item.script || "").trim() || Boolean(scriptFile);
+  const existingScriptFile = clearedScriptFile ? null : parseScriptDocument(item.script_file_url, item.script_file_name);
+  const pautaScriptFile = parseScriptDocument(item.pauta_script_file_url, item.pauta_script_file_name);
   const requiresNewVideoFile = videoRevision;
   const requiresScriptChange = scriptRevision;
   const alreadyPublished = item.status === "published" && Boolean(item.published_url?.trim());
   const materialApproved = item.status === "approved" || item.video_status === "approved";
-  const awaitingPublishUrl = !alreadyPublished && (materialApproved || flow === "live_link");
+  const awaitingPublishUrl = !alreadyPublished && materialApproved && !isLive;
   const brandPosts = isBrandPosting(item.posting_profile);
   const remoteUploadProgress = mergeUploadProgress(
     item.upload_progress,
@@ -69,6 +78,37 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   );
   const isBackgroundUploading = Boolean(item.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("content_planning_item", item.id));
   const awaitingPauta = itemIsAwaitingPauta(item);
+
+  async function submitLiveScript() {
+    if (!script.trim() && !scriptFile && !existingScriptFile) {
+      await alertWarning(tp("materialRequiredTitle"), tp("scriptRequired"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const body: Record<string, unknown> = {
+        script: script.trim() || null,
+        script_status: "submitted",
+        status: "review",
+      };
+      if (scriptFile) {
+        const uploaded = await uploadScriptDocument(scriptFile);
+        body.script_file_url = uploaded.url;
+        body.script_file_name = uploaded.filename;
+      } else if (existingScriptFile) {
+        body.script_file_url = existingScriptFile.url;
+        body.script_file_name = existingScriptFile.filename;
+      }
+      await api.updatePlanningItem(item.id, body);
+      setScriptFile(null);
+      onSubmitted();
+      void alertSuccess(tp("liveScriptSentWaiting"), undefined, { timerMs: 2000 });
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function submitPublishedUrl() {
     if (!publishedUrl.trim()) {
@@ -90,7 +130,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   async function submit() {
     if (itemIsAwaitingPauta(item)) return;
     if (canSubmitScript) {
-      if (!script.trim()) {
+      if (!script.trim() && !scriptFile && !existingScriptFile) {
         await alertWarning(tp("materialRequiredTitle"), tp("scriptRequired"));
         return;
       }
@@ -157,7 +197,15 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
       const body: Record<string, unknown> = { status: "review" };
       if (canSubmitScript) {
-        body.script = script.trim();
+        if (scriptFile) {
+          const uploaded = await uploadScriptDocument(scriptFile);
+          body.script_file_url = uploaded.url;
+          body.script_file_name = uploaded.filename;
+        } else if (existingScriptFile) {
+          body.script_file_url = existingScriptFile.url;
+          body.script_file_name = existingScriptFile.filename;
+        }
+        body.script = script.trim() || null;
         body.script_status = "submitted";
       } else if (canSubmitVideo) {
         let mediaUrl = item.media_url || item.submission_url || null;
@@ -195,7 +243,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   }
 
   const scriptReady = canSubmitScript
-    ? Boolean(script.trim()) && (!requiresScriptChange || scriptChanged)
+    ? (Boolean(script.trim() || scriptFile || existingScriptFile) && (!requiresScriptChange || scriptChanged))
     : false;
   const videoReady = canSubmitVideo
     ? (requiresNewVideoFile
@@ -234,6 +282,123 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     ) : null;
   }
 
+  if (isLive) {
+    const liveScriptReady = Boolean(script.trim() || scriptFile || existingScriptFile);
+    const briefingBlock = (
+      <>
+        {itemHasPautaBriefing(item) ? (
+          <PautaBriefingView item={item} title={t("recurringDetail.livePautaBriefing")} collapsible />
+        ) : null}
+        {pautaScriptFile ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("pautaScriptFile")}</span>
+            <ScriptDocumentLink url={pautaScriptFile.url} filename={pautaScriptFile.filename} />
+          </div>
+        ) : null}
+      </>
+    );
+    const liveLinkForm = (
+      <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        <p className="m-0 text-[11px] font-medium text-emerald-800">{t("recurringDetail.liveLinkHint")}</p>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.liveLinkLabel")}</label>
+          <input
+            type="url"
+            placeholder={t("recurringDetail.liveLinkPh")}
+            value={publishedUrl}
+            onChange={(event) => setPublishedUrl(event.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={submitting || !publishedUrl.trim()}
+          onClick={() => void submitPublishedUrl()}
+          className={cn(
+            "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+            submitting || !publishedUrl.trim() ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
+          )}
+        >
+          <Link2 size={14} /> {t("recurringDetail.saveLiveLink")}
+        </button>
+      </div>
+    );
+
+    if (scriptApproved) {
+      return (
+        <div className="flex flex-col gap-3">
+          {briefingBlock}
+          {liveLinkForm}
+        </div>
+      );
+    }
+
+    if (awaitingScriptApproval) {
+      return (
+        <div className="flex flex-col gap-3">
+          {briefingBlock}
+          <p className="m-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-900">
+            {tp("waitingLiveScriptApproval")}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-3">
+        {briefingBlock}
+        {hasRevision ? (
+          <div className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
+            <p className="m-0 text-sm font-black text-rose-900">{tp("revisionAlertTitle")}</p>
+            {item.script_feedback ? (
+              <p className="m-0 text-xs leading-relaxed font-semibold whitespace-pre-wrap text-slate-800">{item.script_feedback}</p>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-800">{t("recurringDetail.livePautaScriptOrFile")}</span>
+            <span className="text-[10px] font-medium text-slate-400">{t("recurringDetail.livePautaScriptOrFileHint")}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("liveScriptLabel")}</label>
+            <textarea
+              rows={3}
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder={tp("liveScriptPh")}
+              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] outline-none focus:border-brand-primary"
+            />
+          </div>
+          <p className="m-0 text-center text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaScriptOrFileDivider")}</p>
+          <ScriptDocumentField
+            compact
+            label={tp("scriptFileLabel")}
+            hint={tp("scriptFileHint")}
+            file={scriptFile}
+            existing={existingScriptFile}
+            onFileSelect={(next) => {
+              setScriptFile(next);
+              if (next) setClearedScriptFile(false);
+            }}
+            onClearExisting={() => setClearedScriptFile(true)}
+          />
+          <button
+            type="button"
+            disabled={submitting || !liveScriptReady || (requiresScriptChange && !scriptChanged)}
+            onClick={() => void submitLiveScript()}
+            className={cn(
+              "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+              submitting || !liveScriptReady || (requiresScriptChange && !scriptChanged) ? "bg-slate-100 text-slate-400" : "bg-brand-primary text-white hover:bg-indigo-600",
+            )}
+          >
+            <Send size={14} /> {tp("sendScriptForReview")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (awaitingPublishUrl) {
     if (brandPosts) {
       return (
@@ -243,7 +408,21 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       );
     }
     return (
-      <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+      <div className="flex flex-col gap-3">
+        {pautaScriptFile || item.script ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+            {item.script ? (
+              <p className="m-0 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-slate-800">{item.script}</p>
+            ) : null}
+            {pautaScriptFile ? (
+              <div>
+                <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("pautaScriptFile")}</span>
+                <ScriptDocumentLink url={pautaScriptFile.url} filename={pautaScriptFile.filename} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
         <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("approvedPublishHint")}</p>
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("publishedLinkLabel")}</label>
@@ -266,11 +445,12 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
         >
           <Link2 size={14} /> {tp("sendPublishedLink")}
         </button>
+        </div>
       </div>
     );
   }
 
-  if (done || flow === "live_link") return null;
+  if (done) return null;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
@@ -335,8 +515,15 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
         </p>
       ) : null}
 
-      {(canSubmitScript || awaitingScriptApproval || (staged && Boolean(item.script))) ? (
-        <div className="flex flex-col gap-1">
+      {(canSubmitScript || awaitingScriptApproval || (staged && Boolean(item.script || item.script_file_url))) ? (
+        <div className="flex flex-col gap-2">
+          {pautaScriptFile ? (
+            <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+              <span className="mb-1 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("pautaScriptFile")}</span>
+              <ScriptDocumentLink url={pautaScriptFile.url} filename={pautaScriptFile.filename} />
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-1">
           <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("scriptLabel")}</label>
           <textarea
             rows={3}
@@ -345,6 +532,20 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
             disabled={!canSubmitScript || awaitingScriptApproval}
             placeholder={tp("scriptPh")}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] outline-none focus:border-brand-primary disabled:opacity-60"
+          />
+          </div>
+          <ScriptDocumentField
+            compact
+            label={tp("scriptFileLabel")}
+            hint={tp("scriptFileHint")}
+            file={scriptFile}
+            existing={existingScriptFile}
+            onFileSelect={(next) => {
+              setScriptFile(next);
+              if (next) setClearedScriptFile(false);
+            }}
+            onClearExisting={() => setClearedScriptFile(true)}
+            disabled={!canSubmitScript || awaitingScriptApproval}
           />
         </div>
       ) : null}

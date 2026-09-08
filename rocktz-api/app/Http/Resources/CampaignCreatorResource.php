@@ -76,6 +76,8 @@ class CampaignCreatorResource extends JsonResource
             'custom_contract_accepted_at' => $this->custom_contract_accepted_at?->toIso8601String(),
             'content' => $this->whenLoaded('content', fn () => $this->content ? [
                 'script' => $this->content->script,
+                'script_file_url' => $this->content->script_file_url,
+                'script_file_name' => $this->content->script_file_name,
                 'video_url' => $this->content->video_url,
                 'video_file_size' => (int) ($this->content->video_file_size ?? 0),
                 'video_download_url' => $this->mediaDownloadUrl($this->content->video_url),

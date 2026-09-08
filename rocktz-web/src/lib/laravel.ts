@@ -632,7 +632,7 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new UploadCancelledError();
     }
-    throw error;
+    throw new ApiError(i18n.t("common:alerts.apiOffline"), 0);
   }
 
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;

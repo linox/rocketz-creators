@@ -69,10 +69,10 @@ export function isLivePautaType(type?: string | null) {
 /** Generated monthly slot without a brief — creator must wait, not submit. */
 export function itemIsAwaitingPauta(item: PautaBriefingItemLike & {
   status?: string | null;
-  content_type?: string | null;
+  pauta_script_file_url?: string | null;
 }) {
-  if (isLivePautaType(item.content_type)) return false;
-  return item.status === "planned" && !itemHasPautaBriefing(item);
+  if (item.status !== "planned") return false;
+  return !itemHasPautaBriefing(item) && !String(item.pauta_script_file_url ?? "").trim();
 }
 
 /** Real pauta name, ignoring auto titles like "Reel 1/4". */

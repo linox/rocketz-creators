@@ -334,6 +334,8 @@ class RecurringContractController extends Controller
             'briefing_fields.cta' => ['nullable', 'string'],
             'briefing_fields.hashtags' => ['nullable', 'string'],
             'script' => ['nullable', 'string'],
+            'pauta_script_file_url' => ['nullable', 'string', 'max:2048'],
+            'pauta_script_file_name' => ['nullable', 'string', 'max:255'],
             'references' => ['nullable', 'string', 'max:2048'],
             'planned_date' => ['nullable', 'date'],
             'status' => ['nullable', Rule::enum(ContentPlanningStatus::class)],
@@ -342,6 +344,7 @@ class RecurringContractController extends Controller
             'published_url' => ['nullable', 'string', 'max:2048'],
         ]);
         $this->normalizeBriefingPayload($data);
+        $data = SafeHttpUrl::validateFields($data, ['references', 'published_url', 'pauta_script_file_url']);
 
         if ($this->isLiveContentType($data['content_type'] ?? null)) {
             $data['approval_flow'] = ApprovalFlowType::LiveLink;
@@ -381,6 +384,10 @@ class RecurringContractController extends Controller
             'briefing_fields.cta' => ['nullable', 'string'],
             'briefing_fields.hashtags' => ['nullable', 'string'],
             'script' => ['nullable', 'string'],
+            'pauta_script_file_url' => ['nullable', 'string', 'max:2048'],
+            'pauta_script_file_name' => ['nullable', 'string', 'max:255'],
+            'script_file_url' => ['nullable', 'string', 'max:2048'],
+            'script_file_name' => ['nullable', 'string', 'max:255'],
             'references' => ['nullable', 'string', 'max:2048'],
             'caption' => ['nullable', 'string'],
             'content_type' => ['sometimes', Rule::enum(ContentType::class)],
@@ -401,7 +408,14 @@ class RecurringContractController extends Controller
             'video_feedback' => ['nullable', 'string'],
         ]);
         $this->normalizeBriefingPayload($data);
-        $data = SafeHttpUrl::validateFields($data, ['references', 'submission_url', 'media_url', 'published_url']);
+        $data = SafeHttpUrl::validateFields($data, [
+            'references',
+            'submission_url',
+            'media_url',
+            'published_url',
+            'pauta_script_file_url',
+            'script_file_url',
+        ]);
 
         $this->assertCanViewItem($request, $contentPlanningItem);
         $actorIsCreator = $request->user()->role === UserRole::Creator;
@@ -410,6 +424,13 @@ class RecurringContractController extends Controller
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
             $data = $this->restrictCreatorPlanningPayload($data, $contentPlanningItem);
             $this->assertCreatorCanSubmitPauta($data, $contentPlanningItem);
+            if (isset($data['published_url']) && trim((string) $data['published_url']) !== '') {
+                $isLive = $contentPlanningItem->approval_flow === ApprovalFlowType::LiveLink
+                    || $this->isLiveContentType($contentPlanningItem->content_type?->value);
+                if ($isLive && $contentPlanningItem->script_status !== StageApprovalStatus::Approved) {
+                    abort(422, __('auth.live_awaiting_script_approval'));
+                }
+            }
         }
 
         if (isset($data['content_type']) && $this->isLiveContentType($data['content_type'])) {
@@ -489,6 +510,8 @@ class RecurringContractController extends Controller
         if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
             SubmissionVersioning::append($contentPlanningItem, 'script', [
                 'script' => $contentPlanningItem->script,
+                'script_file_url' => $contentPlanningItem->script_file_url,
+                'script_file_name' => $contentPlanningItem->script_file_name,
             ]);
         }
 
@@ -683,6 +706,8 @@ class RecurringContractController extends Controller
     {
         $allowed = [
             'script',
+            'script_file_url',
+            'script_file_name',
             'submission_url',
             'media_url',
             'published_url',
@@ -719,14 +744,17 @@ class RecurringContractController extends Controller
      */
     private function assertCreatorCanSubmitPauta(array $data, ContentPlanningItem $item): void
     {
-        if ($this->isLiveContentType($item->content_type) || $this->itemHasBriefing($item)) {
+        if ($this->itemHasBriefing($item) || filled($item->pauta_script_file_url)) {
             return;
         }
 
         $submitting = array_key_exists('script', $data)
+            || array_key_exists('script_file_url', $data)
+            || array_key_exists('script_file_name', $data)
             || array_key_exists('script_status', $data)
             || array_key_exists('media_url', $data)
             || array_key_exists('submission_url', $data)
+            || array_key_exists('published_url', $data)
             || array_key_exists('video_status', $data)
             || array_key_exists('status', $data);
 

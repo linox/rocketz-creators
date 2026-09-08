@@ -8,9 +8,10 @@ type Props = {
   value: PautaBriefingFields;
   onChange: (value: PautaBriefingFields) => void;
   optional?: boolean;
+  forLive?: boolean;
 };
 
-export function PautaBriefingFieldsForm({ value, onChange, optional }: Props) {
+export function PautaBriefingFieldsForm({ value, onChange, optional, forLive = false }: Props) {
   const { t } = useTranslation("app");
 
   function patch(key: keyof PautaBriefingFields, next: string) {
@@ -21,54 +22,54 @@ export function PautaBriefingFieldsForm({ value, onChange, optional }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
-          {t("campaigns.briefingProduct")}
+          {t(forLive ? "recurringDetail.liveBriefingProduct" : "campaigns.briefingProduct")}
           {optional ? null : " *"}
         </label>
         <input
           value={value.product}
           onChange={(event) => patch("product", event.target.value)}
-          placeholder={t("campaigns.briefingProductPh")}
+          placeholder={t(forLive ? "recurringDetail.liveBriefingProductPh" : "campaigns.briefingProductPh")}
           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-brand-primary"
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.briefingMessage")}</label>
+        <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t(forLive ? "recurringDetail.liveBriefingMessage" : "campaigns.briefingMessage")}</label>
         <textarea
           rows={2}
           value={value.key_message}
           onChange={(event) => patch("key_message", event.target.value)}
-          placeholder={t("campaigns.briefingMessagePh")}
+          placeholder={t(forLive ? "recurringDetail.liveBriefingMessagePh" : "campaigns.briefingMessagePh")}
           className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-brand-primary"
         />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-bold tracking-wider text-emerald-700 uppercase">{t("campaigns.briefingMust")}</label>
+          <label className="text-[11px] font-bold tracking-wider text-emerald-700 uppercase">{t(forLive ? "recurringDetail.liveBriefingMust" : "campaigns.briefingMust")}</label>
           <textarea
             rows={3}
             value={value.must_have}
             onChange={(event) => patch("must_have", event.target.value)}
-            placeholder={t("campaigns.briefingMustPh")}
+            placeholder={t(forLive ? "recurringDetail.liveBriefingMustPh" : "campaigns.briefingMustPh")}
             className="w-full resize-none rounded-xl border border-emerald-200 bg-emerald-50/20 px-3 py-2 text-xs outline-none focus:border-emerald-500"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-bold tracking-wider text-rose-700 uppercase">{t("campaigns.briefingDonts")}</label>
+          <label className="text-[11px] font-bold tracking-wider text-rose-700 uppercase">{t(forLive ? "recurringDetail.liveBriefingDonts" : "campaigns.briefingDonts")}</label>
           <textarea
             rows={3}
             value={value.donts}
             onChange={(event) => patch("donts", event.target.value)}
-            placeholder={t("campaigns.briefingDontsPh")}
+            placeholder={t(forLive ? "recurringDetail.liveBriefingDontsPh" : "campaigns.briefingDontsPh")}
             className="w-full resize-none rounded-xl border border-rose-200 bg-rose-50/20 px-3 py-2 text-xs outline-none focus:border-rose-500"
           />
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-[11px] font-bold tracking-wider text-brand-primary uppercase">{t("campaigns.briefingCta")}</label>
+        <label className="text-[11px] font-bold tracking-wider text-brand-primary uppercase">{t(forLive ? "recurringDetail.liveBriefingCta" : "campaigns.briefingCta")}</label>
         <input
           value={value.cta}
           onChange={(event) => patch("cta", event.target.value)}
-          placeholder={t("campaigns.briefingCtaPh")}
+          placeholder={t(forLive ? "recurringDetail.liveBriefingCtaPh" : "campaigns.briefingCtaPh")}
           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-brand-primary"
         />
       </div>

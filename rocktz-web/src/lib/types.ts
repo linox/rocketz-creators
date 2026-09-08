@@ -26,6 +26,8 @@ export type Creator = {
   internal_notes?: string | null;
   status: string;
   can_access_all_countries?: boolean;
+  storefront_enabled?: boolean;
+  storefront?: StorefrontEligibility;
   can_moderate?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
@@ -157,6 +159,7 @@ export type Campaign = {
   is_direct_contract: boolean;
   is_barter: boolean;
   limit_by_city?: boolean;
+  restrict_to_landing?: boolean;
   state?: string | null;
   city?: string | null;
   barter_details: string | null;
@@ -239,6 +242,8 @@ export type CampaignCreator = {
   post_date?: string | null;
   content?: {
     script: string | null;
+    script_file_url?: string | null;
+    script_file_name?: string | null;
     video_url: string | null;
     video_file_size?: number;
     video_download_url?: string | null;
@@ -258,6 +263,8 @@ export type SubmissionVersionEntry = {
   stage: string;
   submitted_at?: string;
   script?: string | null;
+  script_file_url?: string | null;
+  script_file_name?: string | null;
   media_url?: string | null;
   submission_url?: string | null;
   video_url?: string | null;
@@ -329,6 +336,10 @@ export type PlanningItem = {
   } | null;
   references?: string | null;
   script?: string | null;
+  pauta_script_file_url?: string | null;
+  pauta_script_file_name?: string | null;
+  script_file_url?: string | null;
+  script_file_name?: string | null;
   caption?: string | null;
   planned_date: string | null;
   status: string;
@@ -391,3 +402,76 @@ export type DashboardStats = {
   signatures?: { id: number; creator_name?: string | null; creator_artistic: string; campaign_name: string; status: string }[];
   deliveries?: { id: number; creator_artistic: string; campaign_name: string; type: string; delivery_status: string; date: string }[];
 };
+
+export type StorefrontItemType = "coupon" | "link";
+
+export type StorefrontPartner = {
+  id: number;
+  name: string;
+  logo_url: string | null;
+};
+
+export type StorefrontCategory = {
+  id: number;
+  name: string;
+  sort_order: number;
+};
+
+export type StorefrontItem = {
+  id: number;
+  creator_id: number;
+  company_id: number;
+  company: StorefrontPartner | null;
+  category_id: number | null;
+  category: { id: number; name: string } | null;
+  type: StorefrontItemType;
+  title: string;
+  description: string | null;
+  url: string;
+  coupon_code: string | null;
+  image_url: string | null;
+  is_published: boolean;
+  likes_count: number;
+  shares_count: number;
+  liked: boolean;
+  sort_order: number;
+};
+
+export type StorefrontEligibility = {
+  unlocked: boolean;
+  enabled_by_admin: boolean;
+  completed_campaigns: number;
+  required_campaigns: number;
+  remaining_campaigns: number;
+  slug: string | null;
+  public_url: string | null;
+  show_banner: boolean;
+  banner_url: string | null;
+};
+
+export type CreatorStorefront = {
+  creator: {
+    id: number;
+    artistic_name: string;
+    photo_url: string | null;
+    bio: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    socials: Record<string, string>;
+  };
+  show_banner: boolean;
+  banner_url: string | null;
+  slug: string | null;
+  seo?: {
+    title: string;
+    description: string;
+    image: string | null;
+    url: string;
+  } | null;
+  eligibility: StorefrontEligibility;
+  partners?: StorefrontPartner[];
+  categories: StorefrontCategory[];
+  items: StorefrontItem[];
+};
+
