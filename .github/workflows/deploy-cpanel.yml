@@ -17,6 +17,8 @@
 #
 # O .env da API não é enviado.
 # A versão da tela/health é a de rocktz-web/package.json (arquivo APP_VERSION gerado no job api).
+# Depois do FTP o job reenvia HealthController/routes, apaga bootstrap/cache e chama
+# opcache_reset() — no LiteSpeed o opcode cache ignora arquivo novo no disco.
 # O vendor da API também não: instale localmente e envie por FTP quando composer.lock mudar.
 # Antes do primeiro deploy com esse exclude, apague no cPanel da API
 # (.ftp-deploy-sync-state.json na raiz do FTP). Sem isso, o sync apaga o vendor já publicado.
@@ -198,17 +200,42 @@ jobs:
             **/public/build/**
             **/bootstrap/cache/*.php
 
-      - name: Limpar cache e conferir arquivos no FTP
+      - name: Reenviar PHP crítico, limpar cache e quebrar opcode
         env:
           FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
           SERVER_DIR: ${{ steps.remote.outputs.server_dir }}
         run: |
-          list="$(lftp -c "
+          set -euo pipefail
+          token="$(openssl rand -hex 16)"
+          reset_name="deploy-opcache-${token}.php"
+          cleanup() {
+            lftp -c "
+              set ssl:verify-certificate no;
+              set ftp:passive-mode true;
+              open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+              cd ${SERVER_DIR};
+              rm -f public/${reset_name};
+            " >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          lftp -c "
             set ssl:verify-certificate no;
             set ftp:passive-mode true;
             open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
             cd ${SERVER_DIR};
+            put -O app/Http/Controllers/Api rocktz-api/app/Http/Controllers/Api/HealthController.php;
+            put -O app/Http/Controllers/Api rocktz-api/app/Http/Controllers/Api/CreatorStorefrontController.php;
+            put -O app/Support rocktz-api/app/Support/AppVersion.php;
+            put -O routes rocktz-api/routes/api.php;
+            put rocktz-api/APP_VERSION -o APP_VERSION;
+            put -O public rocktz-api/public/DEPLOY_VERSION.txt;
+            put scripts/cpanel-opcache-reset.php -o public/${reset_name};
             cd bootstrap/cache && glob -a rm -f *.php;
+          "
+          list="$(lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:passive-mode true;
+            open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
             cd ${SERVER_DIR};
             cls -1 app/Http/Controllers/Api;
           ")"
@@ -218,17 +245,27 @@ jobs:
             echo "No cPanel, a conta gitaction@api.creatorz.digital deve ter Diretório = /home/apicreatorzdig/public_html (não .../public_html/public)." >&2
             exit 1
           }
+          reset_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${reset_name}")"
+          echo "$reset_json"
+          echo "$reset_json" | grep -q '"health_on_disk":true' || {
+            echo "HealthController.php no disco ainda não tem AppVersion — o FTP não gravou app/." >&2
+            exit 1
+          }
+          echo "$reset_json" | grep -q '"storefront_routes":true' || {
+            echo "routes/api.php no disco ainda não tem storefront/settings." >&2
+            exit 1
+          }
 
       - name: Conferir API no ar
         run: |
           sleep 3
-          health="$(curl -fsS -H 'Accept: application/json' https://api.creatorz.digital/api/health)"
+          health="$(curl -fsS -H 'Accept: application/json' -H 'Cache-Control: no-cache' "https://api.creatorz.digital/api/health?t=$(date +%s)")"
           echo "$health"
           echo "$health" | grep -q '"version"' || {
-            echo "O /api/health ainda é o PHP antigo (sem version). O FTP não atualizou app/ ou o LiteSpeed está com opcode cache." >&2
+            echo "O /api/health ainda é o PHP antigo (sem version) depois de opcache_reset. Reinicie o PHP no cPanel (Select PHP Version → Reset, ou LiteSpeed → Graceful Restart)." >&2
             exit 1
           }
-          code="$(curl -sS -o /tmp/sf.json -w '%{http_code}' -H 'Accept: application/json' https://api.creatorz.digital/api/creators/5/storefront)"
+          code="$(curl -sS -o /tmp/sf.json -w '%{http_code}' -H 'Accept: application/json' -H 'Cache-Control: no-cache' https://api.creatorz.digital/api/creators/5/storefront)"
           cat /tmp/sf.json
           if [ "$code" = "404" ]; then
             echo "Storefront ainda 404 depois do deploy." >&2
