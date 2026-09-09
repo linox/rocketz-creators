@@ -507,9 +507,13 @@ class MediaController extends Controller
 
             if ($request->isMethod('HEAD')) {
                 try {
-                    $size = $this->r2->objectSize($path);
+                    $size = (int) $disk->size($path);
                 } catch (Throwable) {
-                    $size = 0;
+                    try {
+                        $size = $this->r2->objectSize($path);
+                    } catch (Throwable) {
+                        $size = 0;
+                    }
                 }
 
                 return response('', 200, $headers + [
@@ -517,14 +521,15 @@ class MediaController extends Controller
                 ]);
             }
 
-            $signed = MediaUrl::signedGet($path, false);
-            if (is_string($signed) && str_starts_with($signed, 'http')) {
-                return redirect()->away($signed);
-            }
-
             try {
                 $object = $this->r2->readObject($path, $request->header('Range'));
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                report($e);
+                $signed = MediaUrl::signedGet($path, false);
+                if (is_string($signed) && str_starts_with($signed, 'http')) {
+                    return redirect()->away($signed);
+                }
+
                 return null;
             }
             $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];

@@ -105,6 +105,11 @@ class MediaUploadTest extends TestCase
             ->assertHeader('Accept-Ranges', 'bytes')
             ->assertHeader('Content-Type', 'video/mp4');
 
+        $this->call('HEAD', '/stream/portfolio/video-demo.mp4')
+            ->assertOk()
+            ->assertHeader('Accept-Ranges', 'bytes')
+            ->assertHeader('Content-Type', 'video/mp4');
+
         $partial = $this->get('/stream/portfolio/video-demo.mp4', ['Range' => 'bytes=0-9']);
         $partial->assertStatus(206)
             ->assertHeader('Accept-Ranges', 'bytes')
@@ -460,6 +465,10 @@ class MediaUploadTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'video/mp4')
             ->assertHeader('Accept-Ranges', 'bytes');
+
+        $this->call('HEAD', '/stream/portfolio/video-r2.mp4')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
     }
 
     public function test_video_stream_uses_r2_even_when_default_disk_is_uploads(): void
