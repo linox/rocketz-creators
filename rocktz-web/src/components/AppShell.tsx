@@ -311,7 +311,6 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                   <SidebarItem href="/available-campaigns?view=creator" label={t("viewAsCreator")} icon={Sparkles} active={false} onClick={close} />
                   <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                   <SidebarItem href="/company-dashboard" label={t("companyPortal")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
-                  <SidebarItem href="/company-landing" label={t("companyLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
                   <SidebarItem href="/join" label={t("landing")} icon={Globe} active={isJoinActive} onClick={close} />
                 </div>
               </>
