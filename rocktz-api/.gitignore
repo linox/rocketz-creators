@@ -24,6 +24,7 @@
 /storage/*.key
 /storage/pail
 /vendor
+/vendor.zip
 /APP_VERSION
 /public/DEPLOY_VERSION.txt
 _ide_helper.php

@@ -21,9 +21,9 @@
 # e publica web + API com o mesmo número. O GITHUB_TOKEN não dispara outro workflow.
 #
 # O .env da API não é enviado.
+# vendor/ e vendor.zip NÃO sobem no git nem no FTP do Action — só publicação manual no servidor.
 # A versão da tela/health é a de rocktz-web/package.json (arquivo APP_VERSION gerado no job api).
-# O job da API roda composer --no-dev e envia vendor. Não apague .ftp-deploy-sync-state.json
-# no servidor: um sync “do zero” com vendor excluído apaga vendor/ e a API cai em 500.
+# Não apague .ftp-deploy-sync-state.json no servidor.
 # Depois do FTP o job reenvia PHP crítico, apaga só cache de rotas/config e chama
 # opcache_reset() — no LiteSpeed o opcode cache ignora arquivo novo no disco.
 
@@ -189,6 +189,8 @@ jobs:
             **/.git*/**
             **/.env
             **/.env.*
+            **/vendor/**
+            **/vendor.zip
             **/node_modules/**
             **/tests/**
             **/.phpunit.cache/**
@@ -259,7 +261,7 @@ jobs:
           reset_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${reset_name}")"
           echo "$reset_json"
           echo "$reset_json" | grep -q '"vendor_autoload":true' || {
-            echo "vendor/autoload.php não está no servidor — o FTP não enviou o Composer." >&2
+            echo "vendor/autoload.php não está no servidor. Envie vendor/ no FTP à mão; o Action não publica vendor." >&2
             exit 1
           }
           echo "$reset_json" | grep -q '"env":true' || {
