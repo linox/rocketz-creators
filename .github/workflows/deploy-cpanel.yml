@@ -12,6 +12,9 @@
 #   CPANEL_WEB_REMOTE_DIR   opcional; padrão / (conta já restrita a public_html)
 #   CPANEL_API_REMOTE_DIR   opcional; padrão /
 #
+# Cada push na main incrementa o patch em rocktz-web/package.json, faz commit
+# e publica web + API com o mesmo número. O GITHUB_TOKEN não dispara outro workflow.
+#
 # O .env da API não é enviado.
 # A versão da tela/health é a de rocktz-web/package.json (arquivo APP_VERSION gerado no job api).
 # O vendor da API também não: instale localmente e envie por FTP quando composer.lock mudar.
@@ -35,50 +38,49 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  changes:
-    name: Detectar o que mudou
+  bump:
+    name: Incrementar versão
     runs-on: ubuntu-latest
     outputs:
-      web: ${{ steps.set.outputs.web }}
-      api: ${{ steps.set.outputs.api }}
+      sha: ${{ steps.push.outputs.sha }}
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'push'
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        if: github.event_name == 'push'
         with:
-          filters: |
-            web:
-              - "rocktz-web/**"
-              - "scripts/**"
-              - ".github/workflows/deploy-cpanel.yml"
-            api:
-              - "rocktz-api/**"
-              - "rocktz-web/package.json"
-              - ".github/workflows/deploy-cpanel.yml"
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: set
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Patch (package.json)
+        working-directory: rocktz-web
+        run: npm version patch --no-git-tag-version
+
+      - id: ver
+        run: echo "version=$(node -p "require('./rocktz-web/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - id: push
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "web=true" >> "$GITHUB_OUTPUT"
-            echo "api=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "web=${{ steps.filter.outputs.web }}" >> "$GITHUB_OUTPUT"
-            echo "api=${{ steps.filter.outputs.api }}" >> "$GITHUB_OUTPUT"
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rocktz-web/package.json rocktz-web/package-lock.json
+          git commit -m "chore: versão ${{ steps.ver.outputs.version }}"
+          git pull --rebase origin main
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   web:
     name: Front (creatorz.digital)
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
+    needs: bump
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -123,11 +125,12 @@ jobs:
 
   api:
     name: API (api.creatorz.digital)
-    needs: changes
-    if: needs.changes.outputs.api == 'true'
+    needs: bump
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
 
       - name: Versão (mesma do rocktz-web)
         run: printf '%s\n' "$(node -p "require('./rocktz-web/package.json').version")" > rocktz-api/APP_VERSION
