@@ -29,7 +29,7 @@ function objectKeyFromUrl(url: string): string | null {
     if (!isR2) return null;
 
     const segments = pathname.split("/").filter(Boolean);
-    const folderAt = segments.findIndex((part) => part === "portfolio" || part === "avatars");
+    const folderAt = segments.findIndex((part) => part === "portfolio" || part === "avatars" || part === "documents");
     if (folderAt < 0) return null;
     return segments.slice(folderAt).join("/");
   } catch {
@@ -42,6 +42,9 @@ export function mediaPublicUrl(url?: string | null): string | null {
   const raw = url.trim();
   const relative = objectKeyFromUrl(raw);
   if (!relative) return raw;
+  if (relative.startsWith("documents/") || relative.toLowerCase().endsWith(".pdf")) {
+    return `${mediaOrigin()}/downloads/${relative}`;
+  }
   return `${mediaOrigin()}/stream/${relative}`;
 }
 

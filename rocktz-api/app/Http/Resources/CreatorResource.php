@@ -24,7 +24,7 @@ class CreatorResource extends JsonResource
             'role' => $this->user?->role?->value,
             'full_name' => $this->when($canSeePersonal, $this->full_name),
             'artistic_name' => $this->artistic_name,
-            'photo_url' => $this->photo_url,
+            'photo_url' => MediaUrl::publicAbsolute($this->photo_url),
             'document' => $this->when($canSeePersonal, $this->document),
             'cpf' => $this->when($canSeePersonal, $this->cpf),
             'whatsapp' => $this->when($canSeePersonal, $this->whatsapp),
@@ -71,7 +71,7 @@ class CreatorResource extends JsonResource
             'portfolio' => $this->whenLoaded('portfolioVideos', fn () => $this->portfolioVideos->map(fn ($video) => [
                 'id' => $video->id,
                 'title' => $video->title,
-                'url' => $video->url,
+                'url' => MediaUrl::publicAbsolute($video->url),
                 'download_url' => $this->portfolioDownloadUrl($video->url),
                 'description' => $video->description,
                 'orientation' => $video->orientation,

@@ -312,7 +312,7 @@ class MediaController extends Controller
 
     public function download(string $folder, string $filename): StreamedResponse|RedirectResponse
     {
-        abort_unless($folder === 'portfolio', 404);
+        abort_unless(in_array($folder, ['portfolio', 'avatars', 'documents'], true), 404);
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
 
         $path = $folder.'/'.$filename;
@@ -495,14 +495,22 @@ class MediaController extends Controller
     {
         $headers = $this->playbackHeaders($filename);
 
-        if (MediaDisk::r2Configured() && Storage::disk('r2')->exists($path)) {
+        if (MediaDisk::r2Configured()) {
             $disk = Storage::disk('r2');
             if (! $disk instanceof AwsS3V3Adapter) {
+                if (! $disk->exists($path)) {
+                    return null;
+                }
+
                 return $disk->response($path, $filename, $headers);
             }
 
             if ($request->isMethod('HEAD')) {
-                $size = $this->r2->objectSize($path);
+                try {
+                    $size = $this->r2->objectSize($path);
+                } catch (Throwable) {
+                    $size = 0;
+                }
 
                 return response('', 200, $headers + [
                     'Content-Length' => (string) $size,
@@ -514,7 +522,11 @@ class MediaController extends Controller
                 return redirect()->away($signed);
             }
 
-            $object = $this->r2->readObject($path, $request->header('Range'));
+            try {
+                $object = $this->r2->readObject($path, $request->header('Range'));
+            } catch (Throwable) {
+                return null;
+            }
             $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];
             $headers['Content-Length'] = (string) $object['length'];
             if ($object['range']) {

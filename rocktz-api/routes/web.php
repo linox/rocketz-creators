@@ -8,4 +8,5 @@ Route::get('/', function () {
 });
 
 Route::get('/downloads/{folder}/{filename}', [MediaController::class, 'download'])
+    ->where('folder', 'portfolio|avatars|documents')
     ->where('filename', '[A-Za-z0-9._-]+');

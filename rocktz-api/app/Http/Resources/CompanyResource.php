@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,7 +27,7 @@ class CompanyResource extends JsonResource
             'country' => $this->country,
             'currency' => $this->currency,
             'observations' => $this->when($private, $this->observations),
-            'logo_url' => $this->logo_url,
+            'logo_url' => MediaUrl::publicAbsolute($this->logo_url),
             'objective' => $this->objective,
             'status' => $this->status?->value,
             'creator_invite_code' => $this->when($private, $this->creator_invite_code),

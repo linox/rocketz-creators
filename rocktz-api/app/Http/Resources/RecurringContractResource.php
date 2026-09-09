@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\UserRole;
 use App\Support\CreatorPrivacy;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,7 +23,7 @@ class RecurringContractResource extends JsonResource
             'company' => $this->whenLoaded('company', fn () => [
                 'id' => $this->company->id,
                 'name' => $this->company->name,
-                'logo_url' => $this->company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($this->company->logo_url),
                 'country' => $this->company->country,
                 'currency' => $this->company->currency,
             ]),
@@ -45,7 +46,7 @@ class RecurringContractResource extends JsonResource
                     'full_name' => CreatorPrivacy::canViewPersonalData($request->user(), (int) $row->creator->id)
                         ? $row->creator->full_name
                         : null,
-                    'photo_url' => $row->creator->photo_url,
+                    'photo_url' => MediaUrl::publicAbsolute($row->creator->photo_url),
                     'city' => $row->creator->city,
                     'country' => $row->creator->country,
                     'state' => $row->creator->state,

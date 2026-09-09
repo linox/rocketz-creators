@@ -85,6 +85,7 @@ import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry 
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { mediaPublicUrl } from "@/lib/media-playback";
 
 const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
 type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro" | "metricas";
@@ -1226,7 +1227,7 @@ function DetailInner() {
           {campaign.image_url ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
               <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
                 <span className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-slate-900/80 px-2.5 py-1 text-[10px] font-black tracking-wider text-white uppercase backdrop-blur-md">
                   <ImageIcon size={11} className="text-brand-primary" /> {t("campaignDetail.coverFormat")}
@@ -1782,7 +1783,7 @@ function DetailInner() {
                           </div>
                         ) : null}
                         {selected.content?.image_url ? (
-                          <a href={safeHttpUrl(selected.content.image_url)} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
+                          <a href={safeHttpUrl(mediaPublicUrl(selected.content.image_url) || selected.content.image_url)} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs font-bold text-slate-800">
                             <span className="truncate">{selected.content.image_url}</span>
                             <ExternalLink size={12} />
                           </a>

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\CompanyLandingSeo;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -23,13 +24,13 @@ class CompanyLandingPageResource extends JsonResource
             'company' => $company ? [
                 'id' => $company->id,
                 'name' => $company->name,
-                'logo_url' => $company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
                 'status' => $company->status?->value,
             ] : null,
             'slug' => $this->slug,
             'display_name' => $this->display_name,
-            'logo_url' => $this->logo_url ?: $company?->logo_url,
-            'banner_url' => $this->banner_url,
+            'logo_url' => MediaUrl::publicAbsolute($this->logo_url ?: $company?->logo_url),
+            'banner_url' => MediaUrl::publicAbsolute($this->banner_url),
             'title' => $this->title,
             'description' => $this->description,
             'cta_text' => $this->cta_text,

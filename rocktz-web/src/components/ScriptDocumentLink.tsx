@@ -2,6 +2,7 @@
 
 import { FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 
 type Props = {
@@ -12,7 +13,7 @@ type Props = {
 
 export function ScriptDocumentLink({ url, filename, className }: Props) {
   const { t } = useTranslation("app");
-  const href = safeHttpUrl(url);
+  const href = url ? safeHttpUrl(mediaDownloadUrl(url)) : undefined;
   if (!href) return null;
   const label = (filename || "").trim() || t("recurringDetail.downloadScriptFile");
 

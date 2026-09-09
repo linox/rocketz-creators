@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\CreatorStorefrontItem;
 use App\Models\CreatorStorefrontLike;
+use App\Support\MediaUrl;
 use App\Support\StorefrontActor;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -28,7 +29,7 @@ class CreatorStorefrontItemResource extends JsonResource
             'company' => $company ? [
                 'id' => $company->id,
                 'name' => $company->name,
-                'logo_url' => $company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
             ] : null,
             'category_id' => $item->category_id,
             'category' => $category ? [
@@ -40,7 +41,7 @@ class CreatorStorefrontItemResource extends JsonResource
             'description' => $item->description,
             'url' => $item->url,
             'coupon_code' => $item->coupon_code,
-            'image_url' => $item->image_url,
+            'image_url' => MediaUrl::publicAbsolute($item->image_url),
             'is_published' => (bool) $item->is_published,
             'likes_count' => (int) $item->likes_count,
             'shares_count' => (int) $item->shares_count,

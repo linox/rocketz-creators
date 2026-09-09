@@ -26,6 +26,18 @@ class MediaUrlTest extends TestCase
             MediaUrl::publicAbsolute('http://localhost:8000/stream/avatars/banner.jpg'),
         );
         $this->assertSame(
+            'https://api.creatorz.digital/stream/avatars/banner.jpg',
+            MediaUrl::publicAbsolute('http://localhost:8000/uploads/avatars/banner.jpg'),
+        );
+        $this->assertSame(
+            'https://api.creatorz.digital/stream/avatars/banner.jpg',
+            MediaUrl::publicAbsolute('https://media.creatorz.digital/avatars/banner.jpg'),
+        );
+        $this->assertSame(
+            'https://api.creatorz.digital/downloads/documents/document-roteiro.pdf',
+            MediaUrl::publicAbsolute('http://localhost:8000/downloads/documents/document-roteiro.pdf'),
+        );
+        $this->assertSame(
             'https://cdn.example.com/banner.jpg',
             MediaUrl::publicAbsolute('https://cdn.example.com/banner.jpg'),
         );
@@ -45,6 +57,14 @@ class MediaUrlTest extends TestCase
         $this->assertSame(
             'portfolio/video-demo.mp4',
             MediaUrl::objectKeyFromPublicUrl('https://acct.r2.cloudflarestorage.com/creatorz/portfolio/video-demo.mp4'),
+        );
+        $this->assertSame(
+            'documents/document-roteiro.pdf',
+            MediaUrl::objectKeyFromPublicUrl('http://localhost:8000/downloads/documents/document-roteiro.pdf'),
+        );
+        $this->assertSame(
+            'avatars/banner.jpg',
+            MediaUrl::objectKeyFromPublicUrl('https://media.creatorz.digital/avatars/banner.jpg'),
         );
         $this->assertNull(MediaUrl::objectKeyFromPublicUrl('https://youtube.com/watch?v=abc'));
     }

@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Creator;
 use App\Services\CreatorStorefrontService;
 use App\Support\CreatorStorefrontSeo;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -29,7 +30,7 @@ class CreatorStorefrontResource extends JsonResource
             'creator' => [
                 'id' => $creator->id,
                 'artistic_name' => $creator->artistic_name,
-                'photo_url' => $creator->photo_url,
+                'photo_url' => MediaUrl::publicAbsolute($creator->photo_url),
                 'bio' => $creator->bio,
                 'city' => $creator->city,
                 'state' => $creator->state,
@@ -37,14 +38,14 @@ class CreatorStorefrontResource extends JsonResource
                 'socials' => $creator->socials ?? [],
             ],
             'show_banner' => (bool) $creator->storefront_show_banner,
-            'banner_url' => $creator->storefront_show_banner ? $creator->storefront_banner_url : null,
+            'banner_url' => $creator->storefront_show_banner ? MediaUrl::publicAbsolute($creator->storefront_banner_url) : null,
             'slug' => $creator->storefront_slug,
             'seo' => CreatorStorefrontSeo::for($creator),
             'eligibility' => $eligibility,
             'partners' => $this->when($includePrivate, $partners->map(fn ($company) => [
                 'id' => $company->id,
                 'name' => $company->name,
-                'logo_url' => $company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
             ])->values()->all()),
             'categories' => $creator->relationLoaded('storefrontCategories')
                 ? $creator->storefrontCategories->map(fn ($category) => [

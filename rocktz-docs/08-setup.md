@@ -122,6 +122,14 @@ php artisan media:health
 
 `media:health` tem que mostrar `r2_configured=yes` e `r2_signed_get=ok`. O frontend de produção precisa ser rebuildado (`./scripts/build-web.sh --api https://api.creatorz.digital/api --app https://creatorz.digital`) **depois** deste código ir para o servidor.
 
+Arquivos antigos em `public/uploads` (excluídos do FTP) voltam com:
+
+```bash
+php artisan media:restore
+```
+
+Isso copia `avatars/`, `portfolio/` e `documents/` para o R2 e reescreve URLs `localhost`/`/uploads/` no banco para `/stream/`.
+
 O CORS do bucket R2 deve incluir a origem `https://creatorz.digital`.
 
 ## Contas de teste em produção

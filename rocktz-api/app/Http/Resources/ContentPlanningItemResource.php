@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\CreatorPrivacy;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,12 +25,12 @@ class ContentPlanningItemResource extends JsonResource
                 'full_name' => CreatorPrivacy::canViewPersonalData($request->user(), (int) $this->creator->id)
                     ? $this->creator->full_name
                     : null,
-                'photo_url' => $this->creator->photo_url,
+                'photo_url' => MediaUrl::publicAbsolute($this->creator->photo_url),
             ] : null),
             'company' => $this->whenLoaded('company', fn () => $this->company ? [
                 'id' => $this->company->id,
                 'name' => $this->company->name,
-                'logo_url' => $this->company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($this->company->logo_url),
             ] : null),
             'month' => $this->month,
             'content_type' => $this->content_type?->value,
@@ -40,9 +41,9 @@ class ContentPlanningItemResource extends JsonResource
             'briefing_fields' => $this->briefing_fields ?? [],
             'references' => $this->references,
             'script' => $this->script,
-            'pauta_script_file_url' => $this->pauta_script_file_url,
+            'pauta_script_file_url' => MediaUrl::publicAbsolute($this->pauta_script_file_url),
             'pauta_script_file_name' => $this->pauta_script_file_name,
-            'script_file_url' => $this->script_file_url,
+            'script_file_url' => MediaUrl::publicAbsolute($this->script_file_url),
             'script_file_name' => $this->script_file_name,
             'caption' => $this->caption,
             'planned_date' => $this->planned_date?->toDateString(),
@@ -63,8 +64,8 @@ class ContentPlanningItemResource extends JsonResource
             'revision_history' => $this->revision_history ?? [],
             'published_url' => $this->published_url,
             'metrics' => $this->metrics ?? [],
-            'media_url' => $this->media_url,
-            'submission_url' => $this->submission_url,
+            'media_url' => MediaUrl::publicAbsolute($this->media_url),
+            'submission_url' => MediaUrl::publicAbsolute($this->submission_url),
             'submission_notes' => $this->submission_notes,
             'feedback_note' => $this->feedback_note,
             'submitted_at' => $this->submitted_at?->toIso8601String(),

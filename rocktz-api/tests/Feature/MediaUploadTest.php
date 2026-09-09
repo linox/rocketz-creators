@@ -86,6 +86,15 @@ class MediaUploadTest extends TestCase
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
     }
 
+    public function test_document_download_serves_pdf_from_uploads(): void
+    {
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('documents/document-roteiro.pdf', '%PDF-1.4');
+
+        $this->get('/downloads/documents/document-roteiro.pdf')
+            ->assertOk();
+    }
+
     public function test_video_stream_supports_byte_range(): void
     {
         Storage::fake('uploads');
@@ -115,7 +124,7 @@ class MediaUploadTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('user.name', 'Diogo Rocketz')
-            ->assertJsonPath('user.avatar_url', 'https://api.creatorz.digital/uploads/avatars/foto.jpg');
+            ->assertJsonPath('user.avatar_url', 'http://localhost/stream/avatars/foto.jpg');
     }
 
     public function test_html_and_svg_uploads_are_rejected(): void

@@ -22,6 +22,16 @@ class MediaUrl
         return rtrim((string) config('app.url'), '/').'/'.$prefix.'/'.ltrim($path, '/');
     }
 
+    public static function deliveryUrl(string $path): string
+    {
+        $path = ltrim($path, '/');
+        if (str_starts_with($path, 'documents/') || str_ends_with(strtolower($path), '.pdf')) {
+            return self::download($path);
+        }
+
+        return self::playback($path);
+    }
+
     public static function publicAbsolute(?string $url): ?string
     {
         $url = trim((string) $url);
@@ -30,8 +40,8 @@ class MediaUrl
         }
 
         $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
-        $needsStream = str_contains($host, 'r2.cloudflarestorage.com')
-            || str_ends_with($host, '.r2.dev')
+        $needsStream = $host === ''
+            || self::isRemoteMediaHost($host)
             || str_contains($url, '/stream/')
             || str_contains($url, '/uploads/')
             || str_contains($url, '/downloads/');
@@ -39,7 +49,7 @@ class MediaUrl
         if ($needsStream) {
             $key = self::objectKeyFromPublicUrl($url);
             if ($key) {
-                return self::playback($key);
+                return self::deliveryUrl($key);
             }
         }
 
@@ -51,7 +61,7 @@ class MediaUrl
             return rtrim((string) config('app.url'), '/').$url;
         }
 
-        return self::playback($url);
+        return self::deliveryUrl($url);
     }
 
     public static function objectKeyFromPublicUrl(?string $url): ?string
@@ -62,7 +72,7 @@ class MediaUrl
 
         $path = parse_url($url, PHP_URL_PATH);
         if (! is_string($path) || $path === '') {
-            return null;
+            $path = $url;
         }
 
         foreach (['/stream/', '/downloads/', '/uploads/'] as $marker) {
@@ -73,15 +83,15 @@ class MediaUrl
             }
         }
 
-        $host = parse_url($url, PHP_URL_HOST);
-        if (! is_string($host) || ! self::isRemoteMediaHost($host)) {
+        $host = parse_url(str_contains($url, '://') ? $url : 'http://local/'.$url, PHP_URL_HOST);
+        if (is_string($host) && $host !== '' && ! self::isRemoteMediaHost($host) && str_contains($url, '://')) {
             return null;
         }
 
         $segments = array_values(array_filter(explode('/', $path), fn (string $part) => $part !== ''));
         $index = null;
         foreach ($segments as $i => $segment) {
-            if (in_array($segment, ['portfolio', 'avatars'], true)) {
+            if (in_array($segment, ['portfolio', 'avatars', 'documents'], true)) {
                 $index = $i;
                 break;
             }
@@ -101,10 +111,6 @@ class MediaUrl
         }
 
         $storage = Storage::disk('r2');
-        if (! $storage->exists($path)) {
-            return null;
-        }
-
         $expires = now()->addHours((int) config('media.r2_presign_hours', 6));
         $options = [];
         if ($asAttachment) {
@@ -114,14 +120,18 @@ class MediaUrl
         try {
             return $storage->temporaryUrl($path, $expires, $options);
         } catch (Throwable) {
-            return $storage->url($path);
+            return null;
         }
     }
 
     private static function isRemoteMediaHost(string $host): bool
     {
         $host = strtolower($host);
-        if (str_contains($host, 'r2.cloudflarestorage.com') || str_ends_with($host, '.r2.dev')) {
+        if (
+            $host === 'media.creatorz.digital'
+            || str_contains($host, 'r2.cloudflarestorage.com')
+            || str_ends_with($host, '.r2.dev')
+        ) {
             return true;
         }
 

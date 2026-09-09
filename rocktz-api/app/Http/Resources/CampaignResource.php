@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\UserRole;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,7 +22,7 @@ class CampaignResource extends JsonResource
             'company' => $this->whenLoaded('company', fn () => [
                 'id' => $this->company->id,
                 'name' => $this->company->name,
-                'logo_url' => $this->company->logo_url,
+                'logo_url' => MediaUrl::publicAbsolute($this->company->logo_url),
                 'status' => $this->company->status?->value,
                 'segment' => $this->company->segment,
                 'country' => $this->company->country,
@@ -38,7 +39,7 @@ class CampaignResource extends JsonResource
             'creator_cache' => $this->creator_cache !== null ? (float) $this->creator_cache : null,
             'currency' => $this->currency ?: $this->company?->currency,
             'status' => $this->status?->value,
-            'image_url' => $this->image_url,
+            'image_url' => MediaUrl::publicAbsolute($this->image_url),
             'is_secret' => (bool) $this->is_secret,
             'is_direct_contract' => (bool) $this->is_direct_contract,
             'is_barter' => (bool) $this->is_barter,
@@ -61,7 +62,7 @@ class CampaignResource extends JsonResource
                 'link' => $this->briefing->link,
                 'coupon' => $this->briefing->coupon,
                 'attachments' => $this->briefing->attachments ?? [],
-                'script_file_url' => $this->briefing->script_file_url,
+                'script_file_url' => MediaUrl::publicAbsolute($this->briefing->script_file_url),
                 'script_file_name' => $this->briefing->script_file_name,
             ] : null),
             'deliverables' => $this->whenLoaded('deliverable', fn () => $this->deliverable ? [

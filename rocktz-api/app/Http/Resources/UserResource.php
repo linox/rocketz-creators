@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\ConsentType;
 use App\Services\CreatorStorefrontService;
 use App\Support\AppLocale;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,7 +22,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'role' => $this->role?->value,
             'locale' => $this->locale ?: AppLocale::DEFAULT,
-            'avatar_url' => $this->avatar_url,
+            'avatar_url' => MediaUrl::publicAbsolute($this->avatar_url),
             'permissions' => $this->permissionSlugs(),
             'can_publish_without_approval' => $this->canPublishWithoutApproval(),
             'two_factor_enabled' => (bool) $this->two_factor_enabled,
@@ -41,7 +42,7 @@ class UserResource extends JsonResource
                     'full_name' => $this->creator->full_name,
                     'artistic_name' => $this->creator->artistic_name,
                     'status' => $this->creator->status?->value,
-                    'photo_url' => $this->creator->photo_url,
+                    'photo_url' => MediaUrl::publicAbsolute($this->creator->photo_url),
                     'whatsapp' => $this->creator->whatsapp,
                     'city' => $this->creator->city,
                     'country' => $this->creator->country,
@@ -94,7 +95,7 @@ class UserResource extends JsonResource
             'id' => $company->id,
             'name' => $company->name,
             'status' => $company->status?->value,
-            'logo_url' => $company->logo_url,
+            'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
             'whatsapp' => $company->whatsapp,
             'city' => $company->city,
             'country' => $company->country,
