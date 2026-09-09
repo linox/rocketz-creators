@@ -167,3 +167,21 @@ jobs:
             **/public/hot
             **/public/storage
             **/public/build/**
+            **/bootstrap/cache/*.php
+
+      - name: Limpar cache de rotas (senão rotas novas 404)
+        env:
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          SERVER_DIR: ${{ steps.remote.outputs.server_dir }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:passive-mode true;
+            open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+            cd ${SERVER_DIR};
+            glob -a rm -f bootstrap/cache/routes*.php;
+            glob -a rm -f bootstrap/cache/config.php;
+            glob -a rm -f bootstrap/cache/events.php;
+          "

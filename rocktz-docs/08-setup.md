@@ -80,6 +80,15 @@ Webhook público: `POST /api/webhooks/resend` (header `X-Resend-Webhook-Secret` 
 
 Depois de alterar o `.env` em produção: `php artisan config:clear`.
 
+Se o front chama uma rota nova e a API responde `The route api/... could not be found.`, o servidor está com `php artisan route:cache`. No cPanel da API (`/home/apicreatorzdig/public_html`):
+
+```bash
+php artisan optimize:clear
+php artisan migrate --force
+```
+
+Sem `optimize:clear`, o Laravel ignora o `routes/api.php` recém-enviado.
+
 ## Cloudflare R2 (mídia em produção)
 
 O upload local usa o bucket `creatorz`. O servidor precisa das **mesmas** variáveis; sem elas o player em `https://creatorz.digital` recebe 404/403.
