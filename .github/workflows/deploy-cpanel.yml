@@ -13,6 +13,7 @@
 #   CPANEL_API_REMOTE_DIR   opcional; padrão /
 #
 # O .env da API não é enviado.
+# A versão da tela/health é a de rocktz-web/package.json (arquivo APP_VERSION gerado no job api).
 # O vendor da API também não: instale localmente e envie por FTP quando composer.lock mudar.
 # Antes do primeiro deploy com esse exclude, apague no cPanel da API
 # (.ftp-deploy-sync-state.json na raiz do FTP). Sem isso, o sync apaga o vendor já publicado.
@@ -58,6 +59,7 @@ jobs:
               - ".github/workflows/deploy-cpanel.yml"
             api:
               - "rocktz-api/**"
+              - "rocktz-web/package.json"
               - ".github/workflows/deploy-cpanel.yml"
 
       - id: set
@@ -126,6 +128,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Versão (mesma do rocktz-web)
+        run: printf '%s\n' "$(node -p "require('./rocktz-web/package.json').version")" > rocktz-api/APP_VERSION
 
       - name: Diretório remoto (API)
         id: remote

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\AppVersion;
 use Illuminate\Http\JsonResponse;
 
 class HealthController extends Controller
@@ -12,6 +13,7 @@ class HealthController extends Controller
         $payload = [
             'status' => 'ok',
             'app' => config('app.name'),
+            'version' => AppVersion::current(),
         ];
 
         if (app()->environment('local')) {

@@ -283,7 +283,7 @@
                 </div>
 
                 <footer>
-                    {{ config('app.name') }} · Laravel {{ app()->version() }}
+                    {{ config('app.name') }} · Versão {{ \App\Support\AppVersion::current() }}
                 </footer>
             </main>
         </div>

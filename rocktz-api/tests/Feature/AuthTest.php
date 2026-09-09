@@ -23,7 +23,8 @@ class AuthTest extends TestCase
     {
         $this->getJson('/api/health')
             ->assertOk()
-            ->assertJsonPath('status', 'ok');
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('version', \App\Support\AppVersion::current());
     }
 
     public function test_creator_can_register_and_login(): void
