@@ -25,6 +25,7 @@
 /storage/pail
 /vendor
 /APP_VERSION
+/public/DEPLOY_VERSION.txt
 _ide_helper.php
 Homestead.json
 Homestead.yaml

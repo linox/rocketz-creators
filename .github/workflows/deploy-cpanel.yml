@@ -133,7 +133,10 @@ jobs:
           ref: ${{ needs.bump.outputs.sha }}
 
       - name: Versão (mesma do rocktz-web)
-        run: printf '%s\n' "$(node -p "require('./rocktz-web/package.json').version")" > rocktz-api/APP_VERSION
+        run: |
+          ver="$(node -p "require('./rocktz-web/package.json').version")"
+          printf '%s\n' "$ver" > rocktz-api/APP_VERSION
+          printf '%s\n' "$ver" > rocktz-api/public/DEPLOY_VERSION.txt
 
       - name: Diretório remoto (API)
         id: remote
@@ -144,6 +147,23 @@ jobs:
           case "$d" in */) ;; *) d="${d}/" ;; esac
           echo "server_dir=$d" >> "$GITHUB_OUTPUT"
 
+      - name: Forçar reenvio (apaga sync state do FTP)
+        env:
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          SERVER_DIR: ${{ steps.remote.outputs.server_dir }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:passive-mode true;
+            open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+            cd ${SERVER_DIR};
+            rm -f .ftp-deploy-sync-state.json;
+            pwd;
+            cls -1;
+          "
+
       - name: Publicar via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
@@ -153,6 +173,7 @@ jobs:
           protocol: ftp
           port: 21
           security: loose
+          log-level: verbose
           local-dir: ./rocktz-api/
           server-dir: ${{ steps.remote.outputs.server_dir }}
           timeout: 600000
@@ -177,19 +198,40 @@ jobs:
             **/public/build/**
             **/bootstrap/cache/*.php
 
-      - name: Limpar cache de rotas (senão rotas novas 404)
+      - name: Limpar cache e conferir arquivos no FTP
         env:
           FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
           SERVER_DIR: ${{ steps.remote.outputs.server_dir }}
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp
-          lftp -c "
+          list="$(lftp -c "
             set ssl:verify-certificate no;
             set ftp:passive-mode true;
             open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
             cd ${SERVER_DIR};
-            glob -a rm -f bootstrap/cache/routes*.php;
-            glob -a rm -f bootstrap/cache/config.php;
-            glob -a rm -f bootstrap/cache/events.php;
-          "
+            cd bootstrap/cache && glob -a rm -f *.php;
+            cd ${SERVER_DIR};
+            cls -1 app/Http/Controllers/Api;
+          ")"
+          echo "$list"
+          echo "$list" | grep -q CreatorStorefrontController.php || {
+            echo "CreatorStorefrontController.php não está na raiz Laravel do FTP." >&2
+            echo "No cPanel, a conta gitaction@api.creatorz.digital deve ter Diretório = /home/apicreatorzdig/public_html (não .../public_html/public)." >&2
+            exit 1
+          }
+
+      - name: Conferir API no ar
+        run: |
+          sleep 3
+          health="$(curl -fsS -H 'Accept: application/json' https://api.creatorz.digital/api/health)"
+          echo "$health"
+          echo "$health" | grep -q '"version"' || {
+            echo "O /api/health ainda é o PHP antigo (sem version). O FTP não atualizou app/ ou o LiteSpeed está com opcode cache." >&2
+            exit 1
+          }
+          code="$(curl -sS -o /tmp/sf.json -w '%{http_code}' -H 'Accept: application/json' https://api.creatorz.digital/api/creators/5/storefront)"
+          cat /tmp/sf.json
+          if [ "$code" = "404" ]; then
+            echo "Storefront ainda 404 depois do deploy." >&2
+            exit 1
+          fi
+
