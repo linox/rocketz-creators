@@ -22,4 +22,7 @@ echo json_encode([
     'health_on_disk' => is_file($health) && str_contains((string) file_get_contents($health), 'AppVersion'),
     'storefront_routes' => is_file($routes) && str_contains((string) file_get_contents($routes), 'storefront/settings'),
     'app_version' => is_readable($root.'/APP_VERSION') ? trim((string) file_get_contents($root.'/APP_VERSION')) : '',
+    'vendor_autoload' => is_file($root.'/vendor/autoload.php'),
+    'env' => is_file($root.'/.env'),
+    'packages_cache' => is_file($root.'/bootstrap/cache/packages.php'),
 ]);
