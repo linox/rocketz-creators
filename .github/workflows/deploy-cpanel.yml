@@ -1,16 +1,21 @@
 # Deploy produção: creatorz.digital (front estático) + api.creatorz.digital (Laravel).
 #
 # FTP (contas criadas em cPanel → Contas de FTP, não o usuário principal do painel):
-#   web → Host creatorz.digital, user gitaction@creatorz.digital
+#   web → Host creatorz.digital
 #         Diretório no cPanel: /home/creatorz/public_html
-#   api → Host api.creatorz.digital, user gitaction@api.creatorz.digital
+#   api → Host api.creatorz.digital
 #         Diretório no cPanel: /home/apicreatorzdig/public_html
 # O FTP já abre em public_html, então o remote dir padrão é /.
 #
-# Secrets (Settings → Secrets and variables → Actions):
-#   CPANEL_FTP_PASSWORD     senha FTP (a mesma nas duas contas)
-#   CPANEL_WEB_REMOTE_DIR   opcional; padrão / (conta já restrita a public_html)
-#   CPANEL_API_REMOTE_DIR   opcional; padrão /
+# Secrets (Settings → Secrets and variables → Actions → Secrets):
+#   CPANEL_WEB_FTP_PASSWORD   senha da conta FTP do front
+#   CPANEL_API_FTP_PASSWORD   senha da conta FTP da API
+#   CPANEL_WEB_REMOTE_DIR     opcional; padrão /
+#   CPANEL_API_REMOTE_DIR     opcional; padrão /
+#
+# Variables (Settings → Secrets and variables → Actions → Variables):
+#   CPANEL_WEB_FTP_USER       padrão deploy@creatorz.digital
+#   CPANEL_API_FTP_USER       padrão deploy@api.creatorz.digital
 #
 # Cada push na main incrementa o patch em rocktz-web/package.json, faz commit
 # e publica web + API com o mesmo número. O GITHUB_TOKEN não dispara outro workflow.
@@ -110,8 +115,8 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: creatorz.digital
-          username: gitaction@creatorz.digital
-          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          username: ${{ vars.CPANEL_WEB_FTP_USER || 'deploy@creatorz.digital' }}
+          password: ${{ secrets.CPANEL_WEB_FTP_PASSWORD }}
           protocol: ftp
           port: 21
           security: loose
@@ -170,8 +175,8 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: api.creatorz.digital
-          username: gitaction@api.creatorz.digital
-          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          username: ${{ vars.CPANEL_API_FTP_USER || 'deploy@api.creatorz.digital' }}
+          password: ${{ secrets.CPANEL_API_FTP_PASSWORD }}
           protocol: ftp
           port: 21
           security: loose
@@ -200,7 +205,8 @@ jobs:
 
       - name: Reenviar PHP crítico, limpar cache e quebrar opcode
         env:
-          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          FTP_USER: ${{ vars.CPANEL_API_FTP_USER || 'deploy@api.creatorz.digital' }}
+          FTP_PASS: ${{ secrets.CPANEL_API_FTP_PASSWORD }}
           SERVER_DIR: ${{ steps.remote.outputs.server_dir }}
         run: |
           set -euo pipefail
@@ -212,7 +218,7 @@ jobs:
             lftp -c "
               set ssl:verify-certificate no;
               set ftp:passive-mode true;
-              open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+              open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
               cd ${SERVER_DIR};
               rm -f public/${reset_name};
             " >/dev/null 2>&1 || true
@@ -221,7 +227,7 @@ jobs:
           lftp -c "
             set ssl:verify-certificate no;
             set ftp:passive-mode true;
-            open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+            open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
             cd ${SERVER_DIR};
             put -O app/Http/Controllers/Api rocktz-api/app/Http/Controllers/Api/HealthController.php;
             put -O app/Http/Controllers/Api rocktz-api/app/Http/Controllers/Api/CreatorStorefrontController.php;
@@ -240,14 +246,14 @@ jobs:
           list="$(lftp -c "
             set ssl:verify-certificate no;
             set ftp:passive-mode true;
-            open -u gitaction@api.creatorz.digital,${FTP_PASS} ftp://api.creatorz.digital;
+            open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
             cd ${SERVER_DIR};
             cls -1 app/Http/Controllers/Api;
           ")"
           echo "$list"
           echo "$list" | grep -q CreatorStorefrontController.php || {
             echo "CreatorStorefrontController.php não está na raiz Laravel do FTP." >&2
-            echo "No cPanel, a conta gitaction@api.creatorz.digital deve ter Diretório = /home/apicreatorzdig/public_html (não .../public_html/public)." >&2
+            echo "No cPanel, a conta FTP da API (${FTP_USER}) deve ter Diretório = /home/apicreatorzdig/public_html (não .../public_html/public)." >&2
             exit 1
           }
           reset_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${reset_name}")"
