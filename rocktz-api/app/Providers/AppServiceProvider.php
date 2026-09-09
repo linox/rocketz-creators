@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\View\CpanelBladeCompiler;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\Console\ServeCommand;
@@ -9,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\View\DynamicComponent;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +23,19 @@ class AppServiceProvider extends ServiceProvider
             ServeCommand::class,
             \App\Console\Commands\ServeCommand::class,
         );
+
+        $this->app->singleton('blade.compiler', function ($app) {
+            return tap(new CpanelBladeCompiler(
+                $app['files'],
+                $app['config']['view.compiled'],
+                $app['config']->get('view.relative_hash', false) ? $app->basePath() : '',
+                $app['config']->get('view.cache', true),
+                $app['config']->get('view.compiled_extension', 'php'),
+                $app['config']->get('view.check_cache_timestamps', true),
+            ), function ($blade) {
+                $blade->component('dynamic-component', DynamicComponent::class);
+            });
+        });
     }
 
     /**

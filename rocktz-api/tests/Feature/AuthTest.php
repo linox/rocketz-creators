@@ -11,7 +11,10 @@ use App\Mail\TransactionalMailable;
 use App\Models\Company;
 use App\Models\User;
 use App\Services\Mail\TransactionalMailService;
+use App\Support\AppVersion;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -24,7 +27,7 @@ class AuthTest extends TestCase
         $this->getJson('/api/health')
             ->assertOk()
             ->assertJsonPath('status', 'ok')
-            ->assertJsonPath('version', \App\Support\AppVersion::current());
+            ->assertJsonPath('version', AppVersion::current());
     }
 
     public function test_creator_can_register_and_login(): void
@@ -310,6 +313,37 @@ class AuthTest extends TestCase
     public function test_forgot_password_requires_email(): void
     {
         $this->postJson('/api/auth/forgot-password', [])->assertUnprocessable();
+    }
+
+    public function test_forgot_password_rejects_log_mailer_on_production_url(): void
+    {
+        config([
+            'app.url' => 'https://api.creatorz.digital',
+            'mail.default' => 'log',
+        ]);
+
+        User::factory()->create(['email' => 'reset.log@example.com']);
+
+        $this->postJson('/api/auth/forgot-password', [
+            'email' => 'reset.log@example.com',
+        ])
+            ->assertStatus(503)
+            ->assertJsonPath('message', __('auth.mail_not_configured'));
+    }
+
+    public function test_forgot_password_fails_when_mail_provider_throws(): void
+    {
+        Event::listen(MessageSending::class, function () {
+            throw new \RuntimeException('provider down');
+        });
+
+        User::factory()->create(['email' => 'reset.fail@example.com']);
+
+        $this->postJson('/api/auth/forgot-password', [
+            'email' => 'reset.fail@example.com',
+        ])
+            ->assertStatus(503)
+            ->assertJsonPath('message', __('auth.mail_failed'));
     }
 
     public function test_user_can_accept_lgpd_once(): void

@@ -50,6 +50,8 @@ Gera `rocktz-web/dist-cpanel/` e `rocktz-web-cpanel.zip`. Envie o conteúdo de `
 No `.env` da API em produção:
 
 ```
+APP_ENV=production
+APP_DEBUG=false
 APP_URL=https://api.creatorz.digital
 FRONTEND_URL=https://creatorz.digital
 DB_DATABASE=apicreators_db
@@ -63,6 +65,8 @@ MAIL_FROM_NAME="Creatorz by Rocketz"
 MAIL_SUPPORT_ADDRESS=contato@rocketzmkt.com.br
 # MAIL_ENABLED=false  # pausa todos os envios (teste local)
 ```
+
+Com `APP_ENV=local` ou `MAIL_MAILER=log` o reset de senha não chega na caixa de entrada (grava só no log do servidor). Depois de alterar o `.env`: `php artisan config:clear`.
 
 O domínio do `MAIL_FROM_ADDRESS` precisa estar verificado no Resend. Sem a chave, `POST /auth/forgot-password` responde 503.
 

@@ -109,7 +109,24 @@ class TransactionalMailService
             return false;
         }
 
-        return ! (config('mail.default') === 'resend' && blank(config('services.resend.key')));
+        $mailer = (string) config('mail.default');
+
+        if (in_array($mailer, ['log', 'array'], true) && $this->requiresOutboundMailer()) {
+            return false;
+        }
+
+        return ! ($mailer === 'resend' && blank(config('services.resend.key')));
+    }
+
+    /**
+     * Live API (creatorz.digital or APP_ENV=production) cannot use the log/array mailer.
+     */
+    public function requiresOutboundMailer(): bool
+    {
+        $url = strtolower((string) config('app.url'));
+
+        return app()->environment('production')
+            || str_contains($url, 'creatorz.digital');
     }
 
     public function sendsImmediately(MailTemplateKey $key): bool
@@ -126,7 +143,21 @@ class TransactionalMailService
             'attempts' => $message->attempts + 1,
         ]);
 
-        Mail::to($message->email)->send(new TransactionalMailable($message, $viewData));
+        try {
+            Mail::to($message->email)->send(new TransactionalMailable($message, $viewData));
+        } catch (\ErrorException $e) {
+            if (! str_contains($e->getMessage(), 'Utime failed')) {
+                throw $e;
+            }
+
+            foreach (glob(storage_path('framework/views').'/*') ?: [] as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+
+            Mail::to($message->email)->send(new TransactionalMailable($message, $viewData));
+        }
 
         $message->update([
             'status' => MailMessageStatus::Sent,

@@ -19,6 +19,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
+use RuntimeException;
 
 #[Fillable(['name', 'email', 'password', 'role', 'google_id', 'avatar_url', 'locale', 'active_company_id'])]
 #[Hidden(['password', 'remember_token'])]
@@ -204,7 +205,7 @@ class User extends Authenticatable implements HasLocalePreference
     {
         $frontend = rtrim((string) config('app.frontend_url'), '/');
         $url = $frontend.'/reset-password?token='.$token.'&email='.urlencode($this->email);
-        app(TransactionalMailService::class)->send(
+        $message = app(TransactionalMailService::class)->send(
             MailTemplateKey::PasswordReset,
             $this,
             [
@@ -215,6 +216,10 @@ class User extends Authenticatable implements HasLocalePreference
             null,
             'reset:'.substr($token, 0, 12),
         );
+
+        if (! $message) {
+            throw new RuntimeException(__('auth.mail_failed'));
+        }
     }
 
     public function preferredLocale(): string
