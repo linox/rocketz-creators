@@ -6,20 +6,24 @@ use App\Models\MediaFile;
 use App\Support\BrowserVideo;
 use App\Support\Ffmpeg;
 use App\Support\MediaDisk;
+use App\Support\MediaRestore;
+use App\Support\MediaUrl;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class MediaMakePlayableCommand extends Command
 {
     protected $signature = 'media:make-playable
-        {file? : Filename or object key, e.g. video-xxx.mov}
-        {--pending : Convert stored .mov files missing an MP4}
-        {--limit=5}';
+        {file? : Filename, or omit to convert every .mov missing an MP4}
+        {--pending : Convert all stored .mov files missing an MP4}
+        {--limit=0 : Max files to convert (0 = all)}';
 
     /** @var list<string> */
     protected $aliases = ['media:mp4'];
 
-    protected $description = 'Generate a 720p H.264 preview MP4 beside a stored .mov without replacing the original';
+    protected $description = 'Generate 720p H.264 preview MP4s beside stored .mov files without replacing the originals';
 
     public function handle(): int
     {
@@ -33,12 +37,14 @@ class MediaMakePlayableCommand extends Command
                 return self::FAILURE;
             }
             $keys[] = $key;
-        } elseif ($this->option('pending')) {
-            $keys = $this->pendingKeys((int) $this->option('limit'));
         } else {
-            $this->error('Pass a file name, e.g. php artisan media:mp4 video-20260909181647-p5nv4ebq.mov');
+            $keys = $this->pendingKeys((int) $this->option('limit'));
+            if ($keys === []) {
+                $this->info('No pending .mov files.');
 
-            return self::FAILURE;
+                return self::SUCCESS;
+            }
+            $this->info('Pending: '.count($keys));
         }
 
         if (! BrowserVideo::ffmpegBinary()) {
@@ -48,11 +54,13 @@ class MediaMakePlayableCommand extends Command
         }
 
         $ok = 0;
+        $failed = 0;
         foreach ($keys as $key) {
             $this->line('converting '.$key);
             $result = BrowserVideo::ensurePlayable($key);
             if ($result === null) {
                 $this->error('failed '.$key);
+                $failed++;
 
                 continue;
             }
@@ -60,7 +68,9 @@ class MediaMakePlayableCommand extends Command
             $ok++;
         }
 
-        return $ok > 0 || $keys === [] ? self::SUCCESS : self::FAILURE;
+        $this->line("done: {$ok} converted, {$failed} failed");
+
+        return $failed === 0 ? self::SUCCESS : self::FAILURE;
     }
 
     public function resolveKey(string $file): ?string
@@ -96,41 +106,76 @@ class MediaMakePlayableCommand extends Command
     /**
      * @return list<string>
      */
-    private function pendingKeys(int $limit): array
+    public function pendingKeys(int $limit = 0): array
     {
+        $unlimited = $limit <= 0;
         $keys = [];
-        $candidates = MediaFile::query()
+
+        foreach ($this->candidateKeys() as $path) {
+            if (! is_string($path) || $path === '' || ! BrowserVideo::needsTranscode($path) || $this->hasPreview($path)) {
+                continue;
+            }
+            $keys[$path] = $path;
+            if (! $unlimited && count($keys) >= $limit) {
+                return array_values($keys);
+            }
+        }
+
+        return array_values($keys);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function candidateKeys(): array
+    {
+        $keys = MediaFile::query()
             ->where(function ($query) {
                 $query->where('path', 'like', '%.mov')
                     ->orWhere('path', 'like', '%.MOV')
                     ->orWhere('path', 'like', '%.m4v')
                     ->orWhere('path', 'like', '%.qt');
             })
-            ->limit(max($limit * 5, $limit))
             ->pluck('path')
             ->filter()
-            ->unique()
-            ->values()
             ->all();
 
-        foreach ($candidates as $path) {
-            if (! BrowserVideo::needsTranscode($path) || $this->hasPreview($path)) {
-                continue;
-            }
+        foreach ($this->keysFromStoredUrls() as $path) {
             $keys[] = $path;
-            if (count($keys) >= $limit) {
-                return $keys;
+        }
+
+        foreach (['uploads', ...(MediaDisk::r2Configured() ? ['r2'] : [])] as $diskName) {
+            try {
+                $disk = Storage::disk($diskName);
+                foreach (['portfolio', 'avatars'] as $folder) {
+                    foreach ($disk->files($folder) as $path) {
+                        $keys[] = $path;
+                    }
+                }
+            } catch (Throwable) {
+                //
             }
         }
 
-        if ($keys === [] && MediaDisk::r2Configured()) {
-            $disk = Storage::disk('r2');
-            foreach ($disk->files('portfolio') as $path) {
-                if (BrowserVideo::needsTranscode($path) && ! $disk->exists(BrowserVideo::mp4Key($path))) {
-                    $keys[] = $path;
-                    if (count($keys) >= $limit) {
-                        break;
-                    }
+        return array_values(array_unique($keys));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function keysFromStoredUrls(): array
+    {
+        $keys = [];
+        foreach (MediaRestore::urlColumns() as $column) {
+            try {
+                $values = DB::table($column['table'])->whereNotNull($column['column'])->pluck($column['column']);
+            } catch (Throwable) {
+                continue;
+            }
+            foreach ($values as $url) {
+                $key = MediaUrl::objectKeyFromPublicUrl((string) $url);
+                if (is_string($key) && $key !== '') {
+                    $keys[] = $key;
                 }
             }
         }
@@ -162,7 +207,7 @@ class MediaMakePlayableCommand extends Command
 
         try {
             return Storage::disk('r2')->exists($path);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false;
         }
     }

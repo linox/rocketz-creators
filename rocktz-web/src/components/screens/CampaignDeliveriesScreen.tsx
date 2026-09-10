@@ -25,7 +25,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VideoLightbox } from "@/components/VideoLightbox";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoPoster } from "@/components/VideoPoster";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -509,7 +509,7 @@ function DeliveriesInboxInner() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-1.25rem)] min-h-[24rem] flex-col gap-3 overflow-hidden">
+    <div className="flex min-h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-1.25rem)] flex-col gap-3">
       <header className="flex shrink-0 flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider text-brand-primary uppercase">
@@ -708,8 +708,8 @@ function DeliveriesInboxInner() {
           />
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
-          <section className={cn("flex min-h-0 flex-col overflow-hidden border-b border-slate-200 lg:border-r lg:border-b-0", mobileShowDetail && selected ? "hidden lg:flex" : "flex")}>
+        <div className="grid flex-1 grid-cols-1 items-start rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
+          <section className={cn("flex h-[40vh] flex-col overflow-hidden border-b border-slate-200 lg:sticky lg:top-0 lg:h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-8rem)] lg:border-r lg:border-b-0", mobileShowDetail && selected ? "hidden lg:flex" : "flex")}>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
@@ -743,7 +743,7 @@ function DeliveriesInboxInner() {
             </div>
           </section>
 
-          <section className={cn("min-h-0 min-w-0 overflow-hidden", mobileShowDetail && selected ? "flex" : "hidden lg:flex")}>
+          <section className={cn("w-full min-w-0", mobileShowDetail && selected ? "block" : "hidden lg:block")}>
             {selected && activeVersion ? (
               <ReadingPane
                 item={selected}
@@ -957,7 +957,7 @@ function ReadingPane({
 
   return (
     <>
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="flex w-full flex-col">
       <div className="shrink-0 border-b border-slate-100 px-4 py-3">
         <div className="flex items-start gap-3">
           <button type="button" onClick={onBack} className="mt-1 rounded-lg border border-slate-200 p-1.5 text-slate-500 lg:hidden">
@@ -1026,17 +1026,17 @@ function ReadingPane({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
+      <div className="space-y-5 p-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           {(item.contentType === "video" || item.contentType === "story") && version.fileUrl ? (
             <button
               type="button"
               onClick={() => setWatching(true)}
-              className={cn("relative mx-auto block overflow-hidden rounded-lg bg-black", isVertical ? "aspect-[9/16] max-h-[420px] max-w-[240px]" : "aspect-video w-full max-w-xl")}
+              className={cn("relative mx-auto block overflow-hidden rounded-lg bg-slate-900", isVertical ? "aspect-[9/16] w-full max-w-[260px]" : "aspect-video w-full max-w-xl")}
             >
-              <VideoPlayer src={version.fileUrl} muted preload="none" controls={false} className="h-full w-full object-contain" />
-              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
+              <VideoPoster src={version.fileUrl} className="h-full w-full" />
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/50 bg-black/45 text-white shadow-lg backdrop-blur-md">
                   <Play size={24} fill="currentColor" className="translate-x-0.5" />
                 </span>
               </span>

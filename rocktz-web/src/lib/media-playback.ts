@@ -82,13 +82,14 @@ export type PlaybackSource = {
   src: string | null;
   original: string | null;
   preparing: boolean;
+  poster: string | null;
 };
 
 export async function fetchPlaybackSource(url: string): Promise<PlaybackSource> {
   const stream = mediaStreamUrl(url);
   const fallbackOriginal = mediaOriginalStreamUrl(url);
   if (!stream) {
-    return { src: null, original: fallbackOriginal, preparing: false };
+    return { src: null, original: fallbackOriginal, preparing: false, poster: null };
   }
   const separator = stream.includes("?") ? "&" : "?";
   try {
@@ -98,14 +99,15 @@ export async function fetchPlaybackSource(url: string): Promise<PlaybackSource> 
     });
     const data = (await response.json().catch(() => ({}))) as PlaybackSource;
     if (!response.ok) {
-      return { src: null, original: fallbackOriginal, preparing: true };
+      return { src: null, original: fallbackOriginal, preparing: true, poster: data.poster || null };
     }
     return {
       src: data.src || null,
       original: data.original || fallbackOriginal,
       preparing: Boolean(data.preparing),
+      poster: data.poster || null,
     };
   } catch {
-    return { src: stream, original: fallbackOriginal, preparing: false };
+    return { src: stream, original: fallbackOriginal, preparing: false, poster: null };
   }
 }

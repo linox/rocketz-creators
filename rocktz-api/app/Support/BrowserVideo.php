@@ -23,6 +23,11 @@ class BrowserVideo
         return (string) preg_replace('/\.(mov|qt|m4v)$/i', '.mp4', $key);
     }
 
+    public static function posterKey(string $key): string
+    {
+        return (string) preg_replace('/\.[^.]+$/', '.jpg', self::mp4Key($key));
+    }
+
     public static function needsTranscode(string $key): bool
     {
         return (bool) preg_match('/\.(mov|qt|m4v)$/i', $key);
@@ -73,6 +78,8 @@ class BrowserVideo
         $mp4Key = self::mp4Key($key);
         foreach (self::disks() as $disk) {
             if ($mp4Key !== $key && $disk->exists($mp4Key)) {
+                self::ensureLocalPoster($disk, $key, $mp4Key);
+
                 return ['path' => $mp4Key, 'size' => (int) $disk->size($mp4Key)];
             }
         }
@@ -102,8 +109,16 @@ class BrowserVideo
                     return null;
                 }
 
+                $poster = self::extractPoster($converted);
                 if (! self::writePreview($disk, $mp4Key, $converted)) {
+                    if ($poster !== null) {
+                        @unlink($poster);
+                    }
+
                     return null;
+                }
+                if ($poster !== null) {
+                    self::writePreview($disk, self::posterKey($key), $poster);
                 }
 
                 return ['path' => $mp4Key, 'size' => (int) $disk->size($mp4Key)];
@@ -263,5 +278,47 @@ class BrowserVideo
         }
 
         return $target;
+    }
+
+    private static function extractPoster(string $source): ?string
+    {
+        $ffmpeg = self::ffmpegBinary();
+        if ($ffmpeg === null || ! is_file($source)) {
+            return null;
+        }
+
+        $target = $source.'.poster.jpg';
+        foreach (['0.8', '0'] as $at) {
+            $command = escapeshellcmd($ffmpeg).' -y -ss '.$at.' -i '.escapeshellarg($source)
+                .' -frames:v 1 -q:v 5 -vf '.escapeshellarg('scale=720:720:force_original_aspect_ratio=decrease')
+                .' '.escapeshellarg($target).' 2>/dev/null';
+            exec($command, $output, $code);
+            if ($code === 0 && is_file($target) && (int) filesize($target) > 32) {
+                return $target;
+            }
+            @unlink($target);
+        }
+
+        return null;
+    }
+
+    private static function ensureLocalPoster(Filesystem $disk, string $key, string $mp4Key): void
+    {
+        $posterKey = self::posterKey($key);
+        try {
+            if ($disk->exists($posterKey) || ! method_exists($disk, 'path')) {
+                return;
+            }
+            $local = $disk->path($mp4Key);
+            if (! is_string($local) || ! is_file($local)) {
+                return;
+            }
+            $poster = self::extractPoster($local);
+            if ($poster !== null) {
+                self::writePreview($disk, $posterKey, $poster);
+            }
+        } catch (Throwable) {
+            //
+        }
     }
 }

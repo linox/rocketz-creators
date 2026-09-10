@@ -509,7 +509,12 @@ class MediaController extends Controller
         $original = $this->originalKey($requested);
 
         if ($this->objectExists($preview)) {
-            return $this->sourceJson($this->publicPlaybackSrc($preview), $original ? $this->publicPlaybackSrc($original) : $this->publicPlaybackSrc($preview), false);
+            return $this->sourceJson(
+                $this->publicPlaybackSrc($preview),
+                $original ? $this->publicPlaybackSrc($original) : $this->publicPlaybackSrc($preview),
+                false,
+                $this->posterSrc($preview),
+            );
         }
 
         if ($original !== null && $this->objectExists($original)) {
@@ -517,14 +522,19 @@ class MediaController extends Controller
                 MakeVideoPlayableJob::dispatch($original);
             }
 
-            return $this->sourceJson(null, $this->publicPlaybackSrc($original), true);
+            return $this->sourceJson(null, $this->publicPlaybackSrc($original), true, $this->posterSrc($original));
         }
 
         if ($this->objectExists($requested)) {
-            return $this->sourceJson($this->publicPlaybackSrc($requested), $this->publicPlaybackSrc($requested), false);
+            return $this->sourceJson(
+                $this->publicPlaybackSrc($requested),
+                $this->publicPlaybackSrc($requested),
+                false,
+                $this->posterSrc($requested),
+            );
         }
 
-        return response()->json(['src' => null, 'original' => null, 'preparing' => false], 404, $this->sourceCorsHeaders());
+        return response()->json(['src' => null, 'original' => null, 'preparing' => false, 'poster' => null], 404, $this->sourceCorsHeaders());
     }
 
     private function originalKey(string $path): ?string
@@ -579,12 +589,23 @@ class MediaController extends Controller
         ];
     }
 
-    private function sourceJson(?string $src, ?string $original, bool $preparing): JsonResponse
+    private function posterSrc(string $path): ?string
+    {
+        $poster = BrowserVideo::posterKey($path);
+        if (! $this->objectExists($poster)) {
+            return null;
+        }
+
+        return $this->publicPlaybackSrc($poster);
+    }
+
+    private function sourceJson(?string $src, ?string $original, bool $preparing, ?string $poster = null): JsonResponse
     {
         return response()->json([
             'src' => $src,
             'original' => $original,
             'preparing' => $preparing,
+            'poster' => $poster,
         ], 200, $this->sourceCorsHeaders());
     }
 

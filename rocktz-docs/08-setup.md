@@ -85,6 +85,12 @@ Não dá para deixar `queue:work` ligado o tempo todo. Crie **um** cron na conta
 
 Isso dispara, a cada minuto: e-mails/push (`queue:work --stop-when-empty` nas filas `high,default`) e um preview `.mov` pendente (`media:make-playable --pending --limit=1`). Os dois usam `withoutOverlapping`, então o ffmpeg longo não abre outro processo em cima.
 
+Para converter **todos** os `.mov` que ainda não têm MP4 de uma vez (SSH/Terminal da API):
+
+```bash
+/opt/cpanel/ea-php84/root/usr/bin/php /home/apicreatorzdig/public_html/artisan media:mp4
+```
+
 Local (daemon ok):
 
 ```bash

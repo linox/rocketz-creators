@@ -14,5 +14,7 @@ class BrowserVideoTest extends TestCase
         $this->assertFalse(BrowserVideo::needsTranscode('portfolio/video-iphone.mp4'));
         $this->assertSame('portfolio/video-iphone.mp4', BrowserVideo::mp4Key('portfolio/video-iphone.mov'));
         $this->assertSame('portfolio/video-iphone.mp4', BrowserVideo::mp4Key('portfolio/video-iphone.mp4'));
+        $this->assertSame('portfolio/video-iphone.jpg', BrowserVideo::posterKey('portfolio/video-iphone.mov'));
+        $this->assertSame('portfolio/video-iphone.jpg', BrowserVideo::posterKey('portfolio/video-iphone.mp4'));
     }
 }
