@@ -35,7 +35,10 @@ class MakeVideoPlayableJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            BrowserVideo::ensurePlayable($this->key);
+            $result = BrowserVideo::ensurePlayable($this->key);
+            if ($result === null) {
+                report(new \RuntimeException(BrowserVideo::lastError() ?: 'preview failed for '.$this->key));
+            }
         } catch (Throwable $e) {
             report($e);
         }

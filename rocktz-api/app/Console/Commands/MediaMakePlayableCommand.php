@@ -53,13 +53,16 @@ class MediaMakePlayableCommand extends Command
             return self::FAILURE;
         }
 
+        set_time_limit(0);
+
         $ok = 0;
         $failed = 0;
         foreach ($keys as $key) {
             $this->line('converting '.$key);
             $result = BrowserVideo::ensurePlayable($key);
             if ($result === null) {
-                $this->error('failed '.$key);
+                $why = BrowserVideo::lastError();
+                $this->error('failed '.$key.($why ? ' — '.$why : ''));
                 $failed++;
 
                 continue;
