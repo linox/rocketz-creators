@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Download, Play, Video } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isPlayableVideoSize, mediaDownloadUrl } from "@/lib/media-playback";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoLightbox } from "@/components/VideoLightbox";
 
 type Props = {
   videoUrl: string;
@@ -42,21 +42,7 @@ export function CampaignSubmittedVideo({ videoUrl, fileSize, className, compact 
           </span>
           <Video size={14} className="shrink-0 text-slate-400" />
         </button>
-        {playing ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
-            <button type="button" className="absolute inset-0" aria-label={t("campaignDetail.closeVideoPlayer")} onClick={() => setPlaying(false)} />
-            <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl">
-              <VideoPlayer src={videoUrl} autoPlay className="max-h-[80vh] w-full" />
-              <button
-                type="button"
-                onClick={() => setPlaying(false)}
-                className="absolute top-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-slate-800"
-              >
-                {t("campaignDetail.closeVideoPlayer")}
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {playing ? <VideoLightbox src={videoUrl} onClose={() => setPlaying(false)} /> : null}
       </>
     );
   }

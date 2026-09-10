@@ -48,7 +48,7 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoLightbox } from "@/components/VideoLightbox";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { PautaBriefingFieldsForm } from "@/components/PautaBriefingFields";
@@ -2382,21 +2382,7 @@ function DetailInner() {
         </div>
       ) : null}
 
-      {watchingVideoUrl ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
-          <button type="button" className="absolute inset-0" aria-label={t("campaignDetail.closeVideoPlayer")} onClick={() => setWatchingVideoUrl(null)} />
-          <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl">
-            <VideoPlayer src={watchingVideoUrl} autoPlay className="max-h-[80vh] w-full" />
-            <button
-              type="button"
-              onClick={() => setWatchingVideoUrl(null)}
-              className="absolute top-3 right-3 cursor-pointer rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-slate-800"
-            >
-              {t("campaignDetail.closeVideoPlayer")}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {watchingVideoUrl ? <VideoLightbox src={watchingVideoUrl} onClose={() => setWatchingVideoUrl(null)} /> : null}
 
       {reviseModal.item ? (
         <div className="app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">

@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video, X } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
+import { VideoLightbox } from "@/components/VideoLightbox";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -252,13 +253,12 @@ export function CreatorPortfolioPanel({
       </div>
 
       {playVideo && isPlayable(playVideo) ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4">
-          <button type="button" className="absolute inset-0" aria-label={t("closePlayer")} onClick={() => setPlayVideo(null)} />
-          <div className={cn("relative z-10 overflow-hidden rounded-2xl bg-black shadow-2xl", playVideo.orientation === "horizontal" ? "w-full max-w-4xl" : "w-full max-w-md")}>
-            <VideoPlayer src={playVideo.url} autoPlay className="max-h-[80vh] w-full" />
-            <button type="button" onClick={() => setPlayVideo(null)} className="absolute top-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs font-bold">{t("closePlayer")}</button>
-          </div>
-        </div>
+        <VideoLightbox
+          src={playVideo.url}
+          onClose={() => setPlayVideo(null)}
+          closeLabel={t("closePlayer")}
+          className={playVideo.orientation === "horizontal" ? "w-full max-w-4xl" : "w-full max-w-md"}
+        />
       ) : null}
     </div>
   );
