@@ -507,13 +507,9 @@ class MediaController extends Controller
 
             if ($request->isMethod('HEAD')) {
                 try {
-                    $size = (int) $disk->size($path);
+                    $size = $this->r2->objectSize($path);
                 } catch (Throwable) {
-                    try {
-                        $size = $this->r2->objectSize($path);
-                    } catch (Throwable) {
-                        $size = 0;
-                    }
+                    return null;
                 }
 
                 return response('', 200, $headers + [
@@ -521,8 +517,14 @@ class MediaController extends Controller
                 ]);
             }
 
+            $range = $request->header('Range');
             try {
-                $object = $this->r2->readObject($path, $request->header('Range'));
+                if (! is_string($range) || $range === '') {
+                    $size = $this->r2->objectSize($path);
+                    $end = max(0, min($size - 1, (1024 * 1024) - 1));
+                    $range = 'bytes=0-'.$end;
+                }
+                $object = $this->r2->readObject($path, $range);
             } catch (Throwable $e) {
                 report($e);
                 $signed = MediaUrl::signedGet($path, false);
@@ -532,15 +534,21 @@ class MediaController extends Controller
 
                 return null;
             }
-            $headers['Content-Type'] = $object['type'] !== '' ? $object['type'] : $headers['Content-Type'];
+            if ($headers['Content-Type'] === 'application/octet-stream' && $object['type'] !== '') {
+                $headers['Content-Type'] = $object['type'];
+            }
             $headers['Content-Length'] = (string) $object['length'];
             if ($object['range']) {
                 $headers['Content-Range'] = $object['range'];
             }
 
             $body = $object['body'];
+            $status = $object['range'] ? 206 : 200;
 
             return response()->stream(function () use ($body) {
+                while (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 if (is_object($body) && method_exists($body, 'detach')) {
                     $resource = $body->detach();
                     if (is_resource($resource)) {
@@ -550,8 +558,16 @@ class MediaController extends Controller
                         return;
                     }
                 }
+                if (is_object($body) && method_exists($body, 'eof') && method_exists($body, 'read')) {
+                    while (! $body->eof()) {
+                        echo $body->read(1024 * 256);
+                        flush();
+                    }
+
+                    return;
+                }
                 echo (string) $body;
-            }, $object['status'], $headers);
+            }, $status, $headers);
         }
 
         $diskName = MediaDisk::name();

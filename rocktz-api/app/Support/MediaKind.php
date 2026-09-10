@@ -137,13 +137,20 @@ class MediaKind
 
     public static function storedMime(string $detectedMime, string $kind, string $extension): string
     {
+        $detectedMime = strtolower($detectedMime);
+        $extension = strtolower($extension);
+
+        if (in_array($extension, ['mov', 'qt', 'm4v', 'mp4'], true)
+            || in_array($detectedMime, ['video/quicktime', 'video/x-quicktime'], true)) {
+            return 'video/mp4';
+        }
+
         if (str_starts_with($detectedMime, 'video/') || str_starts_with($detectedMime, 'image/')) {
             return $detectedMime;
         }
 
         return match ($extension) {
             'webm' => 'video/webm',
-            'mov' => 'video/quicktime',
             'png' => 'image/png',
             'webp' => 'image/webp',
             'gif' => 'image/gif',

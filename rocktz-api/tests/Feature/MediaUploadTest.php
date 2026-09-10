@@ -105,6 +105,11 @@ class MediaUploadTest extends TestCase
             ->assertHeader('Accept-Ranges', 'bytes')
             ->assertHeader('Content-Type', 'video/mp4');
 
+        Storage::disk('uploads')->put('portfolio/video-iphone.mov', str_repeat('abcdefghij', 20));
+        $this->get('/stream/portfolio/video-iphone.mov')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
+
         $this->call('HEAD', '/stream/portfolio/video-demo.mp4')
             ->assertOk()
             ->assertHeader('Accept-Ranges', 'bytes')

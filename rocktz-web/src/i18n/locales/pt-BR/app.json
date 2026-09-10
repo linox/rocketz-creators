@@ -1559,6 +1559,7 @@
     "submittedVideoTitle": "Vídeo enviado pelo criador",
     "submittedVideoLargeHint": "Arquivo acima de 200 MB — disponível para download.",
     "closeVideoPlayer": "Fechar",
+    "videoPlaybackError": "Este vídeo não pôde ser reproduzido no navegador. Baixe o arquivo para assistir.",
     "noCreatorFound": "Nenhum criador encontrado",
     "noCreatorHint": "Adicione criadores ao casting usando o botão acima.",
     "alreadyIn": "Já no casting",

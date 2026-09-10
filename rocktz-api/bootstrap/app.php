@@ -23,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function (): void {
-            Route::get('/stream/{folder}/{filename}', [MediaController::class, 'stream'])
+            Route::match(['GET', 'HEAD'], '/stream/{folder}/{filename}', [MediaController::class, 'stream'])
                 ->where('folder', 'portfolio|avatars')
                 ->where('filename', '[A-Za-z0-9._-]+');
         },

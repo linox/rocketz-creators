@@ -48,6 +48,12 @@ export function mediaPublicUrl(url?: string | null): string | null {
   return `${mediaOrigin()}/stream/${relative}`;
 }
 
+export function videoMimeFromUrl(url: string): string {
+  const path = url.split("?")[0]?.toLowerCase() ?? "";
+  if (path.endsWith(".webm")) return "video/webm";
+  return "video/mp4";
+}
+
 export function mediaStreamUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const raw = url.trim();

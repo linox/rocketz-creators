@@ -1559,6 +1559,7 @@
     "submittedVideoTitle": "Video submitted by creator",
     "submittedVideoLargeHint": "File over 200 MB — available for download.",
     "closeVideoPlayer": "Close",
+    "videoPlaybackError": "This video could not be played in the browser. Download the file to watch it.",
     "noCreatorFound": "No creator found",
     "noCreatorHint": "Add creators to the casting using the button above.",
     "alreadyIn": "Already in casting",
