@@ -4,7 +4,7 @@ namespace App\Support;
 
 class ByteRange
 {
-    public const CHUNK_BYTES = 1024 * 1024;
+    public const CHUNK_BYTES = 8 * 1024 * 1024;
 
     public static function cap(?string $header, int $size, int $maxChunk = self::CHUNK_BYTES): string
     {

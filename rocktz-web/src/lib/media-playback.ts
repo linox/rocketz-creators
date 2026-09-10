@@ -1,11 +1,5 @@
 import { getApiUrl } from "@/lib/laravel";
 
-export const PLAYER_MAX_BYTES = 200 * 1024 * 1024;
-
-export function isPlayableVideoSize(size?: number | null) {
-  return !size || size <= PLAYER_MAX_BYTES;
-}
-
 function mediaOrigin(): string {
   return getApiUrl().replace(/\/api\/?$/, "");
 }
@@ -58,12 +52,28 @@ export function mediaStreamUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const raw = url.trim();
   const relative = objectKeyFromUrl(raw);
-  if (!relative) return raw.replace(/\.(mov|qt)$/i, ".mp4");
-  return `${mediaOrigin()}/stream/${relative.replace(/\.(mov|qt)$/i, ".mp4")}`;
+  if (!relative) return raw.replace(/\.(mov|qt|m4v)$/i, ".mp4");
+  return `${mediaOrigin()}/stream/${relative.replace(/\.(mov|qt|m4v)$/i, ".mp4")}`;
+}
+
+export function mediaOriginalStreamUrl(url?: string | null): string | null {
+  if (!url?.trim()) return null;
+  const raw = url.trim();
+  const relative = objectKeyFromUrl(raw);
+  if (!relative) return raw;
+  return `${mediaOrigin()}/stream/${relative}`;
 }
 
 export function mediaDownloadUrl(url: string): string {
   const relative = objectKeyFromUrl(url);
   if (!relative) return url;
   return `${mediaOrigin()}/downloads/${relative}`;
+}
+
+export function canPlayNativeMov(): boolean {
+  if (typeof document === "undefined") return false;
+  const video = document.createElement("video");
+  return ["video/mp4; codecs=\"hvc1\"", "video/mp4; codecs=\"hev1\"", "video/quicktime"].some(
+    (type) => video.canPlayType(type) !== "",
+  );
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\MakeVideoPlayableJob;
 use App\Models\MediaFile;
 use App\Models\User;
 use App\Support\BrowserVideo;
@@ -161,24 +162,8 @@ class MediaStorageService
         ?User $user,
         bool $unlink,
     ): array {
-        if ($kind === 'video') {
-            if (BrowserVideo::needsTranscode($absolutePath)) {
-                $converted = BrowserVideo::transcodeToMp4($absolutePath);
-                if ($converted !== null) {
-                    if ($converted !== $absolutePath) {
-                        if ($unlink) {
-                            @unlink($absolutePath);
-                        }
-                        $absolutePath = $converted;
-                        $unlink = true;
-                    }
-                    $extension = 'mp4';
-                    $mime = 'video/mp4';
-                    $size = (int) filesize($absolutePath);
-                }
-            } elseif (Mp4Faststart::optimize($absolutePath)) {
-                $size = (int) filesize($absolutePath);
-            }
+        if ($kind === 'video' && ! BrowserVideo::needsTranscode('x.'.$extension) && Mp4Faststart::optimize($absolutePath)) {
+            $size = (int) filesize($absolutePath);
         }
 
         $allocated = $this->allocatePath($kind, $extension);
@@ -209,7 +194,12 @@ class MediaStorageService
             throw new MediaStorageException(__('auth.upload_failed'), 500);
         }
 
-        return $this->record($disk, $path, $allocated['filename'], $mime, $size, $user, $kind);
+        $payload = $this->record($disk, $path, $allocated['filename'], $mime, $size, $user, $kind);
+        if ($kind === 'video' && BrowserVideo::needsTranscode($path)) {
+            MakeVideoPlayableJob::dispatch($path);
+        }
+
+        return $payload;
     }
 
     /**

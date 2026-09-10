@@ -24,7 +24,7 @@ class MakeVideoPlayableJob implements ShouldQueue
         }
 
         try {
-            BrowserVideo::ensureRemotePlayable($this->key);
+            BrowserVideo::ensurePlayable($this->key);
         } catch (Throwable $e) {
             report($e);
         }

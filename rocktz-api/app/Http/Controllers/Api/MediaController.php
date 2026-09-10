@@ -10,8 +10,8 @@ use App\Services\MediaStorageException;
 use App\Services\MediaStorageService;
 use App\Services\MediaSubmissionService;
 use App\Services\R2MultipartUploader;
-use App\Support\ByteRange;
 use App\Support\BrowserVideo;
+use App\Support\ByteRange;
 use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUploadStatus;
@@ -335,8 +335,6 @@ class MediaController extends Controller
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
 
         $path = $folder.'/'.$filename;
-        $path = $this->resolveLocalPlayablePath($path);
-        $filename = basename($path);
         if (! Storage::disk('uploads')->exists($path)) {
             $remote = $this->streamRemote($request, $path, $filename);
             abort_if($remote === null, 404);
@@ -506,9 +504,6 @@ class MediaController extends Controller
 
         if (MediaDisk::r2Configured()) {
             $disk = Storage::disk('r2');
-            $path = $this->resolveRemotePlayablePath($path);
-            $filename = basename($path);
-            $headers = $this->playbackHeaders($filename);
             if (! $disk instanceof AwsS3V3Adapter) {
                 if (! $disk->exists($path)) {
                     return null;
@@ -673,33 +668,6 @@ class MediaController extends Controller
     private function respondStored(array $payload): JsonResponse
     {
         return response()->json(['data' => $payload], 201);
-    }
-
-    private function resolveLocalPlayablePath(string $path): string
-    {
-        return $this->resolvePlayablePath($path, Storage::disk('uploads'));
-    }
-
-    private function resolveRemotePlayablePath(string $path): string
-    {
-        return $this->resolvePlayablePath($path, Storage::disk('r2'));
-    }
-
-    private function resolvePlayablePath(string $path, \Illuminate\Contracts\Filesystem\Filesystem $disk): string
-    {
-        $mp4 = BrowserVideo::mp4Key($path);
-        if ($mp4 !== $path && $disk->exists($mp4)) {
-            return $mp4;
-        }
-        if ($disk->exists($path)) {
-            return $path;
-        }
-        $mov = preg_replace('/\.mp4$/i', '.mov', $path);
-        if (is_string($mov) && $mov !== $path && $disk->exists($mov)) {
-            return $mov;
-        }
-
-        return $path;
     }
 
     /**

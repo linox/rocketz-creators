@@ -10,20 +10,11 @@ import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { isUploadCancelled } from "@/lib/laravel";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import { emitAuthRefresh } from "@/lib/session-cache";
 import type { Creator } from "@/lib/types";
 
-const PLAYER_MAX_BYTES = 200 * 1024 * 1024;
-
 type PortfolioVideo = NonNullable<Creator["portfolio"]>[number];
-
-function isPlayable(video: PortfolioVideo) {
-  return !video.file_size || video.file_size <= PLAYER_MAX_BYTES;
-}
-
-function downloadHref(video: PortfolioVideo) {
-  return video.download_url || video.url;
-}
 
 function formatMb(bytes?: number) {
   if (!bytes) return "";
@@ -252,7 +243,7 @@ export function CreatorPortfolioPanel({
         )}
       </div>
 
-      {playVideo && isPlayable(playVideo) ? (
+      {playVideo ? (
         <VideoLightbox
           src={playVideo.url}
           onClose={() => setPlayVideo(null)}
@@ -292,46 +283,33 @@ function OrientationGrid({
       ) : (
         <div className={cn("grid gap-6", videos[0]?.orientation === "horizontal" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3")}>
           {videos.map((video) => {
-            const playable = isPlayable(video);
             const vertical = video.orientation !== "horizontal";
+            const downloadUrl = video.download_url || mediaDownloadUrl(video.url);
             return (
               <article key={video.id} className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-[#F1F5F9] bg-slate-50 transition-all hover:border-brand-primary hover:shadow-md">
-                {playable ? (
-                  <button type="button" onClick={() => onPlay(video)} className={cn("relative flex cursor-pointer items-center justify-center overflow-hidden bg-slate-900", vertical ? "aspect-[9/16] max-h-[320px]" : "aspect-video")}>
-                    <VideoPlayer src={video.url} muted preload="metadata" controls={false} className="h-full w-full object-cover opacity-70 transition-all group-hover:scale-105" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all group-hover:bg-black/45">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
-                        <Play size={24} fill="currentColor" className="translate-x-0.5" />
-                      </div>
+                <button type="button" onClick={() => onPlay(video)} className={cn("relative flex cursor-pointer items-center justify-center overflow-hidden bg-slate-900", vertical ? "aspect-[9/16] max-h-[320px]" : "aspect-video")}>
+                  <VideoPlayer src={video.url} muted preload="none" controls={false} className="h-full w-full object-cover opacity-70 transition-all group-hover:scale-105" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all group-hover:bg-black/45">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
+                      <Play size={24} fill="currentColor" className="translate-x-0.5" />
                     </div>
-                    <div className="absolute top-3 left-3 rounded bg-black/55 px-2 py-0.5 font-mono text-[10px] font-medium tracking-tight text-white shadow backdrop-blur-sm">{t("hosted")}</div>
-                  </button>
-                ) : (
-                  <div className={cn("flex flex-col items-center justify-center gap-3 bg-slate-900 px-6 text-center text-white", vertical ? "aspect-[9/16] max-h-[320px]" : "aspect-video")}>
-                    <Download size={28} className="text-amber-300" />
-                    <p className="text-xs font-bold">{t("largeFile")}</p>
-                    <p className="max-w-[16rem] text-[11px] leading-relaxed text-slate-300">{t("largeFileHint")}</p>
-                    {formatMb(video.file_size) ? <span className="font-mono text-[10px] text-slate-400">{formatMb(video.file_size)}</span> : null}
-                    <a href={downloadHref(video)} download className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-bold tracking-wider text-slate-900 uppercase hover:bg-slate-100">
-                      <Download size={12} /> {t("downloadVideo")}
-                    </a>
                   </div>
-                )}
+                  <div className="absolute top-3 left-3 rounded bg-black/55 px-2 py-0.5 font-mono text-[10px] font-medium tracking-tight text-white shadow backdrop-blur-sm">{t("hosted")}</div>
+                </button>
                 <div className="flex flex-1 flex-col justify-between p-4">
                   <div>
                     <h4 className="truncate pr-4 text-sm font-bold text-[#0F172A] group-hover:text-brand-primary">{video.title}</h4>
                     <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#64748B]">{video.description || t("noDescription")}</p>
                   </div>
                   <div className="mt-4 flex items-center justify-between border-t border-[#F1F5F9] pt-3">
-                    {playable ? (
+                    <div className="flex items-center gap-3">
                       <button type="button" onClick={() => onPlay(video)} className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-brand-primary uppercase">
                         <Eye size={12} /> {t("watch")}
                       </button>
-                    ) : (
-                      <a href={downloadHref(video)} download className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-brand-primary uppercase">
+                      <a href={downloadUrl} download className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase hover:text-brand-primary">
                         <Download size={12} /> {t("downloadVideo")}
                       </a>
-                    )}
+                    </div>
                     {canUpload ? (
                       <button type="button" onClick={() => onRemove(video)} className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600">
                         <Trash2 size={13} />

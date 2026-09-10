@@ -4,12 +4,14 @@ namespace Tests\Feature;
 
 use App\Enums\DeliveryStatus;
 use App\Enums\StageApprovalStatus;
+use App\Jobs\MakeVideoPlayableJob;
 use App\Models\CampaignCreator;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\R2MultipartUploader;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -60,6 +62,26 @@ class MediaUploadTest extends TestCase
         $this->assertGreaterThan(0, (int) $response->json('data.size'));
     }
 
+    public function test_mov_upload_keeps_original_and_queues_preview_job(): void
+    {
+        Storage::fake('uploads');
+        Queue::fake();
+
+        $user = User::factory()->creator()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $response = $this->withToken($token)->post('/api/media', [
+            'file' => UploadedFile::fake()->create('clip.mov', 2048, 'video/quicktime'),
+        ]);
+
+        $response->assertCreated();
+        $this->assertStringEndsWith('.mov', (string) $response->json('data.filename'));
+        $this->assertStringContainsString('.mov', (string) $response->json('data.path'));
+        Queue::assertPushed(MakeVideoPlayableJob::class, function (MakeVideoPlayableJob $job) use ($response) {
+            return $job->key === $response->json('data.path');
+        });
+    }
+
     public function test_portfolio_video_is_accepted_when_mime_is_octet_stream(): void
     {
         Storage::fake('uploads');
@@ -86,6 +108,17 @@ class MediaUploadTest extends TestCase
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
     }
 
+    public function test_mov_download_serves_original_file(): void
+    {
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('portfolio/video-iphone.mov', 'mov-bytes');
+        Storage::disk('uploads')->put('portfolio/video-iphone.mp4', 'preview-bytes');
+
+        $response = $this->get('/downloads/portfolio/video-iphone.mov');
+        $response->assertOk();
+        $this->assertStringContainsString('video-iphone.mov', (string) $response->headers->get('content-disposition'));
+    }
+
     public function test_document_download_serves_pdf_from_uploads(): void
     {
         Storage::fake('uploads');
@@ -107,6 +140,13 @@ class MediaUploadTest extends TestCase
 
         Storage::disk('uploads')->put('portfolio/video-iphone.mov', str_repeat('abcdefghij', 20));
         $this->get('/stream/portfolio/video-iphone.mov')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
+
+        $this->get('/stream/portfolio/video-iphone.mp4')->assertNotFound();
+
+        Storage::disk('uploads')->put('portfolio/video-iphone.mp4', str_repeat('previewmp4x', 20));
+        $this->get('/stream/portfolio/video-iphone.mp4')
             ->assertOk()
             ->assertHeader('Content-Type', 'video/mp4');
 
@@ -472,6 +512,12 @@ class MediaUploadTest extends TestCase
             ->assertHeader('Accept-Ranges', 'bytes');
 
         $this->call('HEAD', '/stream/portfolio/video-r2.mp4')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
+
+        Storage::disk('r2')->put('portfolio/video-iphone.mov', 'mov-bytes');
+        $this->get('/stream/portfolio/video-iphone.mp4')->assertNotFound();
+        $this->get('/stream/portfolio/video-iphone.mov')
             ->assertOk()
             ->assertHeader('Content-Type', 'video/mp4');
     }

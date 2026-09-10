@@ -13,15 +13,10 @@ class MediaMakePlayableCommand extends Command
 {
     protected $signature = 'media:make-playable {key? : Object key, e.g. portfolio/video.mov} {--pending : Convert stored .mov files missing an MP4} {--limit=5}';
 
-    protected $description = 'Transcode QuickTime videos on R2 to H.264 MP4 so the browser player can play them';
+    protected $description = 'Generate a 720p H.264 preview MP4 beside stored .mov files without replacing the original';
 
     public function handle(): int
     {
-        if (! MediaDisk::r2Configured()) {
-            $this->error('R2 is not configured.');
-
-            return self::FAILURE;
-        }
         if (! BrowserVideo::ffmpegBinary()) {
             $this->error(Ffmpeg::installHint());
 
@@ -33,24 +28,37 @@ class MediaMakePlayableCommand extends Command
         if ($requested !== '') {
             $keys[] = ltrim($requested, '/');
         } elseif ($this->option('pending')) {
-            $keys = MediaFile::query()
+            $limit = (int) $this->option('limit');
+            $candidates = MediaFile::query()
                 ->where(function ($query) {
                     $query->where('path', 'like', '%.mov')
-                        ->orWhere('path', 'like', '%.MOV');
+                        ->orWhere('path', 'like', '%.MOV')
+                        ->orWhere('path', 'like', '%.m4v')
+                        ->orWhere('path', 'like', '%.qt');
                 })
-                ->limit((int) $this->option('limit'))
+                ->limit(max($limit * 5, $limit))
                 ->pluck('path')
                 ->filter()
                 ->unique()
                 ->values()
                 ->all();
 
-            if ($keys === []) {
+            foreach ($candidates as $path) {
+                if (! BrowserVideo::needsTranscode($path) || $this->hasPreview($path)) {
+                    continue;
+                }
+                $keys[] = $path;
+                if (count($keys) >= $limit) {
+                    break;
+                }
+            }
+
+            if ($keys === [] && MediaDisk::r2Configured()) {
                 $disk = Storage::disk('r2');
                 foreach ($disk->files('portfolio') as $path) {
                     if (BrowserVideo::needsTranscode($path) && ! $disk->exists(BrowserVideo::mp4Key($path))) {
                         $keys[] = $path;
-                        if (count($keys) >= (int) $this->option('limit')) {
+                        if (count($keys) >= $limit) {
                             break;
                         }
                     }
@@ -65,9 +73,10 @@ class MediaMakePlayableCommand extends Command
         $ok = 0;
         foreach ($keys as $key) {
             $this->line('converting '.$key);
-            $result = BrowserVideo::ensureRemotePlayable($key);
+            $result = BrowserVideo::ensurePlayable($key);
             if ($result === null) {
                 $this->error('failed '.$key);
+
                 continue;
             }
             $this->info('playable '.$result['path']);
@@ -75,5 +84,18 @@ class MediaMakePlayableCommand extends Command
         }
 
         return $ok > 0 || $keys === [] ? self::SUCCESS : self::FAILURE;
+    }
+
+    private function hasPreview(string $path): bool
+    {
+        $mp4 = BrowserVideo::mp4Key($path);
+        if ($mp4 === $path) {
+            return true;
+        }
+        if (Storage::disk('uploads')->exists($mp4)) {
+            return true;
+        }
+
+        return MediaDisk::r2Configured() && Storage::disk('r2')->exists($mp4);
     }
 }
