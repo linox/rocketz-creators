@@ -24,10 +24,12 @@ import {
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
+import { VideoLightbox } from "@/components/VideoLightbox";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import {
   buildDeliveryInboxFromApi,
   countByFolder,
@@ -943,6 +945,7 @@ function ReadingPane({
   onNext: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
+  const [watching, setWatching] = useState(false);
   const images = version.imageUrls ?? (version.thumbnailUrl || version.fileUrl ? [version.thumbnailUrl || version.fileUrl!] : []);
   const isVertical = item.contentType === "video" || item.contentType === "story";
   const heading = inboxHeading(item, t);
@@ -953,6 +956,7 @@ function ReadingPane({
     : item.formatLabel;
 
   return (
+    <>
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-slate-100 px-4 py-3">
         <div className="flex items-start gap-3">
@@ -1025,9 +1029,18 @@ function ReadingPane({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           {(item.contentType === "video" || item.contentType === "story") && version.fileUrl ? (
-            <div className={cn("mx-auto overflow-hidden rounded-lg bg-black", isVertical ? "aspect-[9/16] max-h-[420px] max-w-[240px]" : "aspect-video max-w-xl")}>
-              <VideoPlayer src={version.fileUrl} className="h-full w-full object-contain" />
-            </div>
+            <button
+              type="button"
+              onClick={() => setWatching(true)}
+              className={cn("relative mx-auto block overflow-hidden rounded-lg bg-black", isVertical ? "aspect-[9/16] max-h-[420px] max-w-[240px]" : "aspect-video w-full max-w-xl")}
+            >
+              <VideoPlayer src={version.fileUrl} muted preload="none" controls={false} className="h-full w-full object-contain" />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
+                  <Play size={24} fill="currentColor" className="translate-x-0.5" />
+                </span>
+              </span>
+            </button>
           ) : null}
 
           {item.contentType === "image" && (version.fileUrl || version.thumbnailUrl) ? (
@@ -1077,13 +1090,13 @@ function ReadingPane({
           <div className="mt-2 flex flex-wrap gap-2">
             {version.fileUrl ? (
               <>
-                <a href={safeHttpUrl(version.fileUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={() => setWatching(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Play size={12} /> {t("deliveries.inbox.watch")}
-                </a>
-                <a href={safeHttpUrl(version.fileUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                </button>
+                <button type="button" onClick={() => setWatching(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Maximize2 size={12} /> {t("deliveries.inbox.fullscreen")}
-                </a>
-                <a href={safeHttpUrl(version.fileUrl)} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                </button>
+                <a href={mediaDownloadUrl(version.fileUrl)} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Download size={12} /> {t("deliveries.inbox.download")}
                 </a>
               </>
@@ -1161,6 +1174,14 @@ function ReadingPane({
         </div>
       </div>
     </div>
+    {watching && version.fileUrl ? (
+      <VideoLightbox
+        src={version.fileUrl}
+        onClose={() => setWatching(false)}
+        className={isVertical ? "w-full max-w-md" : "w-full max-w-4xl"}
+      />
+    ) : null}
+    </>
   );
 }
 

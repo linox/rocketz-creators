@@ -5,10 +5,8 @@ import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
 import {
   canPlayNativeMov,
+  fetchPlaybackSource,
   mediaDownloadUrl,
-  mediaOriginalStreamUrl,
-  mediaStreamUrl,
-  videoMimeFromUrl,
 } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
 
@@ -22,6 +20,8 @@ type Props = {
   preload?: "none" | "metadata" | "auto";
 };
 
+const MIN_BUFFER_SECONDS = 3;
+
 function keepInline(event: React.SyntheticEvent<HTMLVideoElement>) {
   const video = event.currentTarget as HTMLVideoElement & {
     webkitDisplayingFullscreen?: boolean;
@@ -29,6 +29,23 @@ function keepInline(event: React.SyntheticEvent<HTMLVideoElement>) {
   };
   if (video.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
   if (document.fullscreenElement === video) void document.exitFullscreen();
+}
+
+function bufferedAhead(video: HTMLVideoElement): number {
+  const time = video.currentTime;
+  for (let index = 0; index < video.buffered.length; index += 1) {
+    if (video.buffered.start(index) <= time + 0.15 && video.buffered.end(index) >= time) {
+      return video.buffered.end(index) - time;
+    }
+  }
+  return 0;
+}
+
+function hasUsableBuffer(video: HTMLVideoElement): boolean {
+  if (video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) return true;
+  const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+  const needed = Math.min(MIN_BUFFER_SECONDS, Math.max(0.6, duration - video.currentTime));
+  return bufferedAhead(video) >= needed;
 }
 
 export function VideoPlayer({
@@ -42,63 +59,93 @@ export function VideoPlayer({
 }: Props) {
   const { t } = useTranslation("app");
   const videoRef = useRef<HTMLVideoElement>(null);
-  const previewUrl = mediaStreamUrl(src);
-  const originalUrl = mediaOriginalStreamUrl(src);
   const downloadUrl = mediaDownloadUrl(src);
-  const [playbackUrl, setPlaybackUrl] = useState(previewUrl);
-  const [preparing, setPreparing] = useState(false);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(true);
+  const [buffering, setBuffering] = useState(false);
 
   useEffect(() => {
-    setPlaybackUrl(previewUrl);
-    setPreparing(false);
-  }, [previewUrl]);
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function resolveSource() {
+      const data = await fetchPlaybackSource(src);
+      if (cancelled) return;
+      const playable = data.src || (canPlayNativeMov() ? data.original : null);
+      if (playable) {
+        setPlaybackUrl(playable);
+        setPreparing(false);
+        return;
+      }
+      setPlaybackUrl(null);
+      setPreparing(true);
+      if (autoPlay || controls) {
+        timer = window.setTimeout(() => {
+          void resolveSource();
+        }, 2500);
+      }
+    }
+
+    setPreparing(true);
+    setPlaybackUrl(null);
+    void resolveSource();
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [src, autoPlay, controls]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !playbackUrl) return;
+
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+
+    const pump = () => {
+      if (hasUsableBuffer(video)) {
+        setBuffering(false);
+        if (autoPlay && video.paused) void video.play().catch(() => undefined);
+        return;
+      }
+      setBuffering(true);
+      if (!video.paused && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        video.pause();
+      }
+    };
+
+    const onWaiting = () => {
+      setBuffering(true);
+    };
+
     const blockNativeFullscreen = (event: Event) => {
       event.preventDefault();
       keepInline({ currentTarget: video } as React.SyntheticEvent<HTMLVideoElement>);
     };
+
+    video.addEventListener("progress", pump);
+    video.addEventListener("canplay", pump);
+    video.addEventListener("canplaythrough", pump);
+    video.addEventListener("playing", pump);
+    video.addEventListener("waiting", onWaiting);
     video.addEventListener("webkitbeginfullscreen", blockNativeFullscreen);
-    return () => video.removeEventListener("webkitbeginfullscreen", blockNativeFullscreen);
-  }, [playbackUrl]);
+    pump();
 
-  function handleError() {
-    if (playbackUrl && originalUrl && playbackUrl !== originalUrl && canPlayNativeMov()) {
-      setPlaybackUrl(originalUrl);
-      setPreparing(false);
-      return;
-    }
-    setPreparing(true);
-  }
+    return () => {
+      video.removeEventListener("progress", pump);
+      video.removeEventListener("canplay", pump);
+      video.removeEventListener("canplaythrough", pump);
+      video.removeEventListener("playing", pump);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("webkitbeginfullscreen", blockNativeFullscreen);
+    };
+  }, [playbackUrl, autoPlay]);
 
-  if (!previewUrl) return null;
-
-  return (
-    <div className={cn("relative bg-black", className)}>
-      {!preparing ? (
-        <video
-          ref={videoRef}
-          key={playbackUrl ?? previewUrl}
-          src={playbackUrl ?? previewUrl}
-          className={cn("h-full w-full bg-black", className)}
-          controls={controls}
-          autoPlay={autoPlay}
-          muted={muted}
-          loop={loop}
-          playsInline
-          disablePictureInPicture
-          controlsList="nofullscreen"
-          preload={preload ?? (autoPlay ? "auto" : "metadata")}
-          onPlay={keepInline}
-          onLoadedData={keepInline}
-          onError={handleError}
-        >
-          <source src={playbackUrl ?? previewUrl} type={videoMimeFromUrl(playbackUrl ?? previewUrl)} />
-        </video>
-      ) : (
-        <div className="flex h-full min-h-[12rem] w-full flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
+  if (preparing || !playbackUrl) {
+    return (
+      <div className={cn("relative flex min-h-[12rem] items-center justify-center bg-black", className)}>
+        <div className="flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
           <p className="text-sm font-semibold">{t("campaignDetail.videoPreparing")}</p>
           {controls ? (
             <a
@@ -110,7 +157,33 @@ export function VideoPlayer({
             </a>
           ) : null}
         </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("relative bg-black", className)}>
+      <video
+        ref={videoRef}
+        src={playbackUrl}
+        className={cn("h-full w-full bg-black", className)}
+        controls={controls}
+        muted={muted}
+        loop={loop}
+        playsInline
+        disablePictureInPicture
+        controlsList="nofullscreen"
+        preload={preload ?? "auto"}
+        onPlay={keepInline}
+        onLoadedData={keepInline}
+      />
+      {buffering ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45">
+          <p className="rounded-full bg-black/70 px-3 py-1.5 text-[11px] font-bold tracking-wider text-white uppercase">
+            {t("campaignDetail.videoBuffering")}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

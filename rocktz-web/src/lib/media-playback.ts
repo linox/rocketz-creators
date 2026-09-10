@@ -77,3 +77,35 @@ export function canPlayNativeMov(): boolean {
     (type) => video.canPlayType(type) !== "",
   );
 }
+
+export type PlaybackSource = {
+  src: string | null;
+  original: string | null;
+  preparing: boolean;
+};
+
+export async function fetchPlaybackSource(url: string): Promise<PlaybackSource> {
+  const stream = mediaStreamUrl(url);
+  const fallbackOriginal = mediaOriginalStreamUrl(url);
+  if (!stream) {
+    return { src: null, original: fallbackOriginal, preparing: false };
+  }
+  const separator = stream.includes("?") ? "&" : "?";
+  try {
+    const response = await fetch(`${stream}${separator}source=1`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => ({}))) as PlaybackSource;
+    if (!response.ok) {
+      return { src: null, original: fallbackOriginal, preparing: true };
+    }
+    return {
+      src: data.src || null,
+      original: data.original || fallbackOriginal,
+      preparing: Boolean(data.preparing),
+    };
+  } catch {
+    return { src: stream, original: fallbackOriginal, preparing: false };
+  }
+}

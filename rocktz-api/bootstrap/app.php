@@ -41,10 +41,27 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
+        // cPanel: um cron "* * * * *" em schedule:run. Sem daemon de queue.
+        $schedule->command('queue:work', [
+            '--stop-when-empty' => true,
+            '--max-time' => 50,
+            '--timeout' => 45,
+            '--tries' => 3,
+            '--queue' => 'high,default',
+        ])
+            ->everyMinute()
+            ->withoutOverlapping(5)
+            ->name('queue-mail-push');
+        $schedule->command('media:make-playable', [
+            '--pending' => true,
+            '--limit' => 1,
+        ])
+            ->everyMinute()
+            ->withoutOverlapping(45)
+            ->name('media-preview');
         $schedule->command('mail:reminders')->hourly();
         $schedule->command('mail:admin-alerts')->dailyAt('08:00');
         $schedule->command('media:prune-chunks')->hourly();
-        $schedule->command('media:make-playable --pending --limit=1')->everyFiveMinutes();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -42,7 +42,7 @@ class Ffmpeg
             '  /home/apicreatorzdig/public_html/bin/ffmpeg',
             '  /home/apicreatorzdig/public_html/bin/ffprobe',
             'Permissão: 755. Depois:',
-            '/opt/cpanel/ea-php84/root/usr/bin/php artisan media:make-playable portfolio/video-20260909181647-p5nv4ebq.mov',
+            '/opt/cpanel/ea-php84/root/usr/bin/php artisan media:mp4 video-20260909181647-p5nv4ebq.mov',
         ]);
     }
 

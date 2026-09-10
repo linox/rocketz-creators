@@ -70,15 +70,30 @@ Com `APP_ENV=local` ou `MAIL_MAILER=log` o reset de senha não chega na caixa de
 
 O domínio do `MAIL_FROM_ADDRESS` precisa estar verificado no Resend. Sem a chave, `POST /auth/forgot-password` responde 503.
 
-Código 2FA e reset de senha são prioridade: saem **na hora** da requisição (não entram na fila). Os demais e-mails transacionais vão para a fila `default`. Com a API no ar:
+Código 2FA e reset de senha são prioridade: saem **na hora** da requisição (não entram na fila). Os demais e-mails transacionais vão para a fila `default`. Preview de `.mov` vai para a fila `media` (o cron processa via `media:make-playable`, sem worker).
+
+### Cron no cPanel (produção)
+
+Não dá para deixar `queue:work` ligado o tempo todo. Crie **um** cron na conta da API (`cPanel → Cron Jobs`):
+
+- **Minuto:** `*` (a cada minuto)
+- **Comando:**
+
+```bash
+/opt/cpanel/ea-php84/root/usr/bin/php /home/apicreatorzdig/public_html/artisan schedule:run >> /home/apicreatorzdig/public_html/storage/logs/cron.log 2>&1
+```
+
+Isso dispara, a cada minuto: e-mails/push (`queue:work --stop-when-empty` nas filas `high,default`) e um preview `.mov` pendente (`media:make-playable --pending --limit=1`). Os dois usam `withoutOverlapping`, então o ffmpeg longo não abre outro processo em cima.
+
+Local (daemon ok):
 
 ```bash
 cd rocktz-api
-php artisan queue:work --queue=high,default
-php artisan schedule:work   # local: lembretes a cada hora + alertas admin 08:00
+php artisan queue:work --queue=high,default,media
+php artisan schedule:work
 ```
 
-Em produção, rode o worker e o scheduler (`* * * * * php artisan schedule:run`) o tempo todo. Sem o worker, cadastro, aprovação e reset de senha gravam `mail_messages` mas o Resend não dispara. Admin: `/mail` (templates + interruptor global de envio) e `/mail/log`. Para testar o app sem disparar e-mail, desligue **Envio de e-mails** em `/mail`, ou use `MAIL_ENABLED=false` no `.env`. Teste um envio em Templates → Enviar teste.
+Em produção o cron substitui o worker. Sem o cron, cadastro/aprovação gravam `mail_messages` mas o Resend não dispara, e o `.mov` fica em “preparando o vídeo”. Admin: `/mail` (templates + interruptor global de envio) e `/mail/log`. Para testar o app sem disparar e-mail, desligue **Envio de e-mails** em `/mail`, ou use `MAIL_ENABLED=false` no `.env`. Teste um envio em Templates → Enviar teste.
 
 Webhook público: `POST /api/webhooks/resend` (header `X-Resend-Webhook-Secret` ou `svix-signature` = `RESEND_WEBHOOK_SECRET`).
 

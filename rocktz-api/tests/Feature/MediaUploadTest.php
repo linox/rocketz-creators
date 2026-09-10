@@ -150,6 +150,24 @@ class MediaUploadTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'video/mp4');
 
+        Queue::fake();
+        $source = $this->getJson('/stream/portfolio/video-pending.mp4?source=1');
+        $source->assertNotFound();
+
+        Storage::disk('uploads')->put('portfolio/video-pending.mov', str_repeat('abcdefghij', 20));
+        $pending = $this->getJson('/stream/portfolio/video-pending.mp4?source=1');
+        $pending->assertOk()
+            ->assertJsonPath('preparing', true)
+            ->assertJsonPath('src', null);
+        $this->assertStringContainsString('video-pending.mov', (string) $pending->json('original'));
+        Queue::assertPushed(MakeVideoPlayableJob::class);
+
+        Storage::disk('uploads')->put('portfolio/video-pending.mp4', str_repeat('previewmp4x', 20));
+        $ready = $this->getJson('/stream/portfolio/video-pending.mp4?source=1');
+        $ready->assertOk()
+            ->assertJsonPath('preparing', false);
+        $this->assertStringContainsString('video-pending.mp4', (string) $ready->json('src'));
+
         $this->call('HEAD', '/stream/portfolio/video-demo.mp4')
             ->assertOk()
             ->assertHeader('Accept-Ranges', 'bytes')

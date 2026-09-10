@@ -329,10 +329,14 @@ class MediaController extends Controller
         return $redirect;
     }
 
-    public function stream(Request $request, string $folder, string $filename): BinaryFileResponse|StreamedResponse|RedirectResponse
+    public function stream(Request $request, string $folder, string $filename): BinaryFileResponse|StreamedResponse|RedirectResponse|JsonResponse
     {
         abort_unless(in_array($folder, ['portfolio', 'avatars'], true), 404);
         abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
+
+        if ($request->query('source') === '1') {
+            return $this->playbackSource($folder, $filename);
+        }
 
         $path = $folder.'/'.$filename;
         if (! Storage::disk('uploads')->exists($path)) {
@@ -496,6 +500,92 @@ class MediaController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'X-Accel-Buffering' => 'no',
         ];
+    }
+
+    private function playbackSource(string $folder, string $filename): JsonResponse
+    {
+        $requested = $folder.'/'.$filename;
+        $preview = BrowserVideo::mp4Key($requested);
+        $original = $this->originalKey($requested);
+
+        if ($this->objectExists($preview)) {
+            return $this->sourceJson($this->publicPlaybackSrc($preview), $original ? $this->publicPlaybackSrc($original) : $this->publicPlaybackSrc($preview), false);
+        }
+
+        if ($original !== null && $this->objectExists($original)) {
+            if (BrowserVideo::needsTranscode($original)) {
+                MakeVideoPlayableJob::dispatch($original);
+            }
+
+            return $this->sourceJson(null, $this->publicPlaybackSrc($original), true);
+        }
+
+        if ($this->objectExists($requested)) {
+            return $this->sourceJson($this->publicPlaybackSrc($requested), $this->publicPlaybackSrc($requested), false);
+        }
+
+        return response()->json(['src' => null, 'original' => null, 'preparing' => false], 404, $this->sourceCorsHeaders());
+    }
+
+    private function originalKey(string $path): ?string
+    {
+        if (BrowserVideo::needsTranscode($path)) {
+            return $path;
+        }
+
+        foreach (['mov', 'MOV', 'm4v', 'qt'] as $extension) {
+            $candidate = (string) preg_replace('/\.mp4$/i', '.'.$extension, $path);
+            if ($candidate !== $path && $this->objectExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function objectExists(string $path): bool
+    {
+        if (Storage::disk('uploads')->exists($path)) {
+            return true;
+        }
+        if (! MediaDisk::r2Configured()) {
+            return false;
+        }
+        try {
+            return Storage::disk('r2')->exists($path);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function publicPlaybackSrc(string $path): string
+    {
+        $signed = MediaUrl::signedGet($path, false);
+        if (is_string($signed) && str_starts_with($signed, 'http')) {
+            return $signed;
+        }
+
+        return MediaUrl::playback($path);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sourceCorsHeaders(): array
+    {
+        return [
+            'Access-Control-Allow-Origin' => '*',
+            'Cache-Control' => 'no-store',
+        ];
+    }
+
+    private function sourceJson(?string $src, ?string $original, bool $preparing): JsonResponse
+    {
+        return response()->json([
+            'src' => $src,
+            'original' => $original,
+            'preparing' => $preparing,
+        ], 200, $this->sourceCorsHeaders());
     }
 
     private function streamRemote(Request $request, string $path, string $filename): BinaryFileResponse|StreamedResponse|RedirectResponse|null

@@ -1561,6 +1561,7 @@
     "closeVideoPlayer": "Close",
     "videoPreparing": "Preparing the video for the browser…",
     "videoPreparingDownload": "Download original",
+    "videoBuffering": "Loading…",
     "videoPlaybackError": "This video could not be played in the browser. Download the file to watch it.",
     "noCreatorFound": "No creator found",
     "noCreatorHint": "Add creators to the casting using the button above.",

@@ -1561,6 +1561,7 @@
     "closeVideoPlayer": "Cerrar",
     "videoPreparing": "Preparando el video para el navegador…",
     "videoPreparingDownload": "Descargar original",
+    "videoBuffering": "Cargando…",
     "videoPlaybackError": "Este video no se pudo reproducir en el navegador. Descarga el archivo para verlo.",
     "noCreatorFound": "Ningún creador encontrado",
     "noCreatorHint": "Añade creadores al casting con el botón de arriba.",
