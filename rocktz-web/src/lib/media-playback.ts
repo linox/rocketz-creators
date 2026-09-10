@@ -58,8 +58,8 @@ export function mediaStreamUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const raw = url.trim();
   const relative = objectKeyFromUrl(raw);
-  if (!relative) return raw;
-  return `${mediaOrigin()}/stream/${relative}`;
+  if (!relative) return raw.replace(/\.(mov|qt)$/i, ".mp4");
+  return `${mediaOrigin()}/stream/${relative.replace(/\.(mov|qt)$/i, ".mp4")}`;
 }
 
 export function mediaDownloadUrl(url: string): string {

@@ -4,7 +4,6 @@ import { cacheAuthUser, clearSessionCache } from "@/lib/session-cache";
 
 const DEFAULT_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 const PRODUCTION_API_URL = "https://api.creatorz.digital/api";
-const PRODUCTION_HOSTS = new Set(["creatorz.digital", "www.creatorz.digital"]);
 
 function isLocalAccessHost(host: string): boolean {
   return (
@@ -16,6 +15,14 @@ function isLocalAccessHost(host: string): boolean {
   );
 }
 
+function isCreatorzHost(host: string): boolean {
+  return host === "creatorz.digital" || host.endsWith(".creatorz.digital");
+}
+
+function isLoopbackApiUrl(url: string): boolean {
+  return /localhost|127\.0\.0\.1/.test(url);
+}
+
 export function getApiUrl(): string {
   if (typeof window === "undefined") {
     return DEFAULT_API_URL;
@@ -24,10 +31,23 @@ export function getApiUrl(): string {
   if (isLocalAccessHost(host)) {
     return `http://${host}:8000/api`;
   }
-  if (PRODUCTION_HOSTS.has(host)) {
+  if (isCreatorzHost(host)) {
     return PRODUCTION_API_URL;
   }
-  return DEFAULT_API_URL;
+  if (process.env.NEXT_PUBLIC_API_URL && !isLoopbackApiUrl(process.env.NEXT_PUBLIC_API_URL)) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  return PRODUCTION_API_URL;
+}
+
+function offlineApiMessage(): string {
+  if (typeof window !== "undefined" && isLocalAccessHost(window.location.hostname)) {
+    return i18n.t("common:alerts.apiOfflineLocal");
+  }
+  if (isLoopbackApiUrl(getApiUrl())) {
+    return i18n.t("common:alerts.apiOfflineLocal");
+  }
+  return i18n.t("common:alerts.apiOffline");
 }
 
 type LaravelError = {
@@ -545,7 +565,7 @@ function xhrSend<T>(
 
     xhr.onerror = () => {
       finish();
-      reject(new ApiError(i18n.t("common:alerts.tryAgain"), 0));
+      reject(new ApiError(offlineApiMessage(), 0));
     };
 
     xhr.onabort = () => {
@@ -632,7 +652,7 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new UploadCancelledError();
     }
-    throw new ApiError(i18n.t("common:alerts.apiOffline"), 0);
+    throw new ApiError(offlineApiMessage(), 0);
   }
 
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;

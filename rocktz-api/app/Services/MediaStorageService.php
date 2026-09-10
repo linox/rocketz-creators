@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\MediaFile;
 use App\Models\User;
+use App\Support\BrowserVideo;
 use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUrl;
@@ -160,8 +161,24 @@ class MediaStorageService
         ?User $user,
         bool $unlink,
     ): array {
-        if ($kind === 'video' && Mp4Faststart::optimize($absolutePath)) {
-            $size = (int) filesize($absolutePath);
+        if ($kind === 'video') {
+            if (BrowserVideo::needsTranscode($absolutePath)) {
+                $converted = BrowserVideo::transcodeToMp4($absolutePath);
+                if ($converted !== null) {
+                    if ($converted !== $absolutePath) {
+                        if ($unlink) {
+                            @unlink($absolutePath);
+                        }
+                        $absolutePath = $converted;
+                        $unlink = true;
+                    }
+                    $extension = 'mp4';
+                    $mime = 'video/mp4';
+                    $size = (int) filesize($absolutePath);
+                }
+            } elseif (Mp4Faststart::optimize($absolutePath)) {
+                $size = (int) filesize($absolutePath);
+            }
         }
 
         $allocated = $this->allocatePath($kind, $extension);

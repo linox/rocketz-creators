@@ -279,7 +279,7 @@ class Mp4Faststart
 
     private static function ffmpegFaststart(string $path): bool
     {
-        $ffmpeg = self::ffmpegBinary();
+        $ffmpeg = Ffmpeg::binary();
         if ($ffmpeg === null) {
             return false;
         }
@@ -301,12 +301,5 @@ class Mp4Faststart
         }
 
         return true;
-    }
-
-    private static function ffmpegBinary(): ?string
-    {
-        $found = trim((string) @shell_exec('command -v ffmpeg'));
-
-        return $found !== '' && is_executable($found) ? $found : null;
     }
 }

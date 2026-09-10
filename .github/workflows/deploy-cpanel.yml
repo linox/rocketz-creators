@@ -204,6 +204,13 @@ jobs:
             **/bootstrap/cache/config.php
             **/bootstrap/cache/routes*.php
             **/bootstrap/cache/events.php
+            **/bin/ffmpeg
+            **/bin/ffprobe
+
+      - name: Baixar ffmpeg estático
+        run: |
+          chmod +x scripts/fetch-ffmpeg.sh
+          ./scripts/fetch-ffmpeg.sh
 
       - name: Reenviar PHP crítico, limpar cache e quebrar opcode
         env:
@@ -258,6 +265,36 @@ jobs:
             echo "No cPanel, a conta FTP da API (${FTP_USER}) deve ter Diretório = /home/apicreatorzdig/public_html (não .../public_html/public)." >&2
             exit 1
           }
+          bins="$(lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:passive-mode true;
+            open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
+            cd ${SERVER_DIR};
+            cls -1 bin;
+          " 2>/dev/null || true)"
+          if echo "$bins" | grep -qx ffmpeg; then
+            echo "ffmpeg já está em bin/"
+          else
+            test -x rocktz-api/bin/ffmpeg
+            lftp -c "
+              set ssl:verify-certificate no;
+              set ftp:passive-mode true;
+              set net:timeout 600;
+              open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
+              cd ${SERVER_DIR};
+              mkdir bin;
+              put rocktz-api/bin/ffmpeg -o bin/ffmpeg;
+              put rocktz-api/bin/ffprobe -o bin/ffprobe;
+            "
+          fi
+          lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:passive-mode true;
+            open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
+            cd ${SERVER_DIR};
+            chmod 755 bin/ffmpeg;
+            chmod 755 bin/ffprobe;
+          " || true
           reset_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${reset_name}")"
           echo "$reset_json"
           echo "$reset_json" | grep -q '"vendor_autoload":true' || {

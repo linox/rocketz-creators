@@ -44,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('mail:reminders')->hourly();
         $schedule->command('mail:admin-alerts')->dailyAt('08:00');
         $schedule->command('media:prune-chunks')->hourly();
+        $schedule->command('media:make-playable --pending --limit=1')->everyFiveMinutes();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
