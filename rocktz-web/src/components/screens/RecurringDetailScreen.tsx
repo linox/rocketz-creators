@@ -1175,7 +1175,7 @@ function DetailInner() {
       </div>
 
       {view === "creators" ? (
-        <div className={cn("grid grid-cols-1 gap-6", !isCreator && creatorLayout === "split" && "lg:grid-cols-12")}>
+        <div className={cn("grid grid-cols-1 gap-6", !isCreator && creatorLayout === "split" && "lg:grid-cols-12 lg:items-start")}>
           {!isCreator ? (
           <div className={cn("flex flex-col gap-4", creatorLayout === "split" ? "lg:col-span-5" : "col-span-full")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1498,15 +1498,15 @@ function DetailInner() {
           ) : null}
 
           <div className={cn(
-            isCreator && "flex flex-col gap-4",
-            !isCreator && creatorLayout === "split" && !pautasModalOpen && "hidden lg:flex lg:col-span-7 lg:flex-col lg:gap-4",
+            isCreator && "flex flex-col gap-4 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-5rem)] lg:min-h-0 lg:self-start lg:overflow-hidden",
+            !isCreator && creatorLayout === "split" && !pautasModalOpen && "hidden lg:sticky lg:top-0 lg:col-span-7 lg:flex lg:max-h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-5rem)] lg:min-h-0 lg:flex-col lg:gap-4 lg:self-start lg:overflow-hidden",
             !isCreator && pautasModalOpen && "app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm sm:p-4",
             !isCreator && creatorLayout === "grid" && !pautasModalOpen && "hidden",
           )}>
             {selectedRow && selectedInfo && selectedSummary ? (
               <div className={cn(
-                "flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6",
-                !isCreator && pautasModalOpen && "app-modal-panel relative max-h-[90vh] w-full max-w-4xl overflow-y-auto",
+                "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6",
+                !isCreator && pautasModalOpen && "app-modal-panel relative max-h-[90vh] w-full max-w-4xl",
               )}>
                 {!isCreator && pautasModalOpen ? (
                   <button type="button" onClick={() => setPautasModalOpen(false)} className="sticky top-0 z-10 -mt-1 mb-1 inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200">
