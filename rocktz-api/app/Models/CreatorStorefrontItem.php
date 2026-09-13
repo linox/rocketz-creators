@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'creator_id',
     'company_id',
+    'custom_company_name',
     'category_id',
     'type',
     'title',
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'is_published',
     'likes_count',
     'shares_count',
+    'clicks_count',
     'sort_order',
 ])]
 class CreatorStorefrontItem extends Model
@@ -35,6 +37,7 @@ class CreatorStorefrontItem extends Model
             'is_published' => 'boolean',
             'likes_count' => 'integer',
             'shares_count' => 'integer',
+            'clicks_count' => 'integer',
             'sort_order' => 'integer',
         ];
     }

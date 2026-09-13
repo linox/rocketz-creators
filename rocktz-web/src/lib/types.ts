@@ -436,7 +436,7 @@ export type DashboardStats = {
 export type StorefrontItemType = "coupon" | "link";
 
 export type StorefrontPartner = {
-  id: number;
+  id: number | null;
   name: string;
   logo_url: string | null;
 };
@@ -450,7 +450,8 @@ export type StorefrontCategory = {
 export type StorefrontItem = {
   id: number;
   creator_id: number;
-  company_id: number;
+  company_id: number | null;
+  custom_company_name: string | null;
   company: StorefrontPartner | null;
   category_id: number | null;
   category: { id: number; name: string } | null;
@@ -463,6 +464,7 @@ export type StorefrontItem = {
   is_published: boolean;
   likes_count: number;
   shares_count: number;
+  clicks_count: number;
   liked: boolean;
   sort_order: number;
 };
@@ -477,6 +479,24 @@ export type StorefrontEligibility = {
   public_url: string | null;
   show_banner: boolean;
   banner_url: string | null;
+};
+
+export type StorefrontStatsDay = {
+  date: string;
+  views: number;
+  clicks: number;
+};
+
+export type StorefrontStats = {
+  views: number;
+  unique_visitors: number;
+  clicks: number;
+  unique_clickers: number;
+  likes: number;
+  shares: number;
+  ctr: number;
+  days: StorefrontStatsDay[];
+  items: { id: number; title: string; clicks: number; likes: number; shares: number }[];
 };
 
 export type CreatorStorefront = {
@@ -501,6 +521,7 @@ export type CreatorStorefront = {
   } | null;
   eligibility: StorefrontEligibility;
   partners?: StorefrontPartner[];
+  stats?: StorefrontStats;
   categories: StorefrontCategory[];
   items: StorefrontItem[];
 };

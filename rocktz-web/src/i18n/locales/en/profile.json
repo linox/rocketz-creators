@@ -208,6 +208,7 @@
   "tabPortfolio": "Portfolio",
   "tabCampaigns": "Campaigns",
   "tabStorefront": "Storefront",
+  "tabStorefrontMetrics": "Metrics",
   "panelTitle": "Creator panel",
   "helloCreator": "Hi, {{name}}! 👋",
   "panelHint": "Track your campaigns, apply to available opportunities and manage your earnings.",

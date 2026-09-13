@@ -5,15 +5,31 @@ import { useTranslation } from "react-i18next";
 import Cropper, { type Area } from "react-easy-crop";
 import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
-import { getCroppedAvatarBlob } from "@/lib/crop-image";
+import { getCroppedImageBlob } from "@/lib/crop-image";
 
 type ImageCropModalProps = {
   imageSrc: string;
   onCancel: () => void;
   onConfirm: (blob: Blob) => void;
+  aspect?: number;
+  outputWidth?: number;
+  outputHeight?: number;
+  title?: string;
+  formatLabel?: string;
+  confirmLabel?: string;
 };
 
-export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModalProps) {
+export function ImageCropModal({
+  imageSrc,
+  onCancel,
+  onConfirm,
+  aspect = 1,
+  outputWidth = 512,
+  outputHeight = 512,
+  title,
+  formatLabel,
+  confirmLabel,
+}: ImageCropModalProps) {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -29,7 +45,7 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
     if (!pixels) return;
     setBusy(true);
     try {
-      const blob = await getCroppedAvatarBlob(imageSrc, pixels);
+      const blob = await getCroppedImageBlob(imageSrc, pixels, { width: outputWidth, height: outputHeight });
       onConfirm(blob);
     } finally {
       setBusy(false);
@@ -46,8 +62,8 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
-            <p className="text-[10px] font-black tracking-widest text-brand-primary uppercase">{t("editProfile.cropFormat")}</p>
-            <h3 className="text-base font-black text-slate-900">{t("editProfile.cropTitle")}</h3>
+            <p className="text-[10px] font-black tracking-widest text-brand-primary uppercase">{formatLabel || t("editProfile.cropFormat")}</p>
+            <h3 className="text-base font-black text-slate-900">{title || t("editProfile.cropTitle")}</h3>
           </div>
           <button type="button" onClick={onCancel} className="cursor-pointer rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
@@ -59,7 +75,7 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
             image={imageSrc}
             crop={crop}
             zoom={zoom}
-            aspect={1}
+            aspect={aspect}
             cropShape="rect"
             showGrid
             onCropChange={setCrop}
@@ -84,7 +100,7 @@ export function ImageCropModal({ imageSrc, onCancel, onConfirm }: ImageCropModal
               className="flex cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-extrabold text-white shadow-md shadow-indigo-100 hover:bg-indigo-600 disabled:opacity-50"
             >
               <Check size={15} />
-              {busy ? t("editProfile.cropping") : t("editProfile.usePhoto")}
+              {busy ? t("editProfile.cropping") : confirmLabel || t("editProfile.usePhoto")}
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\StorefrontEventType;
 use App\Enums\StorefrontItemType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorStorefrontItemResource;
@@ -48,6 +49,21 @@ class CreatorStorefrontController extends Controller
         return response()->json($this->storefronts->shareItem($item));
     }
 
+    public function track(Request $request, string $storefront): JsonResponse
+    {
+        $creator = $this->storefronts->publishedByKey($storefront);
+        $data = $request->validate([
+            'event' => ['required', Rule::enum(StorefrontEventType::class)],
+            'item_id' => ['required_if:event,click', 'nullable', 'integer', 'exists:creator_storefront_items,id'],
+        ]);
+        $type = StorefrontEventType::from((string) $data['event']);
+        $item = $type === StorefrontEventType::Click
+            ? CreatorStorefrontItem::query()->findOrFail((int) $data['item_id'])
+            : null;
+
+        return response()->json($this->storefronts->trackEvent($request, $creator, $type, $item));
+    }
+
     public function settings(): JsonResponse
     {
         return response()->json([
@@ -82,6 +98,7 @@ class CreatorStorefrontController extends Controller
                 'include_private' => true,
                 'eligibility' => $this->storefronts->eligibility($creator),
                 'partners' => $this->storefronts->partnerCompanies($creator),
+                'stats' => $this->storefronts->stats($creator),
             ]),
         ]);
     }
@@ -176,7 +193,8 @@ class CreatorStorefrontController extends Controller
         $required = $creating ? 'required' : 'sometimes';
 
         return $request->validate([
-            'company_id' => [$required, 'integer', 'exists:companies,id'],
+            'company_id' => ['nullable', 'integer', 'exists:companies,id'],
+            'custom_company_name' => ['nullable', 'string', 'max:120'],
             'category_id' => ['nullable', 'integer', 'exists:creator_storefront_categories,id'],
             'type' => [$required, Rule::enum(StorefrontItemType::class)],
             'title' => [$required, 'string', 'max:160'],

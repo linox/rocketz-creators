@@ -208,6 +208,7 @@
   "tabPortfolio": "Portafolio",
   "tabCampaigns": "Campañas",
   "tabStorefront": "Vitrina",
+  "tabStorefrontMetrics": "Métricas",
   "panelTitle": "Panel del creador",
   "helloCreator": "Hola, {{name}}! 👋",
   "panelHint": "Sigue el avance de tus campañas, postúlate a nuevas vitrinas disponibles y gestiona tus ingresos.",

@@ -5,20 +5,24 @@ namespace App\Services;
 use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\StorefrontEventType;
 use App\Enums\StorefrontItemType;
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Creator;
 use App\Models\CreatorStorefrontCategory;
+use App\Models\CreatorStorefrontEvent;
 use App\Models\CreatorStorefrontItem;
 use App\Models\CreatorStorefrontLike;
 use App\Models\StorefrontSetting;
 use App\Support\FrontendUrl;
+use App\Support\ProhibitedStorefrontLink;
 use App\Support\SafeHttpUrl;
 use App\Support\StorefrontActor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -316,6 +320,7 @@ class CreatorStorefrontService
         $data['sort_order'] = (int) $creator->storefrontItems()->max('sort_order') + 1;
         $data['likes_count'] = 0;
         $data['shares_count'] = 0;
+        $data['clicks_count'] = 0;
 
         return $creator->storefrontItems()->create($data)->load(['company:id,name,logo_url', 'category']);
     }
@@ -328,7 +333,7 @@ class CreatorStorefrontService
         $creator = $item->creator;
         $this->assertUnlocked($creator);
         $merged = array_merge($item->only([
-            'company_id', 'category_id', 'type', 'title', 'description', 'url', 'coupon_code', 'image_url', 'is_published', 'sort_order',
+            'company_id', 'custom_company_name', 'category_id', 'type', 'title', 'description', 'url', 'coupon_code', 'image_url', 'is_published', 'sort_order',
         ]), $data);
         if (isset($merged['type']) && $merged['type'] instanceof StorefrontItemType) {
             $merged['type'] = $merged['type']->value;
@@ -400,17 +405,166 @@ class CreatorStorefrontService
     }
 
     /**
+     * @return array{ok: bool, counted: bool}
+     */
+    public function trackEvent(Request $request, Creator $creator, StorefrontEventType $type, ?CreatorStorefrontItem $item = null): array
+    {
+        $this->assertPublished($creator);
+        if (! Schema::hasTable('creator_storefront_events')) {
+            return ['ok' => true, 'counted' => false];
+        }
+        $user = StorefrontActor::user($request);
+        if ($user?->creator?->id === $creator->id) {
+            return ['ok' => true, 'counted' => false];
+        }
+
+        if ($type === StorefrontEventType::Click) {
+            abort_unless($item && (int) $item->creator_id === (int) $creator->id && $item->is_published, 404, __('auth.storefront_unavailable'));
+        } else {
+            $item = null;
+        }
+
+        $actorKey = StorefrontActor::key($request);
+        $windowMinutes = $type === StorefrontEventType::View ? 360 : 2;
+        $duplicate = CreatorStorefrontEvent::query()
+            ->where('creator_id', $creator->id)
+            ->where('type', $type)
+            ->where('actor_key', $actorKey)
+            ->when($item, fn ($query) => $query->where('item_id', $item->id), fn ($query) => $query->whereNull('item_id'))
+            ->where('created_at', '>=', now()->subMinutes($windowMinutes))
+            ->exists();
+
+        if ($duplicate) {
+            return ['ok' => true, 'counted' => false];
+        }
+
+        CreatorStorefrontEvent::query()->create([
+            'creator_id' => $creator->id,
+            'item_id' => $item?->id,
+            'type' => $type,
+            'actor_key' => $actorKey,
+            'created_at' => now(),
+        ]);
+
+        if ($item && $type === StorefrontEventType::Click) {
+            $item->increment('clicks_count');
+        }
+
+        return ['ok' => true, 'counted' => true];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function stats(Creator $creator): array
+    {
+        $items = $creator->relationLoaded('storefrontItems') ? $creator->storefrontItems : $creator->storefrontItems()->get();
+        $emptyDays = [];
+        for ($i = 13; $i >= 0; $i--) {
+            $emptyDays[] = [
+                'date' => now()->subDays($i)->toDateString(),
+                'views' => 0,
+                'clicks' => 0,
+            ];
+        }
+
+        $empty = [
+            'views' => 0,
+            'unique_visitors' => 0,
+            'clicks' => 0,
+            'unique_clickers' => 0,
+            'likes' => (int) $items->sum('likes_count'),
+            'shares' => (int) $items->sum('shares_count'),
+            'ctr' => 0,
+            'days' => $emptyDays,
+            'items' => $items
+                ->sortByDesc(fn (CreatorStorefrontItem $item) => (int) ($item->clicks_count ?? 0))
+                ->take(8)
+                ->map(fn (CreatorStorefrontItem $item) => [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'clicks' => (int) ($item->clicks_count ?? 0),
+                    'likes' => (int) $item->likes_count,
+                    'shares' => (int) $item->shares_count,
+                ])
+                ->values()
+                ->all(),
+        ];
+
+        if (! Schema::hasTable('creator_storefront_events')) {
+            return $empty;
+        }
+
+        $events = CreatorStorefrontEvent::query()
+            ->where('creator_id', $creator->id)
+            ->get(['type', 'item_id', 'actor_key', 'created_at']);
+
+        $views = $events->filter(fn (CreatorStorefrontEvent $event) => $event->type === StorefrontEventType::View);
+        $clicks = $events->filter(fn (CreatorStorefrontEvent $event) => $event->type === StorefrontEventType::Click);
+        $viewCount = $views->count();
+        $clickCount = $clicks->count();
+
+        $days = [];
+        for ($i = 13; $i >= 0; $i--) {
+            $date = now()->subDays($i)->toDateString();
+            $dayEvents = $events->filter(fn (CreatorStorefrontEvent $event) => $event->created_at?->toDateString() === $date);
+            $days[] = [
+                'date' => $date,
+                'views' => $dayEvents->filter(fn (CreatorStorefrontEvent $event) => $event->type === StorefrontEventType::View)->count(),
+                'clicks' => $dayEvents->filter(fn (CreatorStorefrontEvent $event) => $event->type === StorefrontEventType::Click)->count(),
+            ];
+        }
+
+        return [
+            'views' => $viewCount,
+            'unique_visitors' => $views->pluck('actor_key')->unique()->count(),
+            'clicks' => $clickCount,
+            'unique_clickers' => $clicks->pluck('actor_key')->unique()->count(),
+            'likes' => (int) $items->sum('likes_count'),
+            'shares' => (int) $items->sum('shares_count'),
+            'ctr' => $viewCount > 0 ? round(($clickCount / $viewCount) * 100, 1) : 0,
+            'days' => $days,
+            'items' => $items
+                ->sortByDesc(fn (CreatorStorefrontItem $item) => (int) $item->clicks_count)
+                ->take(8)
+                ->map(fn (CreatorStorefrontItem $item) => [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'clicks' => (int) $item->clicks_count,
+                    'likes' => (int) $item->likes_count,
+                    'shares' => (int) $item->shares_count,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function normalizeItem(Creator $creator, array $data, ?CreatorStorefrontItem $existing = null): array
     {
         $partnerIds = $this->partnerCompanyIds($creator);
-        $companyId = (int) ($data['company_id'] ?? 0);
-        if ($companyId < 1 || ! in_array($companyId, $partnerIds, true)) {
-            throw ValidationException::withMessages([
-                'company_id' => [__('auth.storefront_company_not_partner')],
-            ]);
+        $companyId = isset($data['company_id']) && $data['company_id'] !== null && $data['company_id'] !== ''
+            ? (int) $data['company_id']
+            : null;
+        $customCompany = isset($data['custom_company_name']) ? trim((string) $data['custom_company_name']) : '';
+
+        if ($companyId !== null && $companyId > 0) {
+            if (! in_array($companyId, $partnerIds, true)) {
+                throw ValidationException::withMessages([
+                    'company_id' => [__('auth.storefront_company_not_partner')],
+                ]);
+            }
+            $customCompany = '';
+        } else {
+            $companyId = null;
+            if ($customCompany === '') {
+                throw ValidationException::withMessages([
+                    'custom_company_name' => [__('auth.storefront_custom_company_required')],
+                ]);
+            }
         }
 
         $type = StorefrontItemType::from((string) $data['type']);
@@ -436,13 +590,27 @@ class CreatorStorefrontService
             $categoryId = null;
         }
 
+        $title = trim((string) $data['title']);
+        $description = isset($data['description']) ? (trim((string) $data['description']) ?: null) : null;
+        $url = trim((string) $data['url']);
+        $companyName = $customCompany !== ''
+            ? $customCompany
+            : (string) (Company::query()->where('id', $companyId)->value('name') ?? '');
+
+        if (ProhibitedStorefrontLink::blocked($url, $title, $description, $customCompany, $companyName, $coupon)) {
+            throw ValidationException::withMessages([
+                'url' => [__('auth.storefront_prohibited_link')],
+            ]);
+        }
+
         $payload = [
             'company_id' => $companyId,
+            'custom_company_name' => $customCompany !== '' ? $customCompany : null,
             'category_id' => $categoryId,
             'type' => $type->value,
-            'title' => trim((string) $data['title']),
-            'description' => isset($data['description']) ? (trim((string) $data['description']) ?: null) : null,
-            'url' => trim((string) $data['url']),
+            'title' => $title,
+            'description' => $description,
+            'url' => $url,
             'coupon_code' => $coupon ?: null,
             'image_url' => isset($data['image_url']) ? (trim((string) $data['image_url']) ?: null) : null,
             'is_published' => array_key_exists('is_published', $data)

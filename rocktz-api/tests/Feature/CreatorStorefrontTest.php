@@ -91,6 +91,48 @@ class CreatorStorefrontTest extends TestCase
         $this->assertArrayNotHasKey('partners', $public->json('data'));
     }
 
+    public function test_creator_can_add_item_for_custom_company_outside_the_platform(): void
+    {
+        $creator = Creator::factory()->active()->create(['storefront_enabled' => true]);
+        $token = $creator->user->createToken('auth')->plainTextToken;
+
+        $created = $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/storefront/items", [
+                'company_id' => null,
+                'custom_company_name' => 'Loja da Lua',
+                'type' => StorefrontItemType::Link->value,
+                'title' => 'Kit verão',
+                'url' => 'https://lojadalua.example/kit',
+                'is_published' => true,
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertNull($created['company_id']);
+        $this->assertSame('Loja da Lua', $created['custom_company_name']);
+        $this->assertSame('Loja da Lua', $created['company']['name']);
+
+        $this->getJson("/api/storefronts/{$creator->id}")
+            ->assertOk()
+            ->assertJsonPath('data.items.0.company.name', 'Loja da Lua');
+    }
+
+    public function test_storefront_rejects_prohibited_gambling_links(): void
+    {
+        $creator = Creator::factory()->active()->create(['storefront_enabled' => true]);
+        $token = $creator->user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/storefront/items", [
+                'custom_company_name' => 'Tigrinho Bet',
+                'type' => StorefrontItemType::Link->value,
+                'title' => 'Jogue agora',
+                'url' => 'https://example.com/tigrinho',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.url.0', __('auth.storefront_prohibited_link'));
+    }
+
     public function test_recurring_contract_also_counts_as_partner_company(): void
     {
         $creator = Creator::factory()->active()->create(['storefront_enabled' => true]);
@@ -140,6 +182,60 @@ class CreatorStorefrontTest extends TestCase
         $this->getJson("/api/storefronts/{$creator->id}")
             ->assertOk()
             ->assertJsonPath('data.items.0.shares_count', 1);
+    }
+
+    public function test_public_views_and_clicks_are_counted_for_creator_and_admin(): void
+    {
+        $creator = Creator::factory()->active()->create(['storefront_enabled' => true]);
+        $company = Company::factory()->active()->create();
+        $this->completeCampaigns($creator, $company, 1);
+        $token = $creator->user->createToken('auth')->plainTextToken;
+        $itemId = $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/storefront/items", $this->itemPayload($company->id))
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+
+        $this->postJson("/api/storefronts/{$creator->id}/events", ['event' => 'view'])
+            ->assertOk()
+            ->assertJsonPath('counted', true);
+        $this->postJson("/api/storefronts/{$creator->id}/events", ['event' => 'view'])
+            ->assertOk()
+            ->assertJsonPath('counted', false);
+        $this->postJson("/api/storefronts/{$creator->id}/events", ['event' => 'click', 'item_id' => $itemId])
+            ->assertOk()
+            ->assertJsonPath('counted', true);
+
+        $this->withToken($token)
+            ->postJson("/api/storefronts/{$creator->id}/events", ['event' => 'view'])
+            ->assertOk()
+            ->assertJsonPath('counted', false);
+
+        $stats = $this->withToken($token)
+            ->getJson("/api/creators/{$creator->id}/storefront")
+            ->assertOk()
+            ->json('data.stats');
+
+        $this->assertSame(1, $stats['views']);
+        $this->assertSame(1, $stats['clicks']);
+        $this->assertSame(100, $stats['ctr']);
+        $this->assertSame($itemId, $stats['items'][0]['id']);
+        $this->assertSame(1, $stats['items'][0]['clicks']);
+
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->getJson("/api/creators/{$creator->id}/storefront")
+            ->assertOk()
+            ->assertJsonPath('data.stats.views', 1)
+            ->assertJsonPath('data.stats.clicks', 1);
+
+        $this->getJson("/api/storefronts/{$creator->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('data.stats');
     }
 
     public function test_categories_and_banner_settings(): void

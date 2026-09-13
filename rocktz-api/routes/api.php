@@ -33,6 +33,7 @@ Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track']
 Route::get('storefronts/{storefront}', [CreatorStorefrontController::class, 'showPublic'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:60,1');
 Route::post('storefronts/{storefront}/items/{item}/like', [CreatorStorefrontController::class, 'like'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
 Route::post('storefronts/{storefront}/items/{item}/share', [CreatorStorefrontController::class, 'share'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
+Route::post('storefronts/{storefront}/events', [CreatorStorefrontController::class, 'track'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:60,1');
 
 Route::prefix('auth')->group(function () {
     Route::post('register/creator', [AuthController::class, 'registerCreator'])->middleware('throttle:auth-public');

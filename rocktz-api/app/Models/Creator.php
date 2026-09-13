@@ -148,6 +148,11 @@ class Creator extends Model
         return $this->hasMany(CreatorStorefrontItem::class)->orderBy('sort_order')->orderBy('id');
     }
 
+    public function storefrontEvents(): HasMany
+    {
+        return $this->hasMany(CreatorStorefrontEvent::class);
+    }
+
     public function scopeInCompanyPool(Builder $query, int $companyId): Builder
     {
         return $query->where(function (Builder $builder) use ($companyId) {

@@ -88,6 +88,8 @@ export const api = {
     laravelFetch<{ liked: boolean; likes_count: number }>(`/storefronts/${encodeURIComponent(String(creatorKey))}/items/${itemId}/like`, { method: "POST" }),
   shareStorefrontItem: (creatorKey: number | string, itemId: number) =>
     laravelFetch<{ shares_count: number }>(`/storefronts/${encodeURIComponent(String(creatorKey))}/items/${itemId}/share`, { method: "POST" }),
+  trackStorefrontEvent: (creatorKey: number | string, body: { event: "view" | "click"; item_id?: number }) =>
+    laravelFetch<{ ok: boolean; counted: boolean }>(`/storefronts/${encodeURIComponent(String(creatorKey))}/events`, { method: "POST", body: JSON.stringify(body) }),
   creatorStorefront: (creatorId: number) => laravelFetch<Item<CreatorStorefront>>(`/creators/${creatorId}/storefront`),
   updateCreatorStorefront: (creatorId: number, body: unknown) =>
     laravelFetch<Item<CreatorStorefront>>(`/creators/${creatorId}/storefront`, { method: "PATCH", body: JSON.stringify(body) }),

@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   CalendarDays,
+  BarChart3,
   Eye,
   EyeOff,
   Globe,
@@ -241,6 +242,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
     || isActive("/recurring");
   const isCreatorPortfolioActive = onCreatorProfile && creatorTab === "portfolio";
   const isCreatorStorefrontActive = onCreatorProfile && creatorTab === "storefront";
+  const isCreatorStorefrontMetricsActive = path.includes("/storefront-metrics");
   const isCreatorProfileActive = onCreatorProfile && creatorTab === "about";
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
@@ -352,6 +354,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/calendar" label={t("calendar")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
+                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}/storefront-metrics`} label={t("storefrontMetrics")} icon={BarChart3} active={isCreatorStorefrontMetricsActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
               </>

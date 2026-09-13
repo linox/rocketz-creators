@@ -37,6 +37,7 @@ import {
   Smartphone,
   Sparkles,
   Store,
+  BarChart3,
   Trash2,
   User,
   UserCheck,
@@ -1399,6 +1400,19 @@ function ProfileInner() {
         ) : null}
 
         <div className={cn("flex flex-col gap-8", agencyView ? "lg:col-span-2" : "lg:col-span-3")}>
+          {agencyView ? (
+            <div className="mb-2 flex max-w-xl overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
+              <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab !== "storefront" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <User size={14} /> {tp("tabAbout")}
+              </button>
+              <button type="button" onClick={() => goTab("storefront")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Store size={14} /> {tp("tabStorefront")}
+              </button>
+              <Link href={`/creators/${creator.id}/storefront-metrics`} className="flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap text-[#64748B] uppercase hover:text-[#0F172A]">
+                <BarChart3 size={14} /> {tp("tabStorefrontMetrics")}
+              </Link>
+            </div>
+          ) : null}
           {showCreatorTabs ? (
             <div className="mb-2 flex max-w-3xl overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
               <button type="button" onClick={() => goTab("dashboard")} className={cn("flex min-w-[120px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "dashboard" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
@@ -1869,7 +1883,7 @@ function ProfileInner() {
             </div>
           ) : showCreatorTabs && tab === "portfolio" ? (
             <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} />
-          ) : showCreatorTabs && tab === "storefront" ? (
+          ) : (showCreatorTabs || agencyView) && tab === "storefront" ? (
             <CreatorStorefrontPanel creatorId={creator.id} />
           ) : (
             <>

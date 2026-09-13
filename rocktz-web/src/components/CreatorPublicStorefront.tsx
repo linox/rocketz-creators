@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Heart, Link2, Share2, Ticket } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -20,6 +20,10 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
   const storefrontKey = page.slug || page.eligibility.slug || String(creator.id);
   const banner = page.show_banner ? mediaPublicUrl(page.banner_url) || page.banner_url : null;
   const publicUrl = page.seo?.url || page.eligibility.public_url || (typeof window !== "undefined" ? window.location.href : "");
+
+  useEffect(() => {
+    void api.trackStorefrontEvent(storefrontKey, { event: "view" }).catch(() => undefined);
+  }, [storefrontKey]);
 
   const visible = useMemo(
     () => items.filter((item) => categoryId === "all" || item.category_id === categoryId),
@@ -130,12 +134,12 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((item) => {
             const href = safeHttpUrl(item.url);
             return (
-              <article key={item.id} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
-                <div className="relative h-40 bg-slate-100">
+              <article key={item.id} className="flex h-full flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                <div className="relative aspect-[4/3] shrink-0 bg-slate-100">
                   {item.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" className="h-full w-full object-cover" />
@@ -143,38 +147,52 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
                     <div className="flex h-full items-center justify-center text-slate-300">{item.type === "coupon" ? <Ticket size={36} /> : <Link2 size={36} />}</div>
                   )}
                 </div>
-                <div className="space-y-3 p-4">
+                <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold text-brand-primary">{item.company?.name}</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black tracking-wider text-slate-600 uppercase">
+                    <p className="truncate text-[11px] font-bold text-brand-primary">{item.company?.name || item.custom_company_name}</p>
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black tracking-wider text-slate-600 uppercase">
                       {item.type === "coupon" ? t("storefront.typeCoupon") : t("storefront.typeLink")}
                     </span>
                   </div>
-                  <h2 className="text-base font-black text-slate-950">{item.title}</h2>
-                  {item.description ? <p className="text-xs leading-relaxed text-slate-500">{item.description}</p> : null}
-                  {item.coupon_code ? (
-                    <button type="button" onClick={() => void copyCoupon(item.coupon_code || "")} className="flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 font-mono text-sm font-bold text-slate-800 hover:bg-slate-100">
-                      {item.coupon_code}
-                      <Copy size={14} className="text-slate-400" />
-                    </button>
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void likeItem(item)}
-                      className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold ${item.liked ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                    >
-                      <Heart size={14} className={item.liked ? "fill-current" : ""} /> {item.likes_count}
-                    </button>
-                    <button type="button" onClick={() => void shareItem(item)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                      <Share2 size={14} /> {t("storefront.shareItem")}
-                    </button>
+                  <h2 className="mt-3 line-clamp-2 min-h-12 text-base font-black text-slate-950">{item.title}</h2>
+                  <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-relaxed text-slate-500">{item.description || "\u00a0"}</p>
+                  <div className="mt-auto space-y-2 pt-3">
+                    {item.coupon_code ? (
+                      <button type="button" onClick={() => void copyCoupon(item.coupon_code || "")} className="flex h-11 w-full items-center justify-between rounded-xl bg-slate-50 px-3 font-mono text-sm font-bold text-slate-800 hover:bg-slate-100">
+                        {item.coupon_code}
+                        <Copy size={14} className="text-slate-400" />
+                      </button>
+                    ) : (
+                      <div className="h-11" aria-hidden />
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void likeItem(item)}
+                        className={`inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border text-xs font-bold ${item.liked ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        <Heart size={14} className={item.liked ? "fill-current" : ""} /> {item.likes_count}
+                      </button>
+                      <button type="button" onClick={() => void shareItem(item)} className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-xs font-bold whitespace-nowrap text-slate-600 hover:bg-slate-50">
+                        <Share2 size={14} /> {t("storefront.shareItem")}
+                      </button>
+                    </div>
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          void api.trackStorefrontEvent(storefrontKey, { event: "click", item_id: item.id }).catch(() => undefined);
+                        }}
+                        className="flex h-11 items-center justify-center rounded-xl bg-brand-primary text-xs font-bold tracking-wider text-white uppercase hover:bg-indigo-600"
+                      >
+                        {item.type === "coupon" ? t("storefront.useCoupon") : t("storefront.openLink")}
+                      </a>
+                    ) : (
+                      <div className="h-11" aria-hidden />
+                    )}
                   </div>
-                  {href ? (
-                    <a href={href} target="_blank" rel="noopener noreferrer" className="flex h-11 items-center justify-center rounded-xl bg-brand-primary text-xs font-bold tracking-wider text-white uppercase hover:bg-indigo-600">
-                      {item.type === "coupon" ? t("storefront.useCoupon") : t("storefront.openLink")}
-                    </a>
-                  ) : null}
                 </div>
               </article>
             );
@@ -184,6 +202,8 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
         {visible.length === 0 ? (
           <p className="mt-10 text-center text-sm text-slate-500">{t("storefront.emptyPublic")}</p>
         ) : null}
+
+        <p className="mt-12 mb-2 text-center text-[11px] leading-relaxed text-slate-400">{t("storefront.disclaimer")}</p>
       </div>
     </div>
   );

@@ -2,28 +2,36 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Heart, Link2, Plus, Share2, Store, Ticket, Trash2, UploadCloud } from "lucide-react";
+import { ExternalLink, Heart, Link2, Plus, Share2, Store, Ticket, Trash2, UploadCloud, BarChart3 } from "lucide-react";
+import Link from "next/link";
 import { AppModal } from "@/components/AppModal";
+import { ImageCropModal } from "@/components/ImageCropModal";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { mediaPublicUrl } from "@/lib/media-playback";
 import { safeHttpUrl } from "@/lib/safe-http-url";
+import { isProhibitedStorefrontLink } from "@/lib/prohibited-storefront-link";
 import type { CreatorStorefront, StorefrontItem, StorefrontItemType } from "@/lib/types";
 
 function StorefrontImageField({
   label,
   value,
   onChange,
+  variant = "item",
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
+  variant?: "item" | "banner";
 }) {
   const { t } = useTranslation("app");
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const preview = mediaPublicUrl(value) || value;
+  const isBanner = variant === "banner";
+  const frameClass = isBanner ? "aspect-[16/9]" : "aspect-[4/3]";
 
   async function handleFile(file: File) {
     if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
@@ -34,9 +42,16 @@ function StorefrontImageField({
       await alertWarning(t("storefront.imageTooBig"));
       return;
     }
+    setCropSrc(URL.createObjectURL(file));
+  }
+
+  async function handleCropped(blob: Blob) {
+    const previewUrl = cropSrc;
+    setCropSrc(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setUploading(true);
     try {
-      const uploaded = await api.uploadMedia(file, file.name);
+      const uploaded = await api.uploadMedia(blob, isBanner ? "storefront-banner.jpg" : "storefront-item.jpg");
       onChange(uploaded.data.url);
     } catch (err) {
       await alertApiError(err);
@@ -48,12 +63,12 @@ function StorefrontImageField({
   return (
     <div className="space-y-2">
       <label className="text-[11px] font-bold tracking-wider text-slate-700 uppercase">{label}</label>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+      <div className={`overflow-hidden rounded-xl border border-slate-200 bg-slate-50 ${frameClass}`}>
         {value ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="" referrerPolicy="no-referrer" className="h-28 w-full object-cover" />
+          <img src={preview} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-28 items-center justify-center text-xs text-slate-400">{t("storefront.noImage")}</div>
+          <div className="flex h-full items-center justify-center text-xs text-slate-400">{t("storefront.noImage")}</div>
         )}
       </div>
       <div className="flex gap-2">
@@ -83,12 +98,31 @@ function StorefrontImageField({
           event.target.value = "";
         }}
       />
+      {cropSrc ? (
+        <ImageCropModal
+          imageSrc={cropSrc}
+          aspect={isBanner ? 16 / 9 : 4 / 3}
+          outputWidth={isBanner ? 1600 : 1200}
+          outputHeight={isBanner ? 900 : 900}
+          title={isBanner ? t("storefront.cropBannerTitle") : t("storefront.cropTitle")}
+          formatLabel={isBanner ? t("storefront.cropBannerFormat") : t("storefront.cropFormat")}
+          confirmLabel={t("storefront.useImage")}
+          onCancel={() => {
+            URL.revokeObjectURL(cropSrc);
+            setCropSrc(null);
+          }}
+          onConfirm={(blob) => void handleCropped(blob)}
+        />
+      ) : null}
     </div>
   );
 }
 
+const CUSTOM_COMPANY = "__custom__";
+
 const EMPTY_ITEM = {
   company_id: "",
+  custom_company_name: "",
   category_id: "",
   type: "link" as StorefrontItemType,
   title: "",
@@ -191,14 +225,18 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
 
   function openCreate() {
     setEditing(null);
-    setForm({ ...EMPTY_ITEM, company_id: partners[0] ? String(partners[0].id) : "" });
+    setForm({
+      ...EMPTY_ITEM,
+      company_id: partners[0]?.id != null ? String(partners[0].id) : CUSTOM_COMPANY,
+    });
     setItemOpen(true);
   }
 
   function openEdit(item: StorefrontItem) {
     setEditing(item);
     setForm({
-      company_id: String(item.company_id),
+      company_id: item.company_id != null ? String(item.company_id) : CUSTOM_COMPANY,
+      custom_company_name: item.custom_company_name || item.company?.name || "",
       category_id: item.category_id ? String(item.category_id) : "",
       type: item.type,
       title: item.title,
@@ -213,8 +251,13 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
 
   async function saveItem(event: FormEvent) {
     event.preventDefault();
+    const customCompany = form.company_id === CUSTOM_COMPANY;
     if (!form.company_id) {
       await alertWarning(t("storefront.companyRequiredTitle"), t("storefront.companyRequired"));
+      return;
+    }
+    if (customCompany && !form.custom_company_name.trim()) {
+      await alertWarning(t("storefront.companyRequiredTitle"), t("storefront.customCompanyRequired"));
       return;
     }
     if (!form.title.trim() || !form.url.trim()) {
@@ -225,6 +268,10 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
       await alertWarning(t("storefront.invalidUrlTitle"), t("storefront.invalidUrl"));
       return;
     }
+    if (isProhibitedStorefrontLink(form.url, form.title, form.description, form.custom_company_name, form.coupon_code)) {
+      await alertWarning(t("storefront.prohibitedGamblingTitle"), t("storefront.prohibitedGambling"));
+      return;
+    }
     if (form.type === "coupon" && !form.coupon_code.trim()) {
       await alertWarning(t("storefront.couponRequiredTitle"), t("storefront.couponRequired"));
       return;
@@ -232,7 +279,8 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
     setSaving(true);
     try {
       const body = {
-        company_id: Number(form.company_id),
+        company_id: customCompany ? null : Number(form.company_id),
+        custom_company_name: customCompany ? form.custom_company_name.trim() : null,
         category_id: form.category_id ? Number(form.category_id) : null,
         type: form.type,
         title: form.title.trim(),
@@ -308,50 +356,67 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-            <Store size={20} className="text-brand-primary" /> {t("storefront.title")}
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">{t("storefront.subtitle")}</p>
-          <label className="mt-3 block">
-            <span className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("storefront.slug")}</span>
-            <div className="mt-1 flex gap-2">
-              <input
-                value={slug}
-                onChange={(event) => setSlug(event.target.value.toLowerCase())}
-                onBlur={() => void persistSlug()}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => void persistSlug()}
-                className="rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+              <Store size={20} className="shrink-0 text-brand-primary" /> {t("storefront.title")}
+            </h3>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">{t("storefront.subtitle")}</p>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+            {eligibility.public_url ? (
+              <a
+                href={eligibility.public_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold whitespace-nowrap text-slate-700 hover:bg-slate-50"
               >
-                {tc("save")}
-              </button>
-            </div>
-            <span className="mt-1 block text-[11px] font-medium text-slate-400">{t("storefront.slugHint")}</span>
-          </label>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {eligibility.public_url ? (
-            <a
-              href={eligibility.public_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                <ExternalLink size={14} /> {t("storefront.viewPublic")}
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void sharePage()}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold whitespace-nowrap text-slate-700 hover:bg-slate-50"
             >
-              <ExternalLink size={14} /> {t("storefront.viewPublic")}
-            </a>
-          ) : null}
-          <button type="button" onClick={() => void sharePage()} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            <Share2 size={14} /> {t("storefront.sharePage")}
-          </button>
-          <button type="button" onClick={openCreate} disabled={partners.length === 0} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-3 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:bg-slate-200 disabled:text-slate-400">
-            <Plus size={14} /> {t("storefront.addItem")}
-          </button>
+              <Share2 size={14} /> {t("storefront.sharePage")}
+            </button>
+            <Link
+              href={`/creators/${creatorId}/storefront-metrics`}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3.5 text-xs font-bold whitespace-nowrap text-violet-700 hover:bg-violet-100"
+            >
+              <BarChart3 size={14} /> {t("storefront.viewMetrics")}
+            </Link>
+            <span className="hidden h-6 w-px bg-slate-200 lg:block" aria-hidden />
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-primary px-4 text-xs font-bold whitespace-nowrap text-white hover:bg-indigo-600"
+            >
+              <Plus size={14} /> {t("storefront.addItem")}
+            </button>
+          </div>
         </div>
+        <label className="mt-5 block border-t border-slate-100 pt-4">
+          <span className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("storefront.slug")}</span>
+          <div className="mt-1 flex max-w-md gap-2">
+            <input
+              value={slug}
+              onChange={(event) => setSlug(event.target.value.toLowerCase())}
+              onBlur={() => void persistSlug()}
+              className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => void persistSlug()}
+              className="h-10 shrink-0 rounded-xl border border-slate-200 px-4 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              {tc("save")}
+            </button>
+          </div>
+          <span className="mt-1 block text-[11px] font-medium text-slate-400">{t("storefront.slugHint")}</span>
+        </label>
       </div>
 
       {partners.length === 0 ? (
@@ -373,7 +438,7 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
               <span className="mt-0.5 block text-[11px] text-slate-500">{t("storefront.showBannerHint")}</span>
             </span>
           </label>
-          <StorefrontImageField label={t("storefront.banner")} value={eligibility.banner_url || ""} onChange={(url) => void persistBanner(url || null)} />
+          <StorefrontImageField variant="banner" label={t("storefront.banner")} value={eligibility.banner_url || ""} onChange={(url) => void persistBanner(url || null)} />
         </div>
         <form noValidate onSubmit={addCategory} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h4 className="mb-3 text-sm font-bold text-slate-900">{t("storefront.categoriesTitle")}</h4>
@@ -402,7 +467,7 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
           <article key={item.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="relative h-36 bg-slate-100">
+            <div className="relative aspect-[4/3] bg-slate-100">
               {item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" className="h-full w-full object-cover" />
@@ -414,7 +479,7 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
               </span>
             </div>
             <div className="space-y-2 p-4">
-              <p className="text-[11px] font-bold text-brand-primary">{item.company?.name}</p>
+              <p className="text-[11px] font-bold text-brand-primary">{item.company?.name || item.custom_company_name}</p>
               <h5 className="text-sm font-bold text-slate-900">{item.title}</h5>
               {item.coupon_code ? <p className="rounded-lg bg-slate-50 px-2 py-1 font-mono text-xs font-bold text-slate-700">{item.coupon_code}</p> : null}
               <div className="flex items-center gap-3 text-[11px] text-slate-500">
@@ -431,6 +496,8 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
         ))}
       </div>
 
+      <p className="text-center text-[11px] leading-relaxed text-slate-400">{t("storefront.disclaimer")}</p>
+
       {itemOpen ? (
         <AppModal onClose={() => setItemOpen(false)}>
           <form noValidate onSubmit={saveItem} className="flex min-h-0 flex-col">
@@ -442,9 +509,23 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
                 theme="light"
                 placeholder={t("storefront.company")}
                 value={form.company_id}
-                options={partners.map((company) => ({ value: String(company.id), label: company.name }))}
+                options={[
+                  ...partners.map((company) => ({ value: String(company.id), label: company.name })),
+                  { value: CUSTOM_COMPANY, label: t("storefront.customCompany") },
+                ]}
                 onChange={(value) => setForm((current) => ({ ...current, company_id: value }))}
               />
+              {form.company_id === CUSTOM_COMPANY ? (
+                <div>
+                  <input
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                    placeholder={t("storefront.customCompanyName")}
+                    value={form.custom_company_name}
+                    onChange={(event) => setForm((current) => ({ ...current, custom_company_name: event.target.value }))}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">{t("storefront.customCompanyHint")}</p>
+                </div>
+              ) : null}
               <Select2Field
                 theme="light"
                 placeholder={t("storefront.type")}

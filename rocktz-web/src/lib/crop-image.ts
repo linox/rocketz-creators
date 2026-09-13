@@ -14,17 +14,31 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function getCroppedAvatarBlob(imageSrc: string, pixelCrop: CropPixels, size = 512): Promise<Blob> {
+export async function getCroppedImageBlob(
+  imageSrc: string,
+  pixelCrop: CropPixels,
+  output: { width: number; height: number } = { width: 512, height: 512 },
+): Promise<Blob> {
   const image = await loadImage(imageSrc);
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = output.width;
+  canvas.height = output.height;
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Não foi possível recortar a imagem.");
   }
 
-  context.drawImage(image, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, size, size);
+  context.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    output.width,
+    output.height,
+  );
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -39,4 +53,8 @@ export async function getCroppedAvatarBlob(imageSrc: string, pixelCrop: CropPixe
       0.92,
     );
   });
+}
+
+export async function getCroppedAvatarBlob(imageSrc: string, pixelCrop: CropPixels, size = 512): Promise<Blob> {
+  return getCroppedImageBlob(imageSrc, pixelCrop, { width: size, height: size });
 }

@@ -22,6 +22,7 @@ class ActivityActionResolver
         '#^api/campaigns/[^/]+/post-metrics-sync$#',
         '#^api/recurring-contracts/[^/]+/post-metrics-sync$#',
         '#^api/landings/.+/events$#',
+        '#^api/storefronts/.+/events$#',
     ];
 
     /**

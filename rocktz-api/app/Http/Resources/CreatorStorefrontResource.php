@@ -47,6 +47,7 @@ class CreatorStorefrontResource extends JsonResource
                 'name' => $company->name,
                 'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
             ])->values()->all()),
+            'stats' => $this->when($includePrivate, $this->additional['stats'] ?? null),
             'categories' => $creator->relationLoaded('storefrontCategories')
                 ? $creator->storefrontCategories->map(fn ($category) => [
                     'id' => $category->id,

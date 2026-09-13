@@ -21,16 +21,22 @@ class CreatorStorefrontItemResource extends JsonResource
         $likedIds = $request->attributes->get('storefront_liked_ids', []);
         $company = $item->relationLoaded('company') ? $item->company : null;
         $category = $item->relationLoaded('category') ? $item->category : null;
+        $customName = filled($item->custom_company_name) ? (string) $item->custom_company_name : null;
 
         return [
             'id' => $item->id,
             'creator_id' => $item->creator_id,
             'company_id' => $item->company_id,
+            'custom_company_name' => $customName,
             'company' => $company ? [
                 'id' => $company->id,
                 'name' => $company->name,
                 'logo_url' => MediaUrl::publicAbsolute($company->logo_url),
-            ] : null,
+            ] : ($customName ? [
+                'id' => null,
+                'name' => $customName,
+                'logo_url' => null,
+            ] : null),
             'category_id' => $item->category_id,
             'category' => $category ? [
                 'id' => $category->id,
@@ -45,6 +51,7 @@ class CreatorStorefrontItemResource extends JsonResource
             'is_published' => (bool) $item->is_published,
             'likes_count' => (int) $item->likes_count,
             'shares_count' => (int) $item->shares_count,
+            'clicks_count' => (int) ($item->clicks_count ?? 0),
             'liked' => in_array((int) $item->id, $likedIds, true),
             'sort_order' => (int) $item->sort_order,
             'created_at' => $item->created_at?->toIso8601String(),
