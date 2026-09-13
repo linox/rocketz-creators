@@ -31,6 +31,7 @@ import {
   KeyRound,
   Megaphone,
   AlertTriangle,
+  Pencil,
   Repeat,
   Scale,
   Send,
@@ -2011,6 +2012,7 @@ function CreatorWorkActions({
     );
   }
   const action = creatorNextDeliveryAction(deliveryStatus, flow, publishedUrl, postingProfile);
+  const brandPosts = postingProfile === "brand";
   const briefingClass = stack
     ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
     : "inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50";
@@ -2040,9 +2042,16 @@ function CreatorWorkActions({
         <Eye size={13} /> {tp("viewBriefing")}
       </button>
       {action?.kind === "view_published" && publishedUrl ? (
-        <a href={safeHttpUrl(publishedUrl)} target="_blank" rel="noreferrer" className={actionClass}>
-          <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
-        </a>
+        <>
+          <a href={safeHttpUrl(publishedUrl)} target="_blank" rel="noreferrer" className={actionClass}>
+            <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
+          </a>
+          {!brandPosts ? (
+            <button type="button" onClick={onOpen} className={briefingClass}>
+              <Pencil size={13} /> {tp("editPublishedLink")}
+            </button>
+          ) : null}
+        </>
       ) : action ? (
         <button type="button" onClick={onOpen} className={actionClass}>
           <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}

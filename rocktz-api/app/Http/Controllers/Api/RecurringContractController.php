@@ -443,6 +443,7 @@ class RecurringContractController extends Controller
             $isLive = $contentPlanningItem->approval_flow === ApprovalFlowType::LiveLink
                 || $this->isLiveContentType($data['content_type'] ?? $contentPlanningItem->content_type?->value);
             $materialApproved = $contentPlanningItem->status === ContentPlanningStatus::Approved
+                || $contentPlanningItem->status === ContentPlanningStatus::Published
                 || $contentPlanningItem->video_status === StageApprovalStatus::Approved;
             if ($isLive || $materialApproved) {
                 $data['status'] = ContentPlanningStatus::Published;

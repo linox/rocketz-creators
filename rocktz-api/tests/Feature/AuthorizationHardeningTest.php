@@ -11,6 +11,7 @@ use App\Enums\PostingProfile;
 use App\Enums\StageApprovalStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\CampaignCreatorContent;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\ContentPlanningItem;
@@ -214,6 +215,53 @@ class AuthorizationHardeningTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.content.published_link', 'https://instagram.com/reel/marca-oficial')
             ->assertJsonPath('data.delivery_status', 'published');
+    }
+
+    public function test_creator_can_update_published_link_after_publication(): void
+    {
+        $creator = Creator::factory()->active()->create();
+        $row = CampaignCreator::factory()->approved()->create([
+            'creator_id' => $creator->id,
+            'delivery_status' => DeliveryStatus::Published,
+            'script_status' => StageApprovalStatus::Approved,
+            'video_status' => StageApprovalStatus::Approved,
+        ]);
+        CampaignCreatorContent::factory()->create([
+            'campaign_creator_id' => $row->id,
+            'published_link' => 'https://instagram.com/reel/old-post',
+        ]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'published_link' => 'https://instagram.com/reel/new-post',
+                'delivery_status' => DeliveryStatus::Published->value,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.content.published_link', 'https://instagram.com/reel/new-post')
+            ->assertJsonPath('data.delivery_status', 'published');
+    }
+
+    public function test_creator_can_update_pauta_published_url_after_publication(): void
+    {
+        $creator = Creator::factory()->active()->create();
+        $item = ContentPlanningItem::factory()->published()->create([
+            'creator_id' => $creator->id,
+            'briefing' => 'Mostrar o produto nos primeiros segundos.',
+            'published_url' => 'https://instagram.com/reel/old-pauta',
+            'posting_profile' => PostingProfile::Creator,
+        ]);
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $item->recurring_contract_id,
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'published_url' => 'https://instagram.com/reel/new-pauta',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.published_url', 'https://instagram.com/reel/new-pauta')
+            ->assertJsonPath('data.status', 'published');
     }
 
     public function test_creator_cannot_send_pauta_published_url_when_brand_posts(): void

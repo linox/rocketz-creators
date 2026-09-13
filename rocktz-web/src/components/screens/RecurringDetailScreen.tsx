@@ -2068,6 +2068,30 @@ function DetailInner() {
                             <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
                               {t("postingProfile.awaitingCreator")}
                             </p>
+                          ) : !isCreator && !live && item.published_url && canManage ? (
+                            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                              <span className="text-[10px] font-bold tracking-wider text-emerald-800 uppercase">{t("campaignDetail.publishedLinkLabel")}</span>
+                              <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+                                <ExternalLink size={12} className="shrink-0" /> {item.published_url}
+                              </a>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <input
+                                  type="url"
+                                  value={liveLinkDraft[item.id] ?? item.published_url ?? ""}
+                                  onChange={(e) => setLiveLinkDraft((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                  placeholder={t("campaignDetail.publishedLinkPh")}
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={(liveLinkDraft[item.id] ?? item.published_url ?? "").trim() === (item.published_url || "").trim()}
+                                  onClick={() => void onSavePublishedLink(item, liveLinkDraft[item.id] ?? item.published_url ?? "")}
+                                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                                >
+                                  {t("recurringDetail.savePublishedLink")}
+                                </button>
+                              </div>
+                            </div>
                           ) : !isCreator && !live && item.published_url ? (
                             <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
                               <ExternalLink size={12} className="shrink-0" /> {item.published_url}

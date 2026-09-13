@@ -48,6 +48,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const isApproved = row.delivery_status === "approved";
+  const isPublished = row.delivery_status === "published";
+  const linkStage = isApproved || isPublished;
   const brandPosts = isBrandPosting(campaign.posting_profile);
   const flow = campaign.approval_flow || "script_and_video";
   const stagedFlow = flow === "script_and_video";
@@ -67,9 +69,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const canSubmitVideoBase = flow === "video_only"
     || flow === "live_link"
     || (stagedFlow && scriptApproved && !videoApproved)
-    || (!stagedFlow && flow !== "script_only" && !isApproved);
+    || (!stagedFlow && flow !== "script_only" && !linkStage);
   const canSubmitVideo = canSubmitVideoBase && !awaitingVideoApproval && (videoRevision || deliveryRevision || !videoSubmitted);
-  const showScriptField = !isApproved
+  const showScriptField = !linkStage
     && flow !== "video_only"
     && (canSubmitScript || awaitingScriptApproval || Boolean(row.content?.script) || Boolean(row.content?.script_file_url) || scriptApproved || flow === "live_link");
   const currentVideoVersion = row.content?.video_version ?? 0;
@@ -108,7 +110,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   }
 
   async function submitMaterial() {
-    if (isApproved) {
+    if (linkStage) {
       if (brandPosts) {
         return;
       }
@@ -145,7 +147,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     setSubmitting(true);
     setUploadProgress(0);
     try {
-      if (videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
+      if (videoFile && (canSubmitVideo || (!canSubmitScript && !linkStage))) {
         if (uploadManager) {
           uploadManager.startSubmissionUpload(
             videoFile,
@@ -167,7 +169,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       }
 
       const externalVideoUrl = safeHttpUrl(downloadUrl.trim());
-      if (externalVideoUrl && !videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
+      if (externalVideoUrl && !videoFile && (canSubmitVideo || (!canSubmitScript && !linkStage))) {
         const body: Record<string, unknown> = {
           ...buildVideoSubmissionPayload(),
           video_url: externalVideoUrl,
@@ -187,14 +189,14 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
       let videoUrl = row.content?.video_url || null;
       let videoFileSize = row.content?.video_file_size ?? 0;
-      if (videoFile && (canSubmitVideo || (!canSubmitScript && !isApproved))) {
+      if (videoFile && (canSubmitVideo || (!canSubmitScript && !linkStage))) {
         const uploaded = await api.uploadMedia(videoFile, videoFile.name, setUploadProgress);
         videoUrl = uploaded.data.url;
         videoFileSize = uploaded.data.size ?? videoFile.size;
       }
 
       const body: Record<string, unknown> = {};
-      if (isApproved) {
+      if (linkStage) {
         body.published_link = publishedUrl.trim();
         body.delivery_status = "published";
       } else if (canSubmitScript) {
@@ -243,8 +245,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       onSubmitted();
       onClose();
       void alertSuccess(
-        isApproved
-          ? tp("publishedLinkSent")
+        linkStage
+          ? (isPublished ? tp("publishedLinkUpdated") : tp("publishedLinkSent"))
           : hasRevision
             ? tp("newVersionSent")
             : canSubmitScript && stagedFlow
@@ -279,8 +281,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     || isBackgroundUploading
     || awaitingScriptApproval
     || awaitingVideoApproval
-    || (isApproved
-      ? brandPosts || !publishedUrl.trim()
+    || (linkStage
+      ? brandPosts || !publishedUrl.trim() || publishedUrl.trim() === (row.content?.published_link || "").trim())
       : canSubmitScript
         ? !scriptReady
         : canSubmitVideo
@@ -373,8 +375,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
       <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
         <h5 className="flex items-center gap-2 border-b border-slate-100 pb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
-          {isApproved ? <Link2 size={15} className="text-emerald-600" /> : <Send size={15} className="text-brand-primary" />}
-          {isApproved ? tp("publishLinkTitle") : tp("submissionTitle")}
+          {linkStage ? <Link2 size={15} className="text-emerald-600" /> : <Send size={15} className="text-brand-primary" />}
+          {linkStage ? tp("publishLinkTitle") : tp("submissionTitle")}
         </h5>
 
         {hasRevision ? (
@@ -419,14 +421,14 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           </div>
         ) : null}
 
-        {stagedFlow && scriptApproved && !videoApproved && !videoRevision && !awaitingVideoApproval && !isApproved ? (
+        {stagedFlow && scriptApproved && !videoApproved && !videoRevision && !awaitingVideoApproval && !linkStage ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900">
             {tp("scriptApprovedSendVideo")}
           </div>
         ) : null}
 
         <div className="flex flex-col gap-4">
-          {!isApproved ? (
+          {!linkStage ? (
             <>
           {showScriptField ? (
           <div className="flex flex-col gap-2">
@@ -501,7 +503,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             </>
           ) : null}
 
-          {isApproved ? (
+          {linkStage ? (
             brandPosts ? (
             <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="m-0 text-[11px] font-medium text-amber-900">{tp("approvedPublishHintBrand")}</p>
@@ -515,7 +517,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             </div>
             ) : (
             <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-              <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("approvedPublishHint")}</p>
+              <p className="m-0 text-[11px] font-medium text-emerald-800">{isPublished ? tp("editPublishedLinkHint") : tp("approvedPublishHint")}</p>
               {row.content?.video_url ? (
                 <CampaignSubmittedVideo
                   videoUrl={row.content.video_url}
@@ -567,7 +569,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             >
               {tp("collapseBriefing")}
             </button>
-            {!(isApproved && brandPosts) ? (
+            {!(linkStage && brandPosts) ? (
             <button
               type="button"
               disabled={submitDisabled}
@@ -576,16 +578,16 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 "inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-none px-5 text-xs font-bold tracking-wider uppercase shadow-md transition-all disabled:cursor-not-allowed disabled:shadow-none",
                 submitDisabled
                   ? "bg-slate-100 text-slate-400"
-                  : isApproved
+                  : linkStage
                     ? "bg-emerald-600 text-white shadow-emerald-600/20 hover:bg-emerald-700"
                     : hasRevision
                       ? "bg-rose-600 text-white shadow-rose-600/20 hover:bg-rose-700"
                       : "bg-brand-primary text-white shadow-indigo-600/20 hover:bg-indigo-600",
               )}
             >
-              {isApproved ? <Link2 size={15} /> : hasRevision ? <RefreshCw size={15} /> : <CheckCircle2 size={15} />}
-              {isApproved
-                ? tp("sendPublishedLink")
+              {linkStage ? <Link2 size={15} /> : hasRevision ? <RefreshCw size={15} /> : <CheckCircle2 size={15} />}
+              {linkStage
+                ? (isPublished ? tp("savePublishedLink") : tp("sendPublishedLink"))
                 : hasRevision
                   ? tp("sendNewVersionNumbered", {
                       n: canSubmitVideo ? nextVideoVersion : nextScriptVersion,

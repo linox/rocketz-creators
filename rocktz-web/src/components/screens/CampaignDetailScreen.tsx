@@ -1060,7 +1060,10 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.publishedLinkRequired"));
       return;
     }
-    await patch(row, { delivery_status: "published", published_link: link });
+    const updating = row.delivery_status === "published";
+    if (await patch(row, { delivery_status: "published", published_link: link }) && updating) {
+      await alertSuccess(t("campaignDetail.publishedLinkUpdated"));
+    }
   }
 
   if (loading) {
@@ -1854,8 +1857,8 @@ function DetailInner() {
                           </span>
                           <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
                         </div>
-                        {selected.delivery_status === "approved" ? (
-                          isBrandPosting(campaign.posting_profile) || isAdmin ? (
+                        {selected.delivery_status === "approved" || selected.delivery_status === "published" ? (
+                          selected.delivery_status === "published" || isBrandPosting(campaign.posting_profile) || isAdmin ? (
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.publishedLinkLabel")}</label>
                             <input
@@ -1866,7 +1869,9 @@ function DetailInner() {
                               className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-medium outline-none focus:border-emerald-500"
                             />
                             <p className="text-[10px] font-medium text-slate-500">
-                              {t(isBrandPosting(campaign.posting_profile) ? "postingProfile.publishedHintBrand" : "postingProfile.publishedHintCreator")}
+                              {t(selected.delivery_status === "published"
+                                ? "campaignDetail.publishedLinkEditHint"
+                                : (isBrandPosting(campaign.posting_profile) ? "postingProfile.publishedHintBrand" : "postingProfile.publishedHintCreator"))}
                             </p>
                           </div>
                           ) : (
@@ -1926,9 +1931,19 @@ function DetailInner() {
                               </button>
                             ) : null}
                             {selected.delivery_status === "published" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-emerald-800 uppercase">
-                                <CheckCircle2 size={12} /> {t("campaignDetail.publishedDone")}
-                              </span>
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={updatingId !== null || !publishedLinkDraft.trim() || publishedLinkDraft.trim() === (selected.content?.published_link || "").trim()}
+                                  onClick={() => void markPublished(selected)}
+                                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                  <Sparkles size={12} /> {t("campaignDetail.updatePublishedLink")}
+                                </button>
+                                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-emerald-800 uppercase">
+                                  <CheckCircle2 size={12} /> {t("campaignDetail.publishedDone")}
+                                </span>
+                              </>
                             ) : null}
                           </div>
                         </div>

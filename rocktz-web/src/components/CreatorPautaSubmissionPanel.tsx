@@ -118,7 +118,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     setSubmitting(true);
     try {
       await api.updatePlanningItem(item.id, { published_url: publishedUrl.trim() });
-      await alertSuccess(tp("publishedLinkSent"));
+      await alertSuccess(alreadyPublished ? tp("publishedLinkUpdated") : tp("publishedLinkSent"));
       onSubmitted();
     } catch (err) {
       await alertApiError(err);
@@ -272,14 +272,49 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   }
 
   if (alreadyPublished) {
-    return item.published_url ? (
-      <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-        <p className="m-0 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">{tp("publishedLinkLabel")}</p>
-        <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
-          <Link2 size={13} /> {item.published_url}
-        </a>
+    if (brandPosts) {
+      return item.published_url ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="m-0 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">{tp("publishedLinkLabel")}</p>
+          <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+            <Link2 size={13} /> {item.published_url}
+          </a>
+        </div>
+      ) : null;
+    }
+
+    const publishedUnchanged = publishedUrl.trim() === (item.published_url || "").trim();
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("editPublishedLinkHint")}</p>
+        {item.published_url ? (
+          <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
+            <Link2 size={13} /> {item.published_url}
+          </a>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{isLive ? t("recurringDetail.liveLinkLabel") : tp("publishedLinkLabel")}</label>
+          <input
+            type="url"
+            placeholder={isLive ? t("recurringDetail.liveLinkPh") : tp("publishedLinkPh")}
+            value={publishedUrl}
+            onChange={(event) => setPublishedUrl(event.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={submitting || !publishedUrl.trim() || publishedUnchanged}
+          onClick={() => void submitPublishedUrl()}
+          className={cn(
+            "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+            submitting || !publishedUrl.trim() || publishedUnchanged ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
+          )}
+        >
+          <Link2 size={14} /> {tp("savePublishedLink")}
+        </button>
       </div>
-    ) : null;
+    );
   }
 
   if (isLive) {
