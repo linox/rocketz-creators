@@ -282,7 +282,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
     || awaitingScriptApproval
     || awaitingVideoApproval
     || (linkStage
-      ? brandPosts || !publishedUrl.trim() || publishedUrl.trim() === (row.content?.published_link || "").trim())
+      ? brandPosts || !publishedUrl.trim() || publishedUrl.trim() === (row.content?.published_link || "").trim()
       : canSubmitScript
         ? !scriptReady
         : canSubmitVideo
