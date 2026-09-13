@@ -18,6 +18,7 @@ return [
         'data_cadastro' => 'Data do cadastro',
         'data_limite' => 'Prazo',
         'data_entrega' => 'Data de entrega',
+        'data_postagem' => 'Data da postagem',
         'valor_campanha' => 'Valor',
         'motivo_reprovacao' => 'Motivo',
         'solicitacao_modificacao' => 'Ajustes solicitados',
@@ -85,6 +86,12 @@ return [
             'greeting' => 'Olá, {{nome_criador}}!',
             'body' => 'O prazo da demanda {{nome_demanda}} está próximo. Acesse a plataforma para enviar ou atualizar sua entrega.',
             'cta' => 'Acessar demanda',
+        ],
+        'demand.post_day' => [
+            'subject' => 'Hoje é o dia da postagem de {{nome_demanda}}',
+            'greeting' => 'Olá, {{nome_usuario}}!',
+            'body' => 'Hoje é o dia combinado para publicar {{nome_demanda}}. Publique o conteúdo e registre o link na plataforma.',
+            'cta' => 'Abrir demanda',
         ],
         'delivery.revision_requested' => [
             'subject' => 'Foram solicitados ajustes na sua entrega',

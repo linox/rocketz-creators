@@ -66,6 +66,7 @@ import { Select2Field } from "@/components/Select2Field";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
+import { creatorTermAudit } from "@/lib/creator-contract-document";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { ApiError } from "@/lib/laravel";
@@ -127,7 +128,18 @@ function currentYearMonth() {
 }
 
 function itemInMonth(item: PlanningItem, month: string) {
-  return item.month === month || Boolean(item.planned_date?.startsWith(month));
+  return item.month === month || Boolean(item.planned_date?.startsWith(month) || item.post_date?.startsWith(month));
+}
+
+function campaignVisibleOnCreatorMonth(
+  campaign: Campaign,
+  row: { delivery_date?: string | null; post_date?: string | null },
+  month: string,
+) {
+  if (campaign.status !== "finished") return true;
+  const dates = [row.delivery_date, row.post_date, campaign.end_date, campaign.start_date].filter((value): value is string => Boolean(value));
+  if (dates.length === 0) return true;
+  return dates.some((value) => value.startsWith(month));
 }
 
 function quotaEntries(deliverables?: Record<string, number>) {
@@ -167,6 +179,55 @@ function RecurringDeliveryName({
   );
 }
 
+function WorkDatePair({
+  delivery,
+  post,
+  deliveryEmpty,
+  fmtDate,
+  tp,
+}: {
+  delivery?: string | null;
+  post?: string | null;
+  deliveryEmpty?: string;
+  fmtDate: (value?: string | null) => string;
+  tp: (key: string) => string;
+}) {
+  return (
+    <div className="grid min-w-0 grid-cols-2 gap-3">
+      <div className="min-w-0">
+        <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("colDeliveryDate")}</span>
+        <span className="mt-0.5 inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-slate-700">
+          <Calendar size={13} className="shrink-0 text-slate-400" />
+          <span className="truncate">{delivery ? fmtDate(delivery) : (deliveryEmpty ?? "—")}</span>
+        </span>
+      </div>
+      <div className="min-w-0">
+        <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{tp("colPostDate")}</span>
+        <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-700">{post ? fmtDate(post) : "—"}</span>
+      </div>
+    </div>
+  );
+}
+
+function WorkDateCell({
+  value,
+  empty,
+  fmtDate,
+  showIcon,
+}: {
+  value?: string | null;
+  empty?: string;
+  fmtDate: (value?: string | null) => string;
+  showIcon?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1 font-semibold text-slate-700">
+      {showIcon ? <Calendar size={13} className="shrink-0 text-slate-400" /> : null}
+      <span>{value ? fmtDate(value) : (empty ?? "—")}</span>
+    </div>
+  );
+}
+
 type CompanyGroup<T> = {
   key: string;
   id: string;
@@ -182,10 +243,11 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
     const creatorRow = contract.creators?.find((row) => row.creator_id === creatorId);
     const fee = creatorRow?.monthly_cache ?? creatorRow?.monthly_fee ?? null;
     const items = (contract.items ?? [])
-      .filter((item) => item.creator_id === creatorId && item.status !== "published")
+      .filter((item) => item.creator_id === creatorId)
       .sort((a, b) => deliveryStatusRank(planningItemDeliveryState(a)) - deliveryStatusRank(planningItemDeliveryState(b)));
 
     if (items.length === 0) {
+      if (contract.status !== "active") continue;
       rows.push({
         key: `contract-${contract.id}`,
         contract,
@@ -718,7 +780,7 @@ function ProfileInner() {
     if (!isCreatorSelf || !id) return;
     if (tab !== "campaigns" && tab !== "dashboard") return;
     setLoadingCampaigns(true);
-    api.availableCampaigns()
+    api.campaigns("?include=content")
       .then((res) => setMyCampaignItems(res.data))
       .catch(() => undefined)
       .finally(() => setLoadingCampaigns(false));
@@ -733,7 +795,7 @@ function ProfileInner() {
   async function reloadMyCampaigns(options?: { silent?: boolean }) {
     if (!options?.silent) setLoadingCampaigns(true);
     try {
-      setMyCampaignItems((await api.availableCampaigns()).data);
+      setMyCampaignItems((await api.campaigns("?include=content")).data);
     } catch {
       /* ignore */
     } finally {
@@ -840,8 +902,9 @@ function ProfileInner() {
     paused: tp("statusChipPaused"),
     rejected: tp("statusChipRejected"),
   });
-  const myContracts = recurring.filter((contract) => contract.status === "active" && contract.creators?.some((row) => row.creator_id === profile.id));
-  const recurringWorkRows = buildRecurringWorkRows(myContracts, profile.id);
+  const myWorkContracts = recurring.filter((contract) => contract.status !== "pending_agency" && contract.creators?.some((row) => row.creator_id === profile.id));
+  const myContracts = myWorkContracts.filter((contract) => contract.status === "active");
+  const recurringWorkRows = buildRecurringWorkRows(myWorkContracts, profile.id);
   const canEdit = isAdmin || user.creator?.id === profile.id;
   const canUpload = canEdit && (!isAdmin || viewMode === "creator");
   const showCreatorTabs = canEdit && !agencyView;
@@ -869,6 +932,7 @@ function ProfileInner() {
     .filter((item): item is { campaign: Campaign; row: NonNullable<Campaign["applications"]>[number] } => Boolean(item));
 
   const approvedCampaigns = myParticipations.filter((item) => item.row.application_status === "approved");
+  const dashboardApprovedCampaigns = approvedCampaigns.filter((item) => campaignVisibleOnCreatorMonth(item.campaign, item.row, currentYearMonth()));
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const rejectedApplications = myParticipations.filter((item) => item.row.application_status === "rejected");
 
@@ -1591,9 +1655,9 @@ function ProfileInner() {
               ) : (
                 <div className="flex flex-col gap-4">
                   <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
-                    <Briefcase size={16} className="text-brand-primary" /> {tp("activeCampaignsSection", { count: approvedCampaigns.length })}
+                    <Briefcase size={16} className="text-brand-primary" /> {tp("activeCampaignsSection", { count: dashboardApprovedCampaigns.length })}
                   </h3>
-                  {approvedCampaigns.length === 0 ? (
+                  {dashboardApprovedCampaigns.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
                       <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Briefcase size={24} /></div>
                       <h4 className="text-sm font-bold text-slate-800">{tp("noActiveCampaigns")}</h4>
@@ -1604,7 +1668,7 @@ function ProfileInner() {
                     </div>
                   ) : (
                     <ActiveCampaignsTable
-                      approvedCampaigns={approvedCampaigns}
+                      approvedCampaigns={dashboardApprovedCampaigns}
                       expandedSubmissionId={expandedSubmissionId}
                       openSubmission={openSubmission}
                       onCloseSubmission={() => setExpandedSubmissionId(null)}
@@ -1829,19 +1893,8 @@ function ProfileInner() {
           creatorEmail={creator.email ?? user.email ?? undefined}
           creatorDocument={creator.document || creator.cpf || ""}
           creatorCountry={creator.country}
-          existingAudit={creator.contract_acceptance ? {
-            termId: "rocketz-2026",
-            version: CONTRACT_METADATA.version,
-            fullName: creator.contract_acceptance.full_name,
-            document: creator.document || creator.cpf || "",
-            email: creator.email ?? "",
-            acceptedAt: creator.contract_acceptance.accepted_at ?? "",
-            formattedDate: creator.contract_acceptance.accepted_at ?? "",
-            ipUserAgent: "",
-            declarations: {},
-            allAccepted: true,
-            status: "valid",
-          } : null}
+          creator={creator}
+          existingAudit={creatorTermAudit(creator, i18n.language)}
           onAccept={async (audit) => {
             try {
               await api.acceptContract(creator.id, { full_name: audit.fullName, email: audit.email, document: audit.document });
@@ -1996,7 +2049,7 @@ function RecurringBriefingModal({
   onSubmitted: () => void;
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
-  const { t: tc } = useTranslation("common");
+  const { t: tc, i18n } = useTranslation("common");
   const { t: ta } = useTranslation("app");
   const uploadManager = useOptionalUploadManager();
   const item = work.item;
@@ -2016,6 +2069,14 @@ function RecurringBriefingModal({
           <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">
             {[work.contract.company?.name, work.contract.title].filter(Boolean).join(" · ")}
           </p>
+          <div className="mt-2">
+            <WorkDatePair
+              delivery={item.planned_date}
+              post={item.post_date}
+              fmtDate={(value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString(i18n.language) : "—")}
+              tp={tp}
+            />
+          </div>
           {formatLabel ? (
             <span className="mt-1.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-slate-600 uppercase">
               {formatLabel}
@@ -2093,7 +2154,7 @@ function ActiveRecurringWorksTable({
 
   const statusOptions = useMemo(() => [
     { value: "all", label: tp("filterAllStatuses") },
-    ...CONTENT_DELIVERY_STATES.filter((state) => state !== "published").map((state) => ({ value: state, label: deliveryLabel(state) })),
+    ...CONTENT_DELIVERY_STATES.map((state) => ({ value: state, label: deliveryLabel(state) })),
   ], [tp, deliveryLabel]);
 
   const sections = useMemo(() => {
@@ -2111,11 +2172,12 @@ function ActiveRecurringWorksTable({
         const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
         const monthItems = list.filter((work) => work.item && itemInMonth(work.item, month));
-        const pendingRows = monthItems.filter((work) => {
-          if (work.deliveryStatus === "published") return false;
+        if (monthItems.length === 0 && sample.contract.status !== "active") return null;
+        const monthRows = monthItems.filter((work) => {
           if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
           return true;
         });
+        const pendingRows = monthRows.filter((work) => work.deliveryStatus !== "published");
         return {
           key: `contract-${sample.contract.id}`,
           contract: sample.contract,
@@ -2123,6 +2185,7 @@ function ActiveRecurringWorksTable({
           logoUrl: sample.contract.company?.logo_url ?? null,
           fee: sample.fee,
           deliverables: sample.deliverables,
+          monthRows,
           pendingRows,
           monthTotal: quotaTotal(sample.deliverables) || monthItems.length,
         };
@@ -2131,7 +2194,7 @@ function ActiveRecurringWorksTable({
       .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
   }, [rows, companyFilter, statusFilter, month, tp]);
 
-  const pendingCount = sections.reduce((sum, section) => sum + section.pendingRows.length, 0);
+  const monthCount = sections.reduce((sum, section) => sum + section.monthRows.length, 0);
   const openWork = useMemo(
     () => rows.find((work) => work.key === expandedKey) ?? null,
     [rows, expandedKey],
@@ -2157,7 +2220,7 @@ function ActiveRecurringWorksTable({
             <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("recurringWorkTableTitle")}</span>
           </div>
           <span className="w-fit rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-extrabold text-purple-700">
-            {tp("recurringInProgressBadge", { count: pendingCount })}
+            {tp("recurringInProgressBadge", { count: monthCount })}
           </span>
         </div>
         <WorkTableFilters
@@ -2189,13 +2252,13 @@ function ActiveRecurringWorksTable({
             <div className="border-t border-purple-100 bg-slate-50 px-4 py-2 sm:px-5">
               <p className="m-0 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">{tp("pendingThisMonth", { month: monthLabel })}</p>
             </div>
-            {section.pendingRows.length === 0 ? (
+            {section.monthRows.length === 0 ? (
               <p className="m-0 px-5 py-8 text-center text-sm font-medium text-slate-500">{tp("noPendingThisMonth")}</p>
             ) : (
               <>
       <div className="flex flex-col lg:hidden">
             <div className="divide-y divide-slate-100">
-        {section.pendingRows.map((work) => {
+        {section.monthRows.map((work) => {
           const { contract, item, deliveryStatus, key } = work;
           const isOpen = expandedKey === key;
           const awaitingPauta = !item || itemIsAwaitingPauta(item);
@@ -2209,11 +2272,15 @@ function ActiveRecurringWorksTable({
                   <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                  <Calendar size={13} className="text-slate-400" />
-                  {item?.planned_date ? fmtDate(item.planned_date) : (item ? "—" : tp("awaitingDemand"))}
-                </span>
+              <div className="mt-3 flex flex-col gap-2">
+                <WorkDatePair
+                  delivery={item?.planned_date}
+                  post={item?.post_date}
+                  deliveryEmpty={item ? "—" : tp("awaitingDemand")}
+                  fmtDate={fmtDate}
+                  tp={tp}
+                />
+                <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-emerald-700 uppercase">
                   <CheckCircle2 size={11} />
                   {tp("contractLinked")}
@@ -2222,6 +2289,7 @@ function ActiveRecurringWorksTable({
                   <DeliveryStatusIcon state={item && !awaitingPauta ? deliveryStatus : "waiting"} />
                   {awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
                 </span>
+                </div>
               </div>
               {item ? (
                 <DeliveryUploadProgress
@@ -2263,13 +2331,14 @@ function ActiveRecurringWorksTable({
           <thead>
             <tr className="border-b border-purple-100 bg-purple-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
               <th className="p-3.5 pl-5">{tp("colDemandProject")}</th>
-              <th className="p-3.5">{tp("colDeadline")}</th>
+              <th className="p-3.5">{tp("colDeliveryDate")}</th>
+              <th className="p-3.5">{tp("colPostDate")}</th>
               <th className="p-3.5">{tp("colDeliveryStatus")}</th>
               <th className="p-3.5 pr-5 text-right">{tp("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
-            {section.pendingRows.map((work) => {
+            {section.monthRows.map((work) => {
               const { contract, item, deliveryStatus, key } = work;
               const isOpen = expandedKey === key;
               const awaitingPauta = !item || itemIsAwaitingPauta(item);
@@ -2281,11 +2350,16 @@ function ActiveRecurringWorksTable({
                   <td className="p-3.5 pl-5">
                     <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
                   </td>
-                  <td className="p-3.5 text-slate-700">
-                    <div className="flex items-center gap-1 font-semibold">
-                      <Calendar size={13} className="text-slate-400" />
-                      <span>{item?.planned_date ? fmtDate(item.planned_date) : (item ? "—" : tp("awaitingDemand"))}</span>
-                    </div>
+                  <td className="p-3.5">
+                    <WorkDateCell
+                      value={item?.planned_date}
+                      empty={item ? "—" : tp("awaitingDemand")}
+                      fmtDate={fmtDate}
+                      showIcon
+                    />
+                  </td>
+                  <td className="p-3.5">
+                    <WorkDateCell value={item?.post_date} fmtDate={fmtDate} />
                   </td>
                   <td className="p-3.5">
                     <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
@@ -2368,7 +2442,7 @@ function CampaignBriefingModal({
   onSubmitted: () => void;
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
-  const { t: tc } = useTranslation("common");
+  const { t: tc, i18n } = useTranslation("common");
   const uploadManager = useOptionalUploadManager();
   const lockBackdrop = Boolean(row.pending_upload_id) || uploadManager?.isSubjectUploading("campaign_creator", row.id);
 
@@ -2379,6 +2453,14 @@ function CampaignBriefingModal({
           <p className="m-0 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("briefingModalTitle")}</p>
           <h3 className="m-0 mt-1 truncate text-sm font-black text-slate-900">{campaign.name}</h3>
           <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">{campaign.company?.name}</p>
+          <div className="mt-2">
+            <WorkDatePair
+              delivery={row.delivery_date || campaign.end_date}
+              post={row.post_date}
+              fmtDate={(value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString(i18n.language) : "—")}
+              tp={tp}
+            />
+          </div>
         </div>
         <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={tc("close")}>
           <X size={16} />
@@ -2528,11 +2610,14 @@ function ActiveCampaignsTable({
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                  <Calendar size={13} className="text-slate-400" />
-                  {fmtDate(row.delivery_date || campaign.end_date)}
-                </span>
+              <div className="mt-3 flex flex-col gap-2">
+                <WorkDatePair
+                  delivery={row.delivery_date || campaign.end_date}
+                  post={row.post_date}
+                  fmtDate={fmtDate}
+                  tp={tp}
+                />
+                <div className="flex flex-wrap items-center gap-2">
                 <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", applicationBadgeClass(row.application_status))}>
                   {row.application_status === "approved" ? <CheckCircle2 size={11} /> : null}
                   {applicationLabel(row.application_status)}
@@ -2541,6 +2626,7 @@ function ActiveCampaignsTable({
                   <DeliveryStatusIcon state={deliveryStatus} />
                   {deliveryLabel(deliveryStatus)}
                 </span>
+                </div>
               </div>
               <DeliveryUploadProgress
                 subjectType="campaign_creator"
@@ -2563,7 +2649,8 @@ function ActiveCampaignsTable({
             <tr className="border-b border-indigo-100 bg-indigo-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
               <th className="p-3.5 pl-5">{tp("colCampaign")}</th>
               <th className="p-3.5">{tp("colCache")}</th>
-              <th className="p-3.5">{tp("colDeadline")}</th>
+              <th className="p-3.5">{tp("colDeliveryDate")}</th>
+              <th className="p-3.5">{tp("colPostDate")}</th>
               <th className="p-3.5">{tp("colApplicationStatus")}</th>
               <th className="p-3.5">{tp("colDeliveryStatus")}</th>
               <th className="p-3.5 pr-5 text-right">{tp("colActions")}</th>
@@ -2573,7 +2660,7 @@ function ActiveCampaignsTable({
             {groups.map((group) => (
               <Fragment key={`cd-${group.key}`}>
                 <tr>
-                  <td colSpan={6} className="p-0">
+                  <td colSpan={7} className="p-0">
                     <CompanyGroupHeader
                       name={group.name}
                       count={group.rows.length}
@@ -2594,11 +2681,11 @@ function ActiveCampaignsTable({
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
                     </td>
-                    <td className="p-3.5 text-slate-700">
-                      <div className="flex items-center gap-1 font-semibold">
-                        <Calendar size={13} className="text-slate-400" />
-                        <span>{fmtDate(row.delivery_date || campaign.end_date)}</span>
-                      </div>
+                    <td className="p-3.5">
+                      <WorkDateCell value={row.delivery_date || campaign.end_date} fmtDate={fmtDate} showIcon />
+                    </td>
+                    <td className="p-3.5">
+                      <WorkDateCell value={row.post_date} fmtDate={fmtDate} />
                     </td>
                     <td className="p-3.5">
                       <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", applicationBadgeClass(row.application_status))}>

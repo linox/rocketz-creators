@@ -69,7 +69,7 @@ export function planningItemDeliveryState(item: PlanningItem | null): ContentDel
   const scriptOnly = flow === "script_only";
   const scriptApproved = item.script_status === "approved";
   const videoApproved = item.video_status === "approved";
-  const hasScript = Boolean(item.script?.trim());
+  const hasScript = Boolean(item.script?.trim() || item.script_file_url);
   const hasVideo = Boolean(item.media_url?.trim() || item.submission_url?.trim());
 
   if (videoApproved && (!staged || scriptApproved || scriptOnly)) return "approved";

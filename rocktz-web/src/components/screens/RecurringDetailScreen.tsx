@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertTriangle,
@@ -63,7 +64,7 @@ import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
-import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
+import { getCalendarDays, localDateStr, planningDateEvents } from "@/lib/calendar";
 import { itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import { usePrivacy } from "@/lib/privacy";
@@ -154,6 +155,7 @@ const EMPTY_PAUTA = {
   title: "",
   content_type: "reel",
   planned_date: "",
+  post_date: "",
   briefing: emptyPautaBriefing(),
   script: "",
   references: "",
@@ -281,7 +283,7 @@ function creatorCost(row: ContractCreator) {
 }
 
 function itemInMonth(item: PlanningItem, month: string) {
-  return item.month === month || Boolean(item.planned_date?.startsWith(month));
+  return item.month === month || Boolean(item.planned_date?.startsWith(month) || item.post_date?.startsWith(month));
 }
 
 function pautaSlot(monthItems: PlanningItem[], item: PlanningItem) {
@@ -704,6 +706,7 @@ function DetailInner() {
         title: namedPautaTitle(item.title),
         content_type: item.content_type || "reel",
         planned_date: item.planned_date || "",
+        post_date: item.post_date || "",
         briefing: parsePautaBriefing(item),
         script: item.script || "",
         references: item.references || "",
@@ -717,7 +720,7 @@ function DetailInner() {
       setPautaScriptFile(null);
     } else {
       setEditingPauta(null);
-      setPautaForm({ ...EMPTY_PAUTA, planned_date: `${selectedMonth}-01`, briefing: emptyPautaBriefing() });
+      setPautaForm({ ...EMPTY_PAUTA, planned_date: `${selectedMonth}-01`, post_date: "", briefing: emptyPautaBriefing() });
       setPautaScriptFile(null);
     }
     setPautaModal(true);
@@ -839,6 +842,7 @@ function DetailInner() {
       title: pautaForm.title.trim(),
       content_type: pautaForm.content_type,
       planned_date: pautaForm.planned_date,
+      post_date: pautaForm.post_date || null,
       month: pautaForm.planned_date.slice(0, 7),
       briefing: pautaBriefingSummary(pautaForm.briefing),
       briefing_fields: pautaForm.briefing,
@@ -1682,9 +1686,12 @@ function DetailInner() {
                         || videoVersions.length,
                       );
                       const awaitingBriefing = isAwaitingBriefing(item);
-                      const deadline = item.planned_date
-                        ? t(live ? "recurringDetail.livePautaDeadline" : "recurringDetail.pautaDeadline", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) })
+                      const deliveryDateLabel = item.planned_date
+                        ? new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale)
                         : t("recurringDetail.pautaNoDate");
+                      const postDateLabel = item.post_date
+                        ? new Date(`${item.post_date}T00:00:00`).toLocaleDateString(locale)
+                        : "—";
                       const slot = pautaSlot(selectedSummary?.items ?? selectedPautas, item);
                       const displayTitle = namedPautaTitle(item.title);
                       return (
@@ -1824,9 +1831,15 @@ function DetailInner() {
                                   </button>
                                 ) : null}
                                 {videoUrl ? (
-                                  <button type="button" onClick={() => setWatchingVideoUrl(videoUrl)} className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-rose-100 bg-rose-50 px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-rose-700 transition-colors hover:border-rose-200 hover:bg-white">
-                                    <Play size={12} fill="currentColor" /> {t("recurringDetail.watchVideo")}
-                                  </button>
+                                  isGoogleDriveUrl(videoUrl) ? (
+                                    <a href={safeHttpUrl(videoUrl)} target="_blank" rel="noreferrer" className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-brand-primary transition-colors hover:border-indigo-200 hover:bg-white">
+                                      <ExternalLink size={12} /> {t("recurringDetail.openDrive")}
+                                    </a>
+                                  ) : (
+                                    <button type="button" onClick={() => setWatchingVideoUrl(videoUrl)} className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-rose-100 bg-rose-50 px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-rose-700 transition-colors hover:border-rose-200 hover:bg-white">
+                                      <Play size={12} fill="currentColor" /> {t("recurringDetail.watchVideo")}
+                                    </button>
+                                  )
                                 ) : null}
                                 {item.references ? (
                                   <button type="button" onClick={() => openPautaView(item, "references")} className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-indigo-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50">
@@ -1881,34 +1894,49 @@ function DetailInner() {
                                 <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
                                   <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("recurringDetail.videoVersionsTitle")}</p>
                                   <div className="flex flex-col gap-1">
-                                    {videoVersions.map((version) => (
-                                      <button
-                                        key={`${item.id}-v${version.version}`}
-                                        type="button"
-                                        onClick={() => setWatchingVideoUrl(version.url)}
-                                        className={cn(
-                                          "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors",
-                                          version.current
-                                            ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-white"
-                                            : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-brand-primary",
-                                        )}
-                                      >
-                                        <span className="inline-flex min-w-0 items-center gap-1.5">
-                                          <Play size={12} fill="currentColor" className="shrink-0" />
-                                          {t("recurringDetail.watchVideoVersion", { n: version.version })}
-                                          {version.current ? (
-                                            <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-rose-700 uppercase">
-                                              {t("recurringDetail.videoVersionCurrent")}
+                                    {videoVersions.map((version) => {
+                                      const driveHref = isGoogleDriveUrl(version.url) ? safeHttpUrl(version.url) : undefined;
+                                      const className = cn(
+                                        "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors",
+                                        version.current
+                                          ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-white"
+                                          : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-brand-primary",
+                                      );
+                                      const inner = (
+                                        <>
+                                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                                            {driveHref ? <ExternalLink size={12} className="shrink-0" /> : <Play size={12} fill="currentColor" className="shrink-0" />}
+                                            {driveHref
+                                              ? t("recurringDetail.openDriveVersion", { n: version.version })
+                                              : t("recurringDetail.watchVideoVersion", { n: version.version })}
+                                            {version.current ? (
+                                              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-rose-700 uppercase">
+                                                {t("recurringDetail.videoVersionCurrent")}
+                                              </span>
+                                            ) : null}
+                                          </span>
+                                          {version.submittedAt ? (
+                                            <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+                                              {new Date(version.submittedAt).toLocaleDateString(locale)}
                                             </span>
                                           ) : null}
-                                        </span>
-                                        {version.submittedAt ? (
-                                          <span className="shrink-0 text-[10px] font-semibold text-slate-400">
-                                            {new Date(version.submittedAt).toLocaleDateString(locale)}
-                                          </span>
-                                        ) : null}
-                                      </button>
-                                    ))}
+                                        </>
+                                      );
+                                      return driveHref ? (
+                                        <a key={`${item.id}-v${version.version}`} href={driveHref} target="_blank" rel="noreferrer" className={className}>
+                                          {inner}
+                                        </a>
+                                      ) : (
+                                        <button
+                                          key={`${item.id}-v${version.version}`}
+                                          type="button"
+                                          onClick={() => setWatchingVideoUrl(version.url)}
+                                          className={className}
+                                        >
+                                          {inner}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               ) : null}
@@ -1947,7 +1975,7 @@ function DetailInner() {
                               {canManage && pendingApproval && (item.script?.trim() || item.script_file_url || videoUrl) ? (
                                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
                                   <p className="mb-2 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">{t("recurringDetail.submittedMaterialTitle")}</p>
-                                  <div className={cn("grid grid-cols-1 items-start gap-3", item.script?.trim() && videoUrl ? "md:grid-cols-2" : "")}>
+                                  <div className={cn("grid grid-cols-1 items-start gap-3", (item.script?.trim() || item.script_file_url) && videoUrl ? "md:grid-cols-2" : "")}>
                                     {item.script?.trim() ? (
                                       <div className="flex min-w-0 flex-col gap-1.5">
                                         <span className="flex items-center gap-1 text-[10px] font-black tracking-wider text-slate-600 uppercase">
@@ -2000,8 +2028,15 @@ function DetailInner() {
                               ) : null}
                             </div>
                           ) : null}
-                          <div className="flex items-center pt-1 text-[11px] text-slate-500">
-                            <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} className="shrink-0 text-slate-400" /> {deadline}</span>
+                          <div className="grid grid-cols-2 gap-3 pt-1 text-[11px] text-slate-500">
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t(live ? "recurringDetail.livePautaDate" : "recurringDetail.pautaDate")}</span>
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700"><Clock size={12} className="shrink-0 text-slate-400" /> {deliveryDateLabel}</span>
+                            </span>
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaPostDate")}</span>
+                              <span className="font-semibold text-slate-700">{postDateLabel}</span>
+                            </span>
                           </div>
                           {isCreator && !awaitingBriefing ? (
                             <CreatorPautaSubmissionPanel item={item} onSubmitted={() => void load()} />
@@ -2067,7 +2102,7 @@ function DetailInner() {
                 </div>
                 <div className="grid grid-cols-7 auto-rows-[9.5rem] divide-x divide-y divide-slate-100">
                   {getCalendarDays(selectedMonth).map((cell) => {
-                    const dayItems = items.filter((item) => toDateKey(item.planned_date) === cell.dateStr);
+                    const dayItems = items.flatMap((item) => planningDateEvents(item).filter((event) => event.dateStr === cell.dateStr).map((event) => ({ item, kind: event.kind })));
                     const isToday = cell.dateStr === localDateStr();
                     return (
                       <div key={cell.dateStr} className={cn("flex h-full min-h-0 flex-col overflow-hidden p-2", cell.isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-300")}>
@@ -2078,17 +2113,19 @@ function DetailInner() {
                           ) : null}
                         </div>
                         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
-                          {dayItems.map((item) => (
+                          {dayItems.map(({ item, kind }) => (
                             <div
-                              key={item.id}
+                              key={`${item.id}-${kind}`}
                               className={cn(
                                 "flex flex-col gap-0.5 rounded-lg border bg-white p-1.5 text-[10px]",
-                                isMaterialNewVersion(item) ? "border-amber-300" : itemNeedsApproval(item) ? "border-violet-200" : "border-slate-200",
+                                kind === "post"
+                                  ? "border-violet-200"
+                                  : isMaterialNewVersion(item) ? "border-amber-300" : itemNeedsApproval(item) ? "border-violet-200" : "border-slate-200",
                               )}
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span className="truncate font-bold text-slate-800">{namedPautaTitle(item.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</span>
-                                <span className="shrink-0 text-[8px] font-extrabold tracking-wider text-indigo-700 uppercase">{t(`recurring.shortFormats.${item.content_type}`, { defaultValue: item.content_type })}</span>
+                                <span className="shrink-0 text-[8px] font-extrabold tracking-wider text-indigo-700 uppercase">{t(`calendar.kind.${kind}`)}</span>
                               </div>
                               <span className="truncate text-[9px] text-slate-500">{item.creator?.artistic_name || allocated.find((row) => row.creator_id === item.creator_id)?.creator?.artistic_name}</span>
                             </div>
@@ -2217,11 +2254,22 @@ function DetailInner() {
                   <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold text-slate-700 uppercase">{t(`recurring.itemStatus.${viewingPauta.status}`, { defaultValue: viewingPauta.status })}</span>
                 </div>
                 <h3 className="text-lg font-black text-slate-900">{namedPautaTitle(viewingPauta.title) || (isCreator ? t("recurringDetail.awaitingBriefing") : t("recurringDetail.untitledPauta"))}</h3>
-                <p className="mt-1 text-xs font-medium text-slate-500">
-                  {viewingPauta.planned_date
-                    ? t(isLivePauta(viewingPauta.content_type) ? "recurringDetail.livePautaDeadline" : "recurringDetail.pautaDeadline", { date: new Date(`${viewingPauta.planned_date}T00:00:00`).toLocaleDateString(locale) })
-                    : t("recurringDetail.pautaNoDate")}
-                </p>
+                <div className="mt-2 grid grid-cols-2 gap-3 text-xs font-medium text-slate-500">
+                  <p className="m-0">
+                    <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t(isLivePauta(viewingPauta.content_type) ? "recurringDetail.livePautaDate" : "recurringDetail.pautaDate")}</span>
+                    <span className="mt-0.5 block font-semibold text-slate-700">
+                      {viewingPauta.planned_date
+                        ? new Date(`${viewingPauta.planned_date}T00:00:00`).toLocaleDateString(locale)
+                        : t("recurringDetail.pautaNoDate")}
+                    </span>
+                  </p>
+                  <p className="m-0">
+                    <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaPostDate")}</span>
+                    <span className="mt-0.5 block font-semibold text-slate-700">
+                      {viewingPauta.post_date ? new Date(`${viewingPauta.post_date}T00:00:00`).toLocaleDateString(locale) : "—"}
+                    </span>
+                  </p>
+                </div>
               </div>
               <button type="button" onClick={closePautaView} className="cursor-pointer rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
                 <X size={18} />
@@ -2268,32 +2316,47 @@ function DetailInner() {
                   {viewingVideoVersions.length > 1 ? (
                     <div className="mt-3 flex flex-col gap-1.5">
                       <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("recurringDetail.videoVersionsTitle")}</p>
-                      {viewingVideoVersions.map((version) => (
-                        <button
-                          key={`view-v${version.version}`}
-                          type="button"
-                          onClick={() => setWatchingVideoUrl(version.url)}
-                          className={cn(
-                            "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors",
-                            version.current
-                              ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-white"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-brand-primary",
-                          )}
-                        >
-                          <span className="inline-flex items-center gap-1.5">
-                            <Play size={12} fill="currentColor" />
-                            {t("recurringDetail.watchVideoVersion", { n: version.version })}
-                            {version.current ? (
-                              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-rose-700 uppercase">
-                                {t("recurringDetail.videoVersionCurrent")}
-                              </span>
+                      {viewingVideoVersions.map((version) => {
+                        const driveHref = isGoogleDriveUrl(version.url) ? safeHttpUrl(version.url) : undefined;
+                        const className = cn(
+                          "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors",
+                          version.current
+                            ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-white"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-brand-primary",
+                        );
+                        const inner = (
+                          <>
+                            <span className="inline-flex items-center gap-1.5">
+                              {driveHref ? <ExternalLink size={12} /> : <Play size={12} fill="currentColor" />}
+                              {driveHref
+                                ? t("recurringDetail.openDriveVersion", { n: version.version })
+                                : t("recurringDetail.watchVideoVersion", { n: version.version })}
+                              {version.current ? (
+                                <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-rose-700 uppercase">
+                                  {t("recurringDetail.videoVersionCurrent")}
+                                </span>
+                              ) : null}
+                            </span>
+                            {version.submittedAt ? (
+                              <span className="text-[10px] font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleDateString(locale)}</span>
                             ) : null}
-                          </span>
-                          {version.submittedAt ? (
-                            <span className="text-[10px] font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleDateString(locale)}</span>
-                          ) : null}
-                        </button>
-                      ))}
+                          </>
+                        );
+                        return driveHref ? (
+                          <a key={`view-v${version.version}`} href={driveHref} target="_blank" rel="noreferrer" className={className}>
+                            {inner}
+                          </a>
+                        ) : (
+                          <button
+                            key={`view-v${version.version}`}
+                            type="button"
+                            onClick={() => setWatchingVideoUrl(version.url)}
+                            className={className}
+                          >
+                            {inner}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -2549,25 +2612,34 @@ function DetailInner() {
                 <p className="m-0 text-[10px] font-medium text-slate-400">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaTitleHint" : "recurringDetail.pautaTitleHint")}</p>
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-700">{t("recurringDetail.pautaType")} *</label>
+                <Select2Field
+                  theme="light"
+                  searchable={false}
+                  placeholder={t("recurringDetail.pautaType")}
+                  value={pautaForm.content_type}
+                  options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))}
+                  onChange={(value) => setPautaForm({ ...pautaForm, content_type: value })}
+                  triggerClassName={FIELD_SELECT}
+                />
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-slate-700">{t("recurringDetail.pautaType")} *</label>
-                  <Select2Field
-                    theme="light"
-                    searchable={false}
-                    placeholder={t("recurringDetail.pautaType")}
-                    value={pautaForm.content_type}
-                    options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))}
-                    onChange={(value) => setPautaForm({ ...pautaForm, content_type: value })}
-                    triggerClassName={FIELD_SELECT}
-                  />
-                </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-slate-700">{t(isLivePauta(pautaForm.content_type) ? "recurringDetail.livePautaDate" : "recurringDetail.pautaDate")} *</label>
                   <input
                     type="date"
                     value={pautaForm.planned_date}
                     onChange={(e) => setPautaForm({ ...pautaForm, planned_date: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs outline-none focus:border-brand-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-700">{t("recurringDetail.pautaPostDate")}</label>
+                  <input
+                    type="date"
+                    value={pautaForm.post_date}
+                    onChange={(e) => setPautaForm({ ...pautaForm, post_date: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs outline-none focus:border-brand-primary"
                   />
                 </div>

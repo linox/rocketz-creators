@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Bell,
   Building2,
+  CalendarDays,
   Eye,
   EyeOff,
   Globe,
@@ -292,6 +293,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} badge={pendingCampaigns} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
+                <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
                 {userHasPermission(user, "mail.manage") ? (
                   <>
@@ -322,6 +324,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
+                <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
                 <SidebarItem href="/company-landing" label={t("myLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
                 {companyPublicLandingSlug ? (
@@ -346,6 +349,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 ) : (
                   <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 )}
+                <SidebarItem href="/calendar" label={t("calendar")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}

@@ -45,11 +45,23 @@ class CampaignController extends Controller
     public function index(Request $request): JsonResponse
     {
         $includeContent = $this->wantsInclude($request, 'content');
+        $user = $request->user();
         $query = $this->scoped($request)
             ->with(['company', 'deliverable'])
             ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
-        if ($request->user()?->role !== UserRole::Creator) {
+        if ($user?->role === UserRole::Creator) {
+            $creatorId = $user->creator?->id ?: 0;
+            $query->with([
+                'briefing',
+                'campaignCreators' => function ($q) use ($includeContent, $creatorId) {
+                    $q->where('creator_id', $creatorId);
+                    if ($includeContent) {
+                        $q->with('content');
+                    }
+                },
+            ]);
+        } else {
             $query->with([
                 'campaignCreators' => function ($q) use ($includeContent) {
                     $q->with('creator');
@@ -367,6 +379,7 @@ class CampaignController extends Controller
             'payment_date' => ['nullable', 'date', 'required_if:payment_status,scheduled'],
             'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
             'delivery_date' => ['nullable', 'date'],
+            'post_date' => ['nullable', 'date'],
             'script' => ['nullable', 'string'],
             'script_file_url' => ['nullable', 'string', 'max:2048'],
             'script_file_name' => ['nullable', 'string', 'max:255'],

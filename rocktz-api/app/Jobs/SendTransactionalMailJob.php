@@ -96,6 +96,7 @@ class SendTransactionalMailJob implements ShouldQueue
         $key = $message->template_key;
         if (! in_array($key, [
             MailTemplateKey::DemandReminder,
+            MailTemplateKey::PostDayReminder,
             MailTemplateKey::DeliveryPendingReviewReminder,
         ], true)) {
             return false;
@@ -103,6 +104,13 @@ class SendTransactionalMailJob implements ShouldQueue
 
         $related = $message->related;
         if ($related instanceof ContentPlanningItem) {
+            if ($key === MailTemplateKey::PostDayReminder) {
+                return in_array($related->status, [
+                    ContentPlanningStatus::Published,
+                    ContentPlanningStatus::Rejected,
+                ], true);
+            }
+
             return in_array($related->status, [
                 ContentPlanningStatus::Approved,
                 ContentPlanningStatus::Published,
@@ -111,6 +119,10 @@ class SendTransactionalMailJob implements ShouldQueue
         }
 
         if ($related instanceof CampaignCreator) {
+            if ($key === MailTemplateKey::PostDayReminder) {
+                return $related->delivery_status === DeliveryStatus::Published;
+            }
+
             if ($key === MailTemplateKey::DemandReminder) {
                 return in_array($related->delivery_status, [
                     DeliveryStatus::Approved,

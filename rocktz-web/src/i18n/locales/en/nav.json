@@ -7,6 +7,8 @@
   "companies": "Companies",
   "campaigns": "Campaigns",
   "deliveries": "Deliveries",
+  "calendar": "Calendar",
+  "postingAgenda": "Schedule",
   "recurring": "Recurring",
   "notifications": "Notifications",
   "mailTemplates": "Email",

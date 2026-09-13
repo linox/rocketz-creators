@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'script_file_name',
     'caption',
     'planned_date',
+    'post_date',
     'status',
     'approval_flow',
     'posting_profile',
@@ -69,6 +70,7 @@ class ContentPlanningItem extends Model
         return [
             'content_type' => ContentType::class,
             'planned_date' => 'date',
+            'post_date' => 'date',
             'status' => ContentPlanningStatus::class,
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,

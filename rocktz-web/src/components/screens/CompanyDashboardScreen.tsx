@@ -29,6 +29,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -55,6 +56,8 @@ type PendingApproval = {
   demandStatus: string;
   approvalStatus: string;
   script?: string | null;
+  scriptFileUrl?: string | null;
+  scriptFileName?: string | null;
   videoUrl?: string | null;
   videoFileSize?: number | null;
 };
@@ -80,7 +83,7 @@ function approvalStatusTone(status: string) {
 }
 
 function hasApprovalMaterial(item: PendingApproval) {
-  return Boolean(item.script?.trim() || item.videoUrl?.trim());
+  return Boolean(item.script?.trim() || item.scriptFileUrl?.trim() || item.videoUrl?.trim());
 }
 
 function isActiveCampaign(status: string) {
@@ -222,11 +225,13 @@ function CompanyDashboardInner() {
       const staged = (campaign.approval_flow || "script_and_video") === "script_and_video";
       const material = {
         script: row.content?.script ?? null,
+        scriptFileUrl: row.content?.script_file_url ?? null,
+        scriptFileName: row.content?.script_file_name ?? null,
         videoUrl: row.content?.video_url ?? null,
         videoFileSize: row.content?.video_file_size ?? null,
       };
       if (row.script_status === "submitted" || row.script_status === "revision"
-        || (row.delivery_status === "sent" && row.content?.script && !row.content?.video_url && row.script_status !== "approved")) {
+        || (row.delivery_status === "sent" && (row.content?.script || row.content?.script_file_url) && !row.content?.video_url && row.script_status !== "approved")) {
         items.push({
           key: `script-${row.id}`,
           source: "campaign",
@@ -266,9 +271,12 @@ function CompanyDashboardInner() {
         const name = item.creator?.artistic_name || item.creator?.full_name || "—";
         const material = {
           script: item.script ?? null,
+          scriptFileUrl: item.script_file_url ?? null,
+          scriptFileName: item.script_file_name ?? null,
           videoUrl: item.media_url || item.submission_url || null,
         };
-        if (item.script_status === "submitted" || item.script_status === "revision") {
+        if (item.script_status === "submitted" || item.script_status === "revision"
+          || (Boolean(item.script?.trim() || item.script_file_url) && item.script_status !== "approved")) {
           items.push({
             key: `recurring-script-${item.id}`,
             source: "recurring",
@@ -1030,10 +1038,17 @@ function CompanyDashboardInner() {
             </button>
           </div>
           <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
-            {materialItem.script?.trim() ? (
+            {materialItem.script?.trim() || materialItem.scriptFileUrl ? (
               <div>
                 <p className="mb-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">{t("companyDash.overview.stageScript")}</p>
-                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">{materialItem.script}</pre>
+                {materialItem.script?.trim() ? (
+                  <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">{materialItem.script}</pre>
+                ) : null}
+                {materialItem.scriptFileUrl ? (
+                  <div className="mt-2">
+                    <ScriptDocumentLink url={materialItem.scriptFileUrl} filename={materialItem.scriptFileName} />
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {materialItem.videoUrl?.trim() ? (

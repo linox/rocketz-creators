@@ -18,6 +18,7 @@ return [
         'data_cadastro' => 'Sign-up date',
         'data_limite' => 'Deadline',
         'data_entrega' => 'Delivery date',
+        'data_postagem' => 'Posting date',
         'valor_campanha' => 'Amount',
         'motivo_reprovacao' => 'Reason',
         'solicitacao_modificacao' => 'Requested changes',
@@ -84,6 +85,12 @@ return [
             'subject' => 'Your delivery for {{nome_demanda}} is coming up',
             'greeting' => 'Hi, {{nome_criador}}!',
             'body' => 'The deadline for {{nome_demanda}} is approaching. Open the platform to submit or update your delivery.',
+            'cta' => 'Open deliverable',
+        ],
+        'demand.post_day' => [
+            'subject' => 'Today is posting day for {{nome_demanda}}',
+            'greeting' => 'Hi, {{nome_usuario}}!',
+            'body' => 'Today is the scheduled posting day for {{nome_demanda}}. Publish the content and add the link on the platform.',
             'cta' => 'Open deliverable',
         ],
         'delivery.revision_requested' => [

@@ -37,6 +37,7 @@ class ContentPlanningItemFactory extends Factory
             'script' => fake()->optional()->paragraph(),
             'caption' => fake()->optional()->sentence(),
             'planned_date' => fake()->optional()->dateTimeBetween('now', '+1 month')?->format('Y-m-d'),
+            'post_date' => fake()->optional()->dateTimeBetween('now', '+2 months')?->format('Y-m-d'),
             'status' => ContentPlanningStatus::Planned,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
             'posting_profile' => PostingProfile::Creator,

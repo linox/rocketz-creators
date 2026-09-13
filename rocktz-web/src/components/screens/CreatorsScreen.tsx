@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
+import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { MoneyInput } from "@/components/MoneyInput";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -21,6 +22,7 @@ import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import type { Creator, RecurringContract } from "@/lib/types";
 import { CREATOR_CATEGORY_VALUES, creatorCategoryOptions } from "@/lib/creatorCategories";
+import { creatorTermAudit, downloadCreatorTermDocument, type CreatorTermDocLabels } from "@/lib/creator-contract-document";
 import { useAuth } from "@/lib/use-auth";
 import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -112,6 +114,46 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function CreatorTermActions({
+  creator,
+  labels,
+  onView,
+  onDownload,
+}: {
+  creator: Creator;
+  labels: { view: string; download: string; signed: string; pending: string };
+  onView: (creator: Creator) => void;
+  onDownload: (creator: Creator) => void;
+}) {
+  const signed = Boolean(creator.contract_acceptance);
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        title={signed ? `${labels.view} · ${labels.signed}` : `${labels.view} · ${labels.pending}`}
+        onClick={() => onView(creator)}
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg border bg-slate-50/80 shadow-2xs transition-all",
+          signed
+            ? "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+            : "border-amber-200 text-amber-700 hover:border-amber-300 hover:bg-amber-50",
+        )}
+      >
+        <FileText size={14} />
+      </button>
+      <button
+        type="button"
+        title={labels.download}
+        onClick={() => onDownload(creator)}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
+      >
+        <Download size={14} />
+      </button>
+    </div>
+  );
+}
+
 function CreatorCard({
   creator,
   recurringContracts,
@@ -123,6 +165,9 @@ function CreatorCard({
   onReject,
   onChangePassword,
   onRemove,
+  onViewTerm,
+  onDownloadTerm,
+  termLabels,
 }: {
   creator: Creator;
   recurringContracts: RecurringContract[];
@@ -134,6 +179,9 @@ function CreatorCard({
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
   onRemove: (creator: Creator) => void;
+  onViewTerm?: (creator: Creator) => void;
+  onDownloadTerm?: (creator: Creator) => void;
+  termLabels?: { view: string; download: string; signed: string; pending: string };
 }) {
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
@@ -179,6 +227,9 @@ function CreatorCard({
           </div>
           {isAdmin ? (
             <div className="flex shrink-0 items-center gap-1">
+              {onViewTerm && onDownloadTerm && termLabels ? (
+                <CreatorTermActions creator={creator} labels={termLabels} onView={onViewTerm} onDownload={onDownloadTerm} />
+              ) : null}
               <button
                 type="button"
                 title={t("creators.changePassword")}
@@ -292,6 +343,9 @@ function CreatorListRow({
   onReject,
   onChangePassword,
   onRemove,
+  onViewTerm,
+  onDownloadTerm,
+  termLabels,
 }: {
   creator: Creator;
   recurringContracts: RecurringContract[];
@@ -303,6 +357,9 @@ function CreatorListRow({
   onReject: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
   onRemove: (creator: Creator) => void;
+  onViewTerm?: (creator: Creator) => void;
+  onDownloadTerm?: (creator: Creator) => void;
+  termLabels?: { view: string; download: string; signed: string; pending: string };
 }) {
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
@@ -409,6 +466,9 @@ function CreatorListRow({
       ) : null}
 
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#F1F5F9] pt-3 sm:border-0 sm:pt-0">
+        {isAdmin && onViewTerm && onDownloadTerm && termLabels ? (
+          <CreatorTermActions creator={creator} labels={termLabels} onView={onViewTerm} onDownload={onDownloadTerm} />
+        ) : null}
         {isAdmin ? (
           <button
             type="button"
@@ -443,9 +503,10 @@ function CreatorListRow({
 function CreatorsInner() {
   const user = useAuth();
   const router = useRouter();
-  const { t } = useTranslation("app");
+  const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const { t: tAuth } = useTranslation("auth");
+  const { t: tp } = useTranslation("profile");
   const isAdmin = user.role === "admin";
   const isCompany = user.role === "company";
   const canRemove = userHasPermission(user, "users.manage");
@@ -465,6 +526,7 @@ function CreatorsInner() {
   const [form, setForm] = useState(EMPTY_FORM);
   const formDocumentsLabel = taxDocumentsLabel(form.country, tc("orConjunction"), tc("taxIdFallback"));
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
+  const [termCreator, setTermCreator] = useState<Creator | null>(null);
   const [layout, setLayout] = useState<CatalogLayout>("list");
   const filterCurrency = moneyCurrency(user.company);
 
@@ -488,6 +550,36 @@ function CreatorsInner() {
     ],
     [t],
   );
+
+  const termActionLabels = useMemo(
+    () => ({
+      view: t("creators.viewTerm"),
+      download: t("creators.downloadTerm"),
+      signed: t("creators.termSigned"),
+      pending: t("creators.termPending"),
+    }),
+    [t],
+  );
+
+  function termDownloadLabels(creator: Creator): CreatorTermDocLabels {
+    const documents = taxDocumentsLabel(creator.country || DEFAULT_COUNTRY, tc("orConjunction"), tc("taxIdFallback"));
+    return {
+      signed: t("creators.termSigned"),
+      pending: t("creators.termPending"),
+      artisticName: t("creators.artisticName"),
+      fullName: t("creators.fullName"),
+      document: t("creators.cpf", { documents }),
+      email: t("creators.email"),
+      acceptedAt: tp("acceptanceDate"),
+      version: tp("termModal.version", { version: "" }).trim(),
+      acceptId: tp("termModal.acceptIdLabel"),
+      declarations: tp("termModal.declarationsTitle"),
+    };
+  }
+
+  function downloadTerm(creator: Creator) {
+    downloadCreatorTermDocument(creator, i18n.language, termDownloadLabels(creator));
+  }
 
   async function load() {
     if (user.role === "creator") return;
@@ -895,6 +987,9 @@ function CreatorsInner() {
               onReject={reject}
               onChangePassword={setPasswordCreator}
               onRemove={removeCreator}
+              onViewTerm={isAdmin ? setTermCreator : undefined}
+              onDownloadTerm={isAdmin ? downloadTerm : undefined}
+              termLabels={isAdmin ? termActionLabels : undefined}
             />
           ) : (
             <CreatorListRow
@@ -909,6 +1004,9 @@ function CreatorsInner() {
               onReject={reject}
               onChangePassword={setPasswordCreator}
               onRemove={removeCreator}
+              onViewTerm={isAdmin ? setTermCreator : undefined}
+              onDownloadTerm={isAdmin ? downloadTerm : undefined}
+              termLabels={isAdmin ? termActionLabels : undefined}
             />
           ),
         )}
@@ -994,6 +1092,20 @@ function CreatorsInner() {
       ) : null}
 
       {passwordCreator ? <ChangeCreatorPasswordModal creator={passwordCreator} onClose={() => setPasswordCreator(null)} /> : null}
+      {termCreator ? (
+        <CreatorContractModal
+          key={termCreator.id}
+          isOpen
+          readOnly
+          creator={termCreator}
+          onClose={() => setTermCreator(null)}
+          creatorName={termCreator.full_name ?? undefined}
+          creatorEmail={termCreator.email ?? undefined}
+          creatorDocument={termCreator.document || termCreator.cpf || ""}
+          creatorCountry={termCreator.country}
+          existingAudit={creatorTermAudit(termCreator, i18n.language)}
+        />
+      ) : null}
     </div>
   );
 }

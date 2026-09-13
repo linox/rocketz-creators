@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\CompanyLandingSignup;
+use App\Models\CreatorContractAcceptance;
 use App\Services\CreatorStorefrontService;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
@@ -78,18 +79,44 @@ class CreatorResource extends JsonResource
                 'file_size' => (int) $video->file_size,
                 'uploaded_at' => $video->uploaded_at?->toIso8601String(),
             ])),
-            'contract_acceptance' => $this->when($canSeePersonal && $this->relationLoaded('contractAcceptances'), function () {
-                $latest = $this->contractAcceptances->first();
+            'contract_acceptance' => $this->when($canSeePersonal && $this->hasLoadedContractAcceptance(), function () {
+                $latest = $this->resolvedContractAcceptance();
 
                 return $latest ? [
                     'id' => $latest->id,
+                    'term_id' => $latest->term_id,
+                    'version' => $latest->version,
                     'status' => $latest->status?->value,
                     'accepted_at' => $latest->accepted_at?->toIso8601String(),
                     'full_name' => $latest->full_name,
+                    'document' => $latest->document,
+                    'email' => $latest->email,
+                    'ip' => $latest->ip,
+                    'user_agent' => $latest->user_agent,
+                    'declarations' => $latest->declarations,
+                    'all_accepted' => (bool) $latest->all_accepted,
                 ] : null;
             }),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
+    }
+
+    private function hasLoadedContractAcceptance(): bool
+    {
+        return $this->relationLoaded('latestContractAcceptance') || $this->relationLoaded('contractAcceptances');
+    }
+
+    private function resolvedContractAcceptance(): ?CreatorContractAcceptance
+    {
+        if ($this->relationLoaded('latestContractAcceptance') && $this->latestContractAcceptance) {
+            return $this->latestContractAcceptance;
+        }
+
+        if ($this->relationLoaded('contractAcceptances')) {
+            return $this->contractAcceptances->first();
+        }
+
+        return null;
     }
 
     private function portfolioDownloadUrl(?string $url): string

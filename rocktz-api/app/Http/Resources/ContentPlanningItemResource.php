@@ -47,6 +47,7 @@ class ContentPlanningItemResource extends JsonResource
             'script_file_name' => $this->script_file_name,
             'caption' => $this->caption,
             'planned_date' => $this->planned_date?->toDateString(),
+            'post_date' => $this->post_date?->toDateString(),
             'status' => $this->status?->value,
             'approval_flow' => $this->approval_flow?->value,
             'posting_profile' => $this->posting_profile?->value ?? 'creator',

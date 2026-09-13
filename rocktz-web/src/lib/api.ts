@@ -9,6 +9,7 @@ import type {
   CompanyLandingPage,
   CompanyLandingSignup,
   CompanyLandingMetrics,
+  CalendarEvent,
   Creator,
   CreatorStorefront,
   StorefrontCategory,
@@ -44,6 +45,7 @@ async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () =
 
 export const api = {
   dashboard: () => laravelFetch<DashboardStats>("/dashboard"),
+  calendar: (query = "") => laravelFetch<List<CalendarEvent>>(`/calendar${query}`),
   nav: () => laravelFetch<{ unread: number; pending_applications: number }>("/nav"),
   creators: (query = "") => laravelFetch<List<Creator>>(`/creators${query}`),
   creator: (id: number | string) => laravelFetch<Item<Creator>>(`/creators/${id}`),

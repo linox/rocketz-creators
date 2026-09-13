@@ -118,3 +118,25 @@ body {
   color: #0f172a;
   background: #f9fafb;
 }
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .creator-contract-print,
+  .creator-contract-print * {
+    visibility: visible !important;
+  }
+
+  .creator-contract-print {
+    position: absolute !important;
+    inset: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertCircle,
@@ -507,7 +508,7 @@ function DetailInner() {
     summary: "",
     guidelines: "",
   });
-  const [creatorEdit, setCreatorEdit] = useState({ amount: "", delivery_type: "", video_url: "", published_link: "" });
+  const [creatorEdit, setCreatorEdit] = useState({ amount: "", delivery_type: "", delivery_date: "", post_date: "", video_url: "", published_link: "" });
 
   async function load() {
     if (!id || id === "_") return;
@@ -1027,6 +1028,8 @@ function DetailInner() {
       await api.updateParticipation(editing.id, {
         amount: creatorEdit.amount ? parseMoneyMask(creatorEdit.amount, moneyCurrency(campaign)) : 0,
         delivery_type: creatorEdit.delivery_type,
+        delivery_date: creatorEdit.delivery_date || null,
+        post_date: creatorEdit.post_date || null,
         video_url: creatorEdit.video_url || null,
         published_link: creatorEdit.published_link || null,
       });
@@ -1614,7 +1617,7 @@ function DetailInner() {
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                    setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                     setEditing(row);
                                   }}
                                   className="text-[10px] font-extrabold text-brand-primary hover:underline"
@@ -1681,7 +1684,7 @@ function DetailInner() {
                       <button
                         type="button"
                         onClick={() => {
-                          setCreatorEdit({ amount: moneyToMask(selected.amount, moneyCurrency(campaign)), delivery_type: selected.delivery_type || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
+                          setCreatorEdit({ amount: moneyToMask(selected.amount, moneyCurrency(campaign)), delivery_type: selected.delivery_type || "", delivery_date: selected.delivery_date || "", post_date: selected.post_date || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
                           setEditing(selected);
                         }}
                         className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-600"
@@ -1692,7 +1695,7 @@ function DetailInner() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
                     <span className="mt-1 truncate text-sm font-black text-slate-900">{moneyOrMode(effectiveCreatorFee(selected, campaign))}</span>
@@ -1700,6 +1703,14 @@ function DetailInner() {
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryFormat")}</span>
                     <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.delivery_type}</span>
+                  </div>
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryDate")}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.delivery_date ? new Date(`${selected.delivery_date}T00:00:00`).toLocaleDateString(locale) : "—"}</span>
+                  </div>
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.postDate")}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.post_date ? new Date(`${selected.post_date}T00:00:00`).toLocaleDateString(locale) : "—"}</span>
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.contract")}</span>
@@ -1766,20 +1777,33 @@ function DetailInner() {
                         {campaignVideoVersions(selected).length > 1 ? (
                           <div className="flex flex-col gap-1.5">
                             <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("campaignDetail.videoVersionsTitle")}</p>
-                            {campaignVideoVersions(selected).map((version) => (
-                              <button
-                                key={`campaign-v${version.version}`}
-                                type="button"
-                                onClick={() => setWatchingVideoUrl(version.url)}
-                                className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:border-indigo-200 hover:bg-white"
-                              >
-                                <Play size={11} fill="currentColor" />
-                                {t("campaignDetail.scriptVersion", { n: version.version })}
-                                {version.submittedAt ? (
-                                  <span className="font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleString(locale)}</span>
-                                ) : null}
-                              </button>
-                            ))}
+                            {campaignVideoVersions(selected).map((version) => {
+                              const driveHref = isGoogleDriveUrl(version.url) ? safeHttpUrl(version.url) : undefined;
+                              const className = "inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:border-indigo-200 hover:bg-white";
+                              const label = (
+                                <>
+                                  {driveHref ? <ExternalLink size={11} /> : <Play size={11} fill="currentColor" />}
+                                  {driveHref ? t("campaignDetail.openDriveVersion", { n: version.version }) : t("campaignDetail.scriptVersion", { n: version.version })}
+                                  {version.submittedAt ? (
+                                    <span className="font-semibold text-slate-400">{new Date(version.submittedAt).toLocaleString(locale)}</span>
+                                  ) : null}
+                                </>
+                              );
+                              return driveHref ? (
+                                <a key={`campaign-v${version.version}`} href={driveHref} target="_blank" rel="noreferrer" className={className}>
+                                  {label}
+                                </a>
+                              ) : (
+                                <button
+                                  key={`campaign-v${version.version}`}
+                                  type="button"
+                                  onClick={() => setWatchingVideoUrl(version.url)}
+                                  className={className}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
                           </div>
                         ) : null}
                         {selected.content?.image_url ? (
@@ -2419,7 +2443,7 @@ function DetailInner() {
                             <button
                               type="button"
                               onClick={() => {
-                                setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                 setEditing(row);
                               }}
                               className="font-bold text-brand-primary hover:underline"
@@ -2758,6 +2782,16 @@ function DetailInner() {
               <form noValidate onSubmit={saveCreatorEdit} className="flex flex-col gap-3 p-5">
                 <MoneyInput currency={moneyCurrency(campaign)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-brand-primary" placeholder={t("campaignDetail.agreedFee")} value={creatorEdit.amount} onChange={(value) => setCreatorEdit({ ...creatorEdit, amount: value })} />
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.deliveryFormat")} value={creatorEdit.delivery_type} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_type: event.target.value })} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
+                    {t("campaignDetail.deliveryDate")}
+                    <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold normal-case tracking-normal text-slate-800" value={creatorEdit.delivery_date} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_date: event.target.value })} />
+                  </label>
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
+                    {t("campaignDetail.postDate")}
+                    <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold normal-case tracking-normal text-slate-800" value={creatorEdit.post_date} onChange={(event) => setCreatorEdit({ ...creatorEdit, post_date: event.target.value })} />
+                  </label>
+                </div>
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.mediaTitle")} value={creatorEdit.video_url} onChange={(event) => setCreatorEdit({ ...creatorEdit, video_url: event.target.value })} />
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.publishedPost")} value={creatorEdit.published_link} onChange={(event) => setCreatorEdit({ ...creatorEdit, published_link: event.target.value })} />
                 <div className="flex justify-end gap-3 pt-2">

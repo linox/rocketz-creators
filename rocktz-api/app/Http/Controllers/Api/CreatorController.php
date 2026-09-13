@@ -37,6 +37,9 @@ class CreatorController extends Controller
     {
         $user = $request->user();
         $query = Creator::query()->with(['user', 'invitedByCompany:id,name']);
+        if ($user->role !== UserRole::Company) {
+            $query->with('latestContractAcceptance');
+        }
 
         if ($user->role === UserRole::Creator) {
             $query->where('id', $user->creator?->id);

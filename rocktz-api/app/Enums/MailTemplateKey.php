@@ -13,6 +13,7 @@ enum MailTemplateKey: string
     case CampaignApplicationRejected = 'campaign.application_rejected';
     case DemandAssigned = 'demand.assigned';
     case DemandReminder = 'demand.reminder';
+    case PostDayReminder = 'demand.post_day';
     case DeliveryRevisionRequested = 'delivery.revision_requested';
     case DeliveryApproved = 'delivery.approved';
     case DemandUpdated = 'demand.updated';
@@ -60,7 +61,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::CampaignOpportunity => MailTemplateCategory::Opportunity,
-            self::DemandReminder, self::DeliveryPendingReviewReminder => MailTemplateCategory::Reminder,
+            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder => MailTemplateCategory::Reminder,
             self::AdminDeliveryStuck,
             self::AdminDemandOverdue,
             self::AdminCampaignStartingEmpty,
@@ -73,7 +74,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::CampaignOpportunity => 'opportunities',
-            self::DemandReminder, self::DeliveryPendingReviewReminder => 'deadline_reminders',
+            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder => 'deadline_reminders',
             self::CampaignCreatorApplied, self::CampaignPublished => 'campaign_updates',
             default => null,
         };
@@ -127,6 +128,7 @@ enum MailTemplateKey: string
             self::CampaignCreatorApplied => ['link_campanha'],
             self::DemandAssigned,
             self::DemandReminder,
+            self::PostDayReminder,
             self::DeliveryRevisionRequested,
             self::DeliveryApproved,
             self::DemandUpdated,
@@ -151,6 +153,7 @@ enum MailTemplateKey: string
             self::CampaignApplicationApproved => ['nome_campanha', 'nome_empresa', 'data_entrega'],
             self::DemandAssigned => ['nome_campanha', 'nome_empresa', 'nome_demanda', 'data_entrega', 'valor_campanha'],
             self::DemandReminder => ['nome_demanda', 'data_limite'],
+            self::PostDayReminder => ['nome_demanda', 'data_postagem'],
             self::DeliveryRevisionRequested => ['nome_campanha', 'nome_demanda', 'solicitacao_modificacao', 'data_limite'],
             self::DemandUpdated => ['nome_demanda', 'data_limite', 'motivo_reprovacao'],
             self::CampaignCreatorApplied => ['nome_criador', 'nome_campanha'],
@@ -170,6 +173,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::DemandReminder, self::DeliveryPendingReviewReminder => [3, 1, 0, -1],
+            self::PostDayReminder => [0],
             default => [],
         };
     }

@@ -46,6 +46,24 @@ class MediaUploadTest extends TestCase
         ]);
     }
 
+    public function test_uploaded_campaign_image_is_optimized(): void
+    {
+        Storage::fake('uploads');
+
+        $user = User::factory()->admin()->create();
+        $token = $user->createToken('auth')->plainTextToken;
+        $file = UploadedFile::fake()->image('capa.jpg', 2200, 1400);
+
+        $response = $this->withToken($token)->post('/api/media', [
+            'file' => $file,
+        ]);
+
+        $response->assertCreated();
+        $filename = (string) $response->json('data.filename');
+        $this->assertMatchesRegularExpression('/\.(webp|jpg|jpeg|png)$/i', $filename);
+        $this->assertLessThanOrEqual($file->getSize(), (int) $response->json('data.size'));
+    }
+
     public function test_authenticated_user_can_upload_portfolio_video(): void
     {
         Storage::fake('uploads');

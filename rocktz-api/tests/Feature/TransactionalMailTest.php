@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\ContentPlanningStatus;
+use App\Enums\DeliveryStatus;
 use App\Enums\MailMessageStatus;
 use App\Enums\MailTemplateKey;
+use App\Enums\PostingProfile;
 use App\Jobs\SendTransactionalMailJob;
 use App\Mail\TransactionalMailable;
 use App\Models\Campaign;
+use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\ContentPlanningItem;
@@ -264,6 +267,130 @@ class TransactionalMailTest extends TestCase
             'template_key' => MailTemplateKey::DemandReminder->value,
             'related_id' => $item->id,
         ]);
+    }
+
+    public function test_post_day_email_is_sent_to_creator_when_post_date_is_today(): void
+    {
+        Mail::fake();
+        $item = ContentPlanningItem::factory()->create([
+            'post_date' => now()->toDateString(),
+            'status' => ContentPlanningStatus::Approved,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertDatabaseHas('mail_messages', [
+            'email' => $item->creator->user->email,
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+            'related_id' => $item->id,
+        ]);
+    }
+
+    public function test_post_day_email_is_skipped_when_already_published(): void
+    {
+        Mail::fake();
+        $item = ContentPlanningItem::factory()->published()->create([
+            'post_date' => now()->toDateString(),
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertDatabaseMissing('mail_messages', [
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+            'related_id' => $item->id,
+        ]);
+    }
+
+    public function test_post_day_email_is_skipped_when_post_date_is_not_today(): void
+    {
+        Mail::fake();
+        $item = ContentPlanningItem::factory()->create([
+            'post_date' => now()->addDay()->toDateString(),
+            'status' => ContentPlanningStatus::Approved,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertDatabaseMissing('mail_messages', [
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+            'related_id' => $item->id,
+        ]);
+    }
+
+    public function test_post_day_email_is_sent_for_campaign_creator(): void
+    {
+        Mail::fake();
+        $row = CampaignCreator::factory()->approved()->create([
+            'post_date' => now()->toDateString(),
+            'delivery_status' => DeliveryStatus::Approved,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertDatabaseHas('mail_messages', [
+            'email' => $row->creator->user->email,
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+            'related_id' => $row->id,
+        ]);
+    }
+
+    public function test_post_day_email_goes_to_company_when_brand_posts(): void
+    {
+        Mail::fake();
+        $company = Company::factory()->active()->create();
+        $membership = CompanyUser::factory()->active()->create(['company_id' => $company->id]);
+        $item = ContentPlanningItem::factory()->create([
+            'company_id' => $company->id,
+            'post_date' => now()->toDateString(),
+            'posting_profile' => PostingProfile::Brand,
+            'status' => ContentPlanningStatus::Approved,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertDatabaseHas('mail_messages', [
+            'email' => $membership->user->email,
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+            'related_id' => $item->id,
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'email' => $item->creator->user->email,
+            'template_key' => MailTemplateKey::PostDayReminder->value,
+        ]);
+    }
+
+    public function test_queued_post_day_is_cancelled_if_published_before_send(): void
+    {
+        $item = ContentPlanningItem::factory()->create([
+            'post_date' => now()->toDateString(),
+            'status' => ContentPlanningStatus::Approved,
+        ]);
+        $user = $item->creator->user;
+        $copy = app(TransactionalMailService::class)->defaultCopy(MailTemplateKey::PostDayReminder, 'pt_BR');
+        $message = MailMessage::query()->create([
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'template_key' => MailTemplateKey::PostDayReminder,
+            'subject' => $copy['subject'],
+            'status' => MailMessageStatus::Queued,
+            'idempotency_key' => 'test-post-day-cancel',
+            'related_type' => ContentPlanningItem::class,
+            'related_id' => $item->id,
+            'payload' => [
+                'copy' => $copy,
+                'variables' => [
+                    'cta_url' => 'https://example.test',
+                    'link_demanda' => 'https://example.test',
+                ],
+            ],
+        ]);
+        $item->update(['status' => ContentPlanningStatus::Published]);
+
+        Mail::fake();
+        SendTransactionalMailJob::dispatchSync($message->id);
+
+        $this->assertSame(MailMessageStatus::Cancelled, $message->fresh()->status);
+        Mail::assertNothingSent();
     }
 
     public function test_default_copy_resolves_dotted_template_keys(): void

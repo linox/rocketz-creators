@@ -22,6 +22,8 @@ import {
   X,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
+import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VideoLightbox } from "@/components/VideoLightbox";
@@ -948,6 +950,9 @@ function ReadingPane({
   const [watching, setWatching] = useState(false);
   const images = version.imageUrls ?? (version.thumbnailUrl || version.fileUrl ? [version.thumbnailUrl || version.fileUrl!] : []);
   const isVertical = item.contentType === "video" || item.contentType === "story";
+  const driveHref = isGoogleDriveUrl(version.fileUrl) ? safeHttpUrl(version.fileUrl) : undefined;
+  const isScriptDoc = item.contentType === "script" || item.contentType === "caption";
+  const canWatchVideo = Boolean(version.fileUrl) && !driveHref && !isScriptDoc && (item.contentType === "video" || item.contentType === "story");
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
@@ -1028,7 +1033,7 @@ function ReadingPane({
 
       <div className="space-y-5 p-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {(item.contentType === "video" || item.contentType === "story") && version.fileUrl ? (
+          {canWatchVideo && version.fileUrl ? (
             <button
               type="button"
               onClick={() => setWatching(true)}
@@ -1041,6 +1046,18 @@ function ReadingPane({
                 </span>
               </span>
             </button>
+          ) : null}
+
+          {driveHref ? (
+            <a
+              href={driveHref}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-3 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-800 hover:bg-white"
+            >
+              <ExternalLink size={16} className="shrink-0" />
+              {t("deliveries.inbox.openDrive")}
+            </a>
           ) : null}
 
           {item.contentType === "image" && (version.fileUrl || version.thumbnailUrl) ? (
@@ -1060,10 +1077,22 @@ function ReadingPane({
             </div>
           ) : null}
 
-          {(item.contentType === "script" || item.contentType === "caption") ? (
-            <pre className="m-0 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700">
-              {version.scriptText || version.captionText || "—"}
-            </pre>
+          {isScriptDoc ? (
+            <div className="space-y-3">
+              {version.fileUrl && !driveHref ? (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+                  <p className="m-0 mb-1.5 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">{t("deliveries.inbox.scriptFile")}</p>
+                  <ScriptDocumentLink url={version.fileUrl} filename={version.fileName} />
+                </div>
+              ) : null}
+              {version.scriptText || version.captionText ? (
+                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700">
+                  {version.scriptText || version.captionText}
+                </pre>
+              ) : !version.fileUrl && !driveHref ? (
+                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700">—</pre>
+              ) : null}
+            </div>
           ) : null}
 
           {item.contentType === "link" && version.linkUrl ? (
@@ -1088,7 +1117,12 @@ function ReadingPane({
             {version.durationLabel ? <span>{t("deliveries.inbox.duration", { value: version.durationLabel })}</span> : null}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {version.fileUrl ? (
+            {driveHref ? (
+              <a href={driveHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-bold text-indigo-800 hover:bg-white">
+                <ExternalLink size={12} /> {t("deliveries.inbox.openDrive")}
+              </a>
+            ) : null}
+            {canWatchVideo ? (
               <>
                 <button type="button" onClick={() => setWatching(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Play size={12} /> {t("deliveries.inbox.watch")}
@@ -1096,10 +1130,12 @@ function ReadingPane({
                 <button type="button" onClick={() => setWatching(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                   <Maximize2 size={12} /> {t("deliveries.inbox.fullscreen")}
                 </button>
-                <a href={mediaDownloadUrl(version.fileUrl)} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
-                  <Download size={12} /> {t("deliveries.inbox.download")}
-                </a>
               </>
+            ) : null}
+            {version.fileUrl && !driveHref ? (
+              <a href={mediaDownloadUrl(version.fileUrl)} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                <Download size={12} /> {t("deliveries.inbox.download")}
+              </a>
             ) : null}
           </div>
         </div>
@@ -1174,7 +1210,7 @@ function ReadingPane({
         </div>
       </div>
     </div>
-    {watching && version.fileUrl ? (
+    {watching && canWatchVideo && version.fileUrl ? (
       <VideoLightbox
         src={version.fileUrl}
         onClose={() => setWatching(false)}

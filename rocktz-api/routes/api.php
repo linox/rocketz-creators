@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
@@ -67,6 +68,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('media/uploads/{uploadId}', [MediaController::class, 'completeUpload']);
     Route::delete('media/uploads/{uploadId}', [MediaController::class, 'cancelUpload']);
     Route::get('dashboard', DashboardController::class);
+    Route::get('calendar', CalendarController::class);
     Route::get('nav', NavController::class);
     Route::post('device-tokens', [DeviceTokenController::class, 'store']);
     Route::delete('device-tokens', [DeviceTokenController::class, 'destroy']);

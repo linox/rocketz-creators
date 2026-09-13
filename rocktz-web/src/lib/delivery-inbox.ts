@@ -270,22 +270,29 @@ function buildCampaignStageItem(
     : ((row.content?.video_version ?? 0) > 1 || Boolean(row.video_feedback?.trim()));
   const status = stageStatus(stageStatusValue, null, row.delivery_date, { resubmission });
   const contentType: DeliveryContentType = isScript ? "script" : mapCampaignContentType(row);
-  const fileUrl = isScript ? null : (row.content?.video_url || row.content?.image_url || null);
+  const scriptFileUrl = row.content?.script_file_url || null;
+  const scriptFileName = row.content?.script_file_name || fileNameFromUrl(scriptFileUrl);
+  const fileUrl = isScript ? scriptFileUrl : (row.content?.video_url || row.content?.image_url || null);
   const history = (row.content?.submission_versions ?? []).filter((entry) => entry.stage === stage);
   const versions: DeliveryVersion[] = history.length > 0
-    ? history.map((entry) => ({
-      id: `${id}-v${entry.version}`,
-      versionNumber: entry.version,
-      createdAt: entry.submitted_at || createdAt,
-      status: entry.version === (isScript ? row.content?.script_version : row.content?.video_version) ? status : "approved" as DeliveryStatus,
-      fileUrl: isScript ? null : (entry.video_url || fileUrl),
-      thumbnailUrl: row.content?.image_url || campaign.image_url || null,
-      fileName: fileNameFromUrl(isScript ? null : (entry.video_url || fileUrl)) || (isScript ? "roteiro.txt" : null),
-      scriptText: isScript ? (entry.script ?? row.content?.script ?? null) : null,
-      linkUrl: !isScript ? (row.content?.published_link ?? null) : null,
-      imageUrls: !isScript && row.content?.image_url ? [row.content.image_url] : undefined,
-      creatorMessage: row.notes ?? null,
-    }))
+    ? history.map((entry) => {
+      const entryFileUrl = isScript
+        ? (entry.script_file_url || scriptFileUrl)
+        : (entry.video_url || fileUrl);
+      return {
+        id: `${id}-v${entry.version}`,
+        versionNumber: entry.version,
+        createdAt: entry.submitted_at || createdAt,
+        status: entry.version === (isScript ? row.content?.script_version : row.content?.video_version) ? status : "approved" as DeliveryStatus,
+        fileUrl: entryFileUrl,
+        thumbnailUrl: row.content?.image_url || campaign.image_url || null,
+        fileName: (isScript ? (entry.script_file_name || scriptFileName) : null) || fileNameFromUrl(entryFileUrl),
+        scriptText: isScript ? (entry.script ?? row.content?.script ?? null) : null,
+        linkUrl: !isScript ? (row.content?.published_link ?? null) : null,
+        imageUrls: !isScript && row.content?.image_url ? [row.content.image_url] : undefined,
+        creatorMessage: row.notes ?? null,
+      };
+    })
     : [{
       id: `${id}-v1`,
       versionNumber: 1,
@@ -293,7 +300,7 @@ function buildCampaignStageItem(
       status,
       fileUrl,
       thumbnailUrl: row.content?.image_url || campaign.image_url || null,
-      fileName: fileNameFromUrl(fileUrl) || (isScript ? "roteiro.txt" : null),
+      fileName: (isScript ? scriptFileName : null) || fileNameFromUrl(fileUrl),
       scriptText: isScript ? (row.content?.script ?? null) : null,
       linkUrl: !isScript ? (row.content?.published_link ?? null) : null,
       imageUrls: !isScript && row.content?.image_url ? [row.content.image_url] : undefined,
@@ -304,7 +311,7 @@ function buildCampaignStageItem(
     : (row.content?.video_version || versions[versions.length - 1]?.versionNumber || 1);
 
   const activity: DeliveryActivity[] = [];
-  if (isScript && (row.script_submitted_at || row.content?.script)) {
+  if (isScript && (row.script_submitted_at || row.content?.script || row.content?.script_file_url)) {
     activity.push({ id: `${id}-sub`, type: "submitted", userName: creatorName, createdAt });
   }
   if (!isScript && (row.video_submitted_at || row.content?.video_url)) {
@@ -362,7 +369,8 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   const videoOnly = flow === "video_only";
 
   if (staged || scriptOnly) {
-    if (row.script_status === "submitted" || row.script_status === "revision") {
+    const hasScriptMaterial = Boolean(row.content?.script?.trim() || row.content?.script_file_url);
+    if (row.script_status === "submitted" || row.script_status === "revision" || (hasScriptMaterial && row.script_status !== "approved")) {
       items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }));
     }
   }
@@ -398,10 +406,10 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
 }
 
 function mapCampaignContentType(row: CampaignCreator): DeliveryContentType {
-  if (row.content?.published_link && !row.content?.video_url && !row.content?.image_url && !row.content?.script) {
+  if (row.content?.published_link && !row.content?.video_url && !row.content?.image_url && !row.content?.script && !row.content?.script_file_url) {
     return "link";
   }
-  if (row.content?.script && !row.content?.video_url && !row.content?.image_url) return "script";
+  if ((row.content?.script || row.content?.script_file_url) && !row.content?.video_url && !row.content?.image_url) return "script";
   if (row.content?.image_url && !row.content?.video_url) return "image";
   const fromType = mapContentType(row.delivery_type);
   if (fromType !== "other") return fromType;
@@ -436,28 +444,35 @@ function buildPlanningStageItem(
     item.planned_date,
     { resubmission },
   );
-  const fileUrl = isScript ? null : (item.media_url || item.submission_url || null);
+  const scriptFileUrl = item.script_file_url || null;
+  const scriptFileName = item.script_file_name || fileNameFromUrl(scriptFileUrl);
+  const fileUrl = isScript ? scriptFileUrl : (item.media_url || item.submission_url || null);
   const history = (item.submission_versions ?? []).filter((entry) => entry.stage === stage);
   const versions: DeliveryVersion[] = history.length > 0
-    ? history.map((entry) => ({
-      id: `${id}-v${entry.version}`,
-      versionNumber: entry.version,
-      createdAt: entry.submitted_at || createdAt,
-      status: entry.version === (isScript ? item.script_version : item.video_version) ? status : "approved" as DeliveryStatus,
-      fileUrl: isScript ? null : (entry.media_url || entry.submission_url || fileUrl),
-      fileName: fileNameFromUrl(isScript ? null : (entry.media_url || entry.submission_url || fileUrl)),
-      scriptText: isScript ? (entry.script ?? item.script ?? null) : null,
-      captionText: item.caption ?? null,
-      linkUrl: !isScript ? (item.published_url || item.submission_url || null) : null,
-      creatorMessage: item.submission_notes ?? null,
-    }))
+    ? history.map((entry) => {
+      const entryFileUrl = isScript
+        ? (entry.script_file_url || scriptFileUrl)
+        : (entry.media_url || entry.submission_url || fileUrl);
+      return {
+        id: `${id}-v${entry.version}`,
+        versionNumber: entry.version,
+        createdAt: entry.submitted_at || createdAt,
+        status: entry.version === (isScript ? item.script_version : item.video_version) ? status : "approved" as DeliveryStatus,
+        fileUrl: entryFileUrl,
+        fileName: (isScript ? (entry.script_file_name || scriptFileName) : null) || fileNameFromUrl(entryFileUrl),
+        scriptText: isScript ? (entry.script ?? item.script ?? null) : null,
+        captionText: item.caption ?? null,
+        linkUrl: !isScript ? (item.published_url || item.submission_url || null) : null,
+        creatorMessage: item.submission_notes ?? null,
+      };
+    })
     : [{
       id: `${id}-v1`,
       versionNumber: 1,
       createdAt,
       status,
       fileUrl,
-      fileName: fileNameFromUrl(fileUrl),
+      fileName: (isScript ? scriptFileName : null) || fileNameFromUrl(fileUrl),
       scriptText: isScript ? (item.script ?? null) : null,
       captionText: item.caption ?? null,
       linkUrl: !isScript ? (item.published_url || item.submission_url || null) : null,
@@ -468,7 +483,7 @@ function buildPlanningStageItem(
     : (item.video_version || versions[versions.length - 1]?.versionNumber || 1);
 
   const activity: DeliveryActivity[] = [];
-  if (item.submitted_at || (isScript ? item.script : fileUrl)) {
+  if (item.submitted_at || (isScript ? (item.script || item.script_file_url) : fileUrl)) {
     activity.push({ id: `${id}-sub`, type: "submitted", userName: creatorName, message: item.submission_notes, createdAt });
   }
   if (isScript && item.script_feedback) {
@@ -499,7 +514,7 @@ function buildPlanningStageItem(
     createdAt,
     viewedAt: null,
     approvalDeadline: item.planned_date,
-    publicationDate: item.planned_date,
+    publicationDate: item.post_date ?? item.planned_date,
     responsibleUserName: "Rocketz",
     currentVersion,
     versions,
@@ -522,7 +537,8 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
   const live = flow === "live_link";
 
   if (staged || scriptOnly) {
-    if (item.script_status === "submitted" || item.script_status === "revision") {
+    const hasScriptMaterial = Boolean(item.script?.trim() || item.script_file_url);
+    if (item.script_status === "submitted" || item.script_status === "revision" || (hasScriptMaterial && item.script_status !== "approved")) {
       items.push(buildPlanningStageItem(contract, item, "script", { part: 1, total: staged ? 2 : 1 }));
     }
   }
@@ -540,7 +556,7 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
 
   // Fallback: legacy review without stage fields
   if (items.length === 0 && (item.status === "review" || item.submitted_at)) {
-    const stage = item.script && !item.media_url ? "script" : "video";
+    const stage = (item.script || item.script_file_url) && !item.media_url ? "script" : "video";
     items.push(buildPlanningStageItem(contract, item, stage, { part: staged ? (stage === "script" ? 1 : 2) : 1, total: staged ? 2 : 1 }));
   }
 

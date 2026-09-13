@@ -44,3 +44,24 @@ export function getCalendarDays(selectedMonth: string): CalendarCell[] {
   }
   return grid;
 }
+
+export function currentYearMonth(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function shiftMonth(value: string, delta: number) {
+  const [year, month] = value.split("-").map(Number);
+  const next = new Date(year, month - 1 + delta, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export type PlanningDateKind = "delivery" | "post";
+
+export function planningDateEvents(item: { id: number; planned_date?: string | null; post_date?: string | null }) {
+  const events: { id: number; dateStr: string; kind: PlanningDateKind }[] = [];
+  const delivery = toDateKey(item.planned_date);
+  const post = toDateKey(item.post_date);
+  if (delivery) events.push({ id: item.id, dateStr: delivery, kind: "delivery" });
+  if (post) events.push({ id: item.id, dateStr: post, kind: "post" });
+  return events;
+}

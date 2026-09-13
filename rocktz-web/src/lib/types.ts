@@ -48,7 +48,20 @@ export type Creator = {
     download_url?: string;
     uploaded_at?: string | null;
   }[];
-  contract_acceptance?: { id: number; status: string; accepted_at: string | null; full_name: string } | null;
+  contract_acceptance?: {
+    id: number;
+    status: string;
+    accepted_at: string | null;
+    full_name: string;
+    term_id?: string | null;
+    version?: string | null;
+    document?: string | null;
+    email?: string | null;
+    ip?: string | null;
+    user_agent?: string | null;
+    declarations?: Record<string, boolean> | null;
+    all_accepted?: boolean;
+  } | null;
 };
 
 export type SocialSyncResult = {
@@ -342,6 +355,7 @@ export type PlanningItem = {
   script_file_name?: string | null;
   caption?: string | null;
   planned_date: string | null;
+  post_date?: string | null;
   status: string;
   approval_flow?: string | null;
   posting_profile?: "creator" | "brand" | string | null;
@@ -379,6 +393,22 @@ export type AppNotification = {
   campaign_id?: number | null;
   recurring_contract_id?: number | null;
   created_at: string | null;
+};
+
+export type CalendarEventKind = "delivery" | "post";
+
+export type CalendarEvent = {
+  id: string;
+  kind: CalendarEventKind;
+  source: "campaign" | "recurring";
+  source_id: number;
+  date: string;
+  title: string;
+  format: string | null;
+  status: string | null;
+  href: string;
+  creator?: { id: number; artistic_name: string; photo_url: string | null } | null;
+  company?: { id: number; name: string } | null;
 };
 
 export type DashboardStats = {

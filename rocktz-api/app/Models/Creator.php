@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 #[Fillable([
@@ -93,6 +94,11 @@ class Creator extends Model
     public function contractAcceptances(): HasMany
     {
         return $this->hasMany(CreatorContractAcceptance::class);
+    }
+
+    public function latestContractAcceptance(): HasOne
+    {
+        return $this->hasOne(CreatorContractAcceptance::class)->latestOfMany();
     }
 
     public function favoritedByCompanies(): BelongsToMany

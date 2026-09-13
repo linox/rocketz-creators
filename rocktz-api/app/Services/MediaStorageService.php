@@ -6,6 +6,7 @@ use App\Jobs\MakeVideoPlayableJob;
 use App\Models\MediaFile;
 use App\Models\User;
 use App\Support\BrowserVideo;
+use App\Support\ImageOptimize;
 use App\Support\MediaDisk;
 use App\Support\MediaKind;
 use App\Support\MediaUrl;
@@ -164,6 +165,17 @@ class MediaStorageService
     ): array {
         if ($kind === 'video' && ! BrowserVideo::needsTranscode('x.'.$extension) && Mp4Faststart::optimize($absolutePath)) {
             $size = (int) filesize($absolutePath);
+        }
+
+        if ($kind === 'image') {
+            $optimized = ImageOptimize::process($absolutePath);
+            if ($optimized !== null) {
+                $extension = $optimized['extension'];
+                $mime = $optimized['mime'];
+                $size = $optimized['size'];
+            } else {
+                $size = (int) (filesize($absolutePath) ?: $size);
+            }
         }
 
         $allocated = $this->allocatePath($kind, $extension);

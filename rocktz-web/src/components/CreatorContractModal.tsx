@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   X,
+  Download,
   Printer,
   Search,
   AlertCircle,
@@ -16,6 +17,8 @@ import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getCreatorContract, type CreatorContractAuditRecord } from "@/data/creatorContractTerms";
+import { downloadCreatorTermDocument } from "@/lib/creator-contract-document";
+import type { Creator } from "@/lib/types";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import { DEFAULT_COUNTRY } from "@/lib/geo";
 import {
@@ -41,6 +44,7 @@ interface CreatorContractModalProps {
   creatorDocument?: string;
   prefilledDocument?: string;
   creatorCountry?: string | null;
+  creator?: Creator | null;
 }
 
 export function CreatorContractModal({
@@ -57,8 +61,10 @@ export function CreatorContractModal({
   creatorDocument = '',
   prefilledDocument = '',
   creatorCountry = null,
+  creator = null,
 }: CreatorContractModalProps) {
   const { t, i18n } = useTranslation("profile");
+  const { t: ta } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const locale = normalizeLocale(i18n.language);
   const dateLocale = intlLocale(locale);
@@ -70,10 +76,10 @@ export function CreatorContractModal({
   );
   const { metadata, preamble, parts, declarations } = contract;
 
-  const finalExistingAudit = existingAuditRecord || existingAudit || null;
-  const initialName = creatorName || prefilledName || finalExistingAudit?.fullName || '';
-  const initialEmail = creatorEmail || prefilledEmail || finalExistingAudit?.email || '';
-  const initialDoc = creatorDocument || prefilledDocument || finalExistingAudit?.document || '';
+  const signedAudit = existingAuditRecord || existingAudit || null;
+  const initialName = creatorName || prefilledName || signedAudit?.fullName || '';
+  const initialEmail = creatorEmail || prefilledEmail || signedAudit?.email || '';
+  const initialDoc = creatorDocument || prefilledDocument || signedAudit?.document || '';
 
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'parts' | 'full'>('parts');
@@ -81,8 +87,8 @@ export function CreatorContractModal({
   
   // Declarations State
   const [checkedDeclarations, setCheckedDeclarations] = useState<Record<string, boolean>>(() => {
-    if (finalExistingAudit?.declarations) {
-      return finalExistingAudit.declarations;
+    if (signedAudit?.declarations) {
+      return signedAudit.declarations;
     }
     const initial: Record<string, boolean> = {};
     declarations.forEach((d) => {
@@ -102,22 +108,22 @@ export function CreatorContractModal({
       if (initialDoc && !documentInput) setDocumentInput(initialDoc);
       if (initialName && !nameInput) setNameInput(initialName);
       if (initialEmail && !emailInput) setEmailInput(initialEmail);
-      if (finalExistingAudit?.declarations) {
-        setCheckedDeclarations(finalExistingAudit.declarations);
+      if (signedAudit?.declarations) {
+        setCheckedDeclarations(signedAudit.declarations);
       }
     }
-  }, [isOpen, initialDoc, initialName, initialEmail, finalExistingAudit]);
+  }, [isOpen, initialDoc, initialName, initialEmail, signedAudit]);
 
   // Computed Acceptance Status
   const allDeclarationsChecked = declarations.every((d) => !!checkedDeclarations[d.id]);
 
   // Generated Acceptance Term ID
   const generatedTermId = React.useMemo(() => {
-    if (finalExistingAudit?.termId) return finalExistingAudit.termId;
+    if (signedAudit?.termId) return signedAudit.termId;
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
     return `RC-TERMO-${dateStr}-${rand}`;
-  }, [finalExistingAudit]);
+  }, [signedAudit]);
 
   const toggleDeclaration = (id: string) => {
     if (readOnly) return;
@@ -188,7 +194,25 @@ export function CreatorContractModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    setViewMode("full");
+    setActivePartIndex(5);
+    window.setTimeout(() => window.print(), 50);
+  };
+
+  const handleDownload = () => {
+    if (!creator) return;
+    downloadCreatorTermDocument(creator, locale, {
+      signed: t("signed"),
+      pending: t("deliveryPending"),
+      artisticName: ta("creators.artisticName"),
+      fullName: t("termModal.fullNameLabel"),
+      document: t("termModal.cpfLabel", { documents: documentsLabel }),
+      email: t("termModal.emailLabel"),
+      acceptedAt: t("acceptanceDate"),
+      version: t("termModal.version", { version: metadata.version }),
+      acceptId: t("termModal.acceptIdLabel"),
+      declarations: t("termModal.declarationsTitle"),
+    });
   };
 
   if (!isOpen) return null;
@@ -199,7 +223,7 @@ export function CreatorContractModal({
         initial={{ opacity: 0, scale: 0.96, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 15 }}
-        className="app-modal-panel relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="creator-contract-print app-modal-panel relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
       >
         {/* MODAL HEADER */}
         <div className="px-5 sm:px-8 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white relative shrink-0">
@@ -213,11 +237,11 @@ export function CreatorContractModal({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-slate-300">
                   {t("termModal.version", { version: metadata.version })}
                 </span>
-                {existingAuditRecord && (
+                {signedAudit && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                     <Check size={11} />
                     {t("termModal.acceptedOn", {
-                      date: existingAuditRecord.formattedDate || new Date(existingAuditRecord.acceptedAt).toLocaleDateString(dateLocale),
+                      date: signedAudit.formattedDate || new Date(signedAudit.acceptedAt).toLocaleDateString(dateLocale),
                     })}
                   </span>
                 )}
@@ -233,7 +257,19 @@ export function CreatorContractModal({
 
             <div className="flex items-center gap-2 shrink-0">
               <LanguageSwitcher theme="dark" layout="menu" />
+              {creator ? (
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  title={t("termModal.downloadTitle")}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={15} />
+                  <span className="hidden sm:inline">{t("termModal.download")}</span>
+                </button>
+              ) : null}
               <button
+                type="button"
                 onClick={handlePrint}
                 title={t("termModal.printTitle")}
                 className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
@@ -473,7 +509,7 @@ export function CreatorContractModal({
                     </p>
                   </div>
 
-                  {!readOnly && !existingAuditRecord && (
+                  {!readOnly && !signedAudit && (
                     <button
                       type="button"
                       onClick={handleSelectAllDeclarations}
@@ -526,7 +562,7 @@ export function CreatorContractModal({
                     </label>
                     <input
                       type="text"
-                      disabled={readOnly || !!existingAuditRecord}
+                      disabled={readOnly || !!signedAudit}
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       placeholder={t("termModal.namePh")}
@@ -550,7 +586,7 @@ export function CreatorContractModal({
                     <input
                       type="text"
                       maxLength={taxDocumentMaxLength(country)}
-                      disabled={readOnly || !!existingAuditRecord}
+                      disabled={readOnly || !!signedAudit}
                       value={documentInput}
                       onChange={(e) => {
                         setDocumentInput(formatTaxDocument(country, e.target.value));
@@ -571,7 +607,7 @@ export function CreatorContractModal({
                     </label>
                     <input
                       type="email"
-                      disabled={readOnly || !!existingAuditRecord}
+                      disabled={readOnly || !!signedAudit}
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
                       placeholder={t("termModal.emailPh")}
@@ -584,7 +620,7 @@ export function CreatorContractModal({
                       {t("termModal.acceptIdLabel")}
                     </label>
                     <div className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-purple-300 font-mono text-xs flex items-center justify-between">
-                      <span>{existingAuditRecord?.termId || generatedTermId}</span>
+                      <span>{signedAudit?.termId || generatedTermId}</span>
                       <span className="text-[10px] text-slate-400">{t("termModal.auditHash")}</span>
                     </div>
                   </div>

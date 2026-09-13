@@ -47,7 +47,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
-import { getCalendarDays, localDateStr, toDateKey } from "@/lib/calendar";
+import { getCalendarDays, localDateStr, planningDateEvents } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
@@ -119,6 +119,7 @@ const EMPTY_CONTENT = {
   description: "",
   briefing: emptyPautaBriefing(),
   planned_date: "",
+  post_date: "",
   month: "",
 };
 
@@ -154,7 +155,7 @@ function creatorCost(row: NonNullable<RecurringContract["creators"]>[number]) {
 }
 
 function itemInMonth(item: PlanningItem, month: string) {
-  return item.month === month || Boolean(item.planned_date?.startsWith(month));
+  return item.month === month || Boolean(item.planned_date?.startsWith(month) || item.post_date?.startsWith(month));
 }
 
 function itemStatusClass(status: string) {
@@ -310,6 +311,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         description: opts.item.description || "",
         briefing: parsePautaBriefing(opts.item),
         planned_date: opts.item.planned_date || "",
+        post_date: opts.item.post_date || "",
         month: opts.item.month || selectedMonth,
       });
     } else {
@@ -319,6 +321,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         contract_id: opts?.contractId ? String(opts.contractId) : contracts[0] ? String(contracts[0].id) : "",
         creator_id: opts?.creatorId ? String(opts.creatorId) : "",
         planned_date: opts?.date || "",
+        post_date: "",
         month: opts?.date?.slice(0, 7) || selectedMonth,
         briefing: emptyPautaBriefing(),
       });
@@ -396,6 +399,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       briefing: pautaBriefingSummary(contentForm.briefing),
       briefing_fields: contentForm.briefing,
       planned_date: contentForm.planned_date || null,
+      post_date: contentForm.post_date || null,
       month: contentForm.month || selectedMonth,
     };
     try {
@@ -839,8 +843,17 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                                 </div>
                               ) : null}
                             </div>
-                            <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-400">
-                              <span className="font-semibold text-slate-600">{item.planned_date ? t("recurring.dateLabel", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) }) : t("recurring.noDate")}</span>
+                            <div className="flex items-start justify-between gap-2 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
+                              <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
+                                <span className="font-semibold text-slate-600">
+                                  <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaDate")}</span>
+                                  {item.planned_date ? new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale) : t("recurring.noDate")}
+                                </span>
+                                <span className="font-semibold text-slate-600">
+                                  <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaPostDate")}</span>
+                                  {item.post_date ? new Date(`${item.post_date}T00:00:00`).toLocaleDateString(locale) : "—"}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-1">
                                 <button type="button" onClick={() => setViewingItem(item)} className="cursor-pointer rounded p-1 text-slate-400 hover:bg-indigo-50 hover:text-brand-primary"><Eye size={13} /></button>
                                 {canManage ? <button type="button" onClick={() => openContentModal({ contractId: contract.id, creatorId: row.creator_id, item })} className="cursor-pointer rounded p-1 text-slate-400 hover:text-slate-700"><Edit3 size={13} /></button> : null}
@@ -883,7 +896,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 </div>
                 <div className="grid grid-cols-7 auto-rows-[9.5rem] divide-x divide-y divide-slate-100">
                   {getCalendarDays(selectedMonth).map((cell) => {
-                    const dayItems = filteredItems.filter((item) => toDateKey(item.planned_date) === cell.dateStr);
+                    const dayItems = filteredItems.flatMap((item) => planningDateEvents(item).filter((event) => event.dateStr === cell.dateStr).map((event) => ({ item, kind: event.kind })));
                     const isToday = cell.dateStr === localDateStr();
                     return (
                       <div key={cell.dateStr} className={cn("group flex h-full min-h-0 flex-col overflow-hidden p-2", cell.isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-300")}>
@@ -901,10 +914,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                           </div>
                         </div>
                         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
-                          {dayItems.map((item) => (
-                            <button key={item.id} type="button" onClick={() => setViewingItem(item)} className={cn("w-full cursor-pointer rounded-lg border p-1.5 text-left text-[10px] font-bold transition-all hover:scale-[1.02]", itemStatusClass(item.status))}>
+                          {dayItems.map(({ item, kind }) => (
+                            <button key={`${item.id}-${kind}`} type="button" onClick={() => setViewingItem(item)} className={cn("w-full cursor-pointer rounded-lg border p-1.5 text-left text-[10px] font-bold transition-all hover:scale-[1.02]", kind === "post" ? "border-violet-200 bg-violet-50 text-violet-800" : itemStatusClass(item.status))}>
                               <div className="flex items-center justify-between gap-1">
-                                <span className="text-[9px] font-black uppercase opacity-80">{t(`recurring.shortFormats.${item.content_type}`, { defaultValue: item.content_type })}</span>
+                                <span className="text-[9px] font-black uppercase opacity-80">{t(`calendar.kind.${kind}`)}</span>
                                 <span className="truncate text-[9px] font-semibold">{item.creator?.artistic_name}</span>
                               </div>
                               <p className="mt-0.5 truncate font-bold">{item.title}</p>
@@ -971,12 +984,23 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         </div>
                       </div>
                       {item.description ? <p className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">{item.description}</p> : null}
-                      <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-                        <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                          <Calendar size={13} className="text-slate-400" />
-                          {item.planned_date ? t("recurring.publishOn", { date: new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) }) : t("recurring.noDate")}
-                        </span>
-                        <button type="button" onClick={() => setViewingItem(item)} className="inline-flex cursor-pointer items-center gap-1 text-xs font-bold text-brand-primary hover:underline">
+                      <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-2 text-xs">
+                        <div className="grid min-w-0 flex-1 grid-cols-2 gap-3 font-bold text-slate-700">
+                          <span>
+                            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaDate")}</span>
+                            <span className="mt-0.5 inline-flex items-center gap-1.5">
+                              <Calendar size={13} className="text-slate-400" />
+                              {item.planned_date ? new Date(`${item.planned_date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) : t("recurring.noDate")}
+                            </span>
+                          </span>
+                          <span>
+                            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaPostDate")}</span>
+                            <span className="mt-0.5 block">
+                              {item.post_date ? new Date(`${item.post_date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) : "—"}
+                            </span>
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => setViewingItem(item)} className="inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-bold text-brand-primary hover:underline">
                           <Eye size={13} /> {t("recurring.fullBriefing")}
                         </button>
                       </div>
@@ -1174,7 +1198,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               {t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaTitle" : "recurring.contentTitle")}
               <input className="mt-1 h-11 w-full rounded-xl border px-4 text-sm font-semibold" placeholder={t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaTitlePh" : "recurringDetail.pautaTitlePh")} value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} />
             </label>
-            <label className="text-xs font-bold text-slate-500">{t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaDate" : "recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-500">{t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaDate" : "recurring.contentDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.planned_date} onChange={(e) => setContentForm({ ...contentForm, planned_date: e.target.value, month: e.target.value.slice(0, 7) || contentForm.month })} /></label>
+              <label className="text-xs font-bold text-slate-500">{t("recurring.contentPostDate")}<input type="date" className="mt-1 h-11 w-full rounded-xl border px-4 text-sm" value={contentForm.post_date} onChange={(e) => setContentForm({ ...contentForm, post_date: e.target.value })} /></label>
+            </div>
             <PautaBriefingFieldsForm
               value={contentForm.briefing}
               onChange={(briefing) => setContentForm({ ...contentForm, briefing })}
@@ -1249,7 +1276,16 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                   )}
                 </div>
               ) : null}
-              <p className="text-xs font-bold text-slate-500">{viewingItem.planned_date ? t("recurring.dateLabel", { date: new Date(`${viewingItem.planned_date}T00:00:00`).toLocaleDateString(locale) }) : t("recurring.noDate")}</p>
+              <div className="grid grid-cols-2 gap-3 text-xs font-bold text-slate-500">
+                <p className="m-0">
+                  <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaDate")}</span>
+                  <span className="mt-0.5 block text-slate-700">{viewingItem.planned_date ? new Date(`${viewingItem.planned_date}T00:00:00`).toLocaleDateString(locale) : t("recurring.noDate")}</span>
+                </p>
+                <p className="m-0">
+                  <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.pautaPostDate")}</span>
+                  <span className="mt-0.5 block text-slate-700">{viewingItem.post_date ? new Date(`${viewingItem.post_date}T00:00:00`).toLocaleDateString(locale) : "—"}</span>
+                </p>
+              </div>
             </div>
           </div>
         </div>

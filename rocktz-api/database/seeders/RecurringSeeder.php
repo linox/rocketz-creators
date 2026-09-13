@@ -66,7 +66,8 @@ class RecurringSeeder extends Seeder
                 'content_type' => 'reel',
                 'title' => 'Reel rotina glow',
                 'briefing' => 'Mostrar a aplicação do sérum no início do dia.',
-                'planned_date' => now()->addMonth()->startOfMonth()->addDays(4)->toDateString(),
+                'planned_date' => now()->addMonth()->startOfMonth()->addDays(2)->toDateString(),
+                'post_date' => now()->addMonth()->startOfMonth()->addDays(4)->toDateString(),
             ]);
         }
 
@@ -78,6 +79,7 @@ class RecurringSeeder extends Seeder
                 'title' => 'Stories de prova social',
                 'briefing' => 'Bastidores + print de resultados.',
                 'planned_date' => now()->toDateString(),
+                'post_date' => now()->addDays(2)->toDateString(),
                 'submission_url' => 'https://example.com/submissions/ana-stories',
             ]);
         }
@@ -89,7 +91,8 @@ class RecurringSeeder extends Seeder
                 'content_type' => 'ugc',
                 'title' => 'UGC unboxing kit',
                 'briefing' => 'Unboxing completo do kit mensal.',
-                'planned_date' => now()->subMonth()->startOfMonth()->addDays(10)->toDateString(),
+                'planned_date' => now()->subMonth()->startOfMonth()->addDays(8)->toDateString(),
+                'post_date' => now()->subMonth()->startOfMonth()->addDays(10)->toDateString(),
                 'published_url' => 'https://instagram.com/p/aurora-kit-mensal',
             ]);
         }

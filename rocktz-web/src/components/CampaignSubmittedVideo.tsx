@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Play, Video } from "lucide-react";
+import { Download, ExternalLink, Play, Video } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { mediaDownloadUrl } from "@/lib/media-playback";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { VideoLightbox } from "@/components/VideoLightbox";
 
 type Props = {
@@ -18,6 +20,33 @@ export function CampaignSubmittedVideo({ videoUrl, className, compact = false }:
   const { t } = useTranslation("app");
   const [playing, setPlaying] = useState(false);
   const downloadUrl = mediaDownloadUrl(videoUrl);
+  const driveHref = isGoogleDriveUrl(videoUrl) ? safeHttpUrl(videoUrl) : undefined;
+
+  if (driveHref) {
+    return (
+      <a
+        href={driveHref}
+        target="_blank"
+        rel="noreferrer"
+        className={cn(
+          "flex w-full items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs font-bold text-slate-800 transition-colors hover:border-indigo-200 hover:bg-white",
+          className,
+        )}
+      >
+        <span className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary/10 text-brand-primary">
+              <ExternalLink size={16} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate">{compact ? t("campaignDetail.openDrive") : t("campaignDetail.openDriveTitle")}</span>
+              {!compact ? <span className="mt-0.5 block text-[10px] font-semibold tracking-wider text-brand-primary uppercase">{t("campaignDetail.openDrive")}</span> : null}
+            </span>
+          </span>
+        </span>
+      </a>
+    );
+  }
 
   return (
     <>
