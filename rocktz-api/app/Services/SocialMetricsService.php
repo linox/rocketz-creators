@@ -858,20 +858,30 @@ class SocialMetricsService
      */
     private function mediaViewCount(array $node): ?int
     {
-        return SocialNumbers::intOrNull(
+        $plays = SocialNumbers::intOrNull(
             $node['video_play_count']
-                ?? $node['video_view_count']
                 ?? $node['videoPlayCount']
                 ?? $node['ig_play_count']
                 ?? $node['play_count']
                 ?? $node['playCount']
-                ?? $node['view_count']
-                ?? $node['viewCount']
                 ?? data_get($node, 'stats.playCount')
                 ?? data_get($node, 'stats.play_count')
                 ?? data_get($node, 'statistics.play_count')
                 ?? data_get($node, 'statistics.playCount')
+                ?? null
         );
+        $views = SocialNumbers::intOrNull(
+            $node['video_view_count']
+                ?? $node['view_count']
+                ?? $node['viewCount']
+                ?? null
+        );
+
+        if ($plays && $views) {
+            return max($plays, $views);
+        }
+
+        return $plays ?: $views;
     }
 
     /**

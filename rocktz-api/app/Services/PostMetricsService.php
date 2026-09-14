@@ -197,6 +197,24 @@ class PostMetricsService
         $views = null;
         $handle = $link->handle;
 
+        [$apiLikes, $apiComments, $apiViews, $apiHandle] = $this->instagramFromScrapeCreators($link);
+        $likes = $apiLikes;
+        $comments = $apiComments;
+        $views = $apiViews;
+        if ($handle === '' && $apiHandle !== '') {
+            $handle = $apiHandle;
+        }
+
+        if ($likes !== null && $comments !== null && $views !== null) {
+            return new PostSnapshot(
+                network: 'instagram',
+                url: $link->url,
+                likes: $likes,
+                comments: $comments,
+                views: $views,
+            );
+        }
+
         $urls = array_values(array_unique(array_filter([
             $link->url,
             'https://www.instagram.com/p/'.$link->id.'/',
@@ -220,23 +238,23 @@ class PostMetricsService
                 $comments ??= $pageComments;
             }
 
-            $views ??= $this->parseInstagramViews($html);
+            $views = $this->preferInstagramViews($views, $this->parseInstagramViews($html));
             if ($handle === '') {
                 $handle = $this->instagramHandleFromHtml($html);
             }
 
-            if ($likes !== null && $comments !== null) {
+            if ($likes !== null && $comments !== null && $views !== null) {
                 break;
             }
         }
 
-        $views ??= $this->instagramViewsFromEmbed($link);
+        $views = $this->preferInstagramViews($views, $this->instagramViewsFromEmbed($link));
 
         if ($handle !== '') {
             [$profileLikes, $profileComments, $profileViews] = $this->instagramStatsFromProfile($handle, $link->id);
             $likes ??= $profileLikes;
             $comments ??= $profileComments;
-            $views ??= $profileViews;
+            $views = $this->preferInstagramViews($views, $profileViews);
         }
 
         return new PostSnapshot(
@@ -277,14 +295,108 @@ class PostMetricsService
 
     private function parseInstagramViews(string $html): ?int
     {
-        return SocialNumbers::intOrNull($this->matchFirst($html, [
+        $plays = $this->positiveInt($this->matchFirst($html, [
             '/video_play_count\\\\":(\d+)/',
             '/"video_play_count"\s*:\s*"?(\d+)/',
-            '/video_view_count\\\\":(\d+)/',
-            '/"video_view_count"\s*:\s*"?(\d+)/',
+            '/ig_play_count\\\\":(\d+)/',
+            '/"ig_play_count"\s*:\s*"?(\d+)/',
             '/play_count\\\\":(\d+)/',
             '/"play_count"\s*:\s*"?(\d+)/',
         ]));
+        $views = $this->positiveInt($this->matchFirst($html, [
+            '/video_view_count\\\\":(\d+)/',
+            '/"video_view_count"\s*:\s*"?(\d+)/',
+        ]));
+
+        return $this->preferInstagramViews($plays, $views);
+    }
+
+    /**
+     * @return array{0: int|null, 1: int|null, 2: int|null, 3: string}
+     */
+    private function instagramFromScrapeCreators(PostLink $link): array
+    {
+        if ($this->scrapeCreatorsKey() === '') {
+            return [null, null, null, ''];
+        }
+
+        try {
+            $json = $this->scrapeCreatorsGet('/v1/instagram/post', [
+                'url' => $link->canonicalUrl(),
+                'include_play_count' => 'true',
+            ]);
+        } catch (SocialMetricsException) {
+            return [null, null, null, ''];
+        }
+
+        $media = data_get($json, 'data.xdt_shortcode_media', data_get($json, 'xdt_shortcode_media'));
+        if (! is_array($media)) {
+            $media = is_array(data_get($json, 'data')) ? data_get($json, 'data') : $json;
+        }
+        if (! is_array($media)) {
+            return [null, null, null, ''];
+        }
+
+        $likes = SocialNumbers::intOrNull(
+            data_get($media, 'edge_media_preview_like.count')
+                ?? data_get($media, 'edge_liked_by.count')
+                ?? $media['like_count']
+                ?? $media['likeCount']
+                ?? null
+        );
+        $comments = SocialNumbers::intOrNull(
+            data_get($media, 'edge_media_preview_comment.count')
+                ?? data_get($media, 'edge_media_to_parent_comment.count')
+                ?? data_get($media, 'edge_media_to_comment.count')
+                ?? $media['comment_count']
+                ?? $media['commentCount']
+                ?? null
+        );
+        $handle = (string) (data_get($media, 'owner.username') ?? '');
+
+        return [$likes, $comments, $this->instagramViewCount($media), $handle];
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function instagramViewCount(array $node): ?int
+    {
+        $plays = $this->positiveInt(
+            $node['video_play_count']
+                ?? $node['ig_play_count']
+                ?? $node['play_count']
+                ?? $node['playCount']
+                ?? $node['videoPlayCount']
+                ?? null
+        );
+        $views = $this->positiveInt(
+            $node['video_view_count']
+                ?? $node['view_count']
+                ?? $node['viewCount']
+                ?? null
+        );
+
+        return $this->preferInstagramViews($plays, $views);
+    }
+
+    private function preferInstagramViews(?int $preferred, ?int $fallback): ?int
+    {
+        $preferred = $this->positiveInt($preferred);
+        $fallback = $this->positiveInt($fallback);
+
+        if ($preferred !== null && $fallback !== null) {
+            return max($preferred, $fallback);
+        }
+
+        return $preferred ?? $fallback;
+    }
+
+    private function positiveInt(mixed $value): ?int
+    {
+        $number = SocialNumbers::intOrNull($value);
+
+        return $number !== null && $number > 0 ? $number : null;
     }
 
     /**
@@ -402,7 +514,7 @@ class PostMetricsService
             return [
                 SocialNumbers::intOrNull(data_get($node, 'edge_liked_by.count') ?? data_get($node, 'edge_media_preview_like.count')),
                 SocialNumbers::intOrNull(data_get($node, 'edge_media_to_comment.count')),
-                SocialNumbers::intOrNull($node['video_play_count'] ?? $node['video_view_count'] ?? $node['videoPlayCount'] ?? $node['ig_play_count'] ?? $node['play_count'] ?? null),
+                $this->instagramViewCount($node),
             ];
         }
 
@@ -1068,6 +1180,40 @@ class PostMetricsService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, scalar>  $query
+     * @return array<string, mixed>
+     */
+    private function scrapeCreatorsGet(string $path, array $query): array
+    {
+        $query['cache_max_age'] = $query['cache_max_age'] ?? '1d';
+
+        $response = $this->http()
+            ->withHeaders(['x-api-key' => $this->scrapeCreatorsKey()])
+            ->acceptJson()
+            ->get(rtrim($this->scrapeCreatorsUrl(), '/').$path.'?'.http_build_query($query));
+
+        $this->assertReachable($response);
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            throw new SocialMetricsException(__('auth.post_metrics_unavailable'));
+        }
+
+        return $json;
+    }
+
+    private function scrapeCreatorsKey(): string
+    {
+        return trim((string) config('services.social.scrape_creators_key'));
+    }
+
+    private function scrapeCreatorsUrl(): string
+    {
+        return trim((string) config('services.social.scrape_creators_url', 'https://api.scrapecreators.com'))
+            ?: 'https://api.scrapecreators.com';
     }
 
     private function cacheHours(): int

@@ -112,6 +112,65 @@ class PostMetricsTest extends TestCase
             ->assertJsonPath("sync.{$row->id}.comments", 31);
     }
 
+    public function test_instagram_uses_scrapecreators_play_count_for_collab_reel(): void
+    {
+        config()->set('services.social.scrape_creators_key', 'test-key');
+        [$campaign, $row, $token] = $this->campaignWithPublishedLink(
+            'https://www.instagram.com/p/DdFO3sBh1P3/',
+            ['instagram_followers' => 58942],
+        );
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'api.scrapecreators.com/v1/instagram/post')) {
+                return Http::response([
+                    'data' => [
+                        'xdt_shortcode_media' => [
+                            'shortcode' => 'DdFO3sBh1P3',
+                            'video_view_count' => 707,
+                            'video_play_count' => 4120,
+                            'edge_media_preview_like' => ['count' => 97],
+                            'edge_media_preview_comment' => ['count' => 18],
+                            'owner' => ['username' => 'mihpocket'],
+                            'coauthor_producers' => [['username' => 'cricutbr']],
+                        ],
+                    ],
+                ], 200);
+            }
+
+            return Http::response($this->instagramPostHtml(), 200);
+        });
+
+        $this->withToken($token)
+            ->postJson("/api/campaigns/{$campaign->id}/post-metrics-sync", ['force' => true])
+            ->assertOk()
+            ->assertJsonPath("sync.{$row->id}.ok", true)
+            ->assertJsonPath("sync.{$row->id}.likes", 97)
+            ->assertJsonPath("sync.{$row->id}.comments", 18)
+            ->assertJsonPath("sync.{$row->id}.views", 4120);
+    }
+
+    public function test_instagram_prefers_play_count_over_public_view_count_in_html(): void
+    {
+        [$campaign, $row, $token] = $this->campaignWithPublishedLink(
+            'https://www.instagram.com/p/DdFO3sBh1P3/',
+            ['instagram_followers' => 58942],
+        );
+
+        Http::fake([
+            'https://www.instagram.com/*' => Http::response(<<<'HTML'
+<html><head>
+<meta property="og:description" content="97 likes, 18 comments - mihpocket on September 9, 2026" />
+</head><body>"video_view_count":707 "video_play_count":4120</body></html>
+HTML, 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/campaigns/{$campaign->id}/post-metrics-sync", ['force' => true])
+            ->assertOk()
+            ->assertJsonPath("sync.{$row->id}.views", 4120)
+            ->assertJsonPath("sync.{$row->id}.likes", 97);
+    }
+
     public function test_instagram_reads_views_from_embed_json(): void
     {
         [$campaign, $row, $token] = $this->campaignWithPublishedLink(
