@@ -2410,8 +2410,9 @@
     "configureStorefront": "Configure storefront",
     "cropFormat": "4:3 format",
     "cropTitle": "Crop product image",
-    "cropBannerFormat": "Wide format",
+    "cropBannerFormat": "3:1 format · desktop and mobile",
     "cropBannerTitle": "Crop banner",
+    "cropBannerHint": "Keep the subject in the center: that band is what phones show. The darker sides complete the desktop banner.",
     "useImage": "Use image"
   },
   "calendar": {

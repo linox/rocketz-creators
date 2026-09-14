@@ -31,7 +31,7 @@ function StorefrontImageField({
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const preview = mediaPublicUrl(value) || value;
   const isBanner = variant === "banner";
-  const frameClass = isBanner ? "aspect-[16/9]" : "aspect-[4/3]";
+  const frameClass = isBanner ? "aspect-[21/9] md:aspect-[3/1]" : "aspect-[4/3]";
 
   async function handleFile(file: File) {
     if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
@@ -66,7 +66,7 @@ function StorefrontImageField({
       <div className={`overflow-hidden rounded-xl border border-slate-200 bg-slate-50 ${frameClass}`}>
         {value ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+          <img src={preview} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover object-center" />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-slate-400">{t("storefront.noImage")}</div>
         )}
@@ -101,11 +101,13 @@ function StorefrontImageField({
       {cropSrc ? (
         <ImageCropModal
           imageSrc={cropSrc}
-          aspect={isBanner ? 16 / 9 : 4 / 3}
-          outputWidth={isBanner ? 1600 : 1200}
-          outputHeight={isBanner ? 900 : 900}
+          aspect={isBanner ? 3 : 4 / 3}
+          outputWidth={isBanner ? 1920 : 1200}
+          outputHeight={isBanner ? 640 : 900}
+          safeZoneAspect={isBanner ? 21 / 9 : undefined}
           title={isBanner ? t("storefront.cropBannerTitle") : t("storefront.cropTitle")}
           formatLabel={isBanner ? t("storefront.cropBannerFormat") : t("storefront.cropFormat")}
+          hint={isBanner ? t("storefront.cropBannerHint") : undefined}
           confirmLabel={t("storefront.useImage")}
           onCancel={() => {
             URL.revokeObjectURL(cropSrc);
@@ -383,7 +385,7 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
               <Share2 size={14} /> {t("storefront.sharePage")}
             </button>
             <Link
-              href={`/creators/${creatorId}/storefront-metrics`}
+              href={`/creators/${creatorId}?tab=storefront-metrics`}
               className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3.5 text-xs font-bold whitespace-nowrap text-violet-700 hover:bg-violet-100"
             >
               <BarChart3 size={14} /> {t("storefront.viewMetrics")}

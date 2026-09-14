@@ -2410,8 +2410,9 @@
     "configureStorefront": "Configurar vitrine",
     "cropFormat": "Formato 4:3",
     "cropTitle": "Recortar imagem do produto",
-    "cropBannerFormat": "Formato panorâmico",
+    "cropBannerFormat": "Formato 3:1 · desktop e mobile",
     "cropBannerTitle": "Recortar banner",
+    "cropBannerHint": "Mantenha o assunto no centro: essa faixa aparece no celular. As laterais (mais escuras) completam o banner no desktop.",
     "useImage": "Usar imagem"
   },
   "calendar": {

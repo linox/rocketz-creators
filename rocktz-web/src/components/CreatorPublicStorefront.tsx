@@ -91,9 +91,9 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
       <div className="relative mx-auto max-w-5xl px-4 pb-16 sm:px-6">
         <div className="overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200/80">
           {banner ? (
-            <div className="h-44 w-full sm:h-64">
+            <div className="aspect-[21/9] w-full md:aspect-[3/1]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={banner} alt="" className="h-full w-full object-cover" />
+              <img src={banner} alt="" className="h-full w-full object-cover object-center" />
             </div>
           ) : (
             <div className="h-28 bg-gradient-to-r from-[#8A3FFC] to-indigo-500 sm:h-36" />

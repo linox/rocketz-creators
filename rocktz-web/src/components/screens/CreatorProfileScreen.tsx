@@ -61,6 +61,7 @@ import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmission
 import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
 import { CreatorStorefrontPanel } from "@/components/CreatorStorefrontPanel";
+import { StorefrontMetricsPanel } from "@/components/screens/StorefrontMetricsScreen";
 import { DeliveryUploadProgress } from "@/components/DeliveryUploadProgress";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
@@ -457,10 +458,17 @@ const ROLE_OPTION_VALUES = [
   { value: "admin", labelKey: "roleAdministrator" as const },
 ];
 
-type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront";
+type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront" | "storefront-metrics";
 
-function resolveProfileTab(value: string | null, creatorSelf: boolean): ProfileTab {
-  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront") {
+function pathLooksLikeStorefrontMetrics(pathname: string): boolean {
+  if (pathname.includes("storefront-metrics")) return true;
+  if (typeof window !== "undefined" && window.location.pathname.includes("storefront-metrics")) return true;
+  return false;
+}
+
+function resolveProfileTab(value: string | null, creatorSelf: boolean, pathLooksLikeMetrics: boolean): ProfileTab {
+  if (pathLooksLikeMetrics) return "storefront-metrics";
+  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics") {
     return value;
   }
   return creatorSelf ? "dashboard" : "portfolio";
@@ -574,7 +582,7 @@ function ProfileInner() {
   const [contractOpen, setContractOpen] = useState(false);
   const searchParams = useSearchParams();
   const isCreatorSelf = user.role === "creator" && user.creator?.id === id;
-  const tab = resolveProfileTab(searchParams.get("tab"), isCreatorSelf);
+  const tab = resolveProfileTab(searchParams.get("tab"), isCreatorSelf, pathLooksLikeStorefrontMetrics(pathname));
   const locale = intlLocale(normalizeLocale(i18n.language));
   const shouldOpenContract = searchParams.get("contract") === "1";
 
@@ -923,7 +931,8 @@ function ProfileInner() {
 
   function goTab(next: ProfileTab) {
     setEditing(next === "about");
-    router.replace(`${pathname}?tab=${next}`, { scroll: false });
+    if (!id) return;
+    router.replace(`/creators/${id}?tab=${next}`, { scroll: false });
   }
 
   const myParticipations = myCampaignItems
@@ -1403,15 +1412,15 @@ function ProfileInner() {
         <div className={cn("flex flex-col gap-8", agencyView ? "lg:col-span-2" : "lg:col-span-3")}>
           {agencyView ? (
             <div className="mb-2 flex max-w-xl overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
-              <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab !== "storefront" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+              <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab !== "storefront" && tab !== "storefront-metrics" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <User size={14} /> {tp("tabAbout")}
               </button>
               <button type="button" onClick={() => goTab("storefront")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Store size={14} /> {tp("tabStorefront")}
               </button>
-              <Link href={`/creators/${creator.id}/storefront-metrics`} className="flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap text-[#64748B] uppercase hover:text-[#0F172A]">
+              <button type="button" onClick={() => goTab("storefront-metrics")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront-metrics" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <BarChart3 size={14} /> {tp("tabStorefrontMetrics")}
-              </Link>
+              </button>
             </div>
           ) : null}
           {showCreatorTabs ? (
@@ -1430,6 +1439,9 @@ function ProfileInner() {
               </button>
               <button type="button" onClick={() => goTab("storefront")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Store size={14} /> {tp("tabStorefront")}
+              </button>
+              <button type="button" onClick={() => goTab("storefront-metrics")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront-metrics" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <BarChart3 size={14} /> {tp("tabStorefrontMetrics")}
               </button>
               <button type="button" onClick={() => goTab("about")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "about" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <User size={14} /> {tp("tabAbout")}
@@ -1886,6 +1898,8 @@ function ProfileInner() {
             <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} />
           ) : (showCreatorTabs || agencyView) && tab === "storefront" ? (
             <CreatorStorefrontPanel creatorId={creator.id} />
+          ) : (showCreatorTabs || agencyView) && tab === "storefront-metrics" ? (
+            <StorefrontMetricsPanel creatorId={creator.id} />
           ) : (
             <>
               {!showCreatorTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
@@ -1998,14 +2012,19 @@ function CreatorWorkActions({
   layout: "stack" | "inline";
   tp: (key: string) => string;
 }) {
-  const stack = layout === "stack";
+  const compact = layout === "inline";
+  const rowClass = cn(
+    "flex flex-nowrap items-center gap-1.5",
+    compact ? "justify-end" : "overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+  );
+  const btnBase = cn(
+    "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-xl text-xs font-bold shadow-sm transition-all",
+    compact ? "h-8 px-2.5" : "h-10 px-3",
+  );
   if (awaitingPauta) {
     return (
-      <div className={cn("flex", stack ? "flex-col gap-2 sm:flex-row sm:flex-wrap" : "flex-wrap items-center justify-end gap-2")}>
-        <span className={cn(
-          "inline-flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 font-bold text-orange-800",
-          stack ? "min-h-11 w-full justify-center px-3 py-2 text-xs sm:w-auto" : "px-3 py-1.5 text-xs",
-        )}>
+      <div className={rowClass}>
+        <span className={cn(btnBase, "border border-orange-200 bg-orange-50 text-orange-800")}>
           <Clock size={13} /> {tp("awaitingDemand")}
         </span>
       </div>
@@ -2013,13 +2032,10 @@ function CreatorWorkActions({
   }
   const action = creatorNextDeliveryAction(deliveryStatus, flow, publishedUrl, postingProfile);
   const brandPosts = postingProfile === "brand";
-  const briefingClass = stack
-    ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-2 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50 sm:w-auto"
-    : "inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/25 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary shadow-sm transition-all hover:bg-indigo-50";
+  const briefingClass = cn(btnBase, "cursor-pointer border border-brand-primary/25 bg-white text-brand-primary hover:bg-indigo-50");
   const actionClass = cn(
-    stack
-      ? "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border-none px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:w-auto"
-      : "inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-none px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all",
+    btnBase,
+    "cursor-pointer border-none text-white",
     action?.revision
       ? "bg-rose-600 hover:bg-rose-700"
       : action?.kind === "send_link" || action?.kind === "view_published"
@@ -2037,7 +2053,7 @@ function CreatorWorkActions({
           : Link2;
 
   return (
-    <div className={cn("flex", stack ? "flex-col gap-2 sm:flex-row sm:flex-wrap" : "flex-wrap items-center justify-end gap-2")}>
+    <div className={rowClass}>
       <button type="button" onClick={onOpen} className={briefingClass}>
         <Eye size={13} /> {tp("viewBriefing")}
       </button>
@@ -2349,15 +2365,15 @@ function ActiveRecurringWorksTable({
         })}
             </div>
       </div>
-      <div className="hidden lg:block">
-        <table className="w-full border-collapse text-left text-xs">
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full min-w-[720px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-purple-100 bg-purple-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
               <th className="p-3.5 pl-5">{tp("colDemandProject")}</th>
               <th className="p-3.5">{tp("colDeliveryDate")}</th>
               <th className="p-3.5">{tp("colPostDate")}</th>
               <th className="p-3.5">{tp("colDeliveryStatus")}</th>
-              <th className="p-3.5 pr-5 text-right">{tp("colActions")}</th>
+              <th className="p-3.5 pr-5 text-right whitespace-nowrap">{tp("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
@@ -2399,7 +2415,7 @@ function ActiveRecurringWorksTable({
                       />
                     ) : null}
                   </td>
-                  <td className="p-3.5 pr-5 text-right">
+                  <td className="p-3.5 pr-5 text-right whitespace-nowrap">
                     {item ? (
                       <CreatorWorkActions
                         layout="inline"
@@ -2666,8 +2682,8 @@ function ActiveCampaignsTable({
           </div>
         ))}
       </div>
-      <div className="hidden lg:block">
-        <table className="w-full border-collapse text-left text-xs">
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full min-w-[860px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-indigo-100 bg-indigo-50/40 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">
               <th className="p-3.5 pl-5">{tp("colCampaign")}</th>
@@ -2729,7 +2745,7 @@ function ActiveCampaignsTable({
                         onCancelled={() => void reloadMyCampaigns({ silent: true })}
                       />
                     </td>
-                    <td className="p-3.5 pr-5 text-right">
+                    <td className="p-3.5 pr-5 text-right whitespace-nowrap">
                       <CreatorWorkActions
                         layout="inline"
                         deliveryStatus={deliveryStatus}

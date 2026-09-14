@@ -11,6 +11,7 @@ DirectoryIndex index.html
     RewriteRule ^ - [L]
 
     # Export estático: /creators/6 → /creators/_/index.html
+    RewriteRule ^creators/[^/]+/storefront-metrics /creators/_/storefront-metrics/index.html [L]
     RewriteRule ^creators/ /creators/_/index.html [L]
     RewriteRule ^campaigns/ /campaigns/_/index.html [L]
     RewriteRule ^recurring/ /recurring/_/index.html [L]

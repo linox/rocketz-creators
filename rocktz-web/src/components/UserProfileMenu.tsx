@@ -272,7 +272,7 @@ export function UserProfileMenu({
                 <span>{t("storefront")}</span>
               </div>
             </Link>
-            <Link href={`/creators/${user.creator.id}/storefront-metrics`} onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
+            <Link href={`/creators/${user.creator.id}?tab=storefront-metrics`} onClick={() => setIsOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-brand-primary">
               <div className="flex items-center gap-2.5">
                 <BarChart3 size={15} className="text-violet-500" />
                 <span>{t("storefrontMetrics")}</span>

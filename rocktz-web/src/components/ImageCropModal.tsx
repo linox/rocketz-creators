@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import Cropper, { type Area } from "react-easy-crop";
 import { Check, X } from "lucide-react";
@@ -16,8 +16,16 @@ type ImageCropModalProps = {
   outputHeight?: number;
   title?: string;
   formatLabel?: string;
+  hint?: string;
   confirmLabel?: string;
+  /** Aspect of a nested “mobile” frame inside a wide crop; dims the desktop-only sides. */
+  safeZoneAspect?: number;
 };
+
+function safeZoneSidePercent(cropAspect: number, safeAspect: number) {
+  if (!(cropAspect > 0) || !(safeAspect > 0) || safeAspect >= cropAspect) return 0;
+  return ((cropAspect - safeAspect) / cropAspect / 2) * 100;
+}
 
 export function ImageCropModal({
   imageSrc,
@@ -28,7 +36,9 @@ export function ImageCropModal({
   outputHeight = 512,
   title,
   formatLabel,
+  hint,
   confirmLabel,
+  safeZoneAspect,
 }: ImageCropModalProps) {
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
@@ -40,6 +50,8 @@ export function ImageCropModal({
   const onCropComplete = useCallback((_: Area, croppedAreaPixels: Area) => {
     setPixels(croppedAreaPixels);
   }, []);
+  const isWide = aspect >= 1.6;
+  const safeInset = safeZoneAspect ? safeZoneSidePercent(aspect, safeZoneAspect) : 0;
 
   async function handleConfirm() {
     if (!pixels) return;
@@ -58,7 +70,7 @@ export function ImageCropModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="app-modal-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className={`app-modal-panel relative z-10 flex w-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl ${isWide ? "max-w-3xl" : "max-w-lg"}`}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
@@ -70,7 +82,7 @@ export function ImageCropModal({
           </button>
         </div>
 
-        <div className="relative h-[360px] bg-slate-900">
+        <div className={`relative bg-slate-900 ${isWide ? "h-[200px] sm:h-[260px]" : "h-[360px]"}`}>
           <Cropper
             image={imageSrc}
             crop={crop}
@@ -78,6 +90,12 @@ export function ImageCropModal({
             aspect={aspect}
             cropShape="rect"
             showGrid
+            classes={safeInset > 0 ? { cropAreaClassName: "banner-hero-crop-area" } : undefined}
+            style={
+              safeInset > 0
+                ? { cropAreaStyle: { ["--banner-safe-inset" as string]: `${safeInset}%` } as CSSProperties }
+                : undefined
+            }
             onCropChange={setCrop}
             onZoomChange={setZoom}
             onCropComplete={onCropComplete}
@@ -85,6 +103,7 @@ export function ImageCropModal({
         </div>
 
         <div className="space-y-4 p-5">
+          {hint ? <p className="text-[11px] leading-relaxed font-medium text-slate-500">{hint}</p> : null}
           <label className="flex items-center gap-3 text-xs font-bold text-slate-600">
             <span className="w-14 uppercase tracking-wider">{t("editProfile.zoom")}</span>
             <input type="range" min={1} max={3} step={0.05} value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="h-1.5 flex-1 accent-brand-primary" />
