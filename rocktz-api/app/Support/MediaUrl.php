@@ -17,6 +17,18 @@ class MediaUrl
         return self::appPath('downloads', $path);
     }
 
+    public static function downloadFromPublicUrl(?string $url): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        $path = self::objectKeyFromPublicUrl($url);
+
+        return $path ? self::download($path) : $url;
+    }
+
     public static function appPath(string $prefix, string $path): string
     {
         return rtrim((string) config('app.url'), '/').'/'.$prefix.'/'.ltrim($path, '/');

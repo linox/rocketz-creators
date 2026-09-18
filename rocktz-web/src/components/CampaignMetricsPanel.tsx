@@ -2,11 +2,13 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Clapperboard, ExternalLink, Instagram, RefreshCw, Youtube } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, BarChart3, Clapperboard, Download, ExternalLink, Instagram, RefreshCw, Search, Trophy, Youtube } from "lucide-react";
+import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import type { Campaign, CampaignCreator, PostMetrics } from "@/lib/types";
 
@@ -17,6 +19,7 @@ export type PostMetricsRow = {
   metrics?: PostMetrics | null;
   subtitle?: string | null;
   networkHint?: string | null;
+  videoDownloadUrl?: string | null;
 };
 
 type PanelProps = {
@@ -38,6 +41,9 @@ type CampaignProps = {
   onCampaign: (campaign: Campaign) => void;
 };
 
+type SortKey = "name" | "views" | "likes" | "comments" | "engagement";
+type SortDir = "asc" | "desc";
+
 function asMetrics(value: PostMetrics | null | undefined): PostMetrics {
   if (!value || typeof value !== "object") return {};
   return value;
@@ -57,6 +63,32 @@ function postNetwork(row: PostMetricsRow): string {
   if (/tiktok\.com/i.test(link)) return "tiktok";
   if (/youtube\.com|youtu\.be/i.test(link)) return "youtube";
   return row.networkHint || "";
+}
+
+function rowName(row: PostMetricsRow): string {
+  return `${row.creator?.artistic_name || ""} ${row.creator?.full_name || ""} ${row.subtitle || ""}`.trim();
+}
+
+function rowMetric(row: PostMetricsRow, key: Exclude<SortKey, "name">): number | null {
+  return metricNumber(asMetrics(row.metrics)[key]);
+}
+
+function performanceKey(key: SortKey): Exclude<SortKey, "name"> {
+  return key === "name" ? "views" : key;
+}
+
+function compareByMetric(a: PostMetricsRow, b: PostMetricsRow, key: Exclude<SortKey, "name">, dir: SortDir): number {
+  const av = rowMetric(a, key);
+  const bv = rowMetric(b, key);
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  const cmp = av - bv;
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function topRows(rows: PostMetricsRow[], key: SortKey, limit: number): PostMetricsRow[] {
+  return [...rows].sort((a, b) => compareByMetric(a, b, performanceKey(key), "desc")).slice(0, limit);
 }
 
 type MetricTotals = {
@@ -111,6 +143,12 @@ function formatSyncedAt(value: number | null | undefined, locale: string, neverL
   return new Date(value * 1000).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
+function videoHref(url?: string | null): string | undefined {
+  const raw = url?.trim();
+  if (!raw) return undefined;
+  return safeHttpUrl(mediaDownloadUrl(raw));
+}
+
 export function PostMetricsPanel({
   rows,
   locale,
@@ -122,9 +160,48 @@ export function PostMetricsPanel({
   emptyHint,
 }: PanelProps) {
   const { t } = useTranslation("app");
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("views");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [networkFilter, setNetworkFilter] = useState("");
 
   const linked = useMemo(() => rows.filter((row) => Boolean(row.published_link?.trim())), [rows]);
-  const totals = useMemo(() => totalsFromRows(linked), [linked]);
+
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (networkFilter && postNetwork(row) !== networkFilter) return false;
+      if (!term) return true;
+      return rowName(row).toLowerCase().includes(term);
+    });
+  }, [rows, query, networkFilter]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      if (sortKey === "name") {
+        const cmp = rowName(a).localeCompare(rowName(b), locale, { sensitivity: "base" });
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      return compareByMetric(a, b, sortKey, sortDir);
+    });
+    return copy;
+  }, [filtered, locale, sortDir, sortKey]);
+
+  const bestByPlatform = useMemo(
+    () =>
+      NETWORKS.map((network) => ({
+        network,
+        rows: topRows(
+          linked.filter((row) => postNetwork(row) === network),
+          sortKey,
+          3,
+        ),
+      })).filter((item) => item.rows.length > 0),
+    [linked, sortKey],
+  );
+
+  const totals = useMemo(() => totalsFromRows(filtered.filter((row) => Boolean(row.published_link?.trim()))), [filtered]);
   const byNetwork = useMemo(
     () =>
       NETWORKS.map((network) => ({
@@ -141,13 +218,74 @@ export function PostMetricsPanel({
     return t("campaignDetail.networkUnknown");
   }
 
+  function applySort(key: SortKey, toggle = true) {
+    if (toggle && sortKey === key) {
+      setSortDir((current) => (current === "desc" ? "asc" : "desc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(key === "name" ? "asc" : "desc");
+  }
+
+  const sortOptions = [
+    { value: "views", label: t("campaignDetail.metricsSortViews") },
+    { value: "likes", label: t("campaignDetail.metricsSortLikes") },
+    { value: "comments", label: t("campaignDetail.metricsSortComments") },
+    { value: "engagement", label: t("campaignDetail.metricsSortEngagement") },
+    { value: "name", label: t("campaignDetail.metricsSortName") },
+  ];
+
+  const platformOptions = [
+    { value: "all", label: t("campaignDetail.metricsPlatformAll") },
+    ...NETWORKS.filter((network) => linked.some((row) => postNetwork(row) === network)).map((network) => ({
+      value: network,
+      label: networkLabel(network),
+    })),
+  ];
+
+  function formatRowMetric(row: PostMetricsRow, key: SortKey): string {
+    const metric = performanceKey(key);
+    const value = rowMetric(row, metric);
+    if (value == null) return "—";
+    if (metric === "engagement") return formatEngagement(value, locale);
+    return formatNumber(value);
+  }
+
+  function metricLabel(key: SortKey): string {
+    const metric = performanceKey(key);
+    if (metric === "likes") return t("campaignDetail.colLikes");
+    if (metric === "comments") return t("campaignDetail.colComments");
+    if (metric === "engagement") return t("campaignDetail.colEngagement");
+    return t("campaignDetail.colViews");
+  }
+
   const kpis = [
-    { key: "posts", label: t("campaignDetail.kpiPosts"), value: formatNumber(totals.posts), hint: t("campaignDetail.kpiPostsHint", { count: totals.synced }) },
-    { key: "views", label: t("campaignDetail.kpiPostViews"), value: formatNumber(totals.views) },
-    { key: "likes", label: t("campaignDetail.kpiLikes"), value: formatNumber(totals.likes) },
-    { key: "comments", label: t("campaignDetail.kpiComments"), value: formatNumber(totals.comments) },
-    { key: "engagement", label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(totals.engagement, locale) },
-  ] as const;
+    { key: "views" as const, label: t("campaignDetail.kpiPostViews"), value: formatNumber(totals.views) },
+    { key: "likes" as const, label: t("campaignDetail.kpiLikes"), value: formatNumber(totals.likes) },
+    { key: "comments" as const, label: t("campaignDetail.kpiComments"), value: formatNumber(totals.comments) },
+    { key: "engagement" as const, label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(totals.engagement, locale) },
+  ];
+
+  const SortIcon = sortDir === "desc" ? ArrowDownWideNarrow : ArrowUpNarrowWide;
+
+  function SortHeader({ label, column }: { label: string; column: SortKey }) {
+    const active = sortKey === column;
+    return (
+      <th className="px-4 py-3">
+        <button
+          type="button"
+          onClick={() => applySort(column)}
+          className={cn(
+            "inline-flex items-center gap-1 tracking-wider uppercase",
+            active ? "text-indigo-700" : "text-slate-500 hover:text-slate-800",
+          )}
+        >
+          {label}
+          {active ? <SortIcon size={12} /> : null}
+        </button>
+      </th>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -174,16 +312,74 @@ export function PostMetricsPanel({
           </div>
         </div>
 
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <label className="min-w-0 flex-1">
+            <span className="mb-1.5 block text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.metricsSearchLabel")}</span>
+            <span className="relative block">
+              <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("campaignDetail.metricsSearchPh")}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none focus:border-purple-600"
+              />
+            </span>
+          </label>
+          <div className="w-full lg:w-56">
+            <p className="mb-1.5 text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.metricsPlatformLabel")}</p>
+            <Select2Field
+              theme="light"
+              searchable={false}
+              value={networkFilter || "all"}
+              options={platformOptions}
+              onChange={(value) => setNetworkFilter(value === "all" ? "" : value)}
+            />
+          </div>
+          <div className="w-full lg:w-64">
+            <p className="mb-1.5 text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.metricsSortBy")}</p>
+            <Select2Field
+              theme="light"
+              searchable={false}
+              value={sortKey}
+              options={sortOptions}
+              onChange={(value) => {
+                const next = value as SortKey;
+                setSortKey(next);
+                setSortDir(next === "name" ? "asc" : "desc");
+              }}
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3">
           <p className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.metricsOverall")}</p>
+          <p className="text-[11px] text-slate-400">{t("campaignDetail.metricsSortHint")}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {kpis.map((kpi) => (
-              <div key={kpi.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <p className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{kpi.label}</p>
-                <p className="mt-1 text-lg font-black text-slate-900">{kpi.value}</p>
-                {"hint" in kpi && kpi.hint ? <p className="mt-0.5 text-[10px] font-medium text-slate-400">{kpi.hint}</p> : null}
-              </div>
-            ))}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.kpiPosts")}</p>
+              <p className="mt-1 text-lg font-black text-slate-900">{formatNumber(totals.posts)}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-400">{t("campaignDetail.kpiPostsHint", { count: totals.synced })}</p>
+            </div>
+            {kpis.map((kpi) => {
+              const active = sortKey === kpi.key;
+              return (
+                <button
+                  key={kpi.key}
+                  type="button"
+                  onClick={() => applySort(kpi.key)}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors",
+                    active ? "border-indigo-300 bg-indigo-50 ring-2 ring-indigo-200" : "border-slate-100 bg-slate-50 hover:border-indigo-200 hover:bg-white",
+                  )}
+                >
+                  <p className={cn("flex items-center gap-1 text-[10px] font-black tracking-wider uppercase", active ? "text-indigo-700" : "text-slate-500")}>
+                    {kpi.label}
+                    {active ? <SortIcon size={12} /> : null}
+                  </p>
+                  <p className="mt-1 text-lg font-black text-slate-900">{kpi.value}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -194,33 +390,132 @@ export function PostMetricsPanel({
               {byNetwork.map(({ network, totals: networkTotals }) => {
                 const Icon = network === "instagram" ? Instagram : network === "youtube" ? Youtube : Clapperboard;
                 const iconClass = network === "instagram" ? "text-pink-500" : network === "youtube" ? "text-red-600" : "text-rose-500";
+                const active = networkFilter === network;
                 const stats = [
-                  { label: t("campaignDetail.kpiPosts"), value: formatNumber(networkTotals.posts) },
-                  { label: t("campaignDetail.kpiPostViews"), value: formatNumber(networkTotals.views) },
-                  { label: t("campaignDetail.kpiLikes"), value: formatNumber(networkTotals.likes) },
-                  { label: t("campaignDetail.kpiComments"), value: formatNumber(networkTotals.comments) },
-                  { label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(networkTotals.engagement, locale) },
+                  { key: "views" as const, label: t("campaignDetail.kpiPostViews"), value: formatNumber(networkTotals.views) },
+                  { key: "likes" as const, label: t("campaignDetail.kpiLikes"), value: formatNumber(networkTotals.likes) },
+                  { key: "comments" as const, label: t("campaignDetail.kpiComments"), value: formatNumber(networkTotals.comments) },
+                  { key: "engagement" as const, label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(networkTotals.engagement, locale) },
                 ];
 
                 return (
-                  <div key={network} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center gap-2">
+                  <div
+                    key={network}
+                    className={cn("rounded-2xl border p-4", active ? "border-indigo-300 bg-indigo-50/70" : "border-slate-100 bg-slate-50")}
+                  >
+                    <button type="button" onClick={() => setNetworkFilter((current) => (current === network ? "" : network))} className="mb-3 flex w-full items-center gap-2 text-left">
                       <span className={cn("flex h-8 w-8 items-center justify-center rounded-xl bg-white shadow-xs", iconClass)}>
                         <Icon size={16} />
                       </span>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-black text-slate-900">{networkLabel(network)}</p>
-                        <p className="text-[10px] font-medium text-slate-400">{t("campaignDetail.kpiPostsHint", { count: networkTotals.synced })}</p>
+                        <p className="text-[10px] font-medium text-slate-400">
+                          {active ? t("campaignDetail.metricsNetworkClear") : t("campaignDetail.kpiPostsHint", { count: networkTotals.synced })}
+                        </p>
                       </div>
-                    </div>
+                    </button>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[9px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.kpiPosts")}</p>
+                        <p className="mt-0.5 text-sm font-black text-slate-900">{formatNumber(networkTotals.posts)}</p>
+                      </div>
                       {stats.map((stat) => (
-                        <div key={stat.label} className="rounded-xl bg-white px-3 py-2">
+                        <button
+                          key={stat.key}
+                          type="button"
+                          onClick={() => {
+                            setNetworkFilter(network);
+                            applySort(stat.key, false);
+                          }}
+                          className={cn(
+                            "rounded-xl bg-white px-3 py-2 text-left hover:ring-2 hover:ring-indigo-200",
+                            active && sortKey === stat.key && "ring-2 ring-indigo-300",
+                          )}
+                        >
                           <p className="text-[9px] font-black tracking-wider text-slate-400 uppercase">{stat.label}</p>
                           <p className="mt-0.5 text-sm font-black text-slate-900">{stat.value}</p>
-                        </div>
+                        </button>
                       ))}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {bestByPlatform.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-500 uppercase">
+                <Trophy size={12} className="text-amber-500" />
+                {t("campaignDetail.metricsBestByPlatform")}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">{t("campaignDetail.metricsBestByPlatformHint", { metric: metricLabel(sortKey) })}</p>
+            </div>
+            <div className={cn("grid gap-3", bestByPlatform.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3")}>
+              {bestByPlatform.map(({ network, rows: winners }) => {
+                const Icon = network === "instagram" ? Instagram : network === "youtube" ? Youtube : Clapperboard;
+                const iconClass = network === "instagram" ? "text-pink-500" : network === "youtube" ? "text-red-600" : "text-rose-500";
+                const active = networkFilter === network;
+
+                return (
+                  <div key={network} className={cn("rounded-2xl border p-4", active ? "border-amber-300 bg-amber-50/60" : "border-slate-100 bg-slate-50")}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNetworkFilter((current) => (current === network ? "" : network));
+                        applySort(performanceKey(sortKey), false);
+                      }}
+                      className="mb-3 flex w-full items-center gap-2 text-left"
+                    >
+                      <span className={cn("flex h-8 w-8 items-center justify-center rounded-xl bg-white shadow-xs", iconClass)}>
+                        <Icon size={16} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-900">{networkLabel(network)}</p>
+                        <p className="text-[10px] font-medium text-slate-400">{t("campaignDetail.metricsBestSeeAll")}</p>
+                      </div>
+                    </button>
+                    <ol className="flex flex-col gap-2">
+                      {winners.map((row, index) => {
+                        const name = row.creator?.artistic_name || row.creator?.full_name || "";
+                        const link = row.published_link?.trim() || "";
+                        const href = link ? safeHttpUrl(link) : undefined;
+                        return (
+                          <li key={row.id}>
+                            <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNetworkFilter(network);
+                                  applySort(performanceKey(sortKey), false);
+                                }}
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                              >
+                                <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black", index === 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500")}>
+                                  {index + 1}
+                                </span>
+                                <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs font-bold text-slate-900">@{row.creator?.artistic_name || name}</span>
+                                  {row.subtitle ? <span className="block truncate text-[10px] font-medium text-slate-400">{row.subtitle}</span> : null}
+                                </span>
+                                <span className="shrink-0 text-right">
+                                  <span className="block text-xs font-black text-slate-900">{formatRowMetric(row, sortKey)}</span>
+                                  <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase">{metricLabel(sortKey)}</span>
+                                </span>
+                              </button>
+                              {href ? (
+                                <a href={href} target="_blank" rel="noreferrer" className="shrink-0 text-slate-400 hover:text-emerald-700" aria-label={t("campaignDetail.openPost")}>
+                                  <ExternalLink size={14} />
+                                </a>
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
                   </div>
                 );
               })}
@@ -234,13 +529,14 @@ export function PostMetricsPanel({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black tracking-wider text-slate-500 uppercase">
-                <th className="px-4 py-3">{t("campaignDetail.colCreator")}</th>
+                <SortHeader label={t("campaignDetail.colCreator")} column="name" />
                 <th className="px-4 py-3">{t("campaignDetail.colNetwork")}</th>
                 <th className="px-4 py-3">{t("campaignDetail.colLink")}</th>
-                <th className="px-4 py-3">{t("campaignDetail.colViews")}</th>
-                <th className="px-4 py-3">{t("campaignDetail.colLikes")}</th>
-                <th className="px-4 py-3">{t("campaignDetail.colComments")}</th>
-                <th className="px-4 py-3">{t("campaignDetail.colEngagement")}</th>
+                <th className="px-4 py-3">{t("campaignDetail.colVideo")}</th>
+                <SortHeader label={t("campaignDetail.colViews")} column="views" />
+                <SortHeader label={t("campaignDetail.colLikes")} column="likes" />
+                <SortHeader label={t("campaignDetail.colComments")} column="comments" />
+                <SortHeader label={t("campaignDetail.colEngagement")} column="engagement" />
                 <th className="px-4 py-3">{t("campaignDetail.colSynced")}</th>
                 <th className="px-4 py-3 text-right">{t("campaignDetail.colActions")}</th>
               </tr>
@@ -248,16 +544,23 @@ export function PostMetricsPanel({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
                     {emptyLabel || t("campaignDetail.noCreatorHint")}
                   </td>
                 </tr>
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                    {t("campaignDetail.metricsNoResults")}
+                  </td>
+                </tr>
               ) : (
-                rows.map((row) => {
+                sorted.map((row) => {
                   const metrics = asMetrics(row.metrics);
                   const link = row.published_link?.trim() || "";
                   const network = postNetwork(row);
                   const name = row.creator?.artistic_name || row.creator?.full_name || "";
+                  const download = videoHref(row.videoDownloadUrl);
 
                   return (
                     <tr key={row.id} className="hover:bg-slate-50/70">
@@ -278,6 +581,19 @@ export function PostMetricsPanel({
                           </a>
                         ) : (
                           <span className="text-[11px] font-medium text-slate-400">{t("campaignDetail.metricsNoLink")}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {download ? (
+                          <a
+                            href={download}
+                            download
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:underline"
+                          >
+                            <Download size={12} /> {t("campaignDetail.downloadSubmittedVideo")}
+                          </a>
+                        ) : (
+                          <span className="text-[11px] font-medium text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3.5 font-black text-slate-900">{metricNumber(metrics.views) != null ? formatNumber(metricNumber(metrics.views) ?? 0) : "—"}</td>
@@ -320,6 +636,10 @@ export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onC
         creator: row.creator,
         published_link: row.content?.published_link ?? null,
         metrics: row.content?.metrics,
+        videoDownloadUrl:
+          row.video_status === "approved"
+            ? row.content?.video_download_url || row.content?.video_url || null
+            : null,
       })),
     [rows],
   );

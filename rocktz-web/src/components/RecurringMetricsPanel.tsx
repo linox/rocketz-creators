@@ -52,6 +52,10 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
         metrics: item.metrics,
         subtitle: item.title,
         networkHint: networkHint(item.content_type),
+        videoDownloadUrl:
+          item.video_status === "approved" || item.status === "approved"
+            ? item.video_download_url || item.media_url || item.submission_url || null
+            : null,
       })),
     [monthItems],
   );

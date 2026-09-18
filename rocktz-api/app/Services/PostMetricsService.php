@@ -295,7 +295,7 @@ class PostMetricsService
 
     private function parseInstagramViews(string $html): ?int
     {
-        $plays = $this->positiveInt($this->matchFirst($html, [
+        return $this->positiveInt($this->matchFirst($html, [
             '/video_play_count\\\\":(\d+)/',
             '/"video_play_count"\s*:\s*"?(\d+)/',
             '/ig_play_count\\\\":(\d+)/',
@@ -303,12 +303,6 @@ class PostMetricsService
             '/play_count\\\\":(\d+)/',
             '/"play_count"\s*:\s*"?(\d+)/',
         ]));
-        $views = $this->positiveInt($this->matchFirst($html, [
-            '/video_view_count\\\\":(\d+)/',
-            '/"video_view_count"\s*:\s*"?(\d+)/',
-        ]));
-
-        return $this->preferInstagramViews($plays, $views);
     }
 
     /**
@@ -362,7 +356,7 @@ class PostMetricsService
      */
     private function instagramViewCount(array $node): ?int
     {
-        $plays = $this->positiveInt(
+        return $this->positiveInt(
             $node['video_play_count']
                 ?? $node['ig_play_count']
                 ?? $node['play_count']
@@ -370,14 +364,6 @@ class PostMetricsService
                 ?? $node['videoPlayCount']
                 ?? null
         );
-        $views = $this->positiveInt(
-            $node['video_view_count']
-                ?? $node['view_count']
-                ?? $node['viewCount']
-                ?? null
-        );
-
-        return $this->preferInstagramViews($plays, $views);
     }
 
     private function preferInstagramViews(?int $preferred, ?int $fallback): ?int
@@ -1086,7 +1072,7 @@ class PostMetricsService
     {
         $metrics = is_array($model->metrics) ? $model->metrics : [];
         foreach ($snapshot->toMetrics() as $key => $value) {
-            if ($value !== null || in_array($key, ['network', 'url', 'synced_at'], true)) {
+            if ($value !== null || in_array($key, ['network', 'url', 'synced_at', 'views'], true)) {
                 $metrics[$key] = $value;
             }
         }
@@ -1198,7 +1184,7 @@ class PostMetricsService
         $this->assertReachable($response);
 
         $json = $response->json();
-        if (! is_array($json)) {
+        if (! is_array($json) || ($json['success'] ?? true) === false) {
             throw new SocialMetricsException(__('auth.post_metrics_unavailable'));
         }
 

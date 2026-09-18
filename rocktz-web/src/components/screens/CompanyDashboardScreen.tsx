@@ -670,7 +670,7 @@ function CompanyDashboardInner() {
               <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
                 {pendingInviteCreators.map((creator) => (
                   <article key={creator.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                    <Link href={`/creators/${creator.id}`} className="flex min-w-0 items-center gap-3">
+                    <Link href={`/creators/${creator.id}?tab=about`} className="flex min-w-0 items-center gap-3">
                       <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-10 w-10 shrink-0" textClassName="text-xs" />
                       <div className="min-w-0">
                         <h4 className="m-0 truncate text-sm font-bold text-slate-900">@{creator.artistic_name}</h4>
@@ -957,7 +957,7 @@ function CompanyDashboardInner() {
             {favoriteList.length === 0 ? <EmptyDashed className="md:col-span-2">{t("companyDash.favoritesTab.empty")}</EmptyDashed> : null}
             {favoriteList.map((creator) => (
               <article key={creator.id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <Link href={`/creators/${creator.id}`} className="flex min-w-0 items-center gap-3">
+                <Link href={`/creators/${creator.id}?tab=about`} className="flex min-w-0 items-center gap-3">
                   <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-xl" className="h-12 w-12 shrink-0" textClassName="text-sm" />
                   <div className="min-w-0">
                     <h3 className="m-0 truncate font-black text-slate-900">@{creator.artistic_name}</h3>
@@ -991,7 +991,7 @@ function CompanyDashboardInner() {
             <div className="grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {creators.filter((creator) => creator.status === "active" && !company.favorite_creator_ids?.includes(creator.id)).slice(0, 12).map((creator) => (
                 <article key={creator.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4">
-                  <Link href={`/creators/${creator.id}`} className="block min-w-0">
+                  <Link href={`/creators/${creator.id}?tab=about`} className="block min-w-0">
                     <h3 className="m-0 truncate text-sm font-bold text-slate-900 hover:text-brand-primary">@{creator.artistic_name}</h3>
                     <p className="m-0 mt-0.5 truncate text-[11px] text-slate-500">{formatLocation(locale, creator) || "—"}</p>
                   </Link>

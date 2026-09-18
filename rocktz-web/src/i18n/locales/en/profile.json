@@ -1,5 +1,7 @@
 {
   "mediaKit": "Media kit",
+  "mediaKitHint": "Public networks, rates and commercial positioning.",
+  "emptyBio": "This creator has not written a bio yet.",
   "portfolio": "Portfolio",
   "contract": "Contract",
   "categories": "Categories: {{list}}",

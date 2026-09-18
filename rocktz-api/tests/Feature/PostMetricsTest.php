@@ -171,7 +171,7 @@ HTML, 200),
             ->assertJsonPath("sync.{$row->id}.likes", 97);
     }
 
-    public function test_instagram_reads_views_from_embed_json(): void
+    public function test_instagram_ignores_public_video_view_count(): void
     {
         [$campaign, $row, $token] = $this->campaignWithPublishedLink(
             'https://www.instagram.com/p/DZabmqRPbGK/',
@@ -191,7 +191,7 @@ HTML, 200),
             ->assertOk()
             ->assertJsonPath("sync.{$row->id}.ok", true)
             ->assertJsonPath("sync.{$row->id}.likes", 260)
-            ->assertJsonPath("sync.{$row->id}.views", 20586);
+            ->assertJsonPath("sync.{$row->id}.views", null);
     }
 
     public function test_admin_can_sync_tiktok_and_youtube_posts(): void
@@ -358,7 +358,7 @@ HTML, 200),
             ->assertOk()
             ->assertJsonPath("sync.{$row->id}.likes", 14000)
             ->assertJsonPath("sync.{$row->id}.comments", 83)
-            ->assertJsonPath("sync.{$row->id}.views", 209478);
+            ->assertJsonPath("sync.{$row->id}.views", null);
     }
 
     public function test_instagram_uses_profile_lookup_for_views_when_handle_is_known(): void
@@ -378,6 +378,7 @@ HTML, 200),
                                 'node' => [
                                     'shortcode' => 'DbopAZ5BLWL',
                                     'video_view_count' => 1463,
+                                    'video_play_count' => 8200,
                                 ],
                             ]],
                         ],
@@ -390,7 +391,7 @@ HTML, 200),
         $this->withToken($token)
             ->postJson("/api/campaigns/{$campaign->id}/post-metrics-sync", ['force' => true])
             ->assertOk()
-            ->assertJsonPath("sync.{$row->id}.views", 1463)
+            ->assertJsonPath("sync.{$row->id}.views", 8200)
             ->assertJsonPath("sync.{$row->id}.likes", 260);
     }
 
@@ -486,6 +487,42 @@ HTML, 200),
         $this->withToken($token)
             ->postJson("/api/recurring-contracts/{$contract->id}/post-metrics-sync", ['month' => '2026-08'])
             ->assertForbidden();
+    }
+
+    public function test_campaign_content_includes_video_download_url(): void
+    {
+        [$campaign, $row, $token] = $this->campaignWithPublishedLink('https://www.instagram.com/p/DbopAZ5BLWL/');
+        $row->content?->update([
+            'video_url' => 'http://localhost/stream/portfolio/campaign-approved.mp4',
+        ]);
+
+        $this->withToken($token)
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertOk()
+            ->assertJsonPath(
+                'data.applications.0.content.video_download_url',
+                'http://localhost/downloads/portfolio/campaign-approved.mp4',
+            );
+    }
+
+    public function test_recurring_item_includes_video_download_url(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $contract = RecurringContract::factory()->create();
+        ContentPlanningItem::factory()->published()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $contract->company_id,
+            'media_url' => 'http://localhost/stream/portfolio/pauta-approved.mp4',
+        ]);
+
+        $this->withToken($token)
+            ->getJson("/api/recurring-contracts/{$contract->id}")
+            ->assertOk()
+            ->assertJsonPath(
+                'data.items.0.video_download_url',
+                'http://localhost/downloads/portfolio/pauta-approved.mp4',
+            );
     }
 
     /**

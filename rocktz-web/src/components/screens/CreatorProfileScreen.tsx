@@ -466,12 +466,14 @@ function pathLooksLikeStorefrontMetrics(pathname: string): boolean {
   return false;
 }
 
-function resolveProfileTab(value: string | null, creatorSelf: boolean, pathLooksLikeMetrics: boolean): ProfileTab {
+function resolveProfileTab(value: string | null, creatorSelf: boolean, pathLooksLikeMetrics: boolean, companyViewer = false): ProfileTab {
   if (pathLooksLikeMetrics) return "storefront-metrics";
   if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics") {
     return value;
   }
-  return creatorSelf ? "dashboard" : "portfolio";
+  if (creatorSelf) return "dashboard";
+  if (companyViewer) return "about";
+  return "portfolio";
 }
 
 function metricValue(metrics: Record<string, number> | undefined, keys: string[]) {
@@ -581,8 +583,10 @@ function ProfileInner() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const searchParams = useSearchParams();
+  const fromLandingReview = searchParams.get("from") === "landing";
   const isCreatorSelf = user.role === "creator" && user.creator?.id === id;
-  const tab = resolveProfileTab(searchParams.get("tab"), isCreatorSelf, pathLooksLikeStorefrontMetrics(pathname));
+  const isCompanyViewer = user.role === "company";
+  const tab = resolveProfileTab(searchParams.get("tab"), isCreatorSelf, pathLooksLikeStorefrontMetrics(pathname), isCompanyViewer);
   const locale = intlLocale(normalizeLocale(i18n.language));
   const shouldOpenContract = searchParams.get("contract") === "1";
 
@@ -918,6 +922,7 @@ function ProfileInner() {
   const canEdit = isAdmin || user.creator?.id === profile.id;
   const canUpload = canEdit && (!isAdmin || viewMode === "creator");
   const showCreatorTabs = canEdit && !agencyView;
+  const showCompanyTabs = isCompanyViewer && !showCreatorTabs && !agencyView;
   const statusOptions = STATUS_OPTION_VALUES.map((value) => ({
     value,
     label: tp(
@@ -929,10 +934,18 @@ function ProfileInner() {
   }));
   const roleOptions = ROLE_OPTION_VALUES.map((option) => ({ value: option.value, label: tp(option.labelKey) }));
 
+  function creatorProfileHref(nextTab?: string) {
+    const params = new URLSearchParams();
+    if (nextTab) params.set("tab", nextTab);
+    if (fromLandingReview) params.set("from", "landing");
+    const query = params.toString();
+    return `/creators/${id ?? ""}` + (query ? `?${query}` : "");
+  }
+
   function goTab(next: ProfileTab) {
-    setEditing(next === "about");
+    setEditing(canEdit && next === "about" && !showCompanyTabs);
     if (!id) return;
-    router.replace(`/creators/${id}?tab=${next}`, { scroll: false });
+    router.replace(creatorProfileHref(next), { scroll: false });
   }
 
   const myParticipations = myCampaignItems
@@ -1176,7 +1189,7 @@ function ProfileInner() {
         </div>
       ) : null}
 
-      {user.role === "company" && creator.landing_review ? (
+      {user.role === "company" && fromLandingReview && creator.landing_review && creator.landing_review.status !== "approved" && creator.landing_review.status !== "rejected" ? (
         <div className="flex flex-col gap-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm"><Globe size={20} /></div>
@@ -1420,6 +1433,16 @@ function ProfileInner() {
               </button>
               <button type="button" onClick={() => goTab("storefront-metrics")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront-metrics" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <BarChart3 size={14} /> {tp("tabStorefrontMetrics")}
+              </button>
+            </div>
+          ) : null}
+          {showCompanyTabs ? (
+            <div className="mb-2 flex max-w-xl overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
+              <button type="button" onClick={() => goTab("about")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "about" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Sparkles size={14} /> {tp("mediaKit")}
+              </button>
+              <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "portfolio" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Video size={14} /> {tp("tabPortfolio")}
               </button>
             </div>
           ) : null}
@@ -1896,13 +1919,17 @@ function ProfileInner() {
             </div>
           ) : showCreatorTabs && tab === "portfolio" ? (
             <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} />
+          ) : showCompanyTabs && tab === "about" ? (
+            <CreatorMediaKitPanel creator={creator} />
+          ) : showCompanyTabs && tab === "portfolio" ? (
+            <CreatorPortfolioPanel creator={creator} canUpload={false} onChanged={load} />
           ) : (showCreatorTabs || agencyView) && tab === "storefront" ? (
             <CreatorStorefrontPanel creatorId={creator.id} />
           ) : (showCreatorTabs || agencyView) && tab === "storefront-metrics" ? (
             <StorefrontMetricsPanel creatorId={creator.id} />
           ) : (
             <>
-              {!showCreatorTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
+              {!showCreatorTabs && !showCompanyTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
 
               {agencyView ? (
                 <CreatorRecurringEmptyOrList myContracts={myContracts} />
@@ -1932,7 +1959,7 @@ function ProfileInner() {
               load();
               window.dispatchEvent(new Event("rocketz:auth-refresh"));
               if (shouldOpenContract) {
-                router.replace(`/creators/${creator.id}?tab=${tab}`);
+                router.replace(creatorProfileHref(tab));
               }
             } catch (err) {
               await alertApiError(err);
@@ -2880,6 +2907,68 @@ function NetworkCard({
         </div>
       </div>
     </section>
+  );
+}
+
+function CreatorMediaKitPanel({ creator }: { creator: Creator }) {
+  const { t, i18n } = useTranslation();
+  const { t: tp } = useTranslation("profile");
+  const { formatCurrency, formatNumber } = usePrivacy();
+  const categoryLabels = t("auth:categories", { returnObjects: true }) as Record<string, string>;
+  const categories = creator.categories ?? [];
+  const affinities = creator.work_affinities ?? [];
+  const hasPrefs = creator.accepts_exchange || creator.accepts_paid_traffic || creator.accepts_exclusivity || affinities.length > 0;
+  const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+        <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]">
+          <Sparkles size={20} className="text-brand-primary" /> {tp("mediaKit")}
+        </h3>
+        <p className="mt-1 text-[12px] text-[#64748B]">{tp("mediaKitHint")}</p>
+        {location ? <p className="mt-3 text-sm font-medium text-slate-600">{location}</p> : null}
+        <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{creator.bio?.trim() || tp("emptyBio")}</p>
+        {categories.length > 0 ? (
+          <div className="mt-4">
+            <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("nicheCategories")}</span>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {categories.map((cat) => (
+                <span key={cat} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-[#0F172A] uppercase">{categoryLabels[cat] ?? cat}</span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className="mt-4 border-t border-[#F1F5F9] pt-3">
+          <span className="mb-1.5 block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("affinitiesPrefs")}</span>
+          <div className="flex flex-wrap gap-1">
+            {creator.accepts_exchange ? <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">✓ {tp("prefBarter")}</span> : null}
+            {creator.accepts_paid_traffic ? <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">✓ {tp("prefPaidTraffic")}</span> : null}
+            {creator.accepts_exclusivity ? <span className="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700">✓ {tp("prefExclusivity")}</span> : null}
+            {affinities.map((aff) => (
+              <span key={aff} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">✓ {aff}</span>
+            ))}
+            {!hasPrefs ? <span className="text-[11px] text-slate-400 italic">{tp("noCommercialPrefs")}</span> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+        <h3 className="border-b border-[#F1F5F9] pb-3 text-[14px] font-bold tracking-wider text-[#0F172A] uppercase">{tp("networksSection")}</h3>
+        <div className="mt-4">
+          <NetworkMetricsSummary
+            metrics={creator.metrics}
+            socials={creator.socials}
+            pricing={creator.pricing}
+            formatNumber={formatNumber}
+            formatCurrency={(value) => formatCurrency(value, defaultCurrencyForCountry(creator.country))}
+          />
+        </div>
+        <div className="mt-4">
+          <SocialLinks socials={creator.socials} emptyLabel={tp("notInformed")} />
+        </div>
+      </div>
+    </div>
   );
 }
 

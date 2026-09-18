@@ -373,6 +373,7 @@ export type PlanningItem = {
   revision_history?: RevisionHistoryEntry[];
   submission_url: string | null;
   media_url: string | null;
+  video_download_url?: string | null;
   published_url: string | null;
   metrics?: PostMetrics;
   submission_notes: string | null;

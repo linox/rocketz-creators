@@ -250,7 +250,9 @@ class DomainApiTest extends TestCase
             ->getJson("/api/creators/{$invited->id}")
             ->assertOk()
             ->assertJsonMissingPath('data.full_name')
-            ->assertJsonMissingPath('data.whatsapp');
+            ->assertJsonMissingPath('data.whatsapp')
+            ->assertJsonPath('data.artistic_name', 'Convite Privado')
+            ->assertJsonStructure(['data' => ['bio', 'socials', 'metrics', 'pricing', 'categories']]);
 
         $this->withToken($token)
             ->patchJson("/api/creators/{$ana->id}", ['whatsapp' => '11988887777'])

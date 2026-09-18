@@ -80,7 +80,7 @@ class CampaignCreatorResource extends JsonResource
                 'script_file_name' => $this->content->script_file_name,
                 'video_url' => MediaUrl::publicAbsolute($this->content->video_url),
                 'video_file_size' => (int) ($this->content->video_file_size ?? 0),
-                'video_download_url' => $this->mediaDownloadUrl($this->content->video_url),
+                'video_download_url' => MediaUrl::downloadFromPublicUrl($this->content->video_url),
                 'image_url' => MediaUrl::publicAbsolute($this->content->image_url),
                 'published_link' => $this->content->published_link,
                 'script_version' => (int) ($this->content->script_version ?? 0),
@@ -91,16 +91,5 @@ class CampaignCreatorResource extends JsonResource
                 'metrics' => $this->content->metrics ?? [],
             ] : null),
         ];
-    }
-
-    private function mediaDownloadUrl(?string $url): ?string
-    {
-        if (! $url) {
-            return null;
-        }
-
-        $path = MediaUrl::objectKeyFromPublicUrl($url);
-
-        return $path ? MediaUrl::download($path) : $url;
     }
 }

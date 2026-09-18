@@ -1,5 +1,7 @@
 {
   "mediaKit": "Mídia kit",
+  "mediaKitHint": "Dados públicos de redes, caches e posicionamento comercial.",
+  "emptyBio": "O criador ainda não preencheu a biografia.",
   "portfolio": "Portfólio",
   "contract": "Contrato",
   "categories": "Categorias: {{list}}",

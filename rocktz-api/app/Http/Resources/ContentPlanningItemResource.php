@@ -67,6 +67,7 @@ class ContentPlanningItemResource extends JsonResource
             'metrics' => $this->metrics ?? [],
             'media_url' => MediaUrl::publicAbsolute($this->media_url),
             'submission_url' => MediaUrl::publicAbsolute($this->submission_url),
+            'video_download_url' => MediaUrl::downloadFromPublicUrl($this->media_url ?: $this->submission_url),
             'submission_notes' => $this->submission_notes,
             'feedback_note' => $this->feedback_note,
             'submitted_at' => $this->submitted_at?->toIso8601String(),
