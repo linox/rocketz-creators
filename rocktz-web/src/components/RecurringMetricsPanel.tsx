@@ -6,6 +6,7 @@ import { PostMetricsPanel, type PostMetricsRow } from "@/components/CampaignMetr
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
+import { moneyCurrency } from "@/lib/geo";
 import type { PlanningItem, RecurringContract } from "@/lib/types";
 
 type Props = {
@@ -42,6 +43,13 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
   }, [items, month, locale]);
 
   const monthItems = useMemo(() => items.filter((item) => item.month === month), [items, month]);
+  const costByCreator = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const row of contract.creators ?? []) {
+      map.set(row.creator_id, Number(row.monthly_cache ?? row.monthly_fee ?? 0));
+    }
+    return map;
+  }, [contract.creators]);
 
   const rows = useMemo<PostMetricsRow[]>(
     () =>
@@ -56,8 +64,10 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
           item.video_status === "approved" || item.status === "approved"
             ? item.video_download_url || item.media_url || item.submission_url || null
             : null,
+        cost: costByCreator.get(item.creator_id) ?? 0,
+        costKey: item.creator_id,
       })),
-    [monthItems],
+    [costByCreator, monthItems],
   );
 
   async function refresh(itemId?: number) {
@@ -101,6 +111,7 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
       onRefresh={(rowId) => void refresh(rowId)}
       emptyLabel={t("recurringDetail.metricsEmpty")}
       emptyHint={t("recurringDetail.metricsHint")}
+      currency={moneyCurrency(contract)}
       headerExtra={
         <div className="w-full sm:w-56">
           <Select2Field

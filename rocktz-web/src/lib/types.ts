@@ -412,13 +412,32 @@ export type CalendarEvent = {
   company?: { id: number; name: string } | null;
 };
 
+export type DashboardPreviewItem = {
+  id: number;
+  name?: string;
+  title?: string;
+  company_name?: string | null;
+  status?: string | null;
+  total_budget?: number;
+  monthly_fee?: number;
+};
+
 export type DashboardStats = {
   total_creators?: number;
   active_creators?: number;
   pending_approval_creators?: number;
+  total_companies?: number;
+  managed_content?: number;
+  managed_campaign_content?: number;
+  managed_recurring_content?: number;
   running_campaigns?: number;
   finished_campaigns?: number;
+  running_recurring?: number;
+  pending_agency_campaigns?: number;
+  pending_agency_recurring?: number;
   total_campaign_value?: number;
+  recurring_monthly_value?: number;
+  total_managed_value?: number;
   currency?: string | null;
   pending_signatures?: number;
   upcoming_deliveries?: number;
@@ -431,7 +450,18 @@ export type DashboardStats = {
   activity?: { name: string; value: number }[];
   revenue?: { name: string; value: number }[];
   signatures?: { id: number; creator_name?: string | null; creator_artistic: string; campaign_name: string; status: string }[];
-  deliveries?: { id: number; creator_artistic: string; campaign_name: string; type: string; delivery_status: string; date: string }[];
+  deliveries?: {
+    id: number | string;
+    source?: "campaign" | "recurring";
+    href?: string;
+    creator_artistic: string;
+    campaign_name: string;
+    type: string;
+    delivery_status: string;
+    date: string;
+  }[];
+  campaigns_preview?: DashboardPreviewItem[];
+  recurring_preview?: DashboardPreviewItem[];
 };
 
 export type StorefrontItemType = "coupon" | "link";

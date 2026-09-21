@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowRight, CheckCircle2, FileText, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileText, Megaphone, Repeat, TrendingUp, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -32,6 +32,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
   const { formatCurrency, formatNumber } = usePrivacy();
   const revenue = stats.revenue ?? [];
   const emptyChart = !revenue.length || revenue.every((row) => !row.value);
+  const pendingAgency = (stats.pending_agency_campaigns ?? 0) + (stats.pending_agency_recurring ?? 0);
 
   return (
     <div className="flex flex-col gap-8">
@@ -63,11 +64,47 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
+      {pendingAgency > 0 ? (
+        <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-violet-300 bg-gradient-to-r from-violet-500/10 via-violet-500/5 to-indigo-500/10 p-4 shadow-xs sm:flex-row sm:items-center sm:p-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+              <Repeat size={20} />
+            </div>
+            <div>
+              <h4 className="m-0 text-sm font-bold text-violet-950">
+                {t("dash.pendingAgencyTitle", { count: pendingAgency })}
+              </h4>
+              <p className="mt-0.5 text-xs leading-relaxed text-violet-800">
+                {t("dash.pendingAgencyHint", {
+                  campaigns: stats.pending_agency_campaigns ?? 0,
+                  recurring: stats.pending_agency_recurring ?? 0,
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+            {(stats.pending_agency_campaigns ?? 0) > 0 ? (
+              <Link href="/campaigns" className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-violet-700">
+                {t("dash.reviewCampaigns")}
+                <ArrowRight size={14} />
+              </Link>
+            ) : null}
+            {(stats.pending_agency_recurring ?? 0) > 0 ? (
+              <Link href="/recurring" className="flex items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-white px-4 py-2 text-xs font-bold text-violet-800 hover:bg-violet-50">
+                {t("dash.reviewRecurring")}
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
         <KpiCard label={t("dash.kpiCasting")} value={formatNumber(stats.total_creators)} />
+        <KpiCard label={t("dash.kpiCompanies")} value={formatNumber(stats.total_companies ?? 0)} />
+        <KpiCard label={t("dash.kpiContent")} value={formatNumber(stats.managed_content ?? 0)} />
         <KpiCard label={t("dash.kpiCampaigns")} value={stats.running_campaigns ?? 0} />
-        <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_campaign_value)} />
-        <KpiCard label={t("dash.kpiSignatures")} value={String(stats.pending_signatures ?? 0).padStart(2, "0")} />
+        <KpiCard label={t("dash.kpiRecurring")} value={stats.running_recurring ?? 0} />
+        <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_managed_value ?? stats.total_campaign_value)} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -96,7 +133,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
                   <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `R$ ${formatNumber(Number(val))}`} tick={{ fill: "#64748b", fontSize: 10 }} />
                   <Tooltip
-                    formatter={(value) => [formatCurrency(Number(value)), t("dash.budget")]}
+                    formatter={(value) => [formatCurrency(Number(value)), t("dash.budgetCombined")]}
                     contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
                   />
                   <Area type="monotone" dataKey="value" stroke="#6366F1" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
@@ -142,20 +179,36 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
               <h2 className="text-[16px] font-bold text-[#0F172A]">{t("dash.upcoming", { count: stats.upcoming_deliveries ?? 0 })}</h2>
             </div>
             <div className="flex flex-col gap-4 p-6">
-              {(stats.deliveries ?? []).map((delivery) => (
-                <div key={delivery.id} className="flex items-center gap-3 border-b border-dashed border-[#F1F5F9] pb-2 last:border-none last:pb-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-xs font-bold text-brand-primary">
-                    @{(delivery.creator_artistic ?? "?").slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1 text-[13px]">
-                    <div className="mb-0.5 flex items-baseline justify-between">
-                      <strong className="truncate text-[#0F172A]">@{delivery.creator_artistic}</strong>
-                      <span className="shrink-0 font-mono text-[10px] font-bold tracking-tight text-brand-primary">{delivery.date ?? t("dash.today")}</span>
+              {(stats.deliveries ?? []).map((delivery) => {
+                const inner = (
+                  <>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-xs font-bold text-brand-primary">
+                      @{(delivery.creator_artistic ?? "?").slice(0, 1).toUpperCase()}
                     </div>
-                    <div className="truncate text-[11px] text-[#64748B]">{delivery.type} • {delivery.campaign_name}</div>
+                    <div className="min-w-0 flex-1 text-[13px]">
+                      <div className="mb-0.5 flex items-baseline justify-between gap-2">
+                        <strong className="truncate text-[#0F172A]">@{delivery.creator_artistic}</strong>
+                        <span className="shrink-0 font-mono text-[10px] font-bold tracking-tight text-brand-primary">{delivery.date ?? t("dash.today")}</span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[#64748B]">
+                        <span className={delivery.source === "recurring" ? "shrink-0 rounded bg-purple-50 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-purple-700 uppercase" : "shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-indigo-700 uppercase"}>
+                          {delivery.source === "recurring" ? t("dash.sourceRecurring") : t("dash.sourceCampaign")}
+                        </span>
+                        <span className="truncate">{delivery.campaign_name}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+                return delivery.href ? (
+                  <Link key={delivery.id} href={delivery.href} className="flex items-center gap-3 border-b border-dashed border-[#F1F5F9] pb-2 text-inherit last:border-none last:pb-0 hover:opacity-80">
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={delivery.id} className="flex items-center gap-3 border-b border-dashed border-[#F1F5F9] pb-2 last:border-none last:pb-0">
+                    {inner}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {!stats.deliveries?.length ? (
                 <div className="flex flex-col items-center gap-2 py-6 text-center text-[12px] text-[#64748B]">
                   <CheckCircle2 className="animate-bounce text-emerald-300" size={24} />
@@ -163,6 +216,64 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
                 </div>
               ) : null}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+            <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#0F172A]">
+              <Megaphone size={16} className="text-brand-primary" /> {t("dash.campaignsList")}
+            </h2>
+            <Link href="/campaigns" className="text-[11px] font-bold text-brand-primary hover:underline">{t("dash.viewAll")}</Link>
+          </div>
+          <div className="flex flex-col gap-3 p-6">
+            {(stats.campaigns_preview ?? []).map((campaign) => (
+              <Link key={campaign.id} href={`/campaigns/${campaign.id}`} className="flex items-center justify-between gap-3 border-b border-dashed border-[#F1F5F9] pb-3 last:border-none last:pb-0">
+                <div className="min-w-0">
+                  <strong className="block truncate text-[13px] text-[#0F172A]">{campaign.name}</strong>
+                  <span className="truncate text-[11px] text-[#64748B]">{campaign.company_name}</span>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-[11px] font-bold text-[#0F172A]">{formatCurrency(campaign.total_budget)}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-bold tracking-wider text-slate-600 uppercase">
+                    {t(`status.${campaign.status}`, { defaultValue: campaign.status ?? "" })}
+                  </span>
+                </div>
+              </Link>
+            ))}
+            {!stats.campaigns_preview?.length ? (
+              <p className="m-0 py-4 text-center text-[12px] text-[#64748B]">{t("dash.noCampaigns")}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+            <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#0F172A]">
+              <Repeat size={16} className="text-purple-600" /> {t("dash.recurringList")}
+            </h2>
+            <Link href="/recurring" className="text-[11px] font-bold text-brand-primary hover:underline">{t("dash.viewAll")}</Link>
+          </div>
+          <div className="flex flex-col gap-3 p-6">
+            {(stats.recurring_preview ?? []).map((contract) => (
+              <Link key={contract.id} href={`/recurring/${contract.id}`} className="flex items-center justify-between gap-3 border-b border-dashed border-[#F1F5F9] pb-3 last:border-none last:pb-0">
+                <div className="min-w-0">
+                  <strong className="block truncate text-[13px] text-[#0F172A]">{contract.title}</strong>
+                  <span className="truncate text-[11px] text-[#64748B]">{contract.company_name}</span>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-[11px] font-bold text-[#0F172A]">{formatCurrency(contract.monthly_fee)}</span>
+                  <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[9px] font-bold tracking-wider text-purple-700 uppercase">
+                    {t(`status.${contract.status}`, { defaultValue: contract.status ?? "" })}
+                  </span>
+                </div>
+              </Link>
+            ))}
+            {!stats.recurring_preview?.length ? (
+              <p className="m-0 py-4 text-center text-[12px] text-[#64748B]">{t("dash.noRecurring")}</p>
+            ) : null}
           </div>
         </div>
       </div>

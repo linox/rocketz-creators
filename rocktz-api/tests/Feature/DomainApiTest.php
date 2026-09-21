@@ -54,6 +54,35 @@ class DomainApiTest extends TestCase
             ->assertJsonStructure(['unread', 'pending_applications']);
     }
 
+    public function test_admin_dashboard_includes_campaign_and_recurring_stats(): void
+    {
+        $this->seed();
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $response = $this->withToken($token)->getJson('/api/dashboard')->assertOk()
+            ->assertJsonStructure([
+                'running_campaigns',
+                'running_recurring',
+                'total_companies',
+                'managed_content',
+                'recurring_monthly_value',
+                'total_managed_value',
+                'pending_agency_campaigns',
+                'pending_agency_recurring',
+                'campaigns_preview' => [['id', 'name', 'company_name', 'status', 'total_budget']],
+                'recurring_preview' => [['id', 'title', 'company_name', 'status', 'monthly_fee']],
+                'deliveries' => [['id', 'source', 'campaign_name']],
+            ])
+            ->assertJsonPath('running_recurring', 1)
+            ->assertJsonPath('total_companies', 2);
+
+        $this->assertGreaterThanOrEqual(3, (int) $response->json('managed_content'));
+
+        $this->assertEqualsWithDelta(4500, (float) $response->json('recurring_monthly_value'), 0.01);
+    }
+
     public function test_creator_dashboard_includes_audience_activity_and_fees(): void
     {
         $this->seed();

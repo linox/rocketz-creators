@@ -4,18 +4,25 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
+use App\Enums\ContentPlanningStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\RecurringContractStatus;
 use App\Enums\SignatureStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
+use App\Models\ContentPlanningItem;
 use App\Models\Creator;
+use App\Models\RecurringContract;
+use App\Models\RecurringContractCreator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
@@ -52,19 +59,43 @@ class DashboardController extends Controller
             ->where('delivery_status', '!=', DeliveryStatus::Published);
 
         $pendingSignatures = (clone $signatureQuery)->latest()->limit(5)->get();
-        $upcoming = (clone $deliveryQuery)->orderByRaw('delivery_date is null')->orderBy('delivery_date')->limit(5)->get();
 
         $runningCampaigns = Campaign::query()->whereIn('status', $running);
+        $activeRecurring = RecurringContract::query()
+            ->with('recurringContractCreators')
+            ->where('status', RecurringContractStatus::Active);
+        $recurringMonthlyValue = (clone $activeRecurring)->get()->sum(fn (RecurringContract $contract) => $this->recurringMonthlyValue($contract));
+        $totalCampaignValue = (float) (clone $runningCampaigns)->sum('total_budget');
+
+        $planningDeliveryQuery = ContentPlanningItem::query()
+            ->with(['creator', 'recurringContract'])
+            ->whereNotIn('status', [ContentPlanningStatus::Published, ContentPlanningStatus::Rejected]);
+
+        $managedCampaignContent = CampaignCreator::query()
+            ->where('application_status', ApplicationStatus::Approved)
+            ->count();
+        $managedRecurringContent = ContentPlanningItem::query()
+            ->where('status', '!=', ContentPlanningStatus::Rejected)
+            ->count();
 
         return [
             'total_creators' => Creator::query()->count(),
             'active_creators' => Creator::query()->where('status', CreatorStatus::Active)->count(),
             'pending_approval_creators' => Creator::query()->where('status', CreatorStatus::Review)->count(),
+            'total_companies' => Company::query()->count(),
+            'managed_content' => $managedCampaignContent + $managedRecurringContent,
+            'managed_campaign_content' => $managedCampaignContent,
+            'managed_recurring_content' => $managedRecurringContent,
             'running_campaigns' => (clone $runningCampaigns)->count(),
             'finished_campaigns' => Campaign::query()->where('status', CampaignStatus::Finished)->count(),
-            'total_campaign_value' => (float) (clone $runningCampaigns)->sum('total_budget'),
+            'running_recurring' => (clone $activeRecurring)->count(),
+            'pending_agency_campaigns' => Campaign::query()->where('status', CampaignStatus::PendingAgency)->count(),
+            'pending_agency_recurring' => RecurringContract::query()->where('status', RecurringContractStatus::PendingAgency)->count(),
+            'total_campaign_value' => $totalCampaignValue,
+            'recurring_monthly_value' => (float) $recurringMonthlyValue,
+            'total_managed_value' => $totalCampaignValue + (float) $recurringMonthlyValue,
             'pending_signatures' => (clone $signatureQuery)->count(),
-            'upcoming_deliveries' => (clone $deliveryQuery)->count(),
+            'upcoming_deliveries' => (clone $deliveryQuery)->count() + (clone $planningDeliveryQuery)->count(),
             'pending_applications' => CampaignCreator::query()->where('application_status', ApplicationStatus::Pending)->count(),
             'revenue' => $this->revenueSeries(),
             'signatures' => $pendingSignatures->map(fn (CampaignCreator $row) => [
@@ -74,13 +105,20 @@ class DashboardController extends Controller
                 'campaign_name' => $row->campaign?->name,
                 'status' => $row->signature_status?->value,
             ]),
-            'deliveries' => $upcoming->map(fn (CampaignCreator $row) => [
-                'id' => $row->id,
-                'creator_artistic' => $row->creator?->artistic_name,
-                'campaign_name' => $row->campaign?->name,
-                'type' => $row->delivery_type ?: 'Vídeo / Conteúdo',
-                'delivery_status' => $row->delivery_status?->value,
-                'date' => $row->delivery_date?->format('d/m'),
+            'deliveries' => $this->upcomingDeliveries($deliveryQuery, $planningDeliveryQuery),
+            'campaigns_preview' => Campaign::query()->with('company')->latest()->limit(5)->get()->map(fn (Campaign $campaign) => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+                'company_name' => $campaign->company?->name,
+                'status' => $campaign->status?->value,
+                'total_budget' => (float) $campaign->total_budget,
+            ]),
+            'recurring_preview' => RecurringContract::query()->with(['company', 'recurringContractCreators'])->latest()->limit(5)->get()->map(fn (RecurringContract $contract) => [
+                'id' => $contract->id,
+                'title' => $contract->title,
+                'company_name' => $contract->company?->name,
+                'status' => $contract->status?->value,
+                'monthly_fee' => $this->recurringMonthlyValue($contract),
             ]),
         ];
     }
@@ -249,6 +287,110 @@ class DashboardController extends Controller
                 }
             });
 
+        $windowStart = now()->startOfMonth()->subMonths(5);
+
+        RecurringContract::query()
+            ->with('recurringContractCreators')
+            ->where('status', '!=', RecurringContractStatus::PendingAgency)
+            ->where(function ($query) use ($windowStart) {
+                $query->whereNull('end_date')->orWhereDate('end_date', '>=', $windowStart->toDateString());
+            })
+            ->get()
+            ->each(function (RecurringContract $contract) use (&$series) {
+                $value = $this->recurringMonthlyValue($contract);
+                if ($value <= 0) {
+                    return;
+                }
+
+                foreach (array_keys($series) as $key) {
+                    $monthStart = Carbon::createFromFormat('Y-m-d', $key.'-01')?->startOfMonth();
+                    if (! $monthStart) {
+                        continue;
+                    }
+                    $monthEnd = $monthStart->copy()->endOfMonth();
+                    $contractStart = $contract->start_date ?? $monthStart;
+                    $contractEnd = $contract->end_date ?? $monthEnd;
+                    if ($contractStart->lte($monthEnd) && $contractEnd->gte($monthStart)) {
+                        $series[$key]['value'] += $value;
+                    }
+                }
+            });
+
         return array_values($series);
+    }
+
+    private function recurringMonthlyValue(RecurringContract $contract): float
+    {
+        $fee = (float) ($contract->monthly_fee ?? 0);
+        if ($fee > 0) {
+            return $fee;
+        }
+
+        return (float) $contract->recurringContractCreators->sum(
+            fn (RecurringContractCreator $row) => (float) ($row->monthly_cache ?: $row->monthly_fee ?: 0),
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<CampaignCreator>  $deliveryQuery
+     * @param  \Illuminate\Database\Eloquent\Builder<ContentPlanningItem>  $planningQuery
+     * @return list<array<string, mixed>>
+     */
+    private function upcomingDeliveries($deliveryQuery, $planningQuery): array
+    {
+        /** @var Collection<int, array{sort: ?Carbon, payload: array<string, mixed>}> $items */
+        $items = collect();
+
+        (clone $deliveryQuery)
+            ->orderByRaw('delivery_date is null')
+            ->orderBy('delivery_date')
+            ->limit(8)
+            ->get()
+            ->each(function (CampaignCreator $row) use ($items) {
+                $items->push([
+                    'sort' => $row->delivery_date,
+                    'payload' => [
+                        'id' => 'campaign-'.$row->id,
+                        'source' => 'campaign',
+                        'href' => '/campaigns/'.$row->campaign_id,
+                        'creator_artistic' => $row->creator?->artistic_name,
+                        'campaign_name' => $row->campaign?->name,
+                        'type' => $row->delivery_type ?: 'campaign',
+                        'delivery_status' => $row->delivery_status?->value,
+                        'date' => $row->delivery_date?->format('d/m'),
+                    ],
+                ]);
+            });
+
+        (clone $planningQuery)
+            ->orderByRaw('planned_date is null')
+            ->orderBy('planned_date')
+            ->limit(8)
+            ->get()
+            ->each(function (ContentPlanningItem $item) use ($items) {
+                $title = trim((string) $item->title) !== ''
+                    ? $item->title
+                    : ($item->recurringContract?->title ?: 'recurring');
+                $items->push([
+                    'sort' => $item->planned_date,
+                    'payload' => [
+                        'id' => 'recurring-'.$item->id,
+                        'source' => 'recurring',
+                        'href' => '/recurring/'.$item->recurring_contract_id,
+                        'creator_artistic' => $item->creator?->artistic_name,
+                        'campaign_name' => $title,
+                        'type' => $item->content_type?->value ?: 'recurring',
+                        'delivery_status' => $item->status?->value,
+                        'date' => $item->planned_date?->format('d/m'),
+                    ],
+                ]);
+            });
+
+        return $items
+            ->sortBy(fn (array $row) => $row['sort']?->timestamp ?? PHP_INT_MAX)
+            ->take(5)
+            ->pluck('payload')
+            ->values()
+            ->all();
     }
 }
