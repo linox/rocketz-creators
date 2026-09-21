@@ -530,6 +530,26 @@ export type StorefrontStats = {
   items: { id: number; title: string; clicks: number; likes: number; shares: number }[];
 };
 
+export type StorefrontOverviewRow = {
+  id: number;
+  artistic_name: string;
+  photo_url: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  slug: string | null;
+  public_url: string;
+  enabled_by_admin: boolean;
+  completed_campaigns: number;
+  required_campaigns: number;
+  published_items: number;
+  views: number;
+  clicks: number;
+  likes: number;
+  shares: number;
+  ctr: number;
+};
+
 export type CreatorStorefront = {
   creator: {
     id: number;

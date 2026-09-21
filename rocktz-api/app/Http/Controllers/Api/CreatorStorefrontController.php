@@ -73,6 +73,21 @@ class CreatorStorefrontController extends Controller
         ]);
     }
 
+    public function overview(): JsonResponse
+    {
+        $rows = $this->storefronts->listActive();
+
+        return response()->json([
+            'data' => $rows,
+            'meta' => [
+                'total' => count($rows),
+                'views' => array_sum(array_map(fn (array $row) => (int) $row['views'], $rows)),
+                'clicks' => array_sum(array_map(fn (array $row) => (int) $row['clicks'], $rows)),
+                'likes' => array_sum(array_map(fn (array $row) => (int) $row['likes'], $rows)),
+            ],
+        ]);
+    }
+
     public function updateSettings(Request $request): JsonResponse
     {
         $data = $request->validate([

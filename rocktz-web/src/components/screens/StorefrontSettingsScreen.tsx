@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Store } from "lucide-react";
+import { StorefrontActiveList } from "@/components/StorefrontActiveList";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
@@ -76,6 +77,7 @@ function StorefrontSettingsForm() {
           </button>
         </div>
       </form>
+      <StorefrontActiveList />
     </>
   );
 }

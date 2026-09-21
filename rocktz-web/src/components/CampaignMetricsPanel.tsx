@@ -46,9 +46,8 @@ type CampaignProps = {
   onCampaign: (campaign: Campaign) => void;
 };
 
-type SortKey = "name" | "views" | "likes" | "comments" | "engagement" | "cpm";
+type SortKey = "name" | "views" | "likes" | "comments" | "engagement";
 type SortDir = "asc" | "desc";
-type CpmIndex = Map<number, number | null>;
 
 function asMetrics(value: PostMetrics | null | undefined): PostMetrics {
   if (!value || typeof value !== "object") return {};
@@ -75,8 +74,7 @@ function rowName(row: PostMetricsRow): string {
   return `${row.creator?.artistic_name || ""} ${row.creator?.full_name || ""} ${row.subtitle || ""}`.trim();
 }
 
-function rowMetric(row: PostMetricsRow, key: Exclude<SortKey, "name">, cpmIndex?: CpmIndex): number | null {
-  if (key === "cpm") return cpmIndex?.get(row.id) ?? null;
+function rowMetric(row: PostMetricsRow, key: Exclude<SortKey, "name">): number | null {
   return metricNumber(asMetrics(row.metrics)[key]);
 }
 
@@ -85,12 +83,12 @@ function performanceKey(key: SortKey): Exclude<SortKey, "name"> {
 }
 
 function defaultSortDir(key: SortKey): SortDir {
-  return key === "name" || key === "cpm" ? "asc" : "desc";
+  return key === "name" ? "asc" : "desc";
 }
 
-function compareByMetric(a: PostMetricsRow, b: PostMetricsRow, key: Exclude<SortKey, "name">, dir: SortDir, cpmIndex?: CpmIndex): number {
-  const av = rowMetric(a, key, cpmIndex);
-  const bv = rowMetric(b, key, cpmIndex);
+function compareByMetric(a: PostMetricsRow, b: PostMetricsRow, key: Exclude<SortKey, "name">, dir: SortDir): number {
+  const av = rowMetric(a, key);
+  const bv = rowMetric(b, key);
   if (av == null && bv == null) return 0;
   if (av == null) return 1;
   if (bv == null) return -1;
@@ -98,34 +96,14 @@ function compareByMetric(a: PostMetricsRow, b: PostMetricsRow, key: Exclude<Sort
   return dir === "asc" ? cmp : -cmp;
 }
 
-function topRows(rows: PostMetricsRow[], key: SortKey, limit: number, cpmIndex?: CpmIndex): PostMetricsRow[] {
+function topRows(rows: PostMetricsRow[], key: SortKey, limit: number): PostMetricsRow[] {
   const metric = performanceKey(key);
-  return [...rows].sort((a, b) => compareByMetric(a, b, metric, defaultSortDir(metric), cpmIndex)).slice(0, limit);
+  return [...rows].sort((a, b) => compareByMetric(a, b, metric, defaultSortDir(metric))).slice(0, limit);
 }
 
 function spendKey(row: PostMetricsRow): string {
   if (row.costKey != null && row.costKey !== "") return String(row.costKey);
   return `row:${row.id}`;
-}
-
-function influencerCpmIndex(rows: PostMetricsRow[]): CpmIndex {
-  const spend = new Map<string, { cost: number; views: number }>();
-  for (const row of rows) {
-    const key = spendKey(row);
-    const current = spend.get(key) ?? { cost: 0, views: 0 };
-    current.cost = Math.max(current.cost, metricNumber(row.cost) ?? 0);
-    current.views += metricNumber(asMetrics(row.metrics).views) ?? 0;
-    spend.set(key, current);
-  }
-
-  const index: CpmIndex = new Map();
-  for (const row of rows) {
-    const group = spend.get(spendKey(row));
-    const cost = group?.cost ?? 0;
-    const views = group?.views ?? 0;
-    index.set(row.id, cost > 0 && views > 0 ? (cost / views) * 1000 : null);
-  }
-  return index;
 }
 
 type MetricTotals = {
@@ -224,8 +202,6 @@ export function PostMetricsPanel({
   }, [rows, query, networkFilter]);
 
   const visibleLinked = useMemo(() => filtered.filter((row) => Boolean(row.published_link?.trim())), [filtered]);
-  const cpmIndex = useMemo(() => influencerCpmIndex(visibleLinked), [visibleLinked]);
-  const linkedCpmIndex = useMemo(() => influencerCpmIndex(linked), [linked]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -234,22 +210,21 @@ export function PostMetricsPanel({
         const cmp = rowName(a).localeCompare(rowName(b), locale, { sensitivity: "base" });
         return sortDir === "asc" ? cmp : -cmp;
       }
-      return compareByMetric(a, b, sortKey, sortDir, cpmIndex);
+      return compareByMetric(a, b, sortKey, sortDir);
     });
     return copy;
-  }, [cpmIndex, filtered, locale, sortDir, sortKey]);
+  }, [filtered, locale, sortDir, sortKey]);
 
   const bestByPlatform = useMemo(
     () =>
-      NETWORKS.map((network) => {
-        const networkRows = linked.filter((row) => postNetwork(row) === network);
-        const networkCpmIndex = influencerCpmIndex(networkRows);
-        return {
-          network,
-          cpmIndex: networkCpmIndex,
-          rows: topRows(networkRows, sortKey, 3, networkCpmIndex),
-        };
-      }).filter((item) => item.rows.length > 0),
+      NETWORKS.map((network) => ({
+        network,
+        rows: topRows(
+          linked.filter((row) => postNetwork(row) === network),
+          sortKey,
+          3,
+        ),
+      })).filter((item) => item.rows.length > 0),
     [linked, sortKey],
   );
 
@@ -284,7 +259,6 @@ export function PostMetricsPanel({
     { value: "likes", label: t("campaignDetail.metricsSortLikes") },
     { value: "comments", label: t("campaignDetail.metricsSortComments") },
     { value: "engagement", label: t("campaignDetail.metricsSortEngagement") },
-    { value: "cpm", label: t("campaignDetail.metricsSortCpm") },
     { value: "name", label: t("campaignDetail.metricsSortName") },
   ];
 
@@ -301,12 +275,11 @@ export function PostMetricsPanel({
     return formatCurrency(value, currency);
   }
 
-  function formatRowMetric(row: PostMetricsRow, key: SortKey, index: CpmIndex = linkedCpmIndex): string {
+  function formatRowMetric(row: PostMetricsRow, key: SortKey): string {
     const metric = performanceKey(key);
-    const value = rowMetric(row, metric, index);
+    const value = rowMetric(row, metric);
     if (value == null) return "—";
     if (metric === "engagement") return formatEngagement(value, locale);
-    if (metric === "cpm") return formatCpm(value);
     return formatNumber(value);
   }
 
@@ -315,7 +288,6 @@ export function PostMetricsPanel({
     if (metric === "likes") return t("campaignDetail.colLikes");
     if (metric === "comments") return t("campaignDetail.colComments");
     if (metric === "engagement") return t("campaignDetail.colEngagement");
-    if (metric === "cpm") return t("campaignDetail.colCpm");
     return t("campaignDetail.colViews");
   }
 
@@ -324,7 +296,6 @@ export function PostMetricsPanel({
     { key: "likes" as const, label: t("campaignDetail.kpiLikes"), value: formatNumber(totals.likes) },
     { key: "comments" as const, label: t("campaignDetail.kpiComments"), value: formatNumber(totals.comments) },
     { key: "engagement" as const, label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(totals.engagement, locale) },
-    { key: "cpm" as const, label: t("campaignDetail.kpiCpm"), value: formatCpm(totals.cpm), hint: t("campaignDetail.kpiCpmHint") },
   ];
 
   const SortIcon = sortDir === "desc" ? ArrowDownWideNarrow : ArrowUpNarrowWide;
@@ -438,10 +409,14 @@ export function PostMetricsPanel({
                     {active ? <SortIcon size={12} /> : null}
                   </p>
                   <p className="mt-1 text-lg font-black text-slate-900">{kpi.value}</p>
-                  {"hint" in kpi && kpi.hint ? <p className="mt-0.5 text-[10px] font-medium text-slate-400">{kpi.hint}</p> : null}
                 </button>
               );
             })}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.kpiCpm")}</p>
+              <p className="mt-1 text-lg font-black text-slate-900">{formatCpm(totals.cpm)}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-400">{t("campaignDetail.kpiCpmHint")}</p>
+            </div>
           </div>
         </div>
 
@@ -458,7 +433,6 @@ export function PostMetricsPanel({
                   { key: "likes" as const, label: t("campaignDetail.kpiLikes"), value: formatNumber(networkTotals.likes) },
                   { key: "comments" as const, label: t("campaignDetail.kpiComments"), value: formatNumber(networkTotals.comments) },
                   { key: "engagement" as const, label: t("campaignDetail.kpiPostEngagement"), value: formatEngagement(networkTotals.engagement, locale) },
-                  { key: "cpm" as const, label: t("campaignDetail.kpiCpm"), value: formatCpm(networkTotals.cpm) },
                 ];
 
                 return (
@@ -517,7 +491,7 @@ export function PostMetricsPanel({
               <p className="mt-1 text-[11px] text-slate-400">{t("campaignDetail.metricsBestByPlatformHint", { metric: metricLabel(sortKey) })}</p>
             </div>
             <div className={cn("grid gap-3", bestByPlatform.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3")}>
-              {bestByPlatform.map(({ network, rows: winners, cpmIndex: networkCpmIndex }) => {
+              {bestByPlatform.map(({ network, rows: winners }) => {
                 const Icon = network === "instagram" ? Instagram : network === "youtube" ? Youtube : Clapperboard;
                 const iconClass = network === "instagram" ? "text-pink-500" : network === "youtube" ? "text-red-600" : "text-rose-500";
                 const active = networkFilter === network;
@@ -565,7 +539,7 @@ export function PostMetricsPanel({
                                   {row.subtitle ? <span className="block truncate text-[10px] font-medium text-slate-400">{row.subtitle}</span> : null}
                                 </span>
                                 <span className="shrink-0 text-right">
-                                  <span className="block text-xs font-black text-slate-900">{formatRowMetric(row, sortKey, networkCpmIndex)}</span>
+                                  <span className="block text-xs font-black text-slate-900">{formatRowMetric(row, sortKey)}</span>
                                   <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase">{metricLabel(sortKey)}</span>
                                 </span>
                               </button>
@@ -600,7 +574,6 @@ export function PostMetricsPanel({
                 <SortHeader label={t("campaignDetail.colLikes")} column="likes" />
                 <SortHeader label={t("campaignDetail.colComments")} column="comments" />
                 <SortHeader label={t("campaignDetail.colEngagement")} column="engagement" />
-                <SortHeader label={t("campaignDetail.colCpm")} column="cpm" />
                 <th className="px-4 py-3">{t("campaignDetail.colSynced")}</th>
                 <th className="px-4 py-3 text-right">{t("campaignDetail.colActions")}</th>
               </tr>
@@ -608,13 +581,13 @@ export function PostMetricsPanel({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
                     {emptyLabel || t("campaignDetail.noCreatorHint")}
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
                     {t("campaignDetail.metricsNoResults")}
                   </td>
                 </tr>
@@ -664,7 +637,6 @@ export function PostMetricsPanel({
                       <td className="px-4 py-3.5 font-black text-slate-900">{metricNumber(metrics.likes) != null ? formatNumber(metricNumber(metrics.likes) ?? 0) : "—"}</td>
                       <td className="px-4 py-3.5 font-black text-slate-900">{metricNumber(metrics.comments) != null ? formatNumber(metricNumber(metrics.comments) ?? 0) : "—"}</td>
                       <td className="px-4 py-3.5 font-black text-slate-900">{formatEngagement(metricNumber(metrics.engagement), locale)}</td>
-                      <td className="px-4 py-3.5 font-black text-slate-900">{formatCpm(cpmIndex.get(row.id) ?? null)}</td>
                       <td className="px-4 py-3.5 font-medium text-slate-500">{formatSyncedAt(metricNumber(metrics.synced_at) ?? undefined, locale, t("campaignDetail.neverSynced"))}</td>
                       <td className="px-4 py-3.5 text-right">
                         <button

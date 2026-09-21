@@ -14,6 +14,7 @@ import type {
   CreatorStorefront,
   StorefrontCategory,
   StorefrontItem,
+  StorefrontOverviewRow,
   DashboardStats,
   MetricsJobStatus,
   PlanningItem,
@@ -212,6 +213,11 @@ export const api = {
   storefrontSettings: () => laravelFetch<{ data: { min_completed_campaigns: number } }>("/storefront/settings"),
   updateStorefrontSettings: (body: { min_completed_campaigns: number }) =>
     laravelFetch<{ data: { min_completed_campaigns: number }; message: string }>("/storefront/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  storefrontOverview: () =>
+    laravelFetch<{
+      data: StorefrontOverviewRow[];
+      meta: { total: number; views: number; clicks: number; likes: number };
+    }>("/storefront/overview"),
   mailMessages: (query = "") => laravelFetch<{ data: Array<{ id: number; email: string; template_key: string; subject: string; status: string; attempts: number; failure_reason: string | null; provider_id: string | null; created_at: string; user?: { role?: string } }> }>(`/mail/messages${query}`),
   activityLogs: (query = "") =>
     laravelFetch<{

@@ -16,6 +16,7 @@ use App\Models\CreatorStorefrontItem;
 use App\Models\CreatorStorefrontLike;
 use App\Models\StorefrontSetting;
 use App\Support\FrontendUrl;
+use App\Support\MediaUrl;
 use App\Support\ProhibitedStorefrontLink;
 use App\Support\SafeHttpUrl;
 use App\Support\StorefrontActor;
@@ -62,6 +63,95 @@ class CreatorStorefrontService
         }
 
         return $this->completedCampaignsCount($creator) >= $this->requiredCampaigns();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function listActive(): array
+    {
+        $required = $this->requiredCampaigns();
+
+        $completed = DB::table('campaign_creators')
+            ->select('campaign_creators.creator_id', DB::raw('COUNT(DISTINCT campaign_creators.campaign_id) as completed_campaigns'))
+            ->leftJoin('campaigns', 'campaigns.id', '=', 'campaign_creators.campaign_id')
+            ->where('campaign_creators.application_status', ApplicationStatus::Approved->value)
+            ->where(function ($query) {
+                $query->whereIn('campaign_creators.delivery_status', [
+                    DeliveryStatus::Published->value,
+                    DeliveryStatus::Approved->value,
+                ])->orWhere('campaigns.status', CampaignStatus::Finished->value);
+            })
+            ->groupBy('campaign_creators.creator_id');
+
+        $events = Schema::hasTable('creator_storefront_events')
+            ? DB::table('creator_storefront_events')
+                ->select('creator_id')
+                ->selectRaw("SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as views", [StorefrontEventType::View->value])
+                ->selectRaw("SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as clicks", [StorefrontEventType::Click->value])
+                ->groupBy('creator_id')
+            : DB::table('creators')->select('id as creator_id', DB::raw('0 as views'), DB::raw('0 as clicks'))->whereRaw('0 = 1');
+
+        $items = DB::table('creator_storefront_items')
+            ->select('creator_id')
+            ->selectRaw('COUNT(*) as items_count')
+            ->selectRaw('SUM(CASE WHEN is_published = 1 THEN 1 ELSE 0 END) as published_items')
+            ->selectRaw('SUM(likes_count) as likes')
+            ->selectRaw('SUM(shares_count) as shares')
+            ->groupBy('creator_id');
+
+        $rows = Creator::query()
+            ->leftJoinSub($completed, 'completed', 'completed.creator_id', '=', 'creators.id')
+            ->leftJoinSub($events, 'events', 'events.creator_id', '=', 'creators.id')
+            ->leftJoinSub($items, 'items', 'items.creator_id', '=', 'creators.id')
+            ->where(function ($query) use ($required) {
+                $query->where('creators.storefront_enabled', true)
+                    ->orWhereRaw('COALESCE(completed.completed_campaigns, 0) >= ?', [$required]);
+            })
+            ->orderByDesc(DB::raw('COALESCE(events.views, 0)'))
+            ->orderBy('creators.artistic_name')
+            ->get([
+                'creators.id',
+                'creators.artistic_name',
+                'creators.photo_url',
+                'creators.city',
+                'creators.state',
+                'creators.country',
+                'creators.storefront_slug',
+                'creators.storefront_enabled',
+                DB::raw('COALESCE(completed.completed_campaigns, 0) as completed_campaigns'),
+                DB::raw('COALESCE(events.views, 0) as views'),
+                DB::raw('COALESCE(events.clicks, 0) as clicks'),
+                DB::raw('COALESCE(items.published_items, 0) as published_items'),
+                DB::raw('COALESCE(items.likes, 0) as likes'),
+                DB::raw('COALESCE(items.shares, 0) as shares'),
+            ]);
+
+        return $rows->map(function (Creator $creator) use ($required) {
+            $slug = filled($creator->storefront_slug) ? (string) $creator->storefront_slug : (string) $creator->id;
+            $views = (int) $creator->getAttribute('views');
+            $clicks = (int) $creator->getAttribute('clicks');
+
+            return [
+                'id' => (int) $creator->id,
+                'artistic_name' => $creator->artistic_name,
+                'photo_url' => MediaUrl::publicAbsolute($creator->photo_url),
+                'city' => $creator->city,
+                'state' => $creator->state,
+                'country' => $creator->country,
+                'slug' => filled($creator->storefront_slug) ? (string) $creator->storefront_slug : null,
+                'public_url' => FrontendUrl::to('c/'.$slug.'/'),
+                'enabled_by_admin' => (bool) $creator->storefront_enabled,
+                'completed_campaigns' => (int) $creator->getAttribute('completed_campaigns'),
+                'required_campaigns' => $required,
+                'published_items' => (int) $creator->getAttribute('published_items'),
+                'views' => $views,
+                'clicks' => $clicks,
+                'likes' => (int) $creator->getAttribute('likes'),
+                'shares' => (int) $creator->getAttribute('shares'),
+                'ctr' => $views > 0 ? round(($clicks / $views) * 100, 1) : 0,
+            ];
+        })->values()->all();
     }
 
     /**

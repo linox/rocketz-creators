@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Clapperboard,
   Clock,
+  Copy,
   DollarSign,
   Eye,
   ExternalLink,
@@ -910,6 +911,7 @@ function ProfileInner() {
   }
 
   const profile = creator;
+  const storefrontUrl = profile.storefront?.unlocked ? profile.storefront.public_url : null;
   const chip = statusChip(profile.status, {
     active: tp("statusChipActive"),
     review: tp("statusChipReview"),
@@ -1129,6 +1131,12 @@ function ProfileInner() {
     }
   }
 
+  async function copyStorefrontUrl() {
+    if (!storefrontUrl) return;
+    await navigator.clipboard.writeText(storefrontUrl);
+    await alertSuccess(tp("storefrontUrlCopied"));
+  }
+
   return (
     <div className="flex flex-col gap-8 pb-24">
       {isAdmin ? (
@@ -1229,6 +1237,28 @@ function ProfileInner() {
               <p className="mt-0.5 text-[14px] font-medium text-[#64748B]">
                 {[creator.full_name, formatLocation(locale, creator)].filter(Boolean).join(" • ")}
               </p>
+              {storefrontUrl ? (
+                <div className="mt-1.5 flex max-w-full min-w-0 items-center gap-1.5">
+                  <Store size={13} className="shrink-0 text-violet-600" />
+                  <a
+                    href={storefrontUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate text-[12px] font-semibold text-violet-700 hover:underline"
+                  >
+                    {storefrontUrl}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => void copyStorefrontUrl()}
+                    title={tp("copyStorefrontUrl")}
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-violet-50 hover:text-violet-700"
+                  >
+                    <Copy size={13} />
+                    <span className="sr-only">{tp("copyStorefrontUrl")}</span>
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1309,6 +1339,30 @@ function ProfileInner() {
                   <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">{tp("enableStorefrontHint")}</span>
                 </span>
               </label>
+              {storefrontUrl ? (
+                <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50/60 p-2.5">
+                  <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("storefrontUrl")}</span>
+                  <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                    <a
+                      href={storefrontUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-w-0 truncate text-[11px] font-semibold text-violet-700 hover:underline"
+                    >
+                      {storefrontUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => void copyStorefrontUrl()}
+                      title={tp("copyStorefrontUrl")}
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-violet-700"
+                    >
+                      <Copy size={13} />
+                      <span className="sr-only">{tp("copyStorefrontUrl")}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : canEdit ? (

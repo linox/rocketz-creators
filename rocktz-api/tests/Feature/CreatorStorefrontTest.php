@@ -5,11 +5,14 @@ namespace Tests\Feature;
 use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\StorefrontEventType;
 use App\Enums\StorefrontItemType;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\Creator;
+use App\Models\CreatorStorefrontEvent;
+use App\Models\CreatorStorefrontItem;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
@@ -370,6 +373,76 @@ class CreatorStorefrontTest extends TestCase
         $this->withToken($token)
             ->getJson("/api/creators/{$owner->id}/storefront")
             ->assertForbidden();
+    }
+
+    public function test_admin_overview_lists_active_storefronts_with_base_metrics(): void
+    {
+        $company = Company::factory()->active()->create();
+        $locked = Creator::factory()->active()->create(['artistic_name' => 'locked-one']);
+        $adminUnlocked = Creator::factory()->active()->create([
+            'artistic_name' => 'admin-vitrine',
+            'storefront_enabled' => true,
+            'storefront_slug' => 'admin-vitrine',
+        ]);
+        $campaignUnlocked = Creator::factory()->active()->create(['artistic_name' => 'camp-vitrine']);
+        $this->completeCampaigns($campaignUnlocked, $company, 3);
+
+        CreatorStorefrontItem::query()->create([
+            'creator_id' => $adminUnlocked->id,
+            'company_id' => $company->id,
+            'type' => StorefrontItemType::Link,
+            'title' => 'Oferta',
+            'url' => 'https://example.com/oferta',
+            'is_published' => true,
+            'likes_count' => 4,
+            'shares_count' => 2,
+        ]);
+        CreatorStorefrontEvent::query()->create([
+            'creator_id' => $adminUnlocked->id,
+            'item_id' => null,
+            'type' => StorefrontEventType::View,
+            'actor_key' => 'visitor-a',
+            'created_at' => now(),
+        ]);
+        CreatorStorefrontEvent::query()->create([
+            'creator_id' => $adminUnlocked->id,
+            'item_id' => null,
+            'type' => StorefrontEventType::Click,
+            'actor_key' => 'visitor-a',
+            'created_at' => now(),
+        ]);
+
+        $creatorToken = $locked->user->createToken('auth')->plainTextToken;
+        $this->withToken($creatorToken)
+            ->getJson('/api/storefront/overview')
+            ->assertForbidden();
+
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withToken($adminToken)
+            ->getJson('/api/storefront/overview')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('meta.views', 1)
+            ->assertJsonPath('meta.clicks', 1)
+            ->assertJsonMissing(['artistic_name' => 'locked-one'])
+            ->assertJsonFragment([
+                'artistic_name' => 'admin-vitrine',
+                'slug' => 'admin-vitrine',
+                'enabled_by_admin' => true,
+                'published_items' => 1,
+                'views' => 1,
+                'clicks' => 1,
+                'likes' => 4,
+                'shares' => 2,
+                'ctr' => 100,
+            ])
+            ->assertJsonFragment([
+                'artistic_name' => 'camp-vitrine',
+                'enabled_by_admin' => false,
+                'completed_campaigns' => 3,
+            ]);
     }
 
     /**
