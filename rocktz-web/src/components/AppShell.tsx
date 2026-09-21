@@ -276,7 +276,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-full w-[min(16.75rem,86vw)] shrink-0 flex-col bg-[#8A3FFC] text-white/80 transition-transform lg:static lg:w-[16.75rem] lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex h-full w-[min(16.75rem,86vw)] shrink-0 flex-col bg-[#8A3FFC] text-white/80 transition-transform lg:static lg:z-10 lg:w-[16.75rem] lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -472,7 +472,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             variant="header"
           />
         </header>
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10">
           {needsContract || needsFirstPortfolio ? (
             <div className="mb-4 flex flex-col gap-3 sm:mb-6">
               {needsContract ? <CreatorContractRequiredBanner onSign={() => setContractOpen(true)} /> : null}

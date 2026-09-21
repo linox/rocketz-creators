@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Copy, ExternalLink, Search } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from "lucide-react";
 import { CountrySelect } from "@/components/GeoSelectFields";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -15,6 +15,8 @@ import type { StorefrontOverviewRow } from "@/lib/types";
 
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
+
+const PAGE_SIZE_OPTIONS = ["10", "20", "50"] as const;
 
 type SourceFilter = "all" | "admin" | "campaigns";
 type ItemsFilter = "all" | "with" | "empty";
@@ -30,6 +32,8 @@ export function StorefrontActiveList() {
   const [items, setItems] = useState<ItemsFilter>("all");
   const [country, setCountry] = useState("all");
   const [sort, setSort] = useState<SortKey>("views");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     api.storefrontOverview()
@@ -67,6 +71,16 @@ export function StorefrontActiveList() {
     });
   }, [rows, search, source, items, country, sort, locale]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, source, items, country, sort, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const rangeFrom = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeTo = Math.min(safePage * pageSize, filtered.length);
+
   const totals = useMemo(
     () => ({
       total: filtered.length,
@@ -85,7 +99,7 @@ export function StorefrontActiveList() {
   const number = (value: number) => value.toLocaleString(locale);
 
   return (
-    <section className="mt-8">
+    <section className="relative z-0 mt-8 min-w-0 overflow-hidden">
       <div className="mb-4">
         <h2 className="text-lg font-black text-slate-950">{t("storefront.activeTitle")}</h2>
         <p className="mt-1 text-sm text-slate-500">{t("storefront.activeSubtitle")}</p>
@@ -159,6 +173,15 @@ export function StorefrontActiveList() {
             className="min-w-[180px] flex-1 lg:w-48 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={String(pageSize)}
+            options={PAGE_SIZE_OPTIONS.map((size) => ({ value: size, label: t("storefront.pageSize", { count: Number(size) }) }))}
+            onChange={(value) => setPageSize(Number(value) || 10)}
+            className="min-w-[160px] flex-1 lg:w-40 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
         </div>
       </div>
 
@@ -167,8 +190,8 @@ export function StorefrontActiveList() {
       ) : filtered.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-sm text-slate-500">{t("storefront.activeEmpty")}</p>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="hidden overflow-x-auto md:block">
+        <div className="max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="hidden max-w-full overflow-x-auto md:block">
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="border-b border-slate-100 bg-slate-50 text-[10px] font-black tracking-wider text-slate-500 uppercase">
                 <tr>
@@ -184,7 +207,7 @@ export function StorefrontActiveList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {paged.map((row) => (
                   <tr key={row.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -233,7 +256,7 @@ export function StorefrontActiveList() {
           </div>
 
           <div className="flex flex-col divide-y divide-slate-100 md:hidden">
-            {filtered.map((row) => (
+            {paged.map((row) => (
               <div key={row.id} className="flex flex-col gap-3 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
@@ -272,6 +295,37 @@ export function StorefrontActiveList() {
               </div>
             ))}
           </div>
+
+          {filtered.length > 0 ? (
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[11px] font-semibold text-slate-500">
+                {t("storefront.showingRange", { from: rangeFrom, to: rangeTo, total: filtered.length })}
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={14} />
+                  {t("storefront.previousPage")}
+                </button>
+                <span className="min-w-[7rem] text-center text-[11px] font-bold text-slate-600">
+                  {t("storefront.pageOf", { page: safePage, pages: pageCount })}
+                </span>
+                <button
+                  type="button"
+                  disabled={safePage >= pageCount}
+                  onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t("storefront.nextPage")}
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>
