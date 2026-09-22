@@ -13,6 +13,7 @@ import {
   Filter,
   Inbox,
   LayoutList,
+  Link2,
   Maximize2,
   MessageSquare,
   Play,
@@ -97,6 +98,7 @@ function DeliveriesInboxInner() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
 
   async function loadInbox() {
     setLoading(true);
@@ -122,8 +124,13 @@ function DeliveriesInboxInner() {
 
   const actorName = "Rocketz";
 
-  async function approveOnApi(item: DeliveryInboxItem) {
+  async function approveOnApi(item: DeliveryInboxItem, publishedLink?: string) {
+    const link = publishedLink?.trim();
     if (item.planningItemId) {
+      if (link) {
+        await api.updatePlanningItem(item.planningItemId, { published_url: link });
+        return;
+      }
       if (item.approvalStage === "script") {
         await api.updatePlanningItem(item.planningItemId, {
           script_status: "approved",
@@ -146,6 +153,18 @@ function DeliveriesInboxInner() {
       return;
     }
     if (!item.participationId) return;
+    if (link) {
+      await api.updateParticipation(item.participationId, {
+        published_link: link,
+        delivery_status: "published",
+        video_status: "approved",
+        script_status: "approved",
+        revision_details: "",
+        script_feedback: "",
+        video_feedback: "",
+      });
+      return;
+    }
     if (item.approvalStage === "script") {
       await api.updateParticipation(item.participationId, { script_status: "approved", script_feedback: "" });
       return;
@@ -286,6 +305,11 @@ function DeliveriesInboxInner() {
     setVersionId(selected.versions.find((v) => v.versionNumber === selected.currentVersion)?.id ?? selected.versions[0]?.id ?? null);
     setCarouselIndex(0);
     setRevisionOpen(false);
+    setPublishedLinkDraft(
+      selected.versions.find((v) => v.versionNumber === selected.currentVersion)?.linkUrl
+        ?? selected.versions[0]?.linkUrl
+        ?? "",
+    );
   }, [selected?.id]);
 
   function patchItem(id: string, updater: (item: DeliveryInboxItem) => DeliveryInboxItem) {
@@ -316,16 +340,34 @@ function DeliveriesInboxInner() {
     }
   }
 
-  async function approveSelected() {
+  async function approveSelected(withPublishedLink = false) {
     if (!selected || busy) return;
-    const isScriptStage = selected.approvalStage === "script";
-    const confirmTitle = isScriptStage ? t("deliveries.inbox.approveScriptTitle") : t("deliveries.inbox.approveConfirmTitle");
-    const confirmText = isScriptStage ? t("deliveries.inbox.approveScriptText") : t("deliveries.inbox.approveConfirmText");
-    if (!(await alertConfirm(confirmTitle, confirmText, t("deliveries.inbox.approve")))) return;
+    const published = publishedLinkDraft.trim();
+    if (withPublishedLink) {
+      if (!published) {
+        await alertWarning(t("deliveries.inbox.publishedLinkRequiredTitle"), t("deliveries.inbox.publishedLinkRequiredText"));
+        return;
+      }
+      if (!safeHttpUrl(published)) {
+        await alertWarning(t("deliveries.inbox.publishedLinkRequiredTitle"), t("deliveries.inbox.publishedLinkInvalid"));
+        return;
+      }
+      if (!(await alertConfirm(
+        t("deliveries.inbox.concludeWithLinkTitle"),
+        t("deliveries.inbox.concludeWithLinkText"),
+        t("deliveries.inbox.concludeWithLink"),
+      ))) return;
+    } else {
+      const isScriptStage = selected.approvalStage === "script";
+      const confirmTitle = isScriptStage ? t("deliveries.inbox.approveScriptTitle") : t("deliveries.inbox.approveConfirmTitle");
+      const confirmText = isScriptStage ? t("deliveries.inbox.approveScriptText") : t("deliveries.inbox.approveConfirmText");
+      if (!(await alertConfirm(confirmTitle, confirmText, t("deliveries.inbox.approve")))) return;
+    }
     setBusy(true);
     try {
-      await approveOnApi(selected);
+      await approveOnApi(selected, withPublishedLink ? published : undefined);
       const now = new Date().toISOString();
+      const isScriptStage = !withPublishedLink && selected.approvalStage === "script";
       patchItem(selected.id, (row) => ({
         ...row,
         status: "approved",
@@ -336,16 +378,23 @@ function DeliveriesInboxInner() {
             id: `ap-${Date.now()}`,
             type: "approved",
             userName: actorName,
-            message: isScriptStage
-              ? t("deliveries.inbox.activityApprovedScript")
-              : t("deliveries.inbox.activityApproved", { version: row.currentVersion }),
+            message: withPublishedLink
+              ? t("deliveries.inbox.activityConcludedWithLink")
+              : isScriptStage
+                ? t("deliveries.inbox.activityApprovedScript")
+                : t("deliveries.inbox.activityApproved", { version: row.currentVersion }),
             createdAt: now,
           },
         ],
       }));
       await alertSuccess(
-        isScriptStage ? t("deliveries.inbox.scriptApprovedWaiting") : t("deliveries.inbox.approvedOk"),
+        withPublishedLink
+          ? t("deliveries.inbox.concludedWithLinkOk")
+          : isScriptStage
+            ? t("deliveries.inbox.scriptApprovedWaiting")
+            : t("deliveries.inbox.approvedOk"),
       );
+      setPublishedLinkDraft("");
       const idx = filtered.findIndex((item) => item.id === selected.id);
       const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
       if (next) openDelivery(next);
@@ -756,9 +805,12 @@ function DeliveriesInboxInner() {
                 commentText={commentText}
                 detailsOpen={detailsOpen}
                 carouselIndex={carouselIndex}
+                publishedLink={publishedLinkDraft}
+                onPublishedLinkChange={setPublishedLinkDraft}
                 onBack={() => setMobileShowDetail(false)}
                 onVersion={(id) => setVersionId(id)}
-                onApprove={() => void approveSelected()}
+                onApprove={() => void approveSelected(false)}
+                onConcludeWithLink={() => void approveSelected(true)}
                 onToggleRevision={() => setRevisionOpen((v) => !v)}
                 onRevisionText={setRevisionText}
                 onSendRevision={() => void sendRevision()}
@@ -913,9 +965,12 @@ function ReadingPane({
   commentText,
   detailsOpen,
   carouselIndex,
+  publishedLink,
+  onPublishedLinkChange,
   onBack,
   onVersion,
   onApprove,
+  onConcludeWithLink,
   onToggleRevision,
   onRevisionText,
   onSendRevision,
@@ -934,9 +989,12 @@ function ReadingPane({
   commentText: string;
   detailsOpen: boolean;
   carouselIndex: number;
+  publishedLink: string;
+  onPublishedLinkChange: (value: string) => void;
   onBack: () => void;
   onVersion: (id: string) => void;
   onApprove: () => void;
+  onConcludeWithLink: () => void;
   onToggleRevision: () => void;
   onRevisionText: (value: string) => void;
   onSendRevision: () => void;
@@ -953,6 +1011,7 @@ function ReadingPane({
   const driveHref = isGoogleDriveUrl(version.fileUrl) ? safeHttpUrl(version.fileUrl) : undefined;
   const isScriptDoc = item.contentType === "script" || item.contentType === "caption";
   const canWatchVideo = Boolean(version.fileUrl) && !driveHref && !isScriptDoc && (item.contentType === "video" || item.contentType === "story");
+  const awaitingVideoWithoutFile = item.approvalStage === "video" && !version.fileUrl && !version.linkUrl;
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
@@ -1014,6 +1073,32 @@ function ReadingPane({
           ) : null}
         </div>
 
+        {item.status !== "approved" ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+            <label className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">
+              <Link2 size={12} /> {t("deliveries.inbox.publishedLinkLabel")}
+            </label>
+            <p className="m-0 text-[11px] font-medium text-emerald-900">{t("deliveries.inbox.concludeWithLinkHint")}</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="url"
+                value={publishedLink}
+                onChange={(e) => onPublishedLinkChange(e.target.value)}
+                placeholder={t("deliveries.inbox.publishedLinkPh")}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+              />
+              <button
+                type="button"
+                onClick={onConcludeWithLink}
+                disabled={!publishedLink.trim()}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold whitespace-nowrap text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                <Link2 size={14} /> {t("deliveries.inbox.concludeWithLink")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {revisionOpen ? (
           <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/50 p-3">
             <h4 className="m-0 text-sm font-black text-purple-900">{t("deliveries.inbox.revisionTitle")}</h4>
@@ -1032,6 +1117,11 @@ function ReadingPane({
       </div>
 
       <div className="space-y-5 p-4">
+        {awaitingVideoWithoutFile ? (
+          <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-3 text-[12px] font-medium text-amber-900">
+            {t("deliveries.inbox.awaitingVideoHint")}
+          </div>
+        ) : null}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           {canWatchVideo && version.fileUrl ? (
             <button

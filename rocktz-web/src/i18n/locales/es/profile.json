@@ -319,6 +319,10 @@
   "waitingVideoApproval": "Video enviado. Espera el análisis de la marca/agencia. El envío queda bloqueado hasta una solicitud de cambio.",
   "videoSentWaiting": "Video enviado — en espera de revisión",
   "scriptApprovedSendVideo": "Guion aprobado. Ahora envía el video (parte 2).",
+  "scriptApprovedSendVideoOrPublishedLink": "Guion aprobado. Envía el video o, si ya publicó, pega el enlace de la publicación.",
+  "publishedLinkInsteadLabel": "¿Ya publicó? Pega el enlace de la publicación",
+  "publishedLinkInsteadHint": "Si el contenido ya está publicado, pega el enlace del post para concluir sin subir el archivo de video.",
+  "videoOrPublishedLinkRequired": "Envía el video, un enlace de descarga o el enlace de la publicación.",
   "sendScriptForReview": "Enviar guion",
   "sendVideoForReview": "Ver solicitud",
   "materialRequiredTitle": "Material obligatorio",
@@ -424,5 +428,5 @@
   "downloadLinkInvalid": "Ingresa un enlace válido que comience con http:// o https://",
   "uploadOrDownloadLink": "o",
   "removeSelectedFile": "Quitar archivo",
-  "videoOrLinkRequired": "Envía el video arrastrando un archivo o informa un enlace de descarga."
+  "videoOrLinkRequired": "Envía el video arrastrando un archivo, informa un enlace de descarga o el enlace de la publicación."
 }

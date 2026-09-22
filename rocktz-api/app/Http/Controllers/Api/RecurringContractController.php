@@ -445,9 +445,22 @@ class RecurringContractController extends Controller
             $materialApproved = $contentPlanningItem->status === ContentPlanningStatus::Approved
                 || $contentPlanningItem->status === ContentPlanningStatus::Published
                 || $contentPlanningItem->video_status === StageApprovalStatus::Approved;
-            if ($isLive || $materialApproved) {
+            $brandPosts = ($data['posting_profile'] ?? $contentPlanningItem->posting_profile) === PostingProfile::Brand;
+            // Empresa/admin sempre; criador (quando não é marca) pode concluir com link mesmo sem vídeo enviado.
+            $canConcludeWithPublishedLink = ! $actorIsCreator || ! $brandPosts;
+            if ($isLive || $materialApproved || $canConcludeWithPublishedLink) {
                 $data['status'] = ContentPlanningStatus::Published;
                 $data['reviewed_at'] = now();
+                if (! $materialApproved && ! $isLive) {
+                    $data['video_status'] = StageApprovalStatus::Approved;
+                    $flowForPublish = $data['approval_flow'] ?? $contentPlanningItem->approval_flow;
+                    if (
+                        $flowForPublish !== ApprovalFlowType::VideoOnly
+                        && $contentPlanningItem->script_status !== StageApprovalStatus::Approved
+                    ) {
+                        $data['script_status'] = StageApprovalStatus::Approved;
+                    }
+                }
             }
         }
 
@@ -477,7 +490,10 @@ class RecurringContractController extends Controller
                 $data['reviewed_at'] = now();
             }
             if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Approved)) {
-                $data['status'] = ContentPlanningStatus::Approved;
+                // Não rebaixa published → approved quando a conclusão veio pelo link da postagem.
+                if (! NotificationService::is($data['status'] ?? null, ContentPlanningStatus::Published)) {
+                    $data['status'] = ContentPlanningStatus::Approved;
+                }
                 $data['reviewed_at'] = now();
             }
         }

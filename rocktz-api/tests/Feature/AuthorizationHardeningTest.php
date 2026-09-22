@@ -241,6 +241,34 @@ class AuthorizationHardeningTest extends TestCase
             ->assertJsonPath('data.delivery_status', 'published');
     }
 
+    public function test_creator_can_complete_pauta_with_published_url_without_video(): void
+    {
+        $creator = Creator::factory()->active()->create();
+        $item = ContentPlanningItem::factory()->create([
+            'creator_id' => $creator->id,
+            'briefing' => 'Mostrar o produto nos primeiros segundos.',
+            'status' => ContentPlanningStatus::InProduction,
+            'script_status' => StageApprovalStatus::Approved,
+            'video_status' => null,
+            'media_url' => null,
+            'submission_url' => null,
+            'posting_profile' => PostingProfile::Creator,
+        ]);
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $item->recurring_contract_id,
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'published_url' => 'https://instagram.com/reel/link-only-complete',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.published_url', 'https://instagram.com/reel/link-only-complete')
+            ->assertJsonPath('data.status', 'published')
+            ->assertJsonPath('data.video_status', 'approved');
+    }
+
     public function test_creator_can_update_pauta_published_url_after_publication(): void
     {
         $creator = Creator::factory()->active()->create();

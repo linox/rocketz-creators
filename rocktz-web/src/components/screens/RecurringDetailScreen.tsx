@@ -31,6 +31,7 @@ import {
   LayoutGrid,
   History,
   Layers,
+  Link2,
   MessageSquare,
   PieChart,
   Play,
@@ -952,7 +953,28 @@ function DetailInner() {
 
   async function onToggleDone(item: PlanningItem) {
     try {
-      await api.updatePlanningItem(item.id, { status: isDone(item.status) ? "planned" : "approved" });
+      if (isDone(item.status)) {
+        await api.updatePlanningItem(item.id, { status: "planned" });
+      } else {
+        const published = (liveLinkDraft[item.id] ?? item.published_url ?? "").trim();
+        const body: Record<string, unknown> = {
+          status: "approved",
+          script_status: "approved",
+          video_status: "approved",
+          script_feedback: "",
+          video_feedback: "",
+          feedback_note: "",
+        };
+        if (published) {
+          if (!safeHttpUrl(published)) {
+            await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.publishedLinkRequired"));
+            return;
+          }
+          body.published_url = published;
+          body.status = "published";
+        }
+        await api.updatePlanningItem(item.id, body);
+      }
       load();
     } catch (err) {
       await alertApiError(err);
@@ -1787,6 +1809,31 @@ function DetailInner() {
                               </div>
                             ) : null}
                           </div>
+                          {canManage && !done && !live ? (
+                            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                              <label className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+                                <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
+                              </label>
+                              <p className="m-0 text-[11px] font-medium text-emerald-900">{t("recurringDetail.concludeWithPublishedLinkHint")}</p>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <input
+                                  type="url"
+                                  value={liveLinkDraft[item.id] ?? item.published_url ?? ""}
+                                  onChange={(e) => setLiveLinkDraft((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                  placeholder={t("campaignDetail.publishedLinkPh")}
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void onToggleDone(item)}
+                                  disabled={!(liveLinkDraft[item.id] ?? item.published_url ?? "").trim()}
+                                  className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold whitespace-nowrap text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                                >
+                                  <Link2 size={12} /> {t("recurringDetail.markDoneWithLink")}
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                           {live && (item.published_url || canManage) && !isCreator ? (
                             <div className="flex flex-col gap-2 rounded-xl border border-purple-100 bg-purple-50/40 p-3">
                               <span className="text-[10px] font-bold tracking-wider text-purple-700 uppercase">{t("recurringDetail.liveLinkLabel")}</span>

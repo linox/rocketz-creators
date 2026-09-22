@@ -384,6 +384,13 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   if ((staged && scriptReady) || videoOnly || flow === "live_link" || (!staged && !scriptOnly)) {
     if (row.video_status === "submitted" || row.video_status === "revision" || (row.delivery_status === "sent" && row.content?.video_url && row.video_status !== "approved")) {
       items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
+    } else if (
+      row.video_status !== "approved"
+      && row.delivery_status !== "approved"
+      && row.delivery_status !== "published"
+    ) {
+      // Aguardando vídeo: aparece na inbox para concluir com link da publicação
+      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
     }
   }
 
@@ -550,6 +557,14 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
       || item.video_status === "revision"
       || (item.status === "review" && Boolean(item.media_url || item.submission_url) && item.script_status !== "submitted");
     if (videoPending) {
+      items.push(buildPlanningStageItem(contract, item, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
+    } else if (
+      item.video_status !== "approved"
+      && item.status !== "approved"
+      && item.status !== "published"
+      && !live
+    ) {
+      // Aguardando vídeo: aparece na inbox para concluir com link da publicação
       items.push(buildPlanningStageItem(contract, item, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
     }
   }

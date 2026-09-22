@@ -319,6 +319,10 @@
   "waitingVideoApproval": "Video submitted. Wait for brand/agency review. Submission stays locked until a change is requested.",
   "videoSentWaiting": "Video submitted — awaiting review",
   "scriptApprovedSendVideo": "Script approved. Now send the video (part 2).",
+  "scriptApprovedSendVideoOrPublishedLink": "Script approved. Send the video or, if already posted, paste the publication link.",
+  "publishedLinkInsteadLabel": "Already posted? Paste the publication link",
+  "publishedLinkInsteadHint": "If the content is already live, paste the post link to finish without uploading a video file.",
+  "videoOrPublishedLinkRequired": "Send the video, a download link, or the publication link.",
   "sendScriptForReview": "Send script",
   "sendVideoForReview": "View request",
   "materialRequiredTitle": "Material required",
@@ -424,5 +428,5 @@
   "downloadLinkInvalid": "Enter a valid link starting with http:// or https://",
   "uploadOrDownloadLink": "or",
   "removeSelectedFile": "Remove file",
-  "videoOrLinkRequired": "Upload a video by dragging a file or provide a download link."
+  "videoOrLinkRequired": "Upload a video by dragging a file, provide a download link, or the publication link."
 }

@@ -143,11 +143,15 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
         await alertWarning(tp("materialRequiredTitle"), tp("newVideoFileRequired"));
         return;
       }
-      if (!videoFile && !downloadUrl.trim() && !item.media_url && !item.submission_url) {
-        await alertWarning(tp("materialRequiredTitle"), tp("videoOrLinkRequired"));
+      if (!videoFile && !downloadUrl.trim() && !item.media_url && !item.submission_url && !publishedUrl.trim()) {
+        await alertWarning(tp("materialRequiredTitle"), tp("videoOrPublishedLinkRequired"));
         return;
       }
       if (downloadUrl.trim() && !safeHttpUrl(downloadUrl.trim())) {
+        await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
+        return;
+      }
+      if (publishedUrl.trim() && !safeHttpUrl(publishedUrl.trim())) {
         await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
         return;
       }
@@ -188,10 +192,19 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
           media_url: externalVideoUrl,
           submission_url: externalVideoUrl,
           video_status: "submitted",
+          ...(publishedUrl.trim() ? { published_url: publishedUrl.trim() } : {}),
         });
         setDownloadUrl("");
         onSubmitted();
         void alertSuccess(hasRevision ? tp("newVersionSent") : tp("materialSent"), undefined, { timerMs: 2000 });
+        return;
+      }
+
+      // Postou direto na rede: conclui só com o link da publicação
+      if (canSubmitVideo && publishedUrl.trim() && !videoFile && !externalVideoUrl) {
+        await api.updatePlanningItem(item.id, { published_url: publishedUrl.trim() });
+        onSubmitted();
+        void alertSuccess(tp("publishedLinkSent"), undefined, { timerMs: 2000 });
         return;
       }
 
@@ -248,7 +261,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const videoReady = canSubmitVideo
     ? (requiresNewVideoFile
       ? Boolean(videoFile || downloadUrl.trim())
-      : Boolean(videoFile || downloadUrl.trim() || item.media_url || item.submission_url))
+      : Boolean(videoFile || downloadUrl.trim() || item.media_url || item.submission_url || publishedUrl.trim()))
     : false;
   const disabled = submitting
     || isBackgroundUploading
@@ -546,7 +559,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
       {staged && scriptApproved && !videoApproved && !videoRevision && !awaitingVideoApproval && !done ? (
         <p className="m-0 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-semibold text-emerald-900">
-          {tp("scriptApprovedSendVideo")}
+          {tp("scriptApprovedSendVideoOrPublishedLink")}
         </p>
       ) : null}
 
@@ -600,6 +613,23 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
             showPreviousAttached={Boolean(!videoFile && !downloadUrl.trim() && (item.media_url || item.submission_url))}
             attachedHint={requiresNewVideoFile ? tp("previousVideoAttachedSelectNew") : t("recurringDetail.pautaVideoAttached")}
           />
+          {!brandPosts && !requiresNewVideoFile ? (
+            <div className="mt-1 flex flex-col gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5">
+              <label className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+                <Link2 size={12} />
+                {tp("publishedLinkInsteadLabel")}
+              </label>
+              <input
+                type="url"
+                placeholder={tp("publishedLinkPh")}
+                value={publishedUrl}
+                disabled={submitting || isBackgroundUploading || Boolean(videoFile)}
+                onChange={(event) => setPublishedUrl(event.target.value)}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+              />
+              <p className="m-0 text-[10px] leading-relaxed text-emerald-800/80">{tp("publishedLinkInsteadHint")}</p>
+            </div>
+          ) : null}
         </div>
       ) : awaitingVideoApproval && (item.media_url || item.submission_url) ? (
         <div className="flex flex-col gap-1.5">
@@ -635,12 +665,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
                 : "bg-brand-primary text-white hover:bg-indigo-600",
           )}
         >
-          {hasRevision ? <RefreshCw size={14} /> : <CheckCircle2 size={14} />}
+          {hasRevision ? <RefreshCw size={14} /> : publishedUrl.trim() && !videoFile && !downloadUrl.trim() ? <Link2 size={14} /> : <CheckCircle2 size={14} />}
           {hasRevision
             ? tp("sendNewVersionNumbered", { n: canSubmitVideo ? nextVideoVersion : nextScriptVersion })
             : canSubmitScript && staged
               ? tp("sendScriptForReview")
-              : tp("sendForReview")}
+              : publishedUrl.trim() && !videoFile && !downloadUrl.trim()
+                ? tp("sendPublishedLink")
+                : tp("sendForReview")}
         </button>
         )
       ) : null}

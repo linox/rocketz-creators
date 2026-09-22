@@ -140,6 +140,10 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
         return;
       }
+      if (publishedUrl.trim() && !safeHttpUrl(publishedUrl.trim())) {
+        await alertWarning(tp("materialRequiredTitle"), tp("downloadLinkInvalid"));
+        return;
+      }
     } else if (!script.trim() && !videoFile && !publishedUrl.trim()) {
       await alertWarning(tp("materialRequiredTitle"), tp("materialRequired"));
       return;
@@ -423,7 +427,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
         {stagedFlow && scriptApproved && !videoApproved && !videoRevision && !awaitingVideoApproval && !linkStage ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900">
-            {tp("scriptApprovedSendVideo")}
+            {tp("scriptApprovedSendVideoOrPublishedLink")}
           </div>
         ) : null}
 
@@ -477,6 +481,23 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                 showPreviousAttached={Boolean(requiresNewVideoFile && row.content?.video_url && !videoFile && !downloadUrl.trim())}
                 attachedHint={tp("previousVideoAttachedSelectNew")}
               />
+              {!brandPosts && !requiresNewVideoFile ? (
+                <div className="mt-1 flex flex-col gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+                    <Link2 size={12} />
+                    {tp("publishedLinkInsteadLabel")}
+                  </label>
+                  <input
+                    type="url"
+                    placeholder={tp("publishedLinkPh")}
+                    value={publishedUrl}
+                    disabled={submitting || isBackgroundUploading || Boolean(videoFile)}
+                    onChange={(event) => setPublishedUrl(event.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+                  />
+                  <p className="m-0 text-[10px] leading-relaxed text-emerald-800/80">{tp("publishedLinkInsteadHint")}</p>
+                </div>
+              ) : null}
             </div>
 
             {row.content?.video_url ? (
@@ -585,7 +606,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                       : "bg-brand-primary text-white shadow-indigo-600/20 hover:bg-indigo-600",
               )}
             >
-              {linkStage ? <Link2 size={15} /> : hasRevision ? <RefreshCw size={15} /> : <CheckCircle2 size={15} />}
+              {linkStage ? <Link2 size={15} /> : hasRevision ? <RefreshCw size={15} /> : publishedUrl.trim() && !videoFile && !downloadUrl.trim() && canSubmitVideo ? <Link2 size={15} /> : <CheckCircle2 size={15} />}
               {linkStage
                 ? (isPublished ? tp("savePublishedLink") : tp("sendPublishedLink"))
                 : hasRevision
@@ -594,7 +615,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
                     })
                   : canSubmitScript && stagedFlow
                     ? tp("sendScriptForReview")
-                    : tp("sendForReview")}
+                    : publishedUrl.trim() && !videoFile && !downloadUrl.trim() && canSubmitVideo
+                      ? tp("sendPublishedLink")
+                      : tp("sendForReview")}
             </button>
             ) : null}
           </div>

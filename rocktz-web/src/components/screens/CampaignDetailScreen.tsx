@@ -1880,15 +1880,28 @@ function DetailInner() {
                           </p>
                           )
                         ) : (
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
-                            <textarea
-                              rows={3}
-                              placeholder={t("campaignDetail.feedbackPh")}
-                              value={feedback[selected.id] ?? selected.revision_details ?? ""}
-                              onChange={(event) => setFeedback((prev) => ({ ...prev, [selected.id]: event.target.value }))}
-                              className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium outline-none focus:border-brand-primary"
-                            />
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.feedbackLabel")}</label>
+                              <textarea
+                                rows={3}
+                                placeholder={t("campaignDetail.feedbackPh")}
+                                value={feedback[selected.id] ?? selected.revision_details ?? ""}
+                                onChange={(event) => setFeedback((prev) => ({ ...prev, [selected.id]: event.target.value }))}
+                                className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium outline-none focus:border-brand-primary"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                              <label className="text-[9px] font-bold tracking-wider text-emerald-800 uppercase">{t("campaignDetail.publishedLinkLabel")}</label>
+                              <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.concludeWithPublishedLinkHint")}</p>
+                              <input
+                                type="url"
+                                placeholder={t("campaignDetail.publishedLinkPh")}
+                                value={publishedLinkDraft}
+                                onChange={(event) => setPublishedLinkDraft(event.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium outline-none focus:border-brand-primary"
+                              />
+                            </div>
                           </div>
                         )}
                         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -1914,13 +1927,29 @@ function DetailInner() {
                                 <button type="button" disabled={updatingId !== null} onClick={() => void requestRevision(selected)} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-rose-800 uppercase hover:bg-rose-100 disabled:opacity-50">
                                   {t("campaignDetail.requestRevision")}
                                 </button>
-                                {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url) ? (
+                                {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url && !publishedLinkDraft.trim()) ? (
                                   <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { script_status: "approved", script_feedback: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
                                     <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveScript")}
                                   </button>
                                 ) : (
-                                  <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { delivery_status: "approved", script_status: "approved", video_status: "approved", revision_details: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
-                                    <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveMaterial")}
+                                  <button
+                                    type="button"
+                                    disabled={updatingId !== null}
+                                    onClick={() => {
+                                      const published = publishedLinkDraft.trim();
+                                      const body: Record<string, unknown> = {
+                                        delivery_status: published ? "published" : "approved",
+                                        script_status: "approved",
+                                        video_status: "approved",
+                                        revision_details: "",
+                                      };
+                                      if (published) body.published_link = published;
+                                      void patch(selected, body);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    <ThumbsUp size={12} fill="currentColor" />
+                                    {publishedLinkDraft.trim() ? t("campaignDetail.approveWithPublishedLink") : t("campaignDetail.approveMaterial")}
                                   </button>
                                 )}
                               </>
