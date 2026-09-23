@@ -410,6 +410,43 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.status', 'briefing');
     }
 
+    public function test_privileged_company_user_can_delete_own_campaign_and_recurring_any_time(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyId = (int) $company->actingCompanyId();
+        $token = $company->createToken('auth')->plainTextToken;
+        $campaign = Campaign::factory()->published()->create(['company_id' => $companyId]);
+        $contract = RecurringContract::factory()->create(['company_id' => $companyId]);
+        $foreignCampaign = Campaign::factory()->finished()->create();
+        $foreignContract = RecurringContract::factory()->create();
+
+        $this->withToken($token)->deleteJson("/api/campaigns/{$campaign->id}")->assertForbidden();
+        $this->withToken($token)->deleteJson("/api/recurring-contracts/{$contract->id}")->assertForbidden();
+
+        $company->companyUser()->update(['can_publish_without_approval' => true]);
+
+        $this->withToken($token)
+            ->deleteJson("/api/campaigns/{$foreignCampaign->id}")
+            ->assertForbidden();
+        $this->withToken($token)
+            ->deleteJson("/api/recurring-contracts/{$foreignContract->id}")
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->deleteJson("/api/campaigns/{$campaign->id}")
+            ->assertOk();
+        $this->withToken($token)
+            ->deleteJson("/api/recurring-contracts/{$contract->id}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('campaigns', ['id' => $campaign->id]);
+        $this->assertDatabaseMissing('recurring_contracts', ['id' => $contract->id]);
+        $this->assertDatabaseHas('campaigns', ['id' => $foreignCampaign->id]);
+        $this->assertDatabaseHas('recurring_contracts', ['id' => $foreignContract->id]);
+    }
+
     public function test_company_cannot_self_approve_pending_campaign(): void
     {
         $this->seed();

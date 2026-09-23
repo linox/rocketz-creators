@@ -432,7 +432,8 @@ function DetailInner() {
   const isCreator = user.role === "creator";
   const ownCreatorId = user.creator?.id ?? null;
   const canManage = user.role === "admin" || user.role === "company";
-  const canChangeStatus = user.role === "admin" || Boolean(user.can_publish_without_approval);
+  const canPublishWithoutApproval = user.role === "admin" || Boolean(user.can_publish_without_approval);
+  const canChangeStatus = canPublishWithoutApproval;
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1202,7 +1203,7 @@ function DetailInner() {
                 <CheckCircle2 size={14} /> {t("campaignDetail.approveAgency")}
               </button>
             ) : null}
-            {isAdmin ? (
+            {canPublishWithoutApproval ? (
               <button type="button" onClick={() => void removeCampaign()} title={t("campaignDetail.deleteTitle")} className="rounded-xl border border-transparent p-2 text-slate-400 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
                 <Trash2 size={16} />
               </button>

@@ -430,6 +430,7 @@ function DetailInner() {
   const id = String(numericIdFromBrowser("recurring", pathname) ?? "");
   const canManage = user.role === "admin" || user.role === "company";
   const isAdmin = user.role === "admin";
+  const canPublishWithoutApproval = user.role === "admin" || Boolean(user.can_publish_without_approval);
   const isCreator = user.role === "creator";
   const ownCreatorId = user.creator?.id ?? null;
 
@@ -1094,7 +1095,7 @@ function DetailInner() {
                 <CheckCircle2 size={14} /> {t("recurringDetail.approveAgency")}
               </button>
             ) : null}
-            {isAdmin ? (
+            {canPublishWithoutApproval ? (
               <button type="button" onClick={onDeleteProject} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-500 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
                 <Trash2 size={14} /> {t("recurringDetail.deleteProject")}
               </button>

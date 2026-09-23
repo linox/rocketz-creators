@@ -641,7 +641,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                             <button type="button" onClick={() => openContractModal(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" title={t("recurring.edit")}>
                               <Edit3 size={16} />
                             </button>
-                            {isAdmin ? (
+                            {canPublishWithoutApproval ? (
                               <button type="button" onClick={() => onDeleteContract(contract)} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600" title={t("recurring.delete")}>
                                 <Trash2 size={16} />
                               </button>
@@ -1166,7 +1166,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 </div>
               )}
               <div className="flex items-center gap-3 border-t border-slate-100 bg-white pt-4">
-                {editingContract ? (
+                {editingContract && canPublishWithoutApproval ? (
                   <button
                     type="button"
                     onClick={() => { setContractModal(false); void onDeleteContract(editingContract); }}

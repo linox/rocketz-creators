@@ -233,6 +233,7 @@ class RecurringContractController extends Controller
     public function destroy(Request $request, RecurringContract $recurringContract): JsonResponse
     {
         $this->assertCanManage($request, $recurringContract);
+        abort_unless($request->user()->canPublishWithoutApproval(), 403, __('auth.forbidden_permission'));
         $recurringContract->delete();
 
         return response()->json(['message' => __('auth.contract_removed')]);

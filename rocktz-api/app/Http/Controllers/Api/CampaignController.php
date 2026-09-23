@@ -261,8 +261,10 @@ class CampaignController extends Controller
         return response()->json(['data' => new CampaignResource($campaign)]);
     }
 
-    public function destroy(Campaign $campaign): JsonResponse
+    public function destroy(Request $request, Campaign $campaign): JsonResponse
     {
+        $this->assertCanManage($request, $campaign);
+        abort_unless($request->user()->canPublishWithoutApproval(), 403, __('auth.forbidden_permission'));
         $campaign->delete();
 
         return response()->json(['message' => __('auth.campaign_removed')]);
