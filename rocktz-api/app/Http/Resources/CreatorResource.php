@@ -32,6 +32,7 @@ class CreatorResource extends JsonResource
             'email' => $this->when($canSeePersonal, $this->user?->email),
             'city' => $this->city,
             'country' => $this->country,
+            'currency' => $this->currencyCode(),
             'state' => $this->state,
             'birth_date' => $this->when($canSeePersonal, $this->birth_date?->toDateString()),
             'pix_key' => $this->when($canSeePersonal, $this->pix_key),

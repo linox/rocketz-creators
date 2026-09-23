@@ -81,6 +81,8 @@
   "city": "City",
   "stateUf": "Region / State",
   "country": "Country",
+  "currency": "Payment currency",
+  "currencyHint": "At signup, the currency follows the country. You can change the country or the currency.",
   "region": "Region / State",
   "accessAllCountries": "Access campaigns from all countries",
   "accessAllCountriesHint": "Unlocks the campaign marketplace from other countries. Otherwise the creator only sees their home country.",

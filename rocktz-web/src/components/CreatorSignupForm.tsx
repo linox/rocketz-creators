@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PasswordField } from "@/components/PasswordField";
 import { Select2Field } from "@/components/Select2Field";
-import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
+import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { alertApiError, alertWarning } from "@/lib/alerts";
 import type { AuthPayload } from "@/lib/auth";
 import { getAppLocale } from "@/i18n/config";
@@ -21,8 +21,11 @@ import {
 } from "@/lib/masks";
 import {
   DEFAULT_COUNTRY,
+  DEFAULT_CURRENCY,
+  defaultCurrencyForCountry,
   hasRegions,
   isValidCountry,
+  isValidCurrency,
   isValidRegion,
 } from "@/lib/geo";
 import { CREATOR_CATEGORY_VALUES } from "@/lib/creatorCategories";
@@ -70,6 +73,7 @@ export function CreatorSignupForm({ landingSlug, accentColor = "#7C3AED", onSucc
     whatsapp: "",
     city: "",
     country: DEFAULT_COUNTRY,
+    currency: DEFAULT_CURRENCY,
     state: "",
     email: "",
     password: "",
@@ -107,6 +111,10 @@ export function CreatorSignupForm({ landingSlug, accentColor = "#7C3AED", onSucc
       }
       if (!isValidCountry(creator.country)) {
         await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+        return;
+      }
+      if (!isValidCurrency(creator.currency)) {
+        await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
         return;
       }
       if (hasRegions(creator.country) && !isValidRegion(creator.country, creator.state)) {
@@ -205,15 +213,24 @@ export function CreatorSignupForm({ landingSlug, accentColor = "#7C3AED", onSucc
             <ModalField label={ta("fields.whatsapp")} required>
               <input placeholder={ta("fields.whatsappPh")} inputMode="tel" autoComplete="tel" className={creatorModalInput} value={creator.whatsapp} onChange={(e) => setCreator({ ...creator, whatsapp: formatWhatsApp(e.target.value) })} />
             </ModalField>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <ModalField label={ta("fields.country")} required>
                 <CountrySelect
                   theme="light"
                   placeholder={ta("fields.countryPh")}
                   value={creator.country}
-                  onChange={(value) => setCreator({ ...creator, country: value, state: "" })}
+                  onChange={(value) => setCreator({ ...creator, country: value, state: "", currency: defaultCurrencyForCountry(value) })}
                 />
               </ModalField>
+              <ModalField label={ta("fields.currency")} required>
+                <CurrencySelect
+                  theme="light"
+                  placeholder={ta("fields.currencyPh")}
+                  value={creator.currency}
+                  onChange={(value) => setCreator({ ...creator, currency: value })}
+                />
+              </ModalField>
+              <div className="sm:col-span-2">
               <ModalField label={ta("fields.region")} required>
                 <RegionSelect
                   theme="light"
@@ -223,9 +240,12 @@ export function CreatorSignupForm({ landingSlug, accentColor = "#7C3AED", onSucc
                   onChange={(value) => setCreator({ ...creator, state: value })}
                 />
               </ModalField>
+              </div>
+              <div className="sm:col-span-2">
               <ModalField label={ta("fields.city")} required>
                 <input placeholder={ta("fields.cityPh")} autoComplete="address-level2" className={creatorModalInput} value={creator.city} onChange={(e) => setCreator({ ...creator, city: e.target.value })} />
               </ModalField>
+              </div>
             </div>
             <div className="flex items-center gap-3 pt-2">
               <button type="button" onClick={() => setStep(1)} className="w-1/3 rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200">{tc("back")}</button>

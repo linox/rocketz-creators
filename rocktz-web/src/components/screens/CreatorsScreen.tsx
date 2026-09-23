@@ -17,7 +17,7 @@ import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatIntegerMask, isValidEmail, parseIntegerMask, parseMoneyMask, passwordError } from "@/lib/masks";
-import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
+import { DEFAULT_COUNTRY, currencyForProfile, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentPlaceholder, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
@@ -92,7 +92,7 @@ function CreatorFeeValue({
   }
   return (
     <>
-      {formatCurrency(creator.pricing?.reel || 0, defaultCurrencyForCountry(creator.country))} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
+      {formatCurrency(creator.pricing?.reel || 0, currencyForProfile(creator.currency, creator.country))} <span className="text-[10px] font-medium text-[#64748B]">{t("creators.perReel")}</span>
     </>
   );
 }

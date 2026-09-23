@@ -2292,6 +2292,8 @@
     "state": "Región / Estado",
     "statePh": "Selecciona la región",
     "currency": "Moneda de pago",
+    "currencyPh": "Selecciona la moneda",
+    "currencyHint": "Al registrarte, la moneda sigue al país. Puedes cambiar el país o la moneda.",
     "bio": "Biografía / presentación",
     "bioPh": "Cuenta brevemente tu estilo de contenido, nicho, experiencias o historial profesional...",
     "saveChanges": "Guardar cambios",

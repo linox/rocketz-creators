@@ -137,6 +137,7 @@ class CreatorController extends Controller
             'whatsapp' => ['nullable', 'string', 'max:30'],
             'city' => ['nullable', 'string', 'max:120'],
             'country' => Geo::countryRules(false),
+            'currency' => Geo::currencyRules(false),
             'state' => Geo::regionRules($request->string('country')->toString() ?: null, false),
             'cpf' => ['nullable', 'string', 'max:40'],
             'photo_url' => ['nullable', 'string', 'max:2048'],
@@ -151,8 +152,9 @@ class CreatorController extends Controller
         }
 
         $handle = ltrim((string) ($data['instagram'] ?? $data['artistic_name']), '@');
+        $country = Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY);
 
-        $creator = DB::transaction(function () use ($data, $handle, $isCompany, $companyId) {
+        $creator = DB::transaction(function () use ($data, $handle, $isCompany, $companyId, $country) {
             $user = User::query()->create([
                 'name' => $data['full_name'],
                 'email' => Str::lower($data['email']),
@@ -169,7 +171,8 @@ class CreatorController extends Controller
                 'document' => $data['cpf'] ?? null,
                 'whatsapp' => $data['whatsapp'] ?? null,
                 'city' => $data['city'] ?? null,
-                'country' => Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY),
+                'country' => $country,
+                'currency' => Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($country)),
                 'state' => isset($data['state']) ? Geo::normalizeRegion($data['state']) : null,
                 'can_access_all_countries' => (bool) ($data['can_access_all_countries'] ?? false),
                 'socials' => ['instagram' => $handle],
@@ -212,6 +215,7 @@ class CreatorController extends Controller
             'whatsapp' => ['sometimes', 'string', 'max:30'],
             'city' => ['sometimes', 'string', 'max:120'],
             'country' => Geo::countryRules(false),
+            'currency' => Geo::currencyRules(false),
             'state' => Geo::regionRules($request->input('country') ?: $creator->country, false),
             'bio' => ['nullable', 'string'],
             'document' => ['nullable', 'string', 'max:40'],
@@ -244,6 +248,10 @@ class CreatorController extends Controller
 
         if (isset($data['country'])) {
             $data['country'] = Geo::normalizeCountry($data['country']);
+        }
+
+        if (isset($data['currency'])) {
+            $data['currency'] = Geo::normalizeCurrency($data['currency']);
         }
 
         if (isset($data['state'])) {

@@ -87,11 +87,11 @@ import {
   type CreatorDeliveryActionKind,
 } from "@/lib/content-delivery-status";
 import { formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask } from "@/lib/masks";
-import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, hasRegions, isValidRegion } from "@/lib/geo";
+import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, currencyForProfile, defaultCurrencyForCountry, formatLocation, hasRegions, isValidCurrency, isValidRegion } from "@/lib/geo";
 import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { MoneyInput } from "@/components/MoneyInput";
-import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
+import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
@@ -550,6 +550,30 @@ const EMPTY_PRICES: PriceForm = {
   kwai: "",
 };
 
+function remaskAllPrices(current: PriceForm, from?: string | null, to?: string | null): PriceForm {
+  return {
+    story: remaskMoney(current.story, from, to),
+    reel: remaskMoney(current.reel, from, to),
+    post: remaskMoney(current.post, from, to),
+    combo: remaskMoney(current.combo, from, to),
+    tiktok: remaskMoney(current.tiktok, from, to),
+    youtube: remaskMoney(current.youtube, from, to),
+    kwai: remaskMoney(current.kwai, from, to),
+  };
+}
+
+function pricesFromCreator(data: Creator, currency: string): PriceForm {
+  return {
+    story: moneyToMask(data.pricing?.story, currency),
+    reel: moneyToMask(data.pricing?.reel, currency),
+    post: moneyToMask(data.pricing?.post, currency),
+    combo: moneyToMask(data.pricing?.combo, currency),
+    tiktok: moneyToMask(data.pricing?.tiktok, currency),
+    youtube: moneyToMask(data.pricing?.youtube, currency),
+    kwai: moneyToMask(data.pricing?.kwai, currency),
+  };
+}
+
 function maskPII(value: string | null | undefined, hidden: boolean | undefined, fallback: string) {
   if (!value) return fallback;
   if (hidden) return "••••••••";
@@ -604,6 +628,7 @@ function ProfileInner() {
   const [whatsapp, setWhatsapp] = useState("");
   const [city, setCity] = useState("");
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [state, setState] = useState("");
   const [cpf, setCpf] = useState("");
   const [bio, setBio] = useState("");
@@ -615,7 +640,7 @@ function ProfileInner() {
   const [categories, setCategories] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState("");
   const [syncingNetwork, setSyncingNetwork] = useState<NetworkKey | "all" | null>(null);
-  const priceCurrency = defaultCurrencyForCountry(country);
+  const priceCurrency = currencyForProfile(currency, country);
   const documentsLabel = taxDocumentsLabel(country, tc("orConjunction"), tc("taxIdFallback"));
 
   const isAdmin = user.role === "admin";
@@ -641,7 +666,10 @@ function ProfileInner() {
     setArtisticName(data.artistic_name);
     setWhatsapp(data.whatsapp ?? "");
     setCity(data.city ?? "");
-    setCountry(data.country || DEFAULT_COUNTRY);
+    const nextCountry = data.country || DEFAULT_COUNTRY;
+    const nextCurrency = currencyForProfile(data.currency, nextCountry);
+    setCountry(nextCountry);
+    setCurrency(nextCurrency);
     setState(data.state ?? "");
     setCpf(data.cpf || data.document || "");
     setBio(data.bio ?? "");
@@ -671,15 +699,7 @@ function ProfileInner() {
         engagement: percentToMask(data.metrics?.kwai_engagement),
       },
     });
-    setPrices({
-      story: moneyToMask(data.pricing?.story, defaultCurrencyForCountry(data.country)),
-      reel: moneyToMask(data.pricing?.reel, defaultCurrencyForCountry(data.country)),
-      post: moneyToMask(data.pricing?.post, defaultCurrencyForCountry(data.country)),
-      combo: moneyToMask(data.pricing?.combo, defaultCurrencyForCountry(data.country)),
-      tiktok: moneyToMask(data.pricing?.tiktok, defaultCurrencyForCountry(data.country)),
-      youtube: moneyToMask(data.pricing?.youtube, defaultCurrencyForCountry(data.country)),
-      kwai: moneyToMask(data.pricing?.kwai, defaultCurrencyForCountry(data.country)),
-    });
+    setPrices(pricesFromCreator(data, nextCurrency));
     setAcceptsExchange(data.accepts_exchange);
     setAcceptsPaidTraffic(data.accepts_paid_traffic);
     setAcceptsExclusivity(data.accepts_exclusivity);
@@ -1046,6 +1066,10 @@ function ProfileInner() {
       await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
       return;
     }
+    if (!isValidCurrency(currency)) {
+      await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
+      return;
+    }
     try {
       await api.updateCreator(profile.id, {
         full_name: fullName.trim(),
@@ -1053,6 +1077,7 @@ function ProfileInner() {
         whatsapp: whatsapp || null,
         city: city || null,
         country,
+        currency,
         state: state || null,
         cpf: cpf || null,
         document: cpf || null,
@@ -1414,7 +1439,7 @@ function ProfileInner() {
                 socials={creator.socials}
                 pricing={creator.pricing}
                 formatNumber={formatNumber}
-                formatCurrency={(value) => formatCurrency(value, defaultCurrencyForCountry(creator.country))}
+                formatCurrency={(value) => formatCurrency(value, currencyForProfile(creator.currency, creator.country))}
               />
 
               <h3 className="border-b border-[#F1F5F9] pt-3 pb-3 text-[14px] font-bold tracking-wider text-[#0F172A] uppercase">{tp("contactInfo")}</h3>
@@ -1560,19 +1585,19 @@ function ProfileInner() {
                   <Field label={tp("country")}>
                     <CountrySelect theme="light" value={country} onChange={(value) => {
                       const nextCurrency = defaultCurrencyForCountry(value);
-                      setPrices((current) => ({
-                        story: remaskMoney(current.story, priceCurrency, nextCurrency),
-                        reel: remaskMoney(current.reel, priceCurrency, nextCurrency),
-                        post: remaskMoney(current.post, priceCurrency, nextCurrency),
-                        combo: remaskMoney(current.combo, priceCurrency, nextCurrency),
-                        tiktok: remaskMoney(current.tiktok, priceCurrency, nextCurrency),
-                        youtube: remaskMoney(current.youtube, priceCurrency, nextCurrency),
-                        kwai: remaskMoney(current.kwai, priceCurrency, nextCurrency),
-                      }));
+                      setPrices((current) => remaskAllPrices(current, priceCurrency, nextCurrency));
                       setCountry(value);
+                      setCurrency(nextCurrency);
                       setState("");
                       setCpf((current) => formatTaxDocument(value, current));
                     }} />
+                  </Field>
+                  <Field label={tp("currency")}>
+                    <CurrencySelect theme="light" value={currency} onChange={(value) => {
+                      setPrices((current) => remaskAllPrices(current, priceCurrency, value));
+                      setCurrency(value);
+                    }} />
+                    <p className="text-[10px] text-slate-500">{tp("currencyHint")}</p>
                   </Field>
                   <Field label={tp("stateUf")}>
                     <RegionSelect theme="light" country={country} value={state} onChange={setState} />
@@ -3023,7 +3048,7 @@ function CreatorMediaKitPanel({ creator }: { creator: Creator }) {
             socials={creator.socials}
             pricing={creator.pricing}
             formatNumber={formatNumber}
-            formatCurrency={(value) => formatCurrency(value, defaultCurrencyForCountry(creator.country))}
+            formatCurrency={(value) => formatCurrency(value, currencyForProfile(creator.currency, creator.country))}
           />
         </div>
         <div className="mt-4">

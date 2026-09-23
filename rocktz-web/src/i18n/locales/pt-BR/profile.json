@@ -81,6 +81,8 @@
   "city": "Cidade",
   "stateUf": "Região / Estado",
   "country": "País",
+  "currency": "Moeda de pagamento",
+  "currencyHint": "No cadastro, a moeda segue o país. Você pode alterar o país ou a moeda.",
   "region": "Região / Estado",
   "accessAllCountries": "Acesso a campanhas de todos os países",
   "accessAllCountriesHint": "Libera a vitrine de campanhas de outros países. Sem isso, o criador vê só o país de origem.",

@@ -32,6 +32,11 @@ export function defaultCurrencyForCountry(country?: string | null): string {
   return COUNTRIES[code] || DEFAULT_CURRENCY;
 }
 
+export function currencyForProfile(currency?: string | null, country?: string | null): string {
+  const code = normalizeCurrency(currency);
+  return isValidCurrency(code) ? code : defaultCurrencyForCountry(country);
+}
+
 export function isValidCurrency(value?: string | null): boolean {
   const code = normalizeCurrency(value);
   return Boolean(code && Object.values(COUNTRIES).includes(code));

@@ -257,7 +257,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
       ]
     : user.role === "company"
       ? [
-          { href: "/company-dashboard", label: t("tabPanel"), icon: Building2, active: isActive("/company-dashboard") },
+          { href: "/company-dashboard", label: t("tabHome"), icon: Home, active: isActive("/company-dashboard") },
           { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
           { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
           { href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") },
@@ -321,7 +321,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             ) : user.role === "company" ? (
               <>
                 <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("companyPanel")}</div>
-                <SidebarItem href="/company-dashboard" label={t("campaignPanel")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
+                <SidebarItem href="/company-dashboard" label={t("home")} icon={Home} active={isActive("/company-dashboard")} onClick={close} />
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />

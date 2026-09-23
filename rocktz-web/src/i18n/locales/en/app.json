@@ -2292,6 +2292,8 @@
     "state": "Region / State",
     "statePh": "Select the region",
     "currency": "Payment currency",
+    "currencyPh": "Select the currency",
+    "currencyHint": "At signup, the currency follows the country. You can change the country or the currency.",
     "bio": "Bio / introduction",
     "bioPh": "Briefly describe your content style, niche, experience or professional background...",
     "saveChanges": "Save changes",

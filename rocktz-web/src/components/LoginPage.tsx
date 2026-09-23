@@ -156,7 +156,7 @@ export function LoginPage() {
       await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
       return;
     }
-    if (userType === "company" && !isValidCurrency(form.currency)) {
+    if (!isValidCurrency(form.currency)) {
       await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
       return;
     }
@@ -184,6 +184,7 @@ export function LoginPage() {
         whatsapp: form.whatsapp,
         city: form.city,
         country: form.country,
+        currency: form.currency,
         state: form.state,
         password: form.password,
         password_confirmation: form.password_confirmation,
@@ -264,11 +265,10 @@ export function LoginPage() {
                 <input className={fieldClass} placeholder={ta("fields.whatsappLong")} inputMode="tel" autoComplete="tel" value={form.whatsapp} onChange={(e) => update("whatsapp", formatWhatsApp(e.target.value))} />
                 <input className={fieldClass} placeholder={ta("fields.city")} autoComplete="address-level2" value={form.city} onChange={(e) => update("city", e.target.value)} />
                 <CountrySelect theme="dark" placeholder={ta("fields.country")} value={form.country} onChange={(value) => update("country", value)} />
+                <CurrencySelect theme="dark" placeholder={ta("fields.currency")} value={form.currency} onChange={(value) => update("currency", value)} />
                 {userType === "creator" ? (
                   <RegionSelect theme="dark" country={form.country} placeholder={ta("fields.region")} value={form.state} onChange={(value) => update("state", value)} />
-                ) : (
-                  <CurrencySelect theme="dark" placeholder={ta("fields.currency")} value={form.currency} onChange={(value) => update("currency", value)} />
-                )}
+                ) : null}
               </div>
             </>
           ) : null}

@@ -506,13 +506,16 @@ class AuthController extends Controller
                 'name' => $request->input('full_name', $user->name),
             ])->save();
 
+            $country = Geo::normalizeCountry($request->input('country', Geo::DEFAULT_COUNTRY));
+
             Creator::query()->create([
                 'user_id' => $user->id,
                 'full_name' => $request->input('full_name', $user->name),
                 'artistic_name' => $artisticName,
                 'whatsapp' => $request->input('whatsapp'),
                 'city' => $request->input('city'),
-                'country' => Geo::normalizeCountry($request->input('country', Geo::DEFAULT_COUNTRY)),
+                'country' => $country,
+                'currency' => Geo::normalizeCurrency($request->input('currency', Geo::defaultCurrency($country))),
                 'state' => $request->input('state') ? Geo::normalizeRegion((string) $request->input('state')) : null,
                 'socials' => ['instagram' => $instagram],
                 'metrics' => ['followers' => 0, 'avgViews' => 0, 'avgEngagement' => 0],

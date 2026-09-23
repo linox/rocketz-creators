@@ -21,6 +21,7 @@ export type AuthUser = {
     whatsapp?: string | null;
     city?: string | null;
     country?: string | null;
+    currency?: string | null;
     state?: string | null;
     document?: string | null;
     can_access_all_countries?: boolean;

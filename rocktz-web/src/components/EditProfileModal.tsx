@@ -5,14 +5,14 @@ import { useTranslation } from "react-i18next";
 import { Check, Instagram, Mail, MapPin, Smartphone, Sparkles, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { CategoryTagsField } from "@/components/CategoryTagsField";
-import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
+import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import { fetchMe } from "@/lib/laravel";
 import { formatInstagram, formatTikTok, formatWhatsApp, instagramHandle, nationalPhoneDigits } from "@/lib/masks";
-import { DEFAULT_COUNTRY, hasRegions, isValidRegion } from "@/lib/geo";
+import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, currencyForProfile, defaultCurrencyForCountry, hasRegions, isValidCountry, isValidCurrency, isValidRegion } from "@/lib/geo";
 import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 
 type EditProfileModalProps = {
@@ -37,6 +37,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const [tiktok, setTiktok] = useState("");
   const [city, setCity] = useState("");
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [state, setState] = useState("");
   const [bio, setBio] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -53,7 +54,9 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     setInstagram(formatInstagram(user.creator?.socials?.instagram || ""));
     setTiktok(formatTikTok(user.creator?.socials?.tiktok || "").replace(/^@+/, ""));
     setCity(user.creator?.city || user.company?.city || "");
-    setCountry(user.creator?.country || user.company?.country || DEFAULT_COUNTRY);
+    const nextCountry = user.creator?.country || user.company?.country || DEFAULT_COUNTRY;
+    setCountry(nextCountry);
+    setCurrency(currencyForProfile(user.creator?.currency || user.company?.currency, nextCountry));
     setState(user.creator?.state || "");
     setBio("");
     setCategories(normalizeCreatorCategories(user.creator?.categories ?? []));
@@ -68,6 +71,16 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     if (hasCreator && hasRegions(country) && !isValidRegion(country, state)) {
       await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
       return;
+    }
+    if (isCompany || hasCreator) {
+      if (!isValidCountry(country)) {
+        await alertWarning(tc("alerts.countryRequiredTitle"), tc("alerts.countryRequired"));
+        return;
+      }
+      if (!isValidCurrency(currency)) {
+        await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
+        return;
+      }
     }
 
     setLoading(true);
@@ -88,6 +101,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           whatsapp: nationalPhoneDigits(whatsapp) || whatsapp.trim(),
           city: city.trim(),
           country,
+          currency,
           state: state || user.creator.state,
           bio: bio.trim() || undefined,
           categories: normalizeCreatorCategories(categories),
@@ -104,6 +118,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           whatsapp: nationalPhoneDigits(whatsapp) || null,
           city: city.trim() || null,
           country,
+          currency,
           logo_url: trimmedPhoto,
         });
       }
@@ -205,7 +220,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
               ) : null}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.country")}</label>
                   <CountrySelect
                     theme="light"
@@ -214,9 +229,21 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                     onChange={(value) => {
                       setCountry(value);
                       setState("");
+                      setCurrency(defaultCurrencyForCountry(value));
                     }}
                   />
                 </div>
+                {isCompany || hasCreator ? (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.currency")}</label>
+                    <CurrencySelect
+                      theme="light"
+                      placeholder={t("editProfile.currencyPh")}
+                      value={currency}
+                      onChange={setCurrency}
+                    />
+                  </div>
+                ) : null}
                 {hasCreator ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.state")}</label>
@@ -230,6 +257,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                   <input type="text" value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("editProfile.cityPh")} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-brand-primary" />
                 </div>
               </div>
+              {isCompany ? <p className="-mt-2 text-[10px] text-slate-500">{t("companies.currencyHint")}</p> : null}
+              {hasCreator ? <p className="-mt-2 text-[10px] text-slate-500">{t("editProfile.currencyHint")}</p> : null}
 
               {hasCreator ? (
                 <div className="flex flex-col gap-1.5">

@@ -51,7 +51,9 @@ class AuthTest extends TestCase
             ->assertJsonPath('user.creator.status', 'review')
             ->assertJsonPath('user.locale', 'pt-BR')
             ->assertJsonPath('user.lgpd_accepted', true)
-            ->assertJsonPath('user.creator.portfolio_count', 0);
+            ->assertJsonPath('user.creator.portfolio_count', 0)
+            ->assertJsonPath('user.creator.country', 'BR')
+            ->assertJsonPath('user.creator.currency', 'BRL');
 
         $this->assertDatabaseHas('users', [
             'email' => 'maria@example.com',
@@ -62,6 +64,7 @@ class AuthTest extends TestCase
             'artistic_name' => 'mariasilva',
             'status' => CreatorStatus::Review->value,
             'country' => 'BR',
+            'currency' => 'BRL',
             'state' => 'SP',
         ]);
 
@@ -69,6 +72,44 @@ class AuthTest extends TestCase
             'email' => 'maria@example.com',
             'password' => 'secret123',
         ])->assertOk()->assertJsonPath('user.email', 'maria@example.com');
+    }
+
+    public function test_creator_register_sets_local_currency_and_can_change_country_or_currency(): void
+    {
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Alex Rivera',
+            'artistic_name' => 'alexrivera',
+            'email' => 'alex@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999999999',
+            'city' => 'Los Angeles',
+            'country' => 'US',
+            'state' => 'CA',
+            'instagram' => 'alexrivera',
+            'lgpd_accepted' => true,
+        ])->assertCreated()
+            ->assertJsonPath('user.creator.country', 'US')
+            ->assertJsonPath('user.creator.currency', 'USD');
+
+        $creatorId = User::query()->where('email', 'alex@example.com')->firstOrFail()->creator->id;
+
+        $this->actingAs(User::query()->where('email', 'alex@example.com')->firstOrFail(), 'sanctum')
+            ->patchJson("/api/creators/{$creatorId}", [
+                'country' => 'MX',
+                'state' => 'CMX',
+                'currency' => 'EUR',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.country', 'MX')
+            ->assertJsonPath('data.currency', 'EUR');
+
+        $this->assertDatabaseHas('creators', [
+            'id' => $creatorId,
+            'country' => 'MX',
+            'currency' => 'EUR',
+            'state' => 'CMX',
+        ]);
     }
 
     public function test_company_can_register(): void

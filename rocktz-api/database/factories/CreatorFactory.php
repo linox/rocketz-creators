@@ -31,6 +31,7 @@ class CreatorFactory extends Factory
             'whatsapp' => fake()->numerify('+55 ## 9####-####'),
             'city' => fake()->city(),
             'country' => 'BR',
+            'currency' => 'BRL',
             'state' => fake()->randomElement(['SP', 'RJ', 'MG', 'RS', 'PR', 'BA', 'SC']),
             'birth_date' => fake()->dateTimeBetween('-40 years', '-18 years')->format('Y-m-d'),
             'pix_key' => fake()->safeEmail(),

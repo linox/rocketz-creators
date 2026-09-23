@@ -46,6 +46,7 @@ class UserResource extends JsonResource
                     'whatsapp' => $this->creator->whatsapp,
                     'city' => $this->creator->city,
                     'country' => $this->creator->country,
+                    'currency' => $this->creator->currencyCode(),
                     'state' => $this->creator->state,
                     'document' => $this->creator->document,
                     'can_access_all_countries' => (bool) $this->creator->can_access_all_countries,

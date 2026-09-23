@@ -150,4 +150,29 @@ class CompanyMultiMembershipTest extends TestCase
             ->deleteJson("/api/users/{$user->id}/companies/{$first->id}")
             ->assertStatus(422);
     }
+
+    public function test_company_user_can_update_country_and_currency(): void
+    {
+        $user = User::factory()->company()->create();
+        $company = Company::factory()->active()->create([
+            'country' => 'BR',
+            'currency' => 'BRL',
+        ]);
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->patchJson("/api/companies/{$company->id}", [
+                'country' => 'US',
+                'currency' => 'USD',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.country', 'US')
+            ->assertJsonPath('data.currency', 'USD');
+
+        $this->assertSame('US', $company->fresh()->country);
+        $this->assertSame('USD', $company->fresh()->currency);
+    }
 }

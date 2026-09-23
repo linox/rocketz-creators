@@ -9,6 +9,7 @@ export type Creator = {
   email?: string | null;
   city: string | null;
   country?: string | null;
+  currency?: string | null;
   state: string | null;
   bio: string | null;
   document?: string | null;

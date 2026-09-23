@@ -17,8 +17,10 @@ class RegisterCreatorRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $country = Geo::normalizeCountry($this->input('country') ?: Geo::DEFAULT_COUNTRY);
         $this->merge([
-            'country' => Geo::normalizeCountry($this->input('country') ?: Geo::DEFAULT_COUNTRY),
+            'country' => $country,
+            'currency' => Geo::normalizeCurrency($this->input('currency') ?: Geo::defaultCurrency($country)),
             'invite_code' => $this->filled('invite_code')
                 ? Company::normalizeInviteCode((string) $this->input('invite_code'))
                 : null,
@@ -43,6 +45,7 @@ class RegisterCreatorRequest extends FormRequest
             'whatsapp' => ['required', 'string', 'max:30'],
             'city' => ['required', 'string', 'max:120'],
             'country' => Geo::countryRules(),
+            'currency' => Geo::currencyRules(),
             'state' => Geo::regionRules($country),
             'instagram' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:120'],

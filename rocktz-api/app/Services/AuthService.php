@@ -43,13 +43,16 @@ class AuthService
                     : AppLocale::fromRequestHeader($request->header('Accept-Language')),
             ]);
 
+            $country = Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY);
+
             Creator::query()->create([
                 'user_id' => $user->id,
                 'full_name' => $data['full_name'],
                 'artistic_name' => $artisticName,
                 'whatsapp' => $data['whatsapp'],
                 'city' => $data['city'],
-                'country' => Geo::normalizeCountry($data['country'] ?? Geo::DEFAULT_COUNTRY),
+                'country' => $country,
+                'currency' => Geo::normalizeCurrency($data['currency'] ?? Geo::defaultCurrency($country)),
                 'state' => Geo::normalizeRegion($data['state'] ?? ''),
                 'socials' => [
                     'instagram' => $instagram,

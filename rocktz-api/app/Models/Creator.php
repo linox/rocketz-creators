@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
     'whatsapp',
     'city',
     'country',
+    'currency',
     'state',
     'birth_date',
     'pix_key',
@@ -74,6 +75,17 @@ class Creator extends Model
             'storefront_enabled' => 'boolean',
             'storefront_show_banner' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (Creator $creator): void {
+            if (! Geo::isValidCurrency($creator->currency)) {
+                $creator->currency = Geo::defaultCurrency($creator->countryCode());
+            } else {
+                $creator->currency = Geo::normalizeCurrency($creator->currency);
+            }
+        });
     }
 
     public function user(): BelongsTo
@@ -250,6 +262,11 @@ class Creator extends Model
     public function countryCode(): string
     {
         return Geo::isValidCountry($this->country) ? Geo::normalizeCountry($this->country) : Geo::DEFAULT_COUNTRY;
+    }
+
+    public function currencyCode(): string
+    {
+        return Geo::isValidCurrency($this->currency) ? Geo::normalizeCurrency($this->currency) : Geo::defaultCurrency($this->countryCode());
     }
 
     public function canAccessAllCountries(): bool

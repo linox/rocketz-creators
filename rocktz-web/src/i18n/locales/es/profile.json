@@ -81,6 +81,8 @@
   "city": "Ciudad",
   "stateUf": "Región / Estado",
   "country": "País",
+  "currency": "Moneda de pago",
+  "currencyHint": "Al registrarte, la moneda sigue al país. Puedes cambiar el país o la moneda.",
   "region": "Región / Estado",
   "accessAllCountries": "Acceso a campañas de todos los países",
   "accessAllCountriesHint": "Libera el marketplace de campañas de otros países. Sin esto, el creador solo ve su país de origen.",
