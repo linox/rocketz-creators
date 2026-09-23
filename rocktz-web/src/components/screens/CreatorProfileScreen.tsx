@@ -939,6 +939,8 @@ function ProfileInner() {
   }
 
   const profile = creator;
+  const payCurrency = currencyForProfile(profile.currency, profile.country);
+  const formatPay = (value?: number | null) => formatCurrency(value, payCurrency);
   const storefrontUrl = profile.storefront?.unlocked ? profile.storefront.public_url : null;
   const chip = statusChip(profile.status, {
     active: tp("statusChipActive"),
@@ -1048,7 +1050,7 @@ function ProfileInner() {
   function creatorFeeText(campaign: Campaign, row: { amount: number | null; payment_status?: string | null }) {
     if (campaign.is_barter) return ta("available.barterPay");
     const amount = Number(row.amount) || Number(campaign.creator_cache) || 0;
-    if (amount > 0) return formatCurrency(amount, campaign.currency);
+    if (amount > 0) return formatPay(amount);
     return ta("available.toDefine");
   }
 
@@ -1750,12 +1752,12 @@ function ProfileInner() {
                 <div className="flex shrink-0 items-center gap-6 rounded-2xl border border-white/10 bg-white/5 p-4 font-medium backdrop-blur-sm">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("monthlyEarnings")}</span>
-                    <span className="mt-1 text-xl font-black text-emerald-400">{formatCurrency(monthlyEarnings)}</span>
+                    <span className="mt-1 text-xl font-black text-emerald-400">{formatPay(monthlyEarnings)}</span>
                   </div>
                   <div className="h-10 w-px bg-white/10" />
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("paidLabel")}</span>
-                    <span className="mt-1 text-sm font-bold text-slate-200">{formatCurrency(totalReceived)}</span>
+                    <span className="mt-1 text-sm font-bold text-slate-200">{formatPay(totalReceived)}</span>
                   </div>
                 </div>
               </div>
@@ -1764,7 +1766,7 @@ function ProfileInner() {
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("monthlyEarnings")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-purple-700">{formatCurrency(monthlyEarnings)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-purple-700">{formatPay(monthlyEarnings)}</h3>
                     <p className="mt-1 mb-0 text-[11px] font-medium text-slate-500">{tp("monthlyEarningsHint")}</p>
                   </div>
                   <div className="rounded-xl bg-purple-50 p-3 text-purple-600"><Repeat size={18} /></div>
@@ -1772,14 +1774,14 @@ function ProfileInner() {
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("receivedPaid")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{formatCurrency(totalReceived)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{formatPay(totalReceived)}</h3>
                   </div>
                   <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><CheckCircle2 size={18} /></div>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("toReceiveApproved")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{formatCurrency(totalToReceive)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{formatPay(totalToReceive)}</h3>
                   </div>
                   <div className="rounded-xl bg-indigo-50 p-3 text-brand-primary"><DollarSign size={18} /></div>
                 </div>
@@ -1835,7 +1837,7 @@ function ProfileInner() {
                   deliveryLabel={deliveryLabel}
                   deliveryBadgeClass={deliveryBadgeClass}
                   fmtDate={fmtDate}
-                  formatCurrency={formatCurrency}
+                  formatCurrency={formatPay}
                   tp={tp as (key: string, options?: Record<string, unknown>) => string}
                 />
               </div>
@@ -1860,7 +1862,7 @@ function ProfileInner() {
                 deliveryLabel={deliveryLabel}
                 deliveryBadgeClass={deliveryBadgeClass}
                 fmtDate={fmtDate}
-                formatCurrency={formatCurrency}
+                formatCurrency={formatPay}
                 tp={tp as (key: string, options?: Record<string, unknown>) => string}
               />
             </div>
@@ -2019,7 +2021,7 @@ function ProfileInner() {
               {!showCreatorTabs && !showCompanyTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
 
               {agencyView ? (
-                <CreatorRecurringEmptyOrList myContracts={myContracts} />
+                <CreatorRecurringEmptyOrList myContracts={myContracts} currency={payCurrency} />
               ) : null}
             </>
           )}
@@ -2060,7 +2062,7 @@ function ProfileInner() {
 
 const inputClass = "h-11 w-full rounded-lg border border-[#E2E8F0] px-4 text-sm outline-none focus:border-brand-primary";
 
-function CreatorRecurringEmptyOrList({ myContracts }: { myContracts: RecurringContract[] }) {
+function CreatorRecurringEmptyOrList({ myContracts, currency }: { myContracts: RecurringContract[]; currency: string }) {
   const { t: tp } = useTranslation("profile");
   const { formatCurrency } = usePrivacy();
 
@@ -2090,7 +2092,7 @@ function CreatorRecurringEmptyOrList({ myContracts }: { myContracts: RecurringCo
                 </div>
               </div>
               {fee != null ? (
-                <span className="text-sm font-extrabold text-brand-primary">{formatCurrency(Number(fee) || 0)}</span>
+                <span className="text-sm font-extrabold text-brand-primary">{formatCurrency(Number(fee) || 0, currency)}</span>
               ) : null}
             </div>
           </Link>

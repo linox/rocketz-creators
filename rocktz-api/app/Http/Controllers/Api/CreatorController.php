@@ -148,7 +148,7 @@ class CreatorController extends Controller
         ]);
 
         if ($isCompany) {
-            unset($data['status'], $data['can_access_all_countries']);
+            unset($data['status'], $data['can_access_all_countries'], $data['cpf']);
         }
 
         $handle = ltrim((string) ($data['instagram'] ?? $data['artistic_name']), '@');
@@ -167,8 +167,8 @@ class CreatorController extends Controller
                 'full_name' => $data['full_name'],
                 'artistic_name' => $data['artistic_name'],
                 'photo_url' => $data['photo_url'] ?? null,
-                'cpf' => $data['cpf'] ?? null,
-                'document' => $data['cpf'] ?? null,
+                'cpf' => $isCompany ? null : ($data['cpf'] ?? null),
+                'document' => $isCompany ? null : ($data['cpf'] ?? null),
                 'whatsapp' => $data['whatsapp'] ?? null,
                 'city' => $data['city'] ?? null,
                 'country' => $country,
@@ -179,7 +179,7 @@ class CreatorController extends Controller
                 'metrics' => ['followers' => 0, 'avgViews' => 0, 'avgEngagement' => 0],
                 'categories' => array_values(array_filter([$data['category'] ?? null])),
                 'pricing' => ['story' => 0, 'reel' => 0, 'post' => 0],
-                'status' => $data['status'] ?? CreatorStatus::Review,
+                'status' => $isCompany ? CreatorStatus::Active : ($data['status'] ?? CreatorStatus::Review),
                 'invited_by_company_id' => $companyId,
                 'internal_notes' => $isCompany
                     ? __('auth.creator_registered_by_company')
@@ -191,7 +191,7 @@ class CreatorController extends Controller
 
         if ($isCompany && $creator->user) {
             try {
-                $this->mail->creatorRegistered($creator->user);
+                $this->mail->creatorApproved($creator);
             } catch (Throwable $e) {
                 report($e);
             }

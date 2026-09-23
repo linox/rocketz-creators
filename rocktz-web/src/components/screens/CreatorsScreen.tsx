@@ -709,7 +709,7 @@ function CreatorsInner() {
       await alertWarning(t("creators.invalidEmailTitle"), t("creators.invalidEmail"));
       return;
     }
-    if (form.cpf && !isValidTaxDocument(form.country, form.cpf)) {
+    if (!isCompany && form.cpf && !isValidTaxDocument(form.country, form.cpf)) {
       await alertWarning(t("creators.invalidCpfTitle", { documents: formDocumentsLabel }), t("creators.invalidCpf", { documents: formDocumentsLabel }));
       return;
     }
@@ -731,7 +731,7 @@ function CreatorsInner() {
         artistic_name: form.artistic_name.replace(/^@/, "").trim(),
         email: form.email.trim(),
         password: isCompany && form.password ? form.password : undefined,
-        cpf: form.cpf || null,
+        cpf: isCompany ? null : form.cpf || null,
         photo_url: form.photo_url.trim() || null,
         category: form.category,
         instagram: form.artistic_name.replace(/^@/, "").trim(),
@@ -1053,6 +1053,7 @@ function CreatorsInner() {
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.artisticName")}</label>
                   <input placeholder={t("creators.artisticPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.artistic_name} onChange={(e) => setForm({ ...form, artistic_name: e.target.value })} />
                 </div>
+                {isCompany ? null : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.cpf", { documents: formDocumentsLabel })}</label>
                   <input
@@ -1063,7 +1064,8 @@ function CreatorsInner() {
                     onChange={(e) => setForm({ ...form, cpf: formatTaxDocument(form.country, e.target.value) })}
                   />
                 </div>
-                <div className="flex flex-col gap-1.5">
+                )}
+                <div className={cn("flex flex-col gap-1.5", isCompany && "md:col-span-2")}>
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.email")}</label>
                   <input type="email" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>

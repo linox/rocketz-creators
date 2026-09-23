@@ -870,18 +870,21 @@ class DomainApiTest extends TestCase
                 'artistic_name' => 'marina.manual',
                 'email' => 'marina.manual@rocketz.test',
                 'password' => 'senha-forte',
+                'cpf' => '123.456.789-00',
                 'category' => 'Beleza',
-                'status' => 'active',
+                'status' => 'review',
                 'can_access_all_countries' => true,
             ])
             ->assertCreated()
             ->assertJsonPath('data.artistic_name', 'marina.manual')
-            ->assertJsonPath('data.status', 'review')
+            ->assertJsonPath('data.status', 'active')
             ->assertJsonPath('data.invited_by_company_id', $selected->id)
             ->assertJsonPath('data.can_access_all_countries', false)
-            ->assertJsonPath('data.can_moderate', true);
+            ->assertJsonPath('data.can_moderate', false);
 
         $creator = Creator::query()->where('artistic_name', 'marina.manual')->firstOrFail();
+        $this->assertNull($creator->cpf);
+        $this->assertNull($creator->document);
         $this->assertSame($selected->id, (int) $creator->invited_by_company_id);
         $this->assertSame(__('auth.creator_registered_by_company'), $creator->internal_notes);
         $this->assertTrue(Hash::check('senha-forte', (string) $creator->user?->password));
