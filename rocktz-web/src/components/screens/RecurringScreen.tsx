@@ -60,6 +60,7 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 type InnerTab = "contracts" | "planning" | "calendar" | "creator_calendar";
 
 const AGENCY_TAB_KEY = "rocktz.recurring.agencyTab";
+const AGENCY_COMPANY_KEY = "rocktz.recurring.agencyCompany";
 
 function isInnerTab(value: string | null): value is InnerTab {
   return value === "contracts" || value === "planning" || value === "calendar" || value === "creator_calendar";
@@ -78,6 +79,19 @@ function readAgencyTab(userId: number): InnerTab {
     /* ignore */
   }
   return "contracts";
+}
+
+function agencyCompanyKey(userId: number) {
+  return `${AGENCY_COMPANY_KEY}:${userId}`;
+}
+
+function readAgencyCompany(userId: number): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(agencyCompanyKey(userId)) || "";
+  } catch {
+    return "";
+  }
 }
 
 const CONTENT_TYPES = ["reel", "story", "post", "tiktok", "youtube", "live", "pinterest", "blog", "podcast", "unboxing", "ugc", "event", "other"] as const;
@@ -231,9 +245,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       /* ignore */
     }
   }
+
   const [search, setSearch] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-  const [companyFilter, setCompanyFilter] = useState("all");
+  const [companyFilter, setCompanyFilterState] = useState(isAdmin ? "" : "all");
+  const [companyHydrated, setCompanyHydrated] = useState(!isAdmin);
   const [creatorFilter, setCreatorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -246,6 +262,32 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const [contentForm, setContentForm] = useState(EMPTY_CONTENT);
   const [details, setDetails] = useState<RecurringContract | null>(null);
   const [viewingItem, setViewingItem] = useState<PlanningItem | null>(null);
+
+  function setCompanyFilter(next: string) {
+    setCompanyFilterState(next);
+    if (!isAdmin) return;
+    try {
+      if (next) window.localStorage.setItem(agencyCompanyKey(user.id), next);
+      else window.localStorage.removeItem(agencyCompanyKey(user.id));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const stored = readAgencyCompany(user.id);
+    if (stored) setCompanyFilterState(stored);
+    setCompanyHydrated(true);
+  }, [isAdmin, user.id]);
+
+  useEffect(() => {
+    if (!isAdmin || !companyFilter || companies.length === 0) return;
+    if (!companies.some((company) => String(company.id) === companyFilter)) {
+      setCompanyFilter("");
+    }
+  }, [isAdmin, companyFilter, companies, user.id]);
+
   const contractFormCurrency = moneyCurrency(
     editingContract || companies.find((company) => String(company.id) === (isAdmin ? contractForm.company_id : String(user.company?.id || ""))),
   );
@@ -287,29 +329,64 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
     return [...map.values()];
   }, [contracts, creators]);
 
-  const filteredContracts = contracts.filter((contract) => {
+  const companyContracts = useMemo(() => {
+    return contracts.filter((contract) => {
+      if (isAdmin) return Boolean(companyFilter) && String(contract.company_id) === companyFilter;
+      return companyFilter === "all" || String(contract.company_id) === companyFilter;
+    });
+  }, [contracts, isAdmin, companyFilter]);
+
+  const companyItems = useMemo(() => {
+    return contentItems.filter((item) => {
+      if (isAdmin) return Boolean(companyFilter) && String(item.company_id) === companyFilter;
+      return companyFilter === "all" || String(item.company_id) === companyFilter;
+    });
+  }, [contentItems, isAdmin, companyFilter]);
+
+  const rosterCreators = useMemo(() => {
+    if (!isAdmin) return knownCreators;
+    const map = new Map<number, { id: number; artistic_name: string; full_name?: string | null; photo_url: string | null }>();
+    for (const contract of companyContracts) {
+      for (const row of contract.creators || []) {
+        if (row.creator) map.set(row.creator.id, row.creator);
+      }
+    }
+    for (const item of companyItems) {
+      if (item.creator) map.set(item.creator.id, item.creator);
+    }
+    return [...map.values()];
+  }, [isAdmin, knownCreators, companyContracts, companyItems]);
+
+  useEffect(() => {
+    if (!isAdmin || creatorFilter === "all") return;
+    if (!rosterCreators.some((creator) => String(creator.id) === creatorFilter)) {
+      setCreatorFilter("all");
+    }
+  }, [isAdmin, creatorFilter, rosterCreators]);
+
+  const filteredContracts = companyContracts.filter((contract) => {
     const term = search.trim().toLowerCase();
-    const matchesSearch = !term || contract.title.toLowerCase().includes(term) || (contract.company?.name || "").toLowerCase().includes(term);
-    const matchesCompany = companyFilter === "all" || String(contract.company_id) === companyFilter;
-    return matchesSearch && matchesCompany;
+    return !term || contract.title.toLowerCase().includes(term) || (contract.company?.name || "").toLowerCase().includes(term);
   });
 
-  const filteredItems = contentItems.filter((item) => {
+  const filteredItems = companyItems.filter((item) => {
     const matchesMonth = itemInMonth(item, selectedMonth);
-    const matchesCompany = companyFilter === "all" || String(item.company_id) === companyFilter;
     const matchesCreator = creatorFilter === "all" || String(item.creator_id) === creatorFilter;
     const matchesStatus = statusFilter === "all" || item.status === statusFilter;
     const matchesType = typeFilter === "all" || item.content_type === typeFilter;
-    return matchesMonth && matchesCompany && matchesCreator && matchesStatus && matchesType;
+    return matchesMonth && matchesCreator && matchesStatus && matchesType;
   });
 
-  const activeContracts = contracts.filter((c) => c.status === "active");
-  const monthItems = contentItems.filter((item) => itemInMonth(item, selectedMonth));
+  const kpiContracts = isAdmin ? companyContracts : contracts;
+  const kpiItems = isAdmin ? companyItems : contentItems;
+  const activeContracts = kpiContracts.filter((c) => c.status === "active");
+  const monthItems = kpiItems.filter((item) => itemInMonth(item, selectedMonth));
   const publishedMonth = monthItems.filter((item) => item.status === "published").length;
   const monthPercent = monthItems.length ? Math.round((publishedMonth / monthItems.length) * 100) : 0;
   const monthLabel = new Date(`${selectedMonth}-02`).toLocaleDateString(locale, { month: "long", year: "numeric" });
-  const agendaCreatorId = creatorFilter !== "all" ? Number(creatorFilter) : knownCreators[0]?.id;
-  const agendaCreator = knownCreators.find((c) => c.id === agendaCreatorId);
+  const agendaCreatorId = creatorFilter !== "all" ? Number(creatorFilter) : rosterCreators[0]?.id;
+  const agendaCreator = rosterCreators.find((c) => c.id === agendaCreatorId);
+  const showAgencyData = !isAdmin || Boolean(companyFilter);
   const agendaItems = filteredItems.filter((item) => !agendaCreatorId || item.creator_id === agendaCreatorId);
 
   function openContractModal(contract?: RecurringContract) {
@@ -329,7 +406,13 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       setContractForm({
         ...EMPTY_CONTRACT,
         monthly_fee: "0",
-        company_id: user.role === "company" && user.company?.id ? String(user.company.id) : companies[0] ? String(companies[0].id) : "",
+        company_id: isAdmin
+          ? companyFilter
+          : user.role === "company" && user.company?.id
+            ? String(user.company.id)
+            : companies[0]
+              ? String(companies[0].id)
+              : "",
         start_date: new Date().toISOString().slice(0, 10),
       });
     }
@@ -352,9 +435,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       });
     } else {
       setEditingItem(null);
+      const defaultContract = companyContracts[0] ?? contracts[0];
       setContentForm({
         ...EMPTY_CONTENT,
-        contract_id: opts?.contractId ? String(opts.contractId) : contracts[0] ? String(contracts[0].id) : "",
+        contract_id: opts?.contractId ? String(opts.contractId) : defaultContract ? String(defaultContract.id) : "",
         creator_id: opts?.creatorId ? String(opts.creatorId) : "",
         planned_date: opts?.date || "",
         post_date: "",
@@ -404,6 +488,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         const created = await api.createRecurring(body);
         await alertSuccess(created.data.status === "pending_agency" ? t("recurring.createdPending") : t("recurring.created"));
       }
+      if (isAdmin && companyId) setCompanyFilter(String(companyId));
       setContractModal(false);
       load();
     } catch (err) {
@@ -495,8 +580,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
     }
   }
 
-  const companyOptions = [{ value: "all", label: t("recurring.allCompanies") }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))];
-  const creatorOptions = [{ value: "all", label: t("recurring.allCreators") }, ...knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))];
+  const companyOptions = [
+    ...(isAdmin ? [] : [{ value: "all", label: t("recurring.allCompanies") }]),
+    ...companies.map((c) => ({ value: String(c.id), label: c.name })),
+  ];
+  const creatorOptions = [{ value: "all", label: t("recurring.allCreators") }, ...rosterCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))];
   const typeOptions = [{ value: "all", label: t("recurring.allFormats") }, ...CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))];
   const itemStatusOptions = [{ value: "all", label: t("recurring.allStatuses") }, ...ITEM_STATUSES.map((status) => ({ value: status, label: t(`recurring.itemStatus.${status}`) }))];
   const selectedContract = contracts.find((c) => String(c.id) === contentForm.contract_id);
@@ -518,6 +606,19 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
           {isAdmin ? (
+            <label className="flex w-full flex-col gap-1 sm:w-64">
+              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("recurring.selectCompany")}</span>
+              <Select2Field
+                theme="light"
+                searchable
+                placeholder={t("recurring.companyPh")}
+                value={companyFilter}
+                options={companies.map((company) => ({ value: String(company.id), label: company.name }))}
+                onChange={setCompanyFilter}
+              />
+            </label>
+          ) : null}
+          {isAdmin ? (
             <button type="button" onClick={onReset} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 shadow-xs transition-colors hover:bg-rose-100 sm:w-auto">
               <Trash2 size={15} className="shrink-0" /> {t("recurring.reset")}
             </button>
@@ -535,9 +636,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         </div>
       </div>
 
+      {isAdmin && !companyHydrated ? null : showAgencyData ? (
+      <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label={t("recurring.kpiActive")} value={String(activeContracts.length)} hint={t("recurring.kpiActiveHint")} hintClass="text-emerald-600" icon={Repeat} iconClass="bg-indigo-50 text-brand-primary" />
-        <KpiCard label={t("recurring.kpiCreators")} value={String(contracts.reduce((sum, c) => sum + (c.creators?.length || 0), 0))} hint={t("recurring.kpiCreatorsHint")} icon={Users} iconClass="bg-emerald-50 text-emerald-600" />
+        <KpiCard label={t("recurring.kpiCreators")} value={String(kpiContracts.reduce((sum, c) => sum + (c.creators?.length || 0), 0))} hint={t("recurring.kpiCreatorsHint")} icon={Users} iconClass="bg-emerald-50 text-emerald-600" />
         <KpiCard
           label={t("recurring.kpiDeliveries")}
           value={`${publishedMonth}`}
@@ -552,7 +655,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             label={t("recurring.kpiMyCache")}
             value={formatMoneyGroups(
               formatCurrency,
-              contracts.flatMap((contract) =>
+              kpiContracts.flatMap((contract) =>
                 (contract.creators || []).map((row) => ({ amount: creatorCost(row), currency: moneyCurrency(contract) })),
               ),
             )}
@@ -569,8 +672,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       <div className="flex items-center justify-between gap-4 border-b border-slate-200">
         <div className="flex min-w-0 flex-1 items-end gap-4 overflow-x-auto hide-scrollbar lg:gap-8">
           {([
-            ["contracts", Building2, t("recurring.tabContracts"), contracts.length],
-            ["planning", Layers, t("recurring.tabPlanning"), contentItems.length],
+            ["contracts", Building2, t("recurring.tabContracts"), (isAdmin ? companyContracts : contracts).length],
+            ["planning", Layers, t("recurring.tabPlanning"), (isAdmin ? companyItems : contentItems).length],
             ["calendar", Calendar, t("recurring.tabCalendar"), null],
             ["creator_calendar", UserCheck, t("recurring.tabCreatorCalendar"), null],
           ] as const).map(([id, Icon, label, count]) => (
@@ -611,9 +714,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               <Search className="absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400" size={16} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("recurring.searchPh")} className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pr-4 pl-10 text-xs font-medium text-slate-800 outline-none focus:border-brand-primary" />
             </div>
+            {isAdmin ? null : (
             <div className="w-full sm:w-56">
               <Select2Field theme="light" value={companyFilter} options={companyOptions} onChange={setCompanyFilter} />
             </div>
+            )}
           </div>
 
           {!filteredContracts.length ? (
@@ -785,7 +890,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               <p className="mt-0.5 text-xs text-slate-500">{t("recurring.planningHint")}</p>
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">
+              {isAdmin ? null : (
               <div className="w-full sm:w-44"><Select2Field theme="light" value={companyFilter} options={companyOptions} onChange={setCompanyFilter} /></div>
+              )}
               <div className="w-full sm:w-44"><Select2Field theme="light" value={creatorFilter} options={creatorOptions} onChange={setCreatorFilter} /></div>
               {canManage ? (
                 <button type="button" onClick={() => openContentModal()} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-600">
@@ -795,7 +902,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             </div>
           </div>
 
-          {contracts.filter((c) => companyFilter === "all" || String(c.company_id) === companyFilter).map((contract) => (
+          {companyContracts.map((contract) => (
             <div key={contract.id} className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
               <div className="flex flex-col justify-between gap-2 border-b border-slate-100 pb-4 md:flex-row md:items-center">
                 <div>
@@ -915,8 +1022,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               <h3 className="text-base font-bold text-slate-900">{t("recurring.calendarTitle", { month: monthLabel })}</h3>
               <p className="mt-0.5 text-xs text-slate-500">{t("recurring.calendarHint")}</p>
             </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 md:w-auto">
+            <div className={cn("grid w-full grid-cols-1 gap-2 md:w-auto", isAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4")}>
+              {isAdmin ? null : (
               <Select2Field theme="light" value={companyFilter} options={companyOptions} onChange={setCompanyFilter} />
+              )}
               <Select2Field theme="light" value={creatorFilter} options={creatorOptions} onChange={setCreatorFilter} />
               <Select2Field theme="light" value={typeFilter} options={typeOptions} onChange={setTypeFilter} />
               <Select2Field theme="light" value={statusFilter} options={itemStatusOptions} onChange={setStatusFilter} />
@@ -983,7 +1092,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">{t("recurring.selectCreator")}</span>
               <div className="w-56">
-                <Select2Field theme="light" value={agendaCreatorId ? String(agendaCreatorId) : ""} options={knownCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))} onChange={setCreatorFilter} />
+                <Select2Field theme="light" value={agendaCreatorId ? String(agendaCreatorId) : ""} options={rosterCreators.map((c) => ({ value: String(c.id), label: c.artistic_name || c.full_name || String(c.id) }))} onChange={setCreatorFilter} />
               </div>
             </div>
           </div>
@@ -1065,6 +1174,16 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
           </div>
         </div>
       ) : null}
+      </>
+      ) : (
+        <div className="space-y-3 rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-brand-primary">
+            <Building2 size={24} />
+          </div>
+          <h3 className="text-base font-bold text-slate-800">{t("recurring.selectCompanyEmpty")}</h3>
+          <p className="mx-auto max-w-md text-xs text-slate-500">{t("recurring.selectCompanyHint")}</p>
+        </div>
+      )}
 
       {contractModal ? (
         <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4">
@@ -1227,7 +1346,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         <div className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-0 sm:p-4">
           <form noValidate onSubmit={onSaveContent} className="app-modal-panel w-full max-w-lg space-y-3 rounded-3xl bg-white p-6">
             <h2 className="text-xl font-black">{editingItem ? t("recurring.contentEdit") : t("recurring.contentModal")}</h2>
-            <Select2Field theme="light" placeholder={t("recurring.tabContracts")} value={contentForm.contract_id} options={contracts.map((c) => ({ value: String(c.id), label: `${c.company?.name || ""} · ${c.title}` }))} onChange={(value) => setContentForm({ ...contentForm, contract_id: value, creator_id: "" })} />
+            <Select2Field theme="light" placeholder={t("recurring.tabContracts")} value={contentForm.contract_id} options={(isAdmin && companyFilter ? companyContracts : contracts).map((c) => ({ value: String(c.id), label: `${c.company?.name || ""} · ${c.title}` }))} onChange={(value) => setContentForm({ ...contentForm, contract_id: value, creator_id: "" })} />
             <Select2Field theme="light" placeholder={t("recurringDetail.creator")} value={contentForm.creator_id} options={contentCreatorOptions.length ? contentCreatorOptions : (isAdmin ? fallbackCreatorOptions : [])} onChange={(value) => setContentForm({ ...contentForm, creator_id: value })} />
             <Select2Field theme="light" placeholder={t("recurring.contentType")} value={contentForm.content_type} options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))} onChange={(value) => setContentForm({ ...contentForm, content_type: value })} />
             <label className="block text-xs font-bold text-slate-600">
