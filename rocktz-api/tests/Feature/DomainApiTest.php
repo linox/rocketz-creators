@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Services\PermissionService;
 use Database\Seeders\DemoAccounts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class DomainApiTest extends TestCase
@@ -533,6 +534,168 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.status', 'active');
     }
 
+    public function test_creator_sees_company_recurring_work_after_agency_release(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $companyId = (int) $company->actingCompanyId();
+        $creator = Creator::factory()->active()->create([
+            'invited_by_company_id' => $companyId,
+        ]);
+        $companyToken = $company->createToken('auth')->plainTextToken;
+        $creatorToken = $creator->user->createToken('auth')->plainTextToken;
+
+        $contractId = $this->withToken($companyToken)
+            ->postJson('/api/recurring-contracts', [
+                'title' => 'Recorrente da empresa',
+                'start_date' => now()->toDateString(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'pending_agency')
+            ->json('data.id');
+
+        $this->withToken($companyToken)
+            ->postJson("/api/recurring-contracts/{$contractId}/items", [
+                'creator_id' => $creator->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'reel',
+                'title' => 'Reels da marca',
+                'briefing' => 'Mostrar o produto.',
+                'planned_date' => now()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('recurring_contract_creators', [
+            'recurring_contract_id' => $contractId,
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $hidden = $this->withToken($creatorToken)
+            ->getJson('/api/recurring-contracts?include=items')
+            ->assertOk()
+            ->json('data');
+        $this->assertFalse(collect($hidden)->contains(fn ($row) => (int) $row['id'] === (int) $contractId));
+
+        $admin = User::query()->where('email', 'admin@rocketz.test')->firstOrFail();
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/recurring-contracts/{$contractId}/approve-agency")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'active');
+
+        $this->app['auth']->forgetGuards();
+        $visible = $this->withToken($creatorToken)
+            ->getJson('/api/recurring-contracts?include=items')
+            ->assertOk()
+            ->json('data');
+        $row = collect($visible)->firstWhere('id', $contractId);
+        $this->assertNotNull($row);
+        $this->assertSame($creator->id, $row['creators'][0]['creator_id']);
+        $this->assertTrue(collect($row['items'])->contains(fn ($item) => $item['title'] === 'Reels da marca'));
+
+        $this->withToken($creatorToken)
+            ->getJson("/api/recurring-contracts/{$contractId}")
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Recorrente da empresa');
+
+        $legacy = RecurringContract::factory()->active()->create([
+            'company_id' => $companyId,
+            'title' => 'Pauta sem alocação',
+        ]);
+        ContentPlanningItem::factory()->planned()->create([
+            'recurring_contract_id' => $legacy->id,
+            'company_id' => $companyId,
+            'creator_id' => $creator->id,
+            'title' => 'Reels sem vínculo',
+            'month' => now()->format('Y-m'),
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $withLegacy = $this->withToken($creatorToken)
+            ->getJson('/api/recurring-contracts?include=items')
+            ->assertOk()
+            ->json('data');
+        $legacyRow = collect($withLegacy)->firstWhere('id', $legacy->id);
+        $this->assertNotNull($legacyRow);
+        $this->assertTrue(collect($legacyRow['items'])->contains(fn ($item) => $item['title'] === 'Reels sem vínculo'));
+    }
+
+    public function test_direct_publish_company_demand_is_visible_to_creator(): void
+    {
+        $this->seed();
+
+        $company = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company->companyUser()->update(['can_publish_without_approval' => false]);
+        $company->permissionGrants()->create([
+            'permission' => Permission::CampaignsPublishWithoutApproval->value,
+        ]);
+        $company->unsetRelation('companyUser');
+        $company->unsetRelation('permissionGrants');
+
+        $companyId = (int) $company->actingCompanyId();
+        $creator = Creator::factory()->active()->create([
+            'invited_by_company_id' => $companyId,
+        ]);
+        $companyToken = $company->fresh()->createToken('auth')->plainTextToken;
+        $creatorToken = $creator->user->createToken('auth')->plainTextToken;
+
+        $activeId = $this->withToken($companyToken)
+            ->postJson('/api/recurring-contracts', [
+                'title' => 'Recorrente direto',
+                'start_date' => now()->toDateString(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'active')
+            ->json('data.id');
+
+        $this->withToken($companyToken)
+            ->postJson("/api/recurring-contracts/{$activeId}/items", [
+                'creator_id' => $creator->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'reel',
+                'title' => 'Demanda direta',
+                'briefing' => 'Mostrar o produto.',
+                'planned_date' => now()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $pending = RecurringContract::factory()->create([
+            'company_id' => $companyId,
+            'title' => 'Recorrente que estava na fila',
+            'status' => 'pending_agency',
+            'start_date' => now()->toDateString(),
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($companyToken)
+            ->postJson("/api/recurring-contracts/{$pending->id}/items", [
+                'creator_id' => $creator->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'reel',
+                'title' => 'Demanda da fila',
+                'briefing' => 'Falar do benefício.',
+                'planned_date' => now()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $this->assertSame('active', $pending->fresh()->status->value);
+
+        $this->app['auth']->forgetGuards();
+        $visible = $this->withToken($creatorToken)
+            ->getJson('/api/recurring-contracts?include=items')
+            ->assertOk()
+            ->json('data');
+
+        $direct = collect($visible)->firstWhere('id', $activeId);
+        $released = collect($visible)->firstWhere('id', $pending->id);
+        $this->assertNotNull($direct);
+        $this->assertNotNull($released);
+        $this->assertTrue(collect($direct['items'])->contains(fn ($item) => $item['title'] === 'Demanda direta'));
+        $this->assertTrue(collect($released['items'])->contains(fn ($item) => $item['title'] === 'Demanda da fila'));
+    }
+
     public function test_admin_can_toggle_company_user_publish_without_approval(): void
     {
         $this->seed();
@@ -681,6 +844,58 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.artistic_name', 'juliana.fit')
             ->assertJsonPath('data.status', 'review')
             ->assertJsonPath('data.role', 'creator');
+    }
+
+    public function test_company_registers_creator_only_for_the_selected_company(): void
+    {
+        $user = User::factory()->company()->create();
+        $selected = Company::factory()->active()->create();
+        $other = Company::factory()->active()->create();
+
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $selected->id,
+        ]);
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $other->id,
+        ]);
+
+        $user->forceFill(['active_company_id' => $selected->id])->save();
+        $token = $user->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/creators', [
+                'full_name' => 'Marina Manual',
+                'artistic_name' => 'marina.manual',
+                'email' => 'marina.manual@rocketz.test',
+                'password' => 'senha-forte',
+                'category' => 'Beleza',
+                'status' => 'active',
+                'can_access_all_countries' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.artistic_name', 'marina.manual')
+            ->assertJsonPath('data.status', 'review')
+            ->assertJsonPath('data.invited_by_company_id', $selected->id)
+            ->assertJsonPath('data.can_access_all_countries', false)
+            ->assertJsonPath('data.can_moderate', true);
+
+        $creator = Creator::query()->where('artistic_name', 'marina.manual')->firstOrFail();
+        $this->assertSame($selected->id, (int) $creator->invited_by_company_id);
+        $this->assertSame(__('auth.creator_registered_by_company'), $creator->internal_notes);
+        $this->assertTrue(Hash::check('senha-forte', (string) $creator->user?->password));
+
+        $listed = collect($this->withToken($token)->getJson('/api/creators')->json('data'))->pluck('id');
+        $this->assertTrue($listed->contains($creator->id));
+
+        $this->withToken($token)
+            ->patchJson('/api/auth/company', ['company_id' => $other->id])
+            ->assertOk()
+            ->assertJsonPath('user.company.id', $other->id);
+
+        $hidden = collect($this->withToken($token)->getJson('/api/creators')->json('data'))->pluck('id');
+        $this->assertFalse($hidden->contains($creator->id));
     }
 
     public function test_creator_can_add_portfolio_video_with_orientation(): void
@@ -1277,6 +1492,29 @@ class DomainApiTest extends TestCase
         $this->withToken($token)
             ->deleteJson("/api/users/{$created['id']}")
             ->assertOk();
+    }
+
+    public function test_admin_can_change_any_user_password(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/users/{$user->id}", [
+                'password' => 'nova-senha',
+            ])
+            ->assertOk();
+
+        $this->assertTrue(Hash::check('nova-senha', $user->fresh()->password));
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/users/{$user->id}", [
+                'password' => 'curta',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['password']);
+
+        $this->assertTrue(Hash::check('nova-senha', $user->fresh()->password));
     }
 
     public function test_admin_can_remove_creator_user_and_profile(): void

@@ -1192,7 +1192,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
           <form noValidate onSubmit={onSaveContent} className="app-modal-panel w-full max-w-lg space-y-3 rounded-3xl bg-white p-6">
             <h2 className="text-xl font-black">{editingItem ? t("recurring.contentEdit") : t("recurring.contentModal")}</h2>
             <Select2Field theme="light" placeholder={t("recurring.tabContracts")} value={contentForm.contract_id} options={contracts.map((c) => ({ value: String(c.id), label: `${c.company?.name || ""} · ${c.title}` }))} onChange={(value) => setContentForm({ ...contentForm, contract_id: value, creator_id: "" })} />
-            <Select2Field theme="light" placeholder={t("recurringDetail.creator")} value={contentForm.creator_id} options={contentCreatorOptions.length ? contentCreatorOptions : fallbackCreatorOptions} onChange={(value) => setContentForm({ ...contentForm, creator_id: value })} />
+            <Select2Field theme="light" placeholder={t("recurringDetail.creator")} value={contentForm.creator_id} options={contentCreatorOptions.length ? contentCreatorOptions : (isAdmin ? fallbackCreatorOptions : [])} onChange={(value) => setContentForm({ ...contentForm, creator_id: value })} />
             <Select2Field theme="light" placeholder={t("recurring.contentType")} value={contentForm.content_type} options={CONTENT_TYPES.map((type) => ({ value: type, label: t(`recurring.formats.${type}`) }))} onChange={(value) => setContentForm({ ...contentForm, content_type: value })} />
             <label className="block text-xs font-bold text-slate-600">
               {t(isLivePautaType(contentForm.content_type) ? "recurringDetail.livePautaTitle" : "recurring.contentTitle")}

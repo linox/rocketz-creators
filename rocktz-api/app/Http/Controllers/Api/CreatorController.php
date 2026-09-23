@@ -25,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class CreatorController extends Controller
 {
@@ -113,6 +114,21 @@ class CreatorController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $actor = $request->user();
+        $isCompany = $actor->role === UserRole::Company;
+
+        if ($actor->role === UserRole::Admin) {
+            abort_unless($actor->hasPermission(Permission::CreatorsModerate), 403, __('auth.forbidden_permission'));
+        } elseif (! $isCompany) {
+            abort(403, __('auth.forbidden'));
+        }
+
+        $companyId = null;
+        if ($isCompany) {
+            $companyId = (int) $actor->actingCompanyId();
+            abort_unless($companyId > 0, 403, __('auth.company_not_linked'));
+        }
+
         $data = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
             'artistic_name' => ['required', 'string', 'max:255'],
@@ -130,9 +146,13 @@ class CreatorController extends Controller
             'status' => ['nullable', Rule::enum(CreatorStatus::class)],
         ]);
 
+        if ($isCompany) {
+            unset($data['status'], $data['can_access_all_countries']);
+        }
+
         $handle = ltrim((string) ($data['instagram'] ?? $data['artistic_name']), '@');
 
-        $creator = DB::transaction(function () use ($data, $handle) {
+        $creator = DB::transaction(function () use ($data, $handle, $isCompany, $companyId) {
             $user = User::query()->create([
                 'name' => $data['full_name'],
                 'email' => Str::lower($data['email']),
@@ -157,11 +177,24 @@ class CreatorController extends Controller
                 'categories' => array_values(array_filter([$data['category'] ?? null])),
                 'pricing' => ['story' => 0, 'reel' => 0, 'post' => 0],
                 'status' => $data['status'] ?? CreatorStatus::Review,
-                'internal_notes' => 'Cadastrado pelo admin.',
+                'invited_by_company_id' => $companyId,
+                'internal_notes' => $isCompany
+                    ? __('auth.creator_registered_by_company')
+                    : 'Cadastrado pelo admin.',
             ]);
         });
 
-        return response()->json(['data' => new CreatorResource($creator->load('user'))], 201);
+        $creator->load('user');
+
+        if ($isCompany && $creator->user) {
+            try {
+                $this->mail->creatorRegistered($creator->user);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        return response()->json(['data' => new CreatorResource($creator)], 201);
     }
 
     public function update(Request $request, Creator $creator): JsonResponse

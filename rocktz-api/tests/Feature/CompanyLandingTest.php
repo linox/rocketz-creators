@@ -466,9 +466,22 @@ class CompanyLandingTest extends TestCase
         $contract = RecurringContract::query()->where('company_id', $companyUser->companyUser?->company_id)->firstOrFail();
         $outsider = Creator::factory()->active()->create(['artistic_name' => 'Fora Do Pool']);
 
-        $this->withToken($companyUser->createToken('auth')->plainTextToken)
+        $token = $companyUser->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
             ->postJson("/api/recurring-contracts/{$contract->id}/creators", [
                 'creator_id' => $outsider->id,
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('message', __('auth.creator_not_in_company_pool'));
+
+        $this->withToken($token)
+            ->postJson("/api/recurring-contracts/{$contract->id}/items", [
+                'creator_id' => $outsider->id,
+                'month' => now()->format('Y-m'),
+                'content_type' => 'reel',
+                'title' => 'Pauta fora do pool',
+                'planned_date' => now()->toDateString(),
             ])
             ->assertForbidden()
             ->assertJsonPath('message', __('auth.creator_not_in_company_pool'));

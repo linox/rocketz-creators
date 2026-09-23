@@ -120,6 +120,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('notification-preferences', [NotificationPreferenceController::class, 'update']);
 
     Route::middleware('role:admin,company')->group(function () {
+        Route::post('creators', [CreatorController::class, 'store']);
         Route::post('campaigns', [CampaignController::class, 'store']);
         Route::patch('campaigns/{campaign}', [CampaignController::class, 'update']);
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
@@ -142,10 +143,6 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
-        Route::middleware('permission:creators.moderate')->group(function () {
-            Route::post('creators', [CreatorController::class, 'store']);
-        });
-
         Route::middleware('permission:companies.moderate')->group(function () {
             Route::post('companies', [CompanyController::class, 'store']);
             Route::post('companies/{company}/approve', [CompanyController::class, 'approve']);

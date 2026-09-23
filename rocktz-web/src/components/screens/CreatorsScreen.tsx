@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, Clock, Download, FileText, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
+import { PasswordField } from "@/components/PasswordField";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { MoneyInput } from "@/components/MoneyInput";
 import { Select2Field } from "@/components/Select2Field";
@@ -15,7 +16,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
-import { formatIntegerMask, isValidEmail, parseIntegerMask, parseMoneyMask } from "@/lib/masks";
+import { formatIntegerMask, isValidEmail, parseIntegerMask, parseMoneyMask, passwordError } from "@/lib/masks";
 import { DEFAULT_COUNTRY, defaultCurrencyForCountry, formatLocation, formatMoneyGroups, hasRegions, isValidCountry, isValidRegion, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentPlaceholder, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
@@ -30,7 +31,7 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
 type CatalogLayout = "list" | "grid";
 
-const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", category: "UGC Content", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
+const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", password: "", category: "UGC Content", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
 
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
@@ -720,11 +721,16 @@ function CreatorsInner() {
       await alertWarning(tc("alerts.regionRequiredTitle"), tc("alerts.regionRequired"));
       return;
     }
+    if (isCompany && form.password && passwordError(form.password)) {
+      await alertWarning(t("creators.invalidPasswordTitle"), tc("password.too_short"));
+      return;
+    }
     try {
       await api.createCreator({
         full_name: form.full_name.trim(),
         artistic_name: form.artistic_name.replace(/^@/, "").trim(),
         email: form.email.trim(),
+        password: isCompany && form.password ? form.password : undefined,
         cpf: form.cpf || null,
         photo_url: form.photo_url.trim() || null,
         category: form.category,
@@ -734,7 +740,7 @@ function CreatorsInner() {
       });
       setModalOpen(false);
       setForm(EMPTY_FORM);
-      await alertSuccess(t("creators.created"));
+      await alertSuccess(isCompany ? t("creators.createdCompany") : t("creators.created"));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -778,7 +784,6 @@ function CreatorsInner() {
             </button>
           </div>
           {isAdmin ? (
-            <>
             <button
               type="button"
               onClick={resetCasting}
@@ -788,6 +793,8 @@ function CreatorsInner() {
               <Trash2 size={15} className="text-rose-600" />
               {t("creators.reset")}
             </button>
+          ) : null}
+          {isAdmin || isCompany ? (
             <button
               type="button"
               onClick={() => setModalOpen(true)}
@@ -796,7 +803,6 @@ function CreatorsInner() {
               <Plus size={18} />
               {t("creators.new")}
             </button>
-            </>
           ) : null}
         </div>
       </header>
@@ -1033,6 +1039,11 @@ function CreatorsInner() {
               </button>
             </div>
             <form noValidate className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" onSubmit={onCreate}>
+              {isCompany && user.company?.name ? (
+                <p className="m-0 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                  {t("creators.modalHintCompany", { company: user.company.name })}
+                </p>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.fullName")}</label>
@@ -1056,6 +1067,19 @@ function CreatorsInner() {
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.email")}</label>
                   <input type="email" className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
+                {isCompany ? (
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.password")}</label>
+                    <PasswordField
+                      autoComplete="new-password"
+                      value={form.password}
+                      placeholder={t("creators.passwordPh")}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      inputClassName="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm outline-none focus:border-brand-primary"
+                    />
+                    <p className="m-0 text-[11px] leading-snug text-[#64748B]">{t("creators.passwordHint")}</p>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.country")}</label>
                   <CountrySelect theme="light" value={form.country} onChange={(country) => setForm({ ...form, country, state: "", cpf: formatTaxDocument(country, form.cpf) })} />

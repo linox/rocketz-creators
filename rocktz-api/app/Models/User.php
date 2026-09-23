@@ -237,6 +237,10 @@ class User extends Authenticatable implements HasLocalePreference
             return false;
         }
 
+        if ($this->hasPermission(Permission::CampaignsPublishWithoutApproval)) {
+            return true;
+        }
+
         return (bool) $this->actingCompanyUser()?->can_publish_without_approval;
     }
 

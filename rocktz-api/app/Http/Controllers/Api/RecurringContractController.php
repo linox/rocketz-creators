@@ -251,6 +251,7 @@ class RecurringContractController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
         $this->assertCompanyCanAssignCreators($request, [(int) $data['creator_id']], $recurringContract);
+        $this->publishIfActorCan($request, $recurringContract);
         $row = $recurringContract->recurringContractCreators()->updateOrCreate(
             ['creator_id' => $data['creator_id']],
             $data,
@@ -277,6 +278,7 @@ class RecurringContractController extends Controller
             ->where('creator_id', $data['creator_id'])
             ->firstOrFail();
 
+        $this->publishIfActorCan($request, $recurringContract);
         $created = $this->syncMonthlyDeliverables($recurringContract, $row, $data['month']);
 
         if ($created > 0 && ! $recurringContract->isPendingAgency()) {
@@ -344,8 +346,12 @@ class RecurringContractController extends Controller
             'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'published_url' => ['nullable', 'string', 'max:2048'],
         ]);
+        $this->assertCanManage($request, $recurringContract);
+        $this->assertCompanyCanAssignCreators($request, [(int) $data['creator_id']], $recurringContract);
         $this->normalizeBriefingPayload($data);
         $data = SafeHttpUrl::validateFields($data, ['references', 'published_url', 'pauta_script_file_url']);
+        $this->ensureContractCreator($recurringContract, (int) $data['creator_id']);
+        $this->publishIfActorCan($request, $recurringContract);
 
         if ($this->isLiveContentType($data['content_type'] ?? null)) {
             $data['approval_flow'] = ApprovalFlowType::LiveLink;
@@ -421,6 +427,9 @@ class RecurringContractController extends Controller
 
         $this->assertCanViewItem($request, $contentPlanningItem);
         $actorIsCreator = $request->user()->role === UserRole::Creator;
+        if (! $actorIsCreator && $contentPlanningItem->recurringContract) {
+            $this->publishIfActorCan($request, $contentPlanningItem->recurringContract);
+        }
         $hadBriefing = $this->itemHasBriefing($contentPlanningItem);
         if ($actorIsCreator) {
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
@@ -584,8 +593,12 @@ class RecurringContractController extends Controller
         if ($user->role === UserRole::Company) {
             $query->where('company_id', $user->actingCompanyId());
         } elseif ($user->role === UserRole::Creator) {
+            $creatorId = $user->creator?->id;
             $query->where('status', '!=', RecurringContractStatus::PendingAgency)
-                ->whereHas('recurringContractCreators', fn ($q) => $q->where('creator_id', $user->creator?->id));
+                ->where(function (Builder $builder) use ($creatorId) {
+                    $builder->whereHas('recurringContractCreators', fn ($q) => $q->where('creator_id', $creatorId))
+                        ->orWhereHas('contentPlanningItems', fn ($q) => $q->where('creator_id', $creatorId));
+                });
         }
     }
 
@@ -796,7 +809,12 @@ class RecurringContractController extends Controller
         if ($user->role === UserRole::Company && $user->belongsToCompany((int) $contract->company_id)) {
             return;
         }
-        if ($user->role === UserRole::Creator && $contract->recurringContractCreators()->where('creator_id', $user->creator?->id)->exists()) {
+        $creatorId = $user->creator?->id;
+        $assigned = $user->role === UserRole::Creator && $creatorId && (
+            $contract->recurringContractCreators()->where('creator_id', $creatorId)->exists()
+            || $contract->contentPlanningItems()->where('creator_id', $creatorId)->exists()
+        );
+        if ($assigned) {
             abort_if($contract->isPendingAgency(), 403, __('auth.recurring_awaiting_agency'));
 
             return;
@@ -868,10 +886,34 @@ class RecurringContractController extends Controller
             'link' => '/recurring/'.$contract->id,
         ]);
 
-        $contract->loadMissing('recurringContractCreators');
-        foreach ($contract->recurringContractCreators as $row) {
-            $this->notifyRecurringAssigned($contract, (int) $row->creator_id);
+        $contract->loadMissing(['recurringContractCreators', 'contentPlanningItems']);
+        $creatorIds = $contract->recurringContractCreators->pluck('creator_id')
+            ->merge($contract->contentPlanningItems->pluck('creator_id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->filter();
+        foreach ($creatorIds as $creatorId) {
+            $this->notifyRecurringAssigned($contract, $creatorId);
         }
+    }
+
+    private function ensureContractCreator(RecurringContract $contract, int $creatorId): RecurringContractCreator
+    {
+        return $contract->recurringContractCreators()->firstOrCreate(
+            ['creator_id' => $creatorId],
+            ['start_date' => $contract->start_date?->toDateString()],
+        );
+    }
+
+    private function publishIfActorCan(Request $request, RecurringContract $contract): void
+    {
+        if (! $contract->isPendingAgency() || ! $request->user()?->canPublishWithoutApproval()) {
+            return;
+        }
+
+        $previous = $contract->status;
+        $contract->update(['status' => RecurringContractStatus::Active]);
+        $this->notifyReleasedIfNeeded($contract, $previous);
     }
 
     private function notifyRecurringAssigned(RecurringContract $contract, int $creatorId): void

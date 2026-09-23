@@ -77,6 +77,7 @@ return [
     'landing_slug_taken' => 'Este identificador ya está en uso.',
     'landing_signup_title' => 'Nuevo creator desde tu landing page',
     'landing_signup_message' => ':name completó el registro y espera tu análisis.',
+    'creator_registered_by_company' => 'Registrado manualmente por la empresa.',
     'creator_must_accept_contract' => 'Debes firmar el contrato de uso de imagen para postularte a las campañas.',
     'creator_must_accept_campaign_contract' => 'Debes aceptar el contrato personalizado de esta campaña para postularte.',
     'campaign_country_restricted' => 'Esta campaña no está disponible en tu país.',

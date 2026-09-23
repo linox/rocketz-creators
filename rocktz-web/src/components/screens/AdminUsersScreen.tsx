@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { Building2, Plus, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Building2, KeyRound, Plus, Search, ShieldCheck, Users, X } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PasswordField } from "@/components/PasswordField";
@@ -66,6 +66,8 @@ function UsersInner() {
   const [editing, setEditing] = useState<AuthUser | null>(null);
   const [editPerms, setEditPerms] = useState<string[]>([]);
   const [addCompanyId, setAddCompanyId] = useState("");
+  const [passwordTarget, setPasswordTarget] = useState<AuthUser | null>(null);
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirmation: "" });
   const [saving, setSaving] = useState(false);
 
   const canManage = userHasPermission(me, "users.manage");
@@ -213,6 +215,31 @@ function UsersInner() {
     setEditing(item);
     setEditPerms(item.permissions ?? []);
     setAddCompanyId("");
+  }
+
+  function openPassword(item: AuthUser) {
+    setPasswordTarget(item);
+    setPasswordForm({ password: "", confirmation: "" });
+  }
+
+  async function onChangePassword(event: FormEvent) {
+    event.preventDefault();
+    if (!passwordTarget) return;
+    const passwordIssue = passwordError(passwordForm.password, passwordForm.confirmation);
+    if (passwordIssue) {
+      await alertWarning(tc("alerts.invalidPasswordTitle"), tc(`password.${passwordIssue}`));
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.updateUser(passwordTarget.id, { password: passwordForm.password });
+      setPasswordTarget(null);
+      await alertSuccess(t("users.passwordChanged"));
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function onAttachCompany() {
@@ -413,6 +440,15 @@ function UsersInner() {
                           {t("users.openProfile")}
                         </Link>
                       ) : null}
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => openPassword(item)}
+                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200"
+                        >
+                          {t("users.changePassword")}
+                        </button>
+                      ) : null}
                       {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
                         <button
                           type="button"
@@ -451,6 +487,9 @@ function UsersInner() {
               <div className="flex flex-wrap gap-2">
                 {item.role === "creator" && item.creator?.id ? (
                   <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.openProfile")}</Link>
+                ) : null}
+                {canManage ? (
+                  <button type="button" onClick={() => openPassword(item)} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.changePassword")}</button>
                 ) : null}
                 {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
                   <button type="button" onClick={() => openEdit(item)} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}</button>
@@ -508,6 +547,44 @@ function UsersInner() {
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
               <button type="button" onClick={() => setCreateOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
               <button type="submit" disabled={saving} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("create")}</button>
+            </div>
+          </form>
+        </AppModal>
+      ) : null}
+
+      {passwordTarget ? (
+        <AppModal onClose={() => setPasswordTarget(null)}>
+          <form noValidate onSubmit={onChangePassword} className="flex min-h-0 flex-col">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="m-0 flex items-center gap-2 text-[10px] font-bold tracking-wider text-brand-primary uppercase">
+                  <KeyRound size={14} /> {t("users.changePassword")}
+                </p>
+                <h3 className="m-0 mt-1 text-base font-black text-slate-900">{passwordTarget.name}</h3>
+                <p className="m-0 text-xs text-slate-500">{passwordTarget.email}</p>
+              </div>
+              <button type="button" onClick={() => setPasswordTarget(null)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100" aria-label={tc("close")}>✕</button>
+            </div>
+            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-5">
+              <p className="m-0 text-xs leading-relaxed text-slate-500">{t("users.changePasswordHint")}</p>
+              <PasswordField
+                placeholder={t("users.changePasswordTitle")}
+                value={passwordForm.password}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, password: event.target.value }))}
+                inputClassName="border border-slate-200 px-4 text-sm"
+                autoComplete="new-password"
+              />
+              <PasswordField
+                placeholder={t("users.passwordConfirm")}
+                value={passwordForm.confirmation}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, confirmation: event.target.value }))}
+                inputClassName="border border-slate-200 px-4 text-sm"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+              <button type="button" onClick={() => setPasswordTarget(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
+              <button type="submit" disabled={saving} className="rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50">{saving ? tc("saving") : tc("save")}</button>
             </div>
           </form>
         </AppModal>

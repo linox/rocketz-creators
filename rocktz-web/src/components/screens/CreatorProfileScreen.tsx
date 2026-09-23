@@ -240,6 +240,14 @@ type CompanyGroup<T> = {
   rows: T[];
 };
 
+function contractIncludesCreator(contract: RecurringContract, creatorId: number | null) {
+  if (!creatorId) return false;
+  return Boolean(
+    contract.creators?.some((row) => row.creator_id === creatorId)
+    || contract.items?.some((item) => item.creator_id === creatorId),
+  );
+}
+
 function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: number): RecurringWorkRow[] {
   const rows: RecurringWorkRow[] = [];
 
@@ -853,7 +861,7 @@ function ProfileInner() {
         return row?.application_status === "approved" && Boolean(row.pending_upload_id);
       }) || recurringRef.current.some((contract) => {
         if (contract.status !== "active") return false;
-        if (!contract.creators?.some((creatorRow) => creatorRow.creator_id === id)) return false;
+        if (!contractIncludesCreator(contract, id)) return false;
         return contract.items?.some((planItem) => Boolean(planItem.pending_upload_id)) ?? false;
       });
 
@@ -918,7 +926,7 @@ function ProfileInner() {
     paused: tp("statusChipPaused"),
     rejected: tp("statusChipRejected"),
   });
-  const myWorkContracts = recurring.filter((contract) => contract.status !== "pending_agency" && contract.creators?.some((row) => row.creator_id === profile.id));
+  const myWorkContracts = recurring.filter((contract) => contract.status !== "pending_agency" && contractIncludesCreator(contract, profile.id));
   const myContracts = myWorkContracts.filter((contract) => contract.status === "active");
   const recurringWorkRows = buildRecurringWorkRows(myWorkContracts, profile.id);
   const canEdit = isAdmin || user.creator?.id === profile.id;
