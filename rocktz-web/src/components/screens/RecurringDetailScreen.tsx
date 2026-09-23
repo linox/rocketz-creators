@@ -480,8 +480,6 @@ function DetailInner() {
       setContract(data);
       if (user.role === "creator" && user.creator?.id) {
         setSelectedCreatorId(user.creator.id);
-      } else if (!selectedCreatorId && data.creators?.length) {
-        setSelectedCreatorId(data.creators[0].creator_id);
       }
     } catch (err) {
       await alertApiError(err);
@@ -655,7 +653,7 @@ function DetailInner() {
       return profile(a).artistic_name.localeCompare(profile(b).artistic_name, locale, { sensitivity: "base" });
     });
 
-  const selectedRow = allocated.find((row) => row.creator_id === selectedCreatorId) || filteredCreators[0] || allocated[0];
+  const selectedRow = allocated.find((row) => row.creator_id === selectedCreatorId) ?? (isCreator ? allocated[0] : undefined);
   const selectedInfo = selectedRow ? profile(selectedRow) : null;
   const selectedSummary = selectedRow ? summary(selectedRow) : null;
   const selectedPautas = selectedRow ? selectedSummary!.items.filter((item) => (showCompleted ? true : !isPublished(item))) : [];
@@ -911,7 +909,10 @@ function DetailInner() {
     try {
       await api.deleteRecurringCreator(contract.id, row.id);
       await alertSuccess(t("recurringDetail.removedCreator"));
-      if (selectedCreatorId === row.creator_id) setSelectedCreatorId(null);
+      if (selectedCreatorId === row.creator_id) {
+        setSelectedCreatorId(null);
+        setPautasModalOpen(false);
+      }
       load();
     } catch (err) {
       await alertApiError(err);
@@ -2149,6 +2150,12 @@ function DetailInner() {
                     })}
                   </div>
                 )}
+              </div>
+            ) : allocated.length ? (
+              <div className="flex min-h-[24rem] flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
+                <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Users size={22} /></div>
+                <h4 className="text-sm font-bold text-slate-800">{t("recurringDetail.noCreatorSelected")}</h4>
+                <p className="max-w-xs text-xs leading-relaxed text-slate-500">{t("recurringDetail.noCreatorSelectedHint")}</p>
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center text-sm text-slate-400">{t("recurringDetail.noAllocated")}</div>

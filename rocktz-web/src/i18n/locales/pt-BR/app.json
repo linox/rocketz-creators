@@ -1974,6 +1974,8 @@
     "allDelivered": "100% Entregue",
     "noDemand": "Sem Demanda",
     "missingShort": "Faltam {{count}}",
+    "noCreatorSelected": "Nenhum criador selecionado",
+    "noCreatorSelectedHint": "Escolha um criador na lista para ver as demandas ao lado.",
     "emptyPending": "Nenhuma demanda pendente para {{month}}",
     "emptyPendingHint": "Adicione as pautas do mês com briefing detalhado, referências e roteiro para o criador.",
     "emptyGenerateHint": "A cota mensal ainda não foi gerada em {{month}}. Clique em Gerar demandas para criar as {{count}} entregas e depois inclua a pauta de cada uma.",

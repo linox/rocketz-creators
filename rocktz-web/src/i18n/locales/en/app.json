@@ -1974,6 +1974,8 @@
     "allDelivered": "100% Delivered",
     "noDemand": "No Demand",
     "missingShort": "{{count}} left",
+    "noCreatorSelected": "No creator selected",
+    "noCreatorSelectedHint": "Choose a creator from the list to see their demands.",
     "emptyPending": "No pending demands for {{month}}",
     "emptyPendingHint": "Add this month's briefs with detailed briefing, references and script.",
     "emptyGenerateHint": "The monthly quota has not been generated for {{month}} yet. Click Generate demands to create the {{count}} deliveries, then add a brief for each one.",
