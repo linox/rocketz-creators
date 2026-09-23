@@ -59,6 +59,27 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 type InnerTab = "contracts" | "planning" | "calendar" | "creator_calendar";
 
+const AGENCY_TAB_KEY = "rocktz.recurring.agencyTab";
+
+function isInnerTab(value: string | null): value is InnerTab {
+  return value === "contracts" || value === "planning" || value === "calendar" || value === "creator_calendar";
+}
+
+function agencyTabKey(userId: number) {
+  return `${AGENCY_TAB_KEY}:${userId}`;
+}
+
+function readAgencyTab(userId: number): InnerTab {
+  if (typeof window === "undefined") return "contracts";
+  try {
+    const stored = window.localStorage.getItem(agencyTabKey(userId));
+    if (isInnerTab(stored)) return stored;
+  } catch {
+    /* ignore */
+  }
+  return "contracts";
+}
+
 const CONTENT_TYPES = ["reel", "story", "post", "tiktok", "youtube", "live", "pinterest", "blog", "podcast", "unboxing", "ugc", "event", "other"] as const;
 const ITEM_STATUSES = ["planned", "in_production", "review", "approved", "rejected", "published"] as const;
 const CONTRACT_STATUSES = ["active", "paused", "finished"] as const;
@@ -194,7 +215,22 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const [contracts, setContracts] = useState<RecurringContract[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
-  const [innerTab, setInnerTab] = useState<InnerTab>("contracts");
+  const [innerTab, setInnerTabState] = useState<InnerTab>("contracts");
+
+  useEffect(() => {
+    if (!canManage) return;
+    setInnerTabState(readAgencyTab(user.id));
+  }, [canManage, user.id]);
+
+  function setInnerTab(next: InnerTab) {
+    setInnerTabState(next);
+    if (!canManage) return;
+    try {
+      window.localStorage.setItem(agencyTabKey(user.id), next);
+    } catch {
+      /* ignore */
+    }
+  }
   const [search, setSearch] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [companyFilter, setCompanyFilter] = useState("all");
