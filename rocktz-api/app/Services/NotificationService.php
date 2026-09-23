@@ -19,7 +19,7 @@ class NotificationService
      */
     public function send(array $payload): Notification
     {
-        $notification = Notification::query()->create([
+        $attributes = [
             'user_id' => $payload['user_id'] ?? null,
             'creator_id' => $payload['creator_id'] ?? null,
             'campaign_id' => $payload['campaign_id'] ?? null,
@@ -30,7 +30,27 @@ class NotificationService
             'target_role' => $payload['target_role'] ?? NotificationTargetRole::Admin,
             'link' => $payload['link'] ?? null,
             'read' => false,
-        ]);
+        ];
+
+        $existing = Notification::query()
+            ->where('user_id', $attributes['user_id'])
+            ->where('creator_id', $attributes['creator_id'])
+            ->where('campaign_id', $attributes['campaign_id'])
+            ->where('recurring_contract_id', $attributes['recurring_contract_id'])
+            ->where('title', $attributes['title'])
+            ->where('message', $attributes['message'])
+            ->where('type', $attributes['type'])
+            ->where('target_role', $attributes['target_role'])
+            ->where('link', $attributes['link'])
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->latest('id')
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $notification = Notification::query()->create($attributes);
 
         if ($notification->user_id) {
             SendPushNotificationJob::dispatch($notification->id);

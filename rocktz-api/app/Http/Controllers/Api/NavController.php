@@ -15,8 +15,9 @@ class NavController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $user = $request->user();
-        $unread = Notification::query()->where('read', false);
-        $unread->visibleTo($user);
+        $unread = Notification::collapseCopies(
+            Notification::query()->where('read', false)->visibleTo($user)->get(),
+        );
 
         $pending = 0;
         if ($user->role === UserRole::Admin) {
