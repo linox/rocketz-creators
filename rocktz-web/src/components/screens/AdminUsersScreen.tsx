@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { Building2, KeyRound, Plus, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Building2, KeyRound, Plus, Search, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PasswordField } from "@/components/PasswordField";
@@ -291,14 +291,17 @@ function UsersInner() {
       return <>{t("users.noContext")}</>;
     }
     return (
-      <div className="flex flex-wrap items-center gap-1">
-        {linked.length === 0 ? <span>{t("users.noContext")}</span> : null}
-        {linked.map((company) => (
-          <span key={company.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-            <Building2 size={10} className="shrink-0" />
-            <span className="truncate">{company.name}</span>
-          </span>
-        ))}
+      <div className="flex max-w-xl flex-col items-start gap-1.5">
+        {linked.length === 0 ? <span>{t("users.noContext")}</span> : (
+          <div className="flex flex-wrap items-center gap-1">
+            {linked.map((company) => (
+              <span key={company.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                <Building2 size={10} className="shrink-0" />
+                <span className="truncate">{company.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {canManage && onEdit ? (
           <button
             type="button"
@@ -307,6 +310,46 @@ function UsersInner() {
           >
             <Plus size={10} />
             {t("users.addCompany")}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  function UserActions({ item, wrap = false }: { item: AuthUser; wrap?: boolean }) {
+    const btn = cn(
+      "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-bold",
+      !wrap && "w-full xl:w-auto",
+    );
+    const showManage = canManage && (item.role === "company" || permissionsForRole(item.role).length > 0);
+    return (
+      <div className={cn(
+        "flex gap-1",
+        wrap
+          ? "flex-wrap"
+          : "ml-auto w-[9.25rem] flex-col items-stretch xl:w-auto xl:flex-row xl:flex-nowrap xl:items-center xl:justify-end",
+      )}>
+        {item.role === "creator" && item.creator?.id ? (
+          <Link href={`/creators/${item.creator.id}`} className={cn(btn, "bg-slate-100 text-slate-700 hover:bg-slate-200")}>
+            {t("users.openProfile")}
+          </Link>
+        ) : null}
+        {canManage ? (
+          <button type="button" onClick={() => openPassword(item)} className={cn(btn, "bg-slate-100 text-slate-700 hover:bg-slate-200")}>
+            <KeyRound size={12} />
+            {t("users.changePassword")}
+          </button>
+        ) : null}
+        {showManage ? (
+          <button type="button" onClick={() => openEdit(item)} className={cn(btn, "bg-indigo-50 text-brand-primary hover:bg-indigo-100")}>
+            {item.role === "company" ? <Building2 size={12} /> : <ShieldCheck size={12} />}
+            {item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}
+          </button>
+        ) : null}
+        {canManage && item.id !== me.id ? (
+          <button type="button" onClick={() => void onRemove(item)} className={cn(btn, "bg-rose-50 text-rose-600 hover:bg-rose-100")}>
+            <Trash2 size={12} />
+            {tc("remove")}
           </button>
         ) : null}
       </div>
@@ -411,7 +454,7 @@ function UsersInner() {
                 <th className="p-3.5">{t("users.colRole")}</th>
                 <th className="p-3.5">{t("users.colContext")}</th>
                 <th className="p-3.5">{t("users.colPermissions")}</th>
-                <th className="p-3.5 pr-5 text-right">{t("users.colActions")}</th>
+                <th className="w-px p-3.5 pr-5 text-right whitespace-nowrap">{t("users.colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -433,37 +476,8 @@ function UsersInner() {
                   <td className="p-3.5 font-semibold text-slate-700">
                     {t("users.permissionCount", { count: (item.permissions ?? []).length })}
                   </td>
-                  <td className="p-3.5 pr-5 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {item.role === "creator" && item.creator?.id ? (
-                        <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200">
-                          {t("users.openProfile")}
-                        </Link>
-                      ) : null}
-                      {canManage ? (
-                        <button
-                          type="button"
-                          onClick={() => openPassword(item)}
-                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200"
-                        >
-                          {t("users.changePassword")}
-                        </button>
-                      ) : null}
-                      {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
-                        <button
-                          type="button"
-                          onClick={() => openEdit(item)}
-                          className="rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] font-bold text-brand-primary hover:bg-indigo-100"
-                        >
-                          {item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}
-                        </button>
-                      ) : null}
-                      {canManage && item.id !== me.id ? (
-                        <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50">
-                          {tc("remove")}
-                        </button>
-                      ) : null}
-                    </div>
+                  <td className="w-px p-3.5 pr-5 whitespace-nowrap text-right align-middle">
+                    <UserActions item={item} />
                   </td>
                 </tr>
               ))}
@@ -484,20 +498,7 @@ function UsersInner() {
                 {roleBadge(item.role)}
               </div>
               <div className="text-xs text-slate-500"><CompanyLinks item={item} onEdit={canManage ? () => openEdit(item) : undefined} /></div>
-              <div className="flex flex-wrap gap-2">
-                {item.role === "creator" && item.creator?.id ? (
-                  <Link href={`/creators/${item.creator.id}`} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.openProfile")}</Link>
-                ) : null}
-                {canManage ? (
-                  <button type="button" onClick={() => openPassword(item)} className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700">{t("users.changePassword")}</button>
-                ) : null}
-                {canManage && (item.role === "company" || permissionsForRole(item.role).length > 0) ? (
-                  <button type="button" onClick={() => openEdit(item)} className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-brand-primary">{item.role === "company" ? t("users.manageCompanies") : t("users.editPermissions")}</button>
-                ) : null}
-                {canManage && item.id !== me.id ? (
-                  <button type="button" onClick={() => void onRemove(item)} className="rounded-lg px-3 py-2 text-[11px] font-bold text-rose-600">{tc("remove")}</button>
-                ) : null}
-              </div>
+              <UserActions item={item} wrap />
             </div>
           ))}
         </div>

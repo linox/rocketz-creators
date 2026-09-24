@@ -596,17 +596,18 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
 
   return (
     <div className="space-y-8 pb-8">
-      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6">
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider whitespace-nowrap text-brand-primary uppercase">
-            <Repeat size={14} className="shrink-0" /> {t("recurring.breadcrumb")}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+        <div className="min-w-0 lg:w-[22rem] lg:shrink-0">
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider text-brand-primary uppercase">
+            <Repeat size={14} className="shrink-0" />
+            <span className="min-w-0">{t("recurring.breadcrumb")}</span>
           </div>
-          <h2 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">{t("recurring.title")}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">{t("recurring.subtitle")}</p>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 lg:text-3xl">{t("recurring.title")}</h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">{t("recurring.subtitle")}</p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-1 lg:justify-end">
           {isAdmin ? (
-            <label className="flex w-full flex-col gap-1 sm:w-64">
+            <label className="flex w-full flex-col gap-1 sm:w-56">
               <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("recurring.selectCompany")}</span>
               <Select2Field
                 theme="light"
@@ -1488,12 +1489,12 @@ function KpiCard({ label, value, suffix, hint, hintClass, icon: Icon, iconClass 
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
       <div className="min-w-0 flex-1">
-        <span className="block truncate text-[11px] font-bold tracking-wider text-slate-400 uppercase">{label}</span>
-        <span className="mt-1 block text-xl leading-tight font-black break-words text-slate-900 tabular-nums sm:text-2xl">
+        <span className="line-clamp-2 text-[11px] leading-snug font-bold tracking-wider text-slate-400 uppercase">{label}</span>
+        <span className="mt-1 block truncate text-lg leading-none font-black text-slate-900 tabular-nums sm:text-xl">
           {value}
           {suffix ? <span className="text-xs font-semibold text-slate-400"> {suffix}</span> : null}
         </span>
-        <span className={cn("mt-0.5 block truncate text-[10px] font-semibold", hintClass || "text-slate-500")}>{hint}</span>
+        <span className={cn("mt-1 block truncate text-[10px] font-semibold", hintClass || "text-slate-500")}>{hint}</span>
       </div>
       <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl", iconClass)}>
         <Icon size={22} />

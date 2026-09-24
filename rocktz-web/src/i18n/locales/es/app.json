@@ -1069,6 +1069,8 @@
       "typeCampaign": "Campañas puntuales",
       "typeRecurring": "Trabajos recurrentes",
       "companies": "Empresas",
+      "selectCompany": "Empresa",
+      "companyPh": "Selecciona la empresa",
       "allCompanies": "Todas las empresas",
       "viewAll": "Ver todas",
       "showLess": "Ver menos",

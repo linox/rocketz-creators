@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
+import { Select2Field } from "@/components/Select2Field";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -53,6 +54,26 @@ import {
   type InboxViewMode,
 } from "@/lib/delivery-inbox";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import type { Company } from "@/lib/types";
+import { useAuth } from "@/lib/use-auth";
+
+const AGENCY_COMPANY_KEY = "rocktz.deliveries.agencyCompany";
+const ALL_COMPANIES = "all";
+
+function agencyCompanyKey(userId: number) {
+  return `${AGENCY_COMPANY_KEY}:${userId}`;
+}
+
+function readAgencyCompany(userId: number): string {
+  if (typeof window === "undefined") return ALL_COMPANIES;
+  try {
+    const stored = window.localStorage.getItem(agencyCompanyKey(userId));
+    if (stored) return stored;
+    return window.localStorage.getItem(`rocktz.recurring.agencyCompany:${userId}`) || ALL_COMPANIES;
+  } catch {
+    return ALL_COMPANIES;
+  }
+}
 
 function statusTone(status: DeliveryStatus) {
   switch (status) {
@@ -74,11 +95,15 @@ function statusTone(status: DeliveryStatus) {
 }
 
 function DeliveriesInboxInner() {
+  const user = useAuth();
   const { t, i18n } = useTranslation("app");
   const locale = intlLocale(normalizeLocale(i18n.language));
+  const isAdmin = user.role === "admin";
 
   const [items, setItems] = useState<DeliveryInboxItem[]>([]);
+  const [agencyCompanies, setAgencyCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companyReady, setCompanyReady] = useState(!isAdmin);
   const [folder, setFolder] = useState<InboxFolder>("all");
   const [sourceFilter, setSourceFilter] = useState<InboxSourceFilter>("all");
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -113,9 +138,46 @@ function DeliveriesInboxInner() {
     }
   }
 
+  function setCompanyFilter(next: string) {
+    const id = !next || next === ALL_COMPANIES ? null : next;
+    setCompanyId(id);
+    setSourceId(null);
+    if (!isAdmin) return;
+    try {
+      window.localStorage.setItem(agencyCompanyKey(user.id), id ?? ALL_COMPANIES);
+    } catch {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
     void loadInbox();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const stored = readAgencyCompany(user.id);
+    if (stored && stored !== ALL_COMPANIES) setCompanyId(stored);
+    setCompanyReady(true);
+  }, [isAdmin, user.id]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.companies("?status=active").then((res) => setAgencyCompanies(res.data)).catch(() => undefined);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || !companyReady || !companyId || agencyCompanies.length === 0) return;
+    if (!agencyCompanies.some((company) => String(company.id) === companyId)) {
+      setCompanyId(null);
+      setSourceId(null);
+      try {
+        window.localStorage.setItem(agencyCompanyKey(user.id), ALL_COMPANIES);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [isAdmin, companyReady, companyId, agencyCompanies, user.id]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -538,19 +600,28 @@ function DeliveriesInboxInner() {
     return groups;
   }, [filtered]);
 
+  const companyScoped = useMemo(
+    () => (companyId ? items.filter((item) => item.companyId === companyId) : items),
+    [items, companyId],
+  );
+
   const summary = {
-    all: countByFolder(items, "all"),
-    pending: countByFolder(items, "pending_approval"),
-    revision: countByFolder(items, "revision_requested"),
-    unread: countByFolder(items, "unread"),
-    overdue: countByFolder(items, "overdue"),
+    all: countByFolder(companyScoped, "all"),
+    pending: countByFolder(companyScoped, "pending_approval"),
+    revision: countByFolder(companyScoped, "revision_requested"),
+    unread: countByFolder(companyScoped, "unread"),
+    overdue: countByFolder(companyScoped, "overdue"),
   };
 
   const visibleCompanies = companiesExpanded ? companies : companies.slice(0, 4);
-  const extraFiltersActive = sourceFilter !== "all" || companyId !== null || sourceId !== null || quick !== "all";
-  const activeExtraCount = [sourceFilter !== "all", companyId !== null, sourceId !== null, quick !== "all"].filter(Boolean).length;
+  const extraFiltersActive = sourceFilter !== "all" || sourceId !== null || quick !== "all";
+  const activeExtraCount = [sourceFilter !== "all", sourceId !== null, quick !== "all"].filter(Boolean).length;
+  const companyOptions = [
+    { value: ALL_COMPANIES, label: t("deliveries.inbox.allCompanies") },
+    ...agencyCompanies.map((company) => ({ value: String(company.id), label: company.name })),
+  ];
 
-  if (loading) {
+  if (loading || !companyReady) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
@@ -569,6 +640,20 @@ function DeliveriesInboxInner() {
           <h1 className="m-0 text-xl font-bold tracking-tight text-[#0F172A] sm:text-[28px]">{t("deliveries.inbox.title")}</h1>
           <p className="mt-1 max-w-2xl text-[14px] text-[#64748B]">{t("deliveries.inbox.subtitle")}</p>
         </div>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+          {isAdmin ? (
+            <label className="flex w-full flex-col gap-1 sm:w-56">
+              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("deliveries.inbox.selectCompany")}</span>
+              <Select2Field
+                theme="light"
+                searchable
+                placeholder={t("deliveries.inbox.companyPh")}
+                value={companyId ?? ALL_COMPANIES}
+                options={companyOptions}
+                onChange={setCompanyFilter}
+              />
+            </label>
+          ) : null}
         <button
           type="button"
           onClick={() => void alertWarning(t("deliveries.inbox.newDeliveryTitle"), t("deliveries.inbox.newDeliveryHint"))}
@@ -576,6 +661,7 @@ function DeliveriesInboxInner() {
         >
           + {t("deliveries.inbox.newDelivery")}
         </button>
+        </div>
       </header>
 
       <div className="flex shrink-0 flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -639,8 +725,8 @@ function DeliveriesInboxInner() {
             ["revision_requested", summary.revision, t("deliveries.inbox.statRevision")],
             ["unread", summary.unread, t("deliveries.inbox.statUnread")],
             ["overdue", summary.overdue, t("deliveries.inbox.statOverdue")],
-            ["approved", countByFolder(items, "approved"), t("deliveries.inbox.folder.approved")],
-            ["archived", countByFolder(items, "archived"), t("deliveries.inbox.folder.archived")],
+            ["approved", countByFolder(companyScoped, "approved"), t("deliveries.inbox.folder.approved")],
+            ["archived", countByFolder(companyScoped, "archived"), t("deliveries.inbox.folder.archived")],
           ] as const).map(([key, count, label]) => (
             <button
               key={key}
@@ -680,7 +766,7 @@ function DeliveriesInboxInner() {
               <Chip
                 label={t("deliveries.inbox.allCompanies")}
                 active={!companyId}
-                onClick={() => { setCompanyId(null); setSourceId(null); }}
+                onClick={() => setCompanyFilter(ALL_COMPANIES)}
               />
               {visibleCompanies.map((company) => (
                 <Chip
@@ -688,7 +774,7 @@ function DeliveriesInboxInner() {
                   label={company.name}
                   count={company.count}
                   active={companyId === company.id}
-                  onClick={() => { setCompanyId(company.id); setSourceId(null); }}
+                  onClick={() => setCompanyFilter(company.id)}
                 />
               ))}
               {companies.length > 4 ? (
@@ -723,7 +809,6 @@ function DeliveriesInboxInner() {
                 type="button"
                 onClick={() => {
                   setSourceFilter("all");
-                  setCompanyId(null);
                   setSourceId(null);
                   setQuick("all");
                 }}

@@ -1069,6 +1069,8 @@
       "typeCampaign": "One-off campaigns",
       "typeRecurring": "Recurring work",
       "companies": "Companies",
+      "selectCompany": "Company",
+      "companyPh": "Select the company",
       "allCompanies": "All companies",
       "viewAll": "View all",
       "showLess": "Show less",
