@@ -21,7 +21,6 @@ class NotificationService
     {
         $attributes = [
             'user_id' => $payload['user_id'] ?? null,
-            'company_id' => $payload['company_id'] ?? null,
             'creator_id' => $payload['creator_id'] ?? null,
             'campaign_id' => $payload['campaign_id'] ?? null,
             'recurring_contract_id' => $payload['recurring_contract_id'] ?? null,
@@ -35,7 +34,6 @@ class NotificationService
 
         $existing = Notification::query()
             ->where('user_id', $attributes['user_id'])
-            ->where('company_id', $attributes['company_id'])
             ->where('creator_id', $attributes['creator_id'])
             ->where('campaign_id', $attributes['campaign_id'])
             ->where('recurring_contract_id', $attributes['recurring_contract_id'])
@@ -84,10 +82,9 @@ class NotificationService
             ->where('company_id', $companyId)
             ->whereNotNull('user_id')
             ->get()
-            ->each(function (CompanyUser $row) use ($payload, $companyId) {
+            ->each(function (CompanyUser $row) use ($payload) {
                 $this->send(array_merge($payload, [
                     'user_id' => $row->user_id,
-                    'company_id' => $companyId,
                     'target_role' => NotificationTargetRole::Company,
                 ]));
             });

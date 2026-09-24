@@ -97,11 +97,6 @@ class NotificationController extends Controller
             return true;
         }
 
-        if ($user->role === UserRole::Company) {
-            return (int) $notification->user_id === (int) $user->id
-                && (int) $notification->company_id === (int) $user->actingCompanyId();
-        }
-
         if ((int) $notification->user_id === (int) $user->id) {
             return true;
         }

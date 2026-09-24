@@ -385,7 +385,6 @@ export type PlanningItem = {
 
 export type AppNotification = {
   id: number;
-  company_id?: number | null;
   title: string;
   message: string;
   type: string;
