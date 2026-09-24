@@ -97,6 +97,59 @@ class NotificationInboxTest extends TestCase
         $this->assertFalse((bool) Notification::query()->where('user_id', $memberA->id)->value('read'));
     }
 
+    public function test_company_inbox_shows_only_the_selected_company(): void
+    {
+        $user = User::factory()->company()->create();
+        $selected = Company::factory()->active()->create(['name' => 'Cricut México']);
+        $other = Company::factory()->active()->create(['name' => 'Cricut Brasil']);
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $selected->id,
+        ]);
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $other->id,
+        ]);
+
+        $service = app(NotificationService::class);
+        $service->notifyCompany($selected->id, [
+            'title' => 'Guion enviado',
+            'message' => 'Entrega da empresa selecionada.',
+            'type' => NotificationType::DeliveryReview,
+            'link' => '/campaigns/1',
+        ]);
+        $service->notifyCompany($other->id, [
+            'title' => 'Guion enviado',
+            'message' => 'Entrega da outra empresa.',
+            'type' => NotificationType::DeliveryReview,
+            'link' => '/campaigns/2',
+        ]);
+
+        $token = $user->createToken('auth')->plainTextToken;
+        $inbox = $this->withToken($token)->getJson('/api/notifications')->assertOk()->json('data');
+
+        $this->assertCount(1, $inbox);
+        $this->assertSame('Entrega da empresa selecionada.', $inbox[0]['message']);
+        $this->assertSame($selected->id, $inbox[0]['company_id']);
+        $this->withToken($token)->getJson('/api/nav')->assertOk()->assertJsonPath('unread', 1);
+
+        $otherId = Notification::query()->where('company_id', $other->id)->value('id');
+        $this->withToken($token)->patchJson('/api/notifications/'.$otherId.'/read')->assertForbidden();
+
+        $this->withToken($token)->postJson('/api/notifications/read-all')->assertOk();
+        $this->assertTrue((bool) Notification::query()->where('company_id', $selected->id)->value('read'));
+        $this->assertFalse((bool) Notification::query()->where('company_id', $other->id)->value('read'));
+
+        $this->withToken($token)
+            ->patchJson('/api/auth/company', ['company_id' => $other->id])
+            ->assertOk();
+
+        $switched = $this->withToken($token)->getJson('/api/notifications')->assertOk()->json('data');
+        $this->assertCount(1, $switched);
+        $this->assertSame('Entrega da outra empresa.', $switched[0]['message']);
+        $this->withToken($token)->getJson('/api/nav')->assertOk()->assertJsonPath('unread', 1);
+    }
+
     public function test_same_day_resubmission_stays_visible_when_the_message_changes(): void
     {
         $admin = User::factory()->admin()->create();

@@ -175,6 +175,7 @@ function NotificationsInner() {
   const user = useAuth();
   const router = useRouter();
   const { t } = useTranslation("app");
+  const companyId = user.role === "company" ? user.company?.id ?? 0 : 0;
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>("all");
@@ -194,7 +195,7 @@ function NotificationsInner() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, companyId]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -204,10 +205,13 @@ function NotificationsInner() {
   }, [load]);
 
   const scopedItems = useMemo(() => {
-    if (user.role !== "admin") return items;
-    if (roleFilter !== "admin_only") return items;
-    return items.filter((n) => n.target_role === "admin" || !n.target_role || n.target_role === "all");
-  }, [items, roleFilter, user.role]);
+    const visible = user.role === "company"
+      ? items.filter((n) => n.company_id === companyId)
+      : items;
+    if (user.role !== "admin") return visible;
+    if (roleFilter !== "admin_only") return visible;
+    return visible.filter((n) => n.target_role === "admin" || !n.target_role || n.target_role === "all");
+  }, [items, roleFilter, user.role, companyId]);
 
   const isCreator = user.role === "creator";
   const filters = isCreator ? CREATOR_FILTERS : AGENCY_FILTERS;

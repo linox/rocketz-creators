@@ -16,6 +16,7 @@ use Illuminate\Support\Collection;
 
 #[Fillable([
     'user_id',
+    'company_id',
     'creator_id',
     'campaign_id',
     'recurring_contract_id',
@@ -46,6 +47,11 @@ class Notification extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     public function creator(): BelongsTo
@@ -89,7 +95,8 @@ class Notification extends Model
             return;
         }
 
-        $query->where('user_id', $user->id);
+        $query->where('user_id', $user->id)
+            ->where('company_id', (int) $user->actingCompanyId());
     }
 
     /**
@@ -103,6 +110,7 @@ class Notification extends Model
             ->where('type', $this->type)
             ->where('target_role', $this->target_role)
             ->where('link', $this->link)
+            ->where('company_id', $this->company_id)
             ->where('creator_id', $this->creator_id)
             ->where('campaign_id', $this->campaign_id)
             ->where('recurring_contract_id', $this->recurring_contract_id);
@@ -156,6 +164,7 @@ class Notification extends Model
 
         return implode("\0", [
             $perRecipient ? (string) ($this->user_id ?? '') : '',
+            (string) ($this->company_id ?? ''),
             (string) $this->title,
             (string) $this->message,
             $type,
