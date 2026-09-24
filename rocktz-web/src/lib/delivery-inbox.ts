@@ -48,6 +48,13 @@ export type DeliveryActivity = {
   createdAt: string;
 };
 
+export type DeliveryRevision = {
+  id: string;
+  stage: string;
+  note: string;
+  requestedAt: string;
+};
+
 export type DeliveryInboxItem = {
   id: string;
   title: string;
@@ -70,6 +77,7 @@ export type DeliveryInboxItem = {
   currentVersion: number;
   versions: DeliveryVersion[];
   activity: DeliveryActivity[];
+  revisions: DeliveryRevision[];
   archived?: boolean;
   participationId?: number | null;
   planningItemId?: number | null;
@@ -224,6 +232,27 @@ function fileNameFromUrl(url?: string | null) {
   }
 }
 
+function revisionNotes(
+  history: { stage: string; note: string; requested_at?: string }[] | undefined,
+  stage: string,
+  fallback: string | null | undefined,
+  fallbackAt: string,
+  id: string,
+): DeliveryRevision[] {
+  const stored = (history ?? []).filter((entry) => entry.stage === stage && entry.note?.trim());
+  if (stored.length) {
+    return stored.map((entry, index) => ({
+      id: `${id}-rev-${entry.requested_at || index}`,
+      stage,
+      note: entry.note.trim(),
+      requestedAt: entry.requested_at || fallbackAt,
+    }));
+  }
+  const note = fallback?.trim();
+  if (!note) return [];
+  return [{ id: `${id}-rev-fallback`, stage, note, requestedAt: fallbackAt }];
+}
+
 function campaignFlow(campaign: Campaign) {
   return campaign.approval_flow || "script_and_video";
 }
@@ -327,6 +356,14 @@ function buildCampaignStageItem(
     activity.push({ id: `${id}-ap`, type: "approved", userName: companyName, createdAt });
   }
 
+  const revisions = revisionNotes(
+    row.content?.revision_history,
+    stage,
+    isScript ? row.script_feedback : (row.video_feedback || row.revision_details),
+    createdAt,
+    id,
+  );
+
   return {
     id,
     title: campaign.name,
@@ -350,6 +387,7 @@ function buildCampaignStageItem(
     currentVersion,
     versions,
     activity,
+    revisions,
     participationId: row.id,
     planningItemId: null,
     approvalStage: stage,
@@ -503,6 +541,14 @@ function buildPlanningStageItem(
     activity.push({ id: `${id}-ap`, type: "approved", userName: companyName, createdAt: item.reviewed_at || createdAt });
   }
 
+  const revisions = revisionNotes(
+    item.revision_history,
+    stage,
+    isScript ? item.script_feedback : (item.video_feedback || item.feedback_note),
+    item.reviewed_at || createdAt,
+    id,
+  );
+
   return {
     id,
     title: namedPlanningTitle(item.title),
@@ -526,6 +572,7 @@ function buildPlanningStageItem(
     currentVersion,
     versions,
     activity,
+    revisions,
     participationId: null,
     planningItemId: item.id,
     approvalStage: stage,

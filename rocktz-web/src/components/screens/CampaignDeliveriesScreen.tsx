@@ -11,6 +11,7 @@ import {
   Download,
   ExternalLink,
   Filter,
+  History,
   Inbox,
   LayoutList,
   Link2,
@@ -492,6 +493,15 @@ function DeliveriesInboxInner() {
             createdAt: now,
           },
         ],
+        revisions: [
+          ...(row.revisions ?? []),
+          {
+            id: `rev-${Date.now()}`,
+            stage: row.approvalStage === "script" ? "script" : "video",
+            note,
+            requestedAt: now,
+          },
+        ],
       }));
       setRevisionText("");
       setRevisionOpen(false);
@@ -631,7 +641,7 @@ function DeliveriesInboxInner() {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-1.25rem)] flex-col gap-3">
+    <div className="flex h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-1.5rem)] flex-col gap-3 overflow-hidden sm:h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-2.5rem)] lg:h-[calc(100dvh-var(--app-header-h)-5rem)]">
       <header className="flex shrink-0 flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-wider text-brand-primary uppercase">
@@ -844,8 +854,8 @@ function DeliveriesInboxInner() {
           />
         </div>
       ) : (
-        <div className="grid flex-1 grid-cols-1 items-start rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
-          <section className={cn("flex h-[40vh] flex-col overflow-hidden border-b border-slate-200 lg:sticky lg:top-0 lg:h-[calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-8rem)] lg:border-r lg:border-b-0", mobileShowDetail && selected ? "hidden lg:flex" : "flex")}>
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
+          <section className={cn("flex min-h-0 flex-col overflow-hidden border-b border-slate-200 lg:border-r lg:border-b-0", mobileShowDetail && selected ? "hidden lg:flex" : "flex")}>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
@@ -879,7 +889,7 @@ function DeliveriesInboxInner() {
             </div>
           </section>
 
-          <section className={cn("w-full min-w-0", mobileShowDetail && selected ? "block" : "hidden lg:block")}>
+          <section className={cn("min-h-0 w-full min-w-0 flex-col overflow-hidden", mobileShowDetail && selected ? "flex" : "hidden lg:flex")}>
             {selected && activeVersion ? (
               <ReadingPane
                 item={selected}
@@ -911,7 +921,7 @@ function DeliveriesInboxInner() {
                 t={t}
               />
             ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-slate-400">
+              <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-8 text-center text-slate-400">
                 <LayoutList size={32} />
                 <p className="m-0 text-sm font-bold text-slate-600">{t("deliveries.inbox.selectHint")}</p>
               </div>
@@ -1106,7 +1116,7 @@ function ReadingPane({
 
   return (
     <>
-    <div className="flex w-full flex-col">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-contain">
       <div className="shrink-0 border-b border-slate-100 px-4 py-3">
         <div className="flex items-start gap-3">
           <button type="button" onClick={onBack} className="mt-1 rounded-lg border border-slate-200 p-1.5 text-slate-500 lg:hidden">
@@ -1202,6 +1212,28 @@ function ReadingPane({
       </div>
 
       <div className="space-y-5 p-4">
+        <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+          <h3 className="m-0 flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-purple-800 uppercase">
+            <History size={13} /> {t("deliveries.inbox.changeHistory")}
+          </h3>
+          {(item.revisions ?? []).length ? (
+            <div className="mt-2 space-y-2">
+              {[...item.revisions].reverse().map((entry) => (
+                <div key={entry.id} className="rounded-lg border border-purple-100 bg-white px-3 py-2">
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[9px] font-extrabold text-purple-700 uppercase">
+                      {entry.stage === "script" ? t("deliveries.inbox.changeHistoryScript") : t("deliveries.inbox.changeHistoryVideo")}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-400">{new Date(entry.requestedAt).toLocaleString(locale)}</span>
+                  </div>
+                  <p className="m-0 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{entry.note}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="m-0 mt-2 text-[11px] font-medium text-slate-500">{t("deliveries.inbox.changeHistoryEmpty")}</p>
+          )}
+        </div>
         {awaitingVideoWithoutFile ? (
           <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-3 text-[12px] font-medium text-amber-900">
             {t("deliveries.inbox.awaitingVideoHint")}
