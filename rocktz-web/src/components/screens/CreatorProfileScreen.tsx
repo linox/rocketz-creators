@@ -11,6 +11,7 @@ import {
   Briefcase,
   Building2,
   Calendar,
+  CalendarDays,
   Check,
   CheckCircle2,
   Clapperboard,
@@ -131,8 +132,52 @@ function currentYearMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type WorkHorizon = "month" | "upcoming";
+
+function formatMonthLabel(month: string, locale: string) {
+  const raw = new Date(`${month}-02T12:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function monthKeyOf(value?: string | null) {
+  if (!value || value.length < 7) return null;
+  const key = value.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(key) ? key : null;
+}
+
 function itemInMonth(item: PlanningItem, month: string) {
   return item.month === month || Boolean(item.planned_date?.startsWith(month) || item.post_date?.startsWith(month));
+}
+
+function futureMonthKey(item: PlanningItem, current: string) {
+  if (itemInMonth(item, current)) return null;
+  const keys = [monthKeyOf(item.month), monthKeyOf(item.planned_date), monthKeyOf(item.post_date)]
+    .filter((key): key is string => Boolean(key && key > current));
+  keys.sort();
+  return keys[0] ?? null;
+}
+
+function campaignMonthKeys(
+  campaign: Campaign,
+  row: { delivery_date?: string | null; post_date?: string | null },
+) {
+  return [...new Set(
+    [monthKeyOf(row.delivery_date), monthKeyOf(row.post_date), monthKeyOf(campaign.end_date), monthKeyOf(campaign.start_date)]
+      .filter((key): key is string => Boolean(key)),
+  )].sort();
+}
+
+function campaignWorkHorizon(
+  campaign: Campaign,
+  row: { delivery_date?: string | null; post_date?: string | null },
+  current: string,
+): WorkHorizon | "hidden" {
+  if (campaign.status === "finished") {
+    return campaignVisibleOnCreatorMonth(campaign, row, current) ? "month" : "hidden";
+  }
+  const keys = campaignMonthKeys(campaign, row);
+  if (keys.length > 0 && keys.every((key) => key > current)) return "upcoming";
+  return "month";
 }
 
 function campaignVisibleOnCreatorMonth(
@@ -613,6 +658,7 @@ function ProfileInner() {
   const [campaignSubTab, setCampaignSubTab] = useState<"active" | "applications">("active");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<number | null>(null);
   const [expandedRecurringKey, setExpandedRecurringKey] = useState<string | null>(null);
+  const [workHorizon, setWorkHorizon] = useState<WorkHorizon>("month");
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const searchParams = useSearchParams();
@@ -988,7 +1034,21 @@ function ProfileInner() {
     .filter((item): item is { campaign: Campaign; row: NonNullable<Campaign["applications"]>[number] } => Boolean(item));
 
   const approvedCampaigns = myParticipations.filter((item) => item.row.application_status === "approved");
-  const dashboardApprovedCampaigns = approvedCampaigns.filter((item) => campaignVisibleOnCreatorMonth(item.campaign, item.row, currentYearMonth()));
+  const workMonth = currentYearMonth();
+  const workMonthLabel = formatMonthLabel(workMonth, locale);
+  const monthCampaigns = approvedCampaigns.filter((item) => campaignWorkHorizon(item.campaign, item.row, workMonth) === "month");
+  const upcomingCampaigns = approvedCampaigns.filter((item) => campaignWorkHorizon(item.campaign, item.row, workMonth) === "upcoming");
+  const dashboardCampaigns = workHorizon === "upcoming" ? upcomingCampaigns : monthCampaigns;
+  const monthRecurringCount = recurringWorkRows.filter((work) => work.item && itemInMonth(work.item, workMonth)).length;
+  const upcomingRecurringCount = recurringWorkRows.filter((work) => work.item && futureMonthKey(work.item, workMonth)).length;
+  const upcomingDemandCount = upcomingCampaigns.length + upcomingRecurringCount;
+  const upcomingCampaignGroups = [...upcomingCampaigns.reduce((groups, item) => {
+    const month = campaignMonthKeys(item.campaign, item.row).find((key) => key > workMonth) ?? workMonth;
+    const list = groups.get(month) ?? [];
+    list.push(item);
+    groups.set(month, list);
+    return groups;
+  }, new Map<string, typeof upcomingCampaigns>())].sort((a, b) => a[0].localeCompare(b[0]));
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const rejectedApplications = myParticipations.filter((item) => item.row.application_status === "rejected");
 
@@ -1787,6 +1847,14 @@ function ProfileInner() {
                 </div>
               </div>
 
+              <WorkHorizonSwitch
+                value={workHorizon}
+                onChange={setWorkHorizon}
+                monthLabel={workMonthLabel}
+                upcomingCount={upcomingDemandCount}
+                tp={tp as (key: string, options?: Record<string, unknown>) => string}
+              />
+
               {loadingCampaigns ? (
                 <div className="flex items-center justify-center rounded-[16px] border border-[#E2E8F0] bg-white p-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
@@ -1794,9 +1862,14 @@ function ProfileInner() {
               ) : (
                 <div className="flex flex-col gap-4">
                   <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
-                    <Briefcase size={16} className="text-brand-primary" /> {tp("activeCampaignsSection", { count: dashboardApprovedCampaigns.length })}
+                    <Briefcase size={16} className="text-brand-primary" /> {workHorizon === "upcoming"
+                      ? tp("campaignsUpcomingSection", { count: dashboardCampaigns.length })
+                      : tp("campaignsThisMonthSection", { month: workMonthLabel, count: dashboardCampaigns.length })}
                   </h3>
-                  {dashboardApprovedCampaigns.length === 0 ? (
+                  {dashboardCampaigns.length === 0 ? (
+                    workHorizon === "upcoming" ? (
+                      <p className="m-0 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white px-6 py-10 text-center text-sm font-medium text-slate-500">{tp("noUpcomingCampaigns")}</p>
+                    ) : (
                     <div className="flex flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
                       <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Briefcase size={24} /></div>
                       <h4 className="text-sm font-bold text-slate-800">{tp("noActiveCampaigns")}</h4>
@@ -1805,30 +1878,47 @@ function ProfileInner() {
                         <Sparkles size={14} /> {tp("browseAvailable")}
                       </Link>
                     </div>
+                    )
                   ) : (
-                    <ActiveCampaignsTable
-                      approvedCampaigns={dashboardApprovedCampaigns}
-                      expandedSubmissionId={expandedSubmissionId}
-                      openSubmission={openSubmission}
-                      onCloseSubmission={() => setExpandedSubmissionId(null)}
-                      reloadMyCampaigns={reloadMyCampaigns}
-                      applicationLabel={applicationLabel}
-                      deliveryLabel={deliveryLabel}
-                      deliveryBadgeClass={deliveryBadgeClass}
-                      applicationBadgeClass={applicationBadgeClass}
-                      creatorFeeText={creatorFeeText}
-                      fmtDate={fmtDate}
-                      tp={tp as (key: string, options?: Record<string, unknown>) => string}
-                    />
+                    (workHorizon === "upcoming"
+                      ? upcomingCampaignGroups.map(([month, rows]) => ({ key: month, title: formatMonthLabel(month, locale), rows }))
+                      : [{ key: "month", title: null as string | null, rows: dashboardCampaigns }]
+                    ).map((group) => (
+                      <div key={group.key} className="flex flex-col gap-3">
+                        {group.title ? (
+                          <div className="flex items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                            <span className="text-sm font-black text-indigo-950">{group.title}</span>
+                            <span className="text-[11px] font-extrabold tracking-wider text-indigo-700 uppercase">{tp("horizonUpcoming")}</span>
+                          </div>
+                        ) : null}
+                        <ActiveCampaignsTable
+                          approvedCampaigns={group.rows}
+                          expandedSubmissionId={expandedSubmissionId}
+                          openSubmission={openSubmission}
+                          onCloseSubmission={() => setExpandedSubmissionId(null)}
+                          reloadMyCampaigns={reloadMyCampaigns}
+                          applicationLabel={applicationLabel}
+                          deliveryLabel={deliveryLabel}
+                          deliveryBadgeClass={deliveryBadgeClass}
+                          applicationBadgeClass={applicationBadgeClass}
+                          creatorFeeText={creatorFeeText}
+                          fmtDate={fmtDate}
+                          tp={tp as (key: string, options?: Record<string, unknown>) => string}
+                        />
+                      </div>
+                    ))
                   )}
                 </div>
               )}
 
               <div className="flex flex-col gap-4 border-t border-slate-100 pt-6">
                 <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
-                  <Repeat size={16} className="text-purple-600" /> {tp("activeRecurringSection", { count: myContracts.length })}
+                  <Repeat size={16} className="text-purple-600" /> {workHorizon === "upcoming"
+                    ? tp("recurringUpcomingSection", { count: upcomingRecurringCount })
+                    : tp("recurringThisMonthSection", { month: workMonthLabel, count: monthRecurringCount })}
                 </h3>
                 <ActiveRecurringWorksTable
+                  horizon={workHorizon}
                   rows={recurringWorkRows}
                   expandedKey={expandedRecurringKey}
                   openRow={openRecurringWork}
@@ -1838,6 +1928,7 @@ function ProfileInner() {
                   deliveryBadgeClass={deliveryBadgeClass}
                   fmtDate={fmtDate}
                   formatCurrency={formatPay}
+                  onShowUpcoming={() => setWorkHorizon("upcoming")}
                   tp={tp as (key: string, options?: Record<string, unknown>) => string}
                 />
               </div>
@@ -1848,12 +1939,22 @@ function ProfileInner() {
                 <div className="flex items-center gap-2.5">
                   <div className="rounded-xl bg-purple-50 p-2.5 text-purple-600"><Repeat size={20} /></div>
                   <div>
-                    <h3 className="m-0 text-lg font-bold text-slate-900">{tp("recurringWorksTitle", { count: myContracts.length })}</h3>
-                    <p className="m-0 text-xs text-slate-500">{tp("recurringWorksHint")}</p>
+                    <h3 className="m-0 text-lg font-bold text-slate-900">{workHorizon === "upcoming"
+                      ? tp("recurringUpcomingSection", { count: upcomingRecurringCount })
+                      : tp("recurringWorksTitle", { count: monthRecurringCount })}</h3>
+                    <p className="m-0 text-xs text-slate-500">{workHorizon === "upcoming" ? tp("recurringWorksUpcomingHint") : tp("recurringWorksHint")}</p>
                   </div>
                 </div>
               </div>
+              <WorkHorizonSwitch
+                value={workHorizon}
+                onChange={setWorkHorizon}
+                monthLabel={workMonthLabel}
+                upcomingCount={upcomingRecurringCount}
+                tp={tp as (key: string, options?: Record<string, unknown>) => string}
+              />
               <ActiveRecurringWorksTable
+                horizon={workHorizon}
                 rows={recurringWorkRows}
                 expandedKey={expandedRecurringKey}
                 openRow={openRecurringWork}
@@ -1863,6 +1964,7 @@ function ProfileInner() {
                 deliveryBadgeClass={deliveryBadgeClass}
                 fmtDate={fmtDate}
                 formatCurrency={formatPay}
+                onShowUpcoming={() => setWorkHorizon("upcoming")}
                 tp={tp as (key: string, options?: Record<string, unknown>) => string}
               />
             </div>
@@ -2262,7 +2364,70 @@ function RecurringBriefingModal({
   );
 }
 
+function WorkHorizonSwitch({
+  value,
+  onChange,
+  monthLabel,
+  upcomingCount,
+  tp,
+}: {
+  value: WorkHorizon;
+  onChange: (next: WorkHorizon) => void;
+  monthLabel: string;
+  upcomingCount: number;
+  tp: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const upcomingLabel = tp(upcomingCount === 1 ? "horizonUpcomingCountOne" : "horizonUpcomingCount", { count: upcomingCount });
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onChange("month")}
+          className={cn(
+            "flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors",
+            value === "month" ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-800 hover:border-slate-300",
+          )}
+        >
+          <span className="min-w-0">
+            <span className={cn("block text-[10px] font-extrabold tracking-wider uppercase", value === "month" ? "text-slate-300" : "text-slate-400")}>{tp("horizonThisMonth")}</span>
+            <span className="mt-0.5 block truncate text-sm font-black">{monthLabel}</span>
+          </span>
+          <Calendar size={18} className={value === "month" ? "text-white" : "text-slate-400"} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("upcoming")}
+          className={cn(
+            "flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors",
+            value === "upcoming"
+              ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+              : upcomingCount > 0
+                ? "border-indigo-300 bg-indigo-50 text-indigo-950 shadow-sm ring-2 ring-indigo-300 hover:border-indigo-400"
+                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300",
+          )}
+        >
+          <span className="min-w-0">
+            <span className={cn("block text-[10px] font-extrabold tracking-wider uppercase", value === "upcoming" ? "text-indigo-100" : upcomingCount > 0 ? "text-indigo-500" : "text-slate-400")}>{tp("horizonUpcoming")}</span>
+            <span className="mt-0.5 block truncate text-sm font-black">{upcomingLabel}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            {upcomingCount > 0 ? (
+              <span className={cn("rounded-full px-2.5 py-1 text-xs font-black", value === "upcoming" ? "bg-white/20 text-white" : "bg-indigo-600 text-white")}>{upcomingCount}</span>
+            ) : null}
+            <CalendarDays size={18} className={value === "upcoming" ? "text-white" : upcomingCount > 0 ? "text-indigo-600" : "text-slate-400"} />
+          </span>
+        </button>
+      </div>
+      <p className="m-0 text-xs text-slate-500">
+        {value === "upcoming" ? tp("horizonUpcomingHint") : tp("horizonMonthHint", { month: monthLabel })}
+      </p>
+    </div>
+  );
+}
+
 function ActiveRecurringWorksTable({
+  horizon = "month",
   rows,
   expandedKey,
   openRow,
@@ -2272,8 +2437,10 @@ function ActiveRecurringWorksTable({
   deliveryBadgeClass,
   fmtDate,
   formatCurrency,
+  onShowUpcoming,
   tp,
 }: {
+  horizon?: WorkHorizon;
   rows: RecurringWorkRow[];
   expandedKey: string | null;
   openRow: (key: string) => void;
@@ -2283,14 +2450,13 @@ function ActiveRecurringWorksTable({
   deliveryBadgeClass: (status: string | null | undefined) => string;
   fmtDate: (value?: string | null) => string;
   formatCurrency: (value: number) => string;
+  onShowUpcoming?: () => void;
   tp: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const { t: ta } = useTranslation("app");
   const { i18n } = useTranslation();
   const locale = intlLocale(normalizeLocale(i18n.language));
-  const month = currentYearMonth();
-  const monthLabelRaw = new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
-  const monthLabel = monthLabelRaw.charAt(0).toUpperCase() + monthLabelRaw.slice(1);
+  const current = currentYearMonth();
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -2320,34 +2486,63 @@ function ActiveRecurringWorksTable({
       byContract.set(work.contract.id, list);
     }
 
-    return [...byContract.values()]
-      .map((list) => {
-        const sample = list[0];
-        const companyName = sample.contract.company?.name || tp("partnerCompany");
-        const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
-        if (companyFilter !== "all" && companyId !== companyFilter) return null;
-        const monthItems = list.filter((work) => work.item && itemInMonth(work.item, month));
-        if (monthItems.length === 0 && sample.contract.status !== "active") return null;
-        const monthRows = monthItems.filter((work) => {
-          if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
-          return true;
-        });
-        const pendingRows = monthRows.filter((work) => work.deliveryStatus !== "published");
-        return {
-          key: `contract-${sample.contract.id}`,
+    const built: {
+      key: string;
+      monthKey: string;
+      monthLabel: string;
+      contract: RecurringContract;
+      companyName: string;
+      logoUrl: string | null;
+      fee: number | null;
+      deliverables: Record<string, number>;
+      monthRows: RecurringWorkRow[];
+      pendingRows: RecurringWorkRow[];
+      monthTotal: number;
+    }[] = [];
+
+    for (const list of byContract.values()) {
+      const sample = list[0];
+      const companyName = sample.contract.company?.name || tp("partnerCompany");
+      const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
+      if (companyFilter !== "all" && companyId !== companyFilter) continue;
+
+      const buckets = new Map<string, RecurringWorkRow[]>();
+      if (horizon === "month") {
+        const monthItems = list.filter((work) => work.item && itemInMonth(work.item, current));
+        if (monthItems.length === 0 && sample.contract.status !== "active") continue;
+        buckets.set(current, monthItems);
+      } else {
+        for (const work of list) {
+          if (!work.item) continue;
+          const key = futureMonthKey(work.item, current);
+          if (!key) continue;
+          const bucket = buckets.get(key) ?? [];
+          bucket.push(work);
+          buckets.set(key, bucket);
+        }
+      }
+
+      for (const [monthKey, monthItems] of buckets) {
+        const monthRows = monthItems.filter((work) => statusFilter === "all" || work.deliveryStatus === statusFilter);
+        if (horizon === "upcoming" && monthRows.length === 0) continue;
+        built.push({
+          key: `contract-${sample.contract.id}-${monthKey}`,
+          monthKey,
+          monthLabel: formatMonthLabel(monthKey, locale),
           contract: sample.contract,
           companyName,
           logoUrl: sample.contract.company?.logo_url ?? null,
           fee: sample.fee,
           deliverables: sample.deliverables,
           monthRows,
-          pendingRows,
+          pendingRows: monthRows.filter((work) => work.deliveryStatus !== "published"),
           monthTotal: quotaTotal(sample.deliverables) || monthItems.length,
-        };
-      })
-      .filter((section): section is NonNullable<typeof section> => Boolean(section))
-      .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
-  }, [rows, companyFilter, statusFilter, month, tp]);
+        });
+      }
+    }
+
+    return built.sort((a, b) => a.monthKey.localeCompare(b.monthKey) || a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
+  }, [rows, companyFilter, statusFilter, horizon, current, locale, tp]);
 
   const monthCount = sections.reduce((sum, section) => sum + section.monthRows.length, 0);
   const openWork = useMemo(
@@ -2372,10 +2567,10 @@ function ActiveRecurringWorksTable({
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <Repeat size={16} className="shrink-0 text-purple-600" />
-            <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp("recurringWorkTableTitle")}</span>
+            <span className="truncate text-xs font-bold tracking-wider text-slate-900 uppercase">{tp(horizon === "upcoming" ? "recurringUpcomingTableTitle" : "recurringWorkTableTitle")}</span>
           </div>
           <span className="w-fit rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-extrabold text-purple-700">
-            {tp("recurringInProgressBadge", { count: monthCount })}
+            {tp(horizon === "upcoming" ? "recurringUpcomingBadge" : "recurringInProgressBadge", { count: monthCount })}
           </span>
         </div>
         <WorkTableFilters
@@ -2389,10 +2584,20 @@ function ActiveRecurringWorksTable({
         />
       </div>
       {sections.length === 0 ? (
-        <div className="rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm font-medium text-slate-500">{tp("noFilterResults")}</div>
+        <div className="rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm font-medium text-slate-500">
+          {horizon === "upcoming" && companyFilter === "all" && statusFilter === "all" ? tp("noUpcomingDemands") : tp("noFilterResults")}
+        </div>
       ) : (
-        sections.map((section) => (
+        sections.map((section, index) => (
           <article key={section.key} className="overflow-hidden rounded-[20px] border border-purple-200/90 bg-white shadow-sm">
+            {horizon === "upcoming" && (index === 0 || sections[index - 1]?.monthKey !== section.monthKey) ? (
+              <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-4 py-3 sm:px-5">
+                <span className="text-sm font-black text-indigo-950">{section.monthLabel}</span>
+                <span className="text-[11px] font-extrabold tracking-wider text-indigo-700 uppercase">
+                  {tp("horizonUpcoming")}
+                </span>
+              </div>
+            ) : null}
             <RecurringCompanyHeader
               name={section.companyName}
               projectTitle={section.contract.title}
@@ -2405,10 +2610,17 @@ function ActiveRecurringWorksTable({
               ta={ta}
             />
             <div className="border-t border-purple-100 bg-slate-50 px-4 py-2 sm:px-5">
-              <p className="m-0 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">{tp("pendingThisMonth", { month: monthLabel })}</p>
+              <p className="m-0 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">{tp("pendingThisMonth", { month: section.monthLabel })}</p>
             </div>
             {section.monthRows.length === 0 ? (
-              <p className="m-0 px-5 py-8 text-center text-sm font-medium text-slate-500">{tp("noPendingThisMonth")}</p>
+              <div className="px-5 py-8 text-center">
+                <p className="m-0 text-sm font-medium text-slate-500">{tp("noPendingThisMonth")}</p>
+                {horizon === "month" && onShowUpcoming && rows.some((work) => work.contract.id === section.contract.id && work.item && futureMonthKey(work.item, current)) ? (
+                  <button type="button" onClick={onShowUpcoming} className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700">
+                    <CalendarDays size={14} /> {tp("viewUpcomingDemands")}
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <>
       <div className="flex flex-col lg:hidden">
