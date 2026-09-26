@@ -38,43 +38,50 @@ export function futureMonthCounts(months: Array<string | null | undefined>, curr
     .map(([value, count]) => ({ value, count }));
 }
 
-function MonthTile({
+function MonthChip({
   active,
-  kicker,
-  title,
-  year,
-  detail,
+  label,
+  mark,
+  caption,
   count,
+  title,
   onClick,
 }: {
   active: boolean;
-  kicker: string;
-  title: string;
-  year?: string;
-  detail: string;
+  label: string;
+  mark?: string;
+  caption?: string;
   count: number;
+  title?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={active}
+      title={title}
       onClick={onClick}
       className={cn(
-        "flex min-h-[108px] w-[210px] shrink-0 cursor-pointer flex-col rounded-2xl border px-4 py-3.5 text-left transition-all",
+        "inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full border px-2.5 text-left transition-colors",
         active
-          ? "border-slate-900 bg-slate-900 text-white shadow-md shadow-slate-900/10"
-          : "border-slate-200 bg-white text-slate-900 shadow-sm hover:border-indigo-200 hover:shadow-md",
+          ? "border-brand-primary bg-brand-primary text-white shadow-sm shadow-indigo-200"
+          : "border-indigo-100 bg-white text-slate-700 hover:border-brand-primary/40 hover:bg-indigo-50",
       )}
     >
-      <span className={cn("text-[10px] font-extrabold tracking-[0.14em] uppercase", active ? "text-indigo-300" : "text-slate-400")}>{kicker}</span>
-      <span className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-[15px] font-black tracking-tight">{title}</span>
-        {year ? <span className={cn("text-xs font-semibold", active ? "text-slate-400" : "text-slate-400")}>{year}</span> : null}
-      </span>
-      <span className="mt-3 flex items-end justify-between gap-3">
-        <span className={cn("text-xs font-semibold leading-snug", active ? "text-slate-300" : "text-slate-500")}>{detail}</span>
-        <span className={cn("text-2xl leading-none font-black tabular-nums", active ? "text-white" : "text-slate-900")}>{count}</span>
+      {mark ? (
+        <span className={cn("text-[10px] font-extrabold tracking-wide uppercase", active ? "text-indigo-100" : "text-brand-primary")}>{mark}</span>
+      ) : null}
+      <span className="text-sm font-bold leading-none">{label}</span>
+      {caption ? (
+        <span className={cn("max-w-[14rem] truncate text-[11px] font-medium leading-none", active ? "text-indigo-100" : "text-slate-500")}>{caption}</span>
+      ) : null}
+      <span
+        className={cn(
+          "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold tabular-nums",
+          active ? "bg-white/20 text-white" : "bg-indigo-50 text-brand-primary",
+        )}
+      >
+        {count}
       </span>
     </button>
   );
@@ -86,7 +93,6 @@ export function MonthScopeBar({
   upcoming,
   locale,
   thisMonthLabel,
-  upcomingLabel,
   emptyUpcomingLabel,
   prevLabel,
   nextLabel,
@@ -116,34 +122,32 @@ export function MonthScopeBar({
 
   if (variant === "creator") {
     return (
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        <MonthTile
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+        <MonthChip
           active={selected === current}
-          kicker={thisMonthLabel}
-          title={currentFace.name}
-          year={currentFace.year}
-          detail={currentDetail || demandsLabel(currentCount)}
+          mark={thisMonthLabel}
+          label={currentFace.name}
+          caption={currentDetail}
           count={currentCount}
+          title={demandsLabel(currentCount)}
           onClick={() => onChange(current)}
         />
         {upcoming.map((option) => {
           const face = monthFace(option.value, locale);
           return (
-            <MonthTile
+            <MonthChip
               key={option.value}
               active={selected === option.value}
-              kicker={face.year}
-              title={face.name}
-              detail={option.detail || demandsLabel(option.count)}
+              label={face.name}
+              caption={option.detail}
               count={option.count}
+              title={option.detail || demandsLabel(option.count)}
               onClick={() => onChange(option.value)}
             />
           );
         })}
         {upcoming.length === 0 && emptyUpcomingLabel ? (
-          <div className="flex min-h-[108px] w-[210px] shrink-0 items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold leading-snug text-slate-500">
-            {emptyUpcomingLabel}
-          </div>
+          <span className="px-1 text-xs font-medium text-slate-400">{emptyUpcomingLabel}</span>
         ) : null}
       </div>
     );
@@ -154,57 +158,53 @@ export function MonthScopeBar({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => onChange(shiftMonth(selected, -1))}
-          className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-indigo-100 bg-white text-slate-500 hover:border-brand-primary/40 hover:bg-indigo-50 hover:text-brand-primary"
           title={prevLabel}
           aria-label={prevLabel}
         >
-          <ChevronLeft size={18} />
+          <ChevronLeft size={16} />
         </button>
         <button
           type="button"
           onClick={() => onChange(shiftMonth(selected, 1))}
-          className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-indigo-100 bg-white text-slate-500 hover:border-brand-primary/40 hover:bg-indigo-50 hover:text-brand-primary"
           title={nextLabel}
           aria-label={nextLabel}
         >
-          <ChevronRight size={18} />
+          <ChevronRight size={16} />
         </button>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
         {!selectedInRail ? (
-          <MonthTile
+          <MonthChip
             active
-            kicker={selected < current ? prevLabel || selectedFace.year : upcomingLabel}
-            title={selectedFace.name}
-            year={selectedFace.year}
-            detail={demandsLabel(selectedCount ?? 0)}
+            label={selectedFace.name}
             count={selectedCount ?? 0}
+            title={demandsLabel(selectedCount ?? 0)}
             onClick={() => onChange(selected)}
           />
         ) : null}
-        <MonthTile
+        <MonthChip
           active={selected === current}
-          kicker={thisMonthLabel}
-          title={currentFace.name}
-          year={currentFace.year}
-          detail={demandsLabel(currentCount)}
+          mark={thisMonthLabel}
+          label={currentFace.name}
           count={currentCount}
+          title={demandsLabel(currentCount)}
           onClick={() => onChange(current)}
         />
         {upcoming.map((option) => {
           const face = monthFace(option.value, locale);
           return (
-            <MonthTile
+            <MonthChip
               key={option.value}
               active={selected === option.value}
-              kicker={face.year}
-              title={face.name}
-              detail={demandsLabel(option.count)}
+              label={face.name}
               count={option.count}
+              title={demandsLabel(option.count)}
               onClick={() => onChange(option.value)}
             />
           );
