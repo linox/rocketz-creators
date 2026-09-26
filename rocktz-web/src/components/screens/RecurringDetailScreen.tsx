@@ -523,6 +523,8 @@ function DetailInner() {
 
   const items = (contract?.items ?? []).filter((item) => !isCreator || !ownCreatorId || item.creator_id === ownCreatorId);
   const upcomingMonths = futureMonthCounts(items.map((item) => planningDemandMonth(item)));
+  const currentMonthCount = items.filter((item) => itemInMonth(item, currentMonth())).length;
+  const selectedMonthCount = items.filter((item) => itemInMonth(item, selectedMonth)).length;
   const allocated = (contract?.creators ?? []).filter((row) => !isCreator || !ownCreatorId || row.creator_id === ownCreatorId);
 
   function profile(row: ContractCreator) {
@@ -1189,6 +1191,9 @@ function DetailInner() {
           upcomingLabel={t("recurring.upcomingMonths")}
           prevLabel={t("recurring.prevMonth")}
           nextLabel={t("recurring.nextMonth")}
+          currentCount={currentMonthCount}
+          selectedCount={selectedMonthCount}
+          demandsLabel={(count) => t(count === 1 ? "recurring.monthDemandsOne" : "recurring.monthDemands", { count })}
         />
         </div>
       </div>

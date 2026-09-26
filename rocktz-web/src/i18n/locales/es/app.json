@@ -1361,6 +1361,8 @@
     "nextMonth": "Mes siguiente",
     "thisMonth": "Este mes",
     "upcomingMonths": "Próximos meses",
+    "monthDemands": "{{count}} demandas",
+    "monthDemandsOne": "{{count}} demanda",
     "searchPh": "Buscar contrato por empresa o nombre del proyecto...",
     "allCompanies": "Todas las Empresas",
     "selectCompany": "Empresa",

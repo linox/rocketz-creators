@@ -379,6 +379,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const monthPercent = monthItems.length ? Math.round((publishedMonth / monthItems.length) * 100) : 0;
   const monthLabel = new Date(`${selectedMonth}-02`).toLocaleDateString(locale, { month: "long", year: "numeric" });
   const upcomingMonths = futureMonthCounts(kpiItems.map((item) => planningDemandMonth(item)));
+  const currentMonthCount = kpiItems.filter((item) => itemInMonth(item, currentMonth())).length;
   const agendaCreatorId = creatorFilter !== "all" ? Number(creatorFilter) : rosterCreators[0]?.id;
   const agendaCreator = rosterCreators.find((c) => c.id === agendaCreatorId);
   const showAgencyData = !isAdmin || Boolean(companyFilter);
@@ -699,6 +700,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         upcomingLabel={t("recurring.upcomingMonths")}
         prevLabel={t("recurring.prevMonth")}
         nextLabel={t("recurring.nextMonth")}
+        currentCount={currentMonthCount}
+        selectedCount={monthItems.length}
+        demandsLabel={(count) => t(count === 1 ? "recurring.monthDemandsOne" : "recurring.monthDemands", { count })}
       />
 
       {innerTab === "contracts" ? (
