@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
+import { formatMonthLabel, futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -131,19 +132,25 @@ function currentYearMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function itemInMonth(item: PlanningItem, month: string) {
-  return item.month === month || Boolean(item.planned_date?.startsWith(month) || item.post_date?.startsWith(month));
-}
-
-function campaignVisibleOnCreatorMonth(
+function campaignDemandMonth(
   campaign: Campaign,
   row: { delivery_date?: string | null; post_date?: string | null },
-  month: string,
+  current: string,
 ) {
-  if (campaign.status !== "finished") return true;
-  const dates = [row.delivery_date, row.post_date, campaign.end_date, campaign.start_date].filter((value): value is string => Boolean(value));
-  if (dates.length === 0) return true;
-  return dates.some((value) => value.startsWith(month));
+  const dated = [row.delivery_date, row.post_date, campaign.end_date, campaign.start_date]
+    .map((value) => value?.match(/^(\d{4}-\d{2})/)?.[1])
+    .filter((value): value is string => Boolean(value));
+  if (dated.length === 0) return campaign.status === "finished" ? null : current;
+  const ahead = dated.filter((month) => month >= current).sort();
+  if (ahead[0]) return ahead[0];
+  return campaign.status === "finished" ? null : current;
+}
+
+function recurringDemandMonth(work: RecurringWorkRow, current: string) {
+  if (!work.item) return current;
+  const month = planningDemandMonth(work.item);
+  if (!month || month < current) return month ? null : current;
+  return month;
 }
 
 function quotaEntries(deliverables?: Record<string, number>) {
@@ -613,6 +620,7 @@ function ProfileInner() {
   const [campaignSubTab, setCampaignSubTab] = useState<"active" | "applications">("active");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<number | null>(null);
   const [expandedRecurringKey, setExpandedRecurringKey] = useState<string | null>(null);
+  const [demandMonth, setDemandMonth] = useState(currentYearMonth);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const searchParams = useSearchParams();
@@ -988,7 +996,29 @@ function ProfileInner() {
     .filter((item): item is { campaign: Campaign; row: NonNullable<Campaign["applications"]>[number] } => Boolean(item));
 
   const approvedCampaigns = myParticipations.filter((item) => item.row.application_status === "approved");
-  const dashboardApprovedCampaigns = approvedCampaigns.filter((item) => campaignVisibleOnCreatorMonth(item.campaign, item.row, currentYearMonth()));
+  const demandCurrentMonth = currentYearMonth();
+  const demandMonthActive = demandMonth === demandCurrentMonth || recurringWorkRows.some((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonth) || approvedCampaigns.some((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonth)
+    ? demandMonth
+    : demandCurrentMonth;
+  const campaignsForDemandMonth = approvedCampaigns.filter((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonthActive);
+  const recurringForDemandMonth = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonthActive);
+  const upcomingDemandMonths = futureMonthCounts([
+    ...approvedCampaigns.map((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth)),
+    ...recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)),
+  ], demandCurrentMonth);
+  const currentDemandCount = approvedCampaigns.filter((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandCurrentMonth).length
+    + recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandCurrentMonth).length;
+  const recurringMonthActive = demandMonth === demandCurrentMonth || recurringWorkRows.some((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonth)
+    ? demandMonth
+    : demandCurrentMonth;
+  const recurringRowsForTab = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === recurringMonthActive);
+  const upcomingRecurringMonths = futureMonthCounts(
+    recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)),
+    demandCurrentMonth,
+  );
+  const currentRecurringCount = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandCurrentMonth).length;
+  const recurringMonthLabel = formatMonthLabel(recurringMonthActive, locale);
+  const demandMonthLabel = formatMonthLabel(demandMonthActive, locale);
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const rejectedApplications = myParticipations.filter((item) => item.row.application_status === "rejected");
 
@@ -1787,16 +1817,29 @@ function ProfileInner() {
                 </div>
               </div>
 
+              <MonthScopeBar
+                variant="creator"
+                selected={demandMonthActive}
+                onChange={setDemandMonth}
+                upcoming={upcomingDemandMonths}
+                locale={locale}
+                thisMonthLabel={tp("thisMonthChip")}
+                upcomingLabel={tp("upcomingMonthsLabel")}
+                emptyUpcomingLabel={tp("noUpcomingDemands")}
+                currentCount={currentDemandCount}
+              />
+
               {loadingCampaigns ? (
                 <div className="flex items-center justify-center rounded-[16px] border border-[#E2E8F0] bg-white p-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
                 </div>
-              ) : (
+              ) : campaignsForDemandMonth.length === 0 && demandMonthActive !== demandCurrentMonth ? null : (
                 <div className="flex flex-col gap-4">
                   <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
-                    <Briefcase size={16} className="text-brand-primary" /> {tp("activeCampaignsSection", { count: dashboardApprovedCampaigns.length })}
+                    <Briefcase size={16} className="text-brand-primary" /> {tp("campaignsInMonth", { month: demandMonthLabel, count: campaignsForDemandMonth.length })}
                   </h3>
-                  {dashboardApprovedCampaigns.length === 0 ? (
+                  {campaignsForDemandMonth.length === 0 ? (
+                    approvedCampaigns.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
                       <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Briefcase size={24} /></div>
                       <h4 className="text-sm font-bold text-slate-800">{tp("noActiveCampaigns")}</h4>
@@ -1805,9 +1848,12 @@ function ProfileInner() {
                         <Sparkles size={14} /> {tp("browseAvailable")}
                       </Link>
                     </div>
+                    ) : (
+                      <p className="m-0 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white px-5 py-8 text-center text-sm font-medium text-slate-500">{tp("noCampaignsThisMonth", { month: demandMonthLabel })}</p>
+                    )
                   ) : (
                     <ActiveCampaignsTable
-                      approvedCampaigns={dashboardApprovedCampaigns}
+                      approvedCampaigns={campaignsForDemandMonth}
                       expandedSubmissionId={expandedSubmissionId}
                       openSubmission={openSubmission}
                       onCloseSubmission={() => setExpandedSubmissionId(null)}
@@ -1824,11 +1870,13 @@ function ProfileInner() {
                 </div>
               )}
 
+              {demandMonthActive !== demandCurrentMonth && recurringForDemandMonth.length === 0 ? null : (
               <div className="flex flex-col gap-4 border-t border-slate-100 pt-6">
                 <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
-                  <Repeat size={16} className="text-purple-600" /> {tp("activeRecurringSection", { count: myContracts.length })}
+                  <Repeat size={16} className="text-purple-600" /> {tp("recurringInMonth", { month: demandMonthLabel, count: recurringForDemandMonth.length })}
                 </h3>
                 <ActiveRecurringWorksTable
+                  month={demandMonthActive}
                   rows={recurringWorkRows}
                   expandedKey={expandedRecurringKey}
                   openRow={openRecurringWork}
@@ -1841,6 +1889,7 @@ function ProfileInner() {
                   tp={tp as (key: string, options?: Record<string, unknown>) => string}
                 />
               </div>
+              )}
             </div>
           ) : showCreatorTabs && tab === "recurring" ? (
             <div className="flex flex-col gap-6">
@@ -1848,12 +1897,24 @@ function ProfileInner() {
                 <div className="flex items-center gap-2.5">
                   <div className="rounded-xl bg-purple-50 p-2.5 text-purple-600"><Repeat size={20} /></div>
                   <div>
-                    <h3 className="m-0 text-lg font-bold text-slate-900">{tp("recurringWorksTitle", { count: myContracts.length })}</h3>
+                    <h3 className="m-0 text-lg font-bold text-slate-900">{tp("recurringInMonth", { month: recurringMonthLabel, count: recurringRowsForTab.length })}</h3>
                     <p className="m-0 text-xs text-slate-500">{tp("recurringWorksHint")}</p>
                   </div>
                 </div>
               </div>
+              <MonthScopeBar
+                variant="creator"
+                selected={recurringMonthActive}
+                onChange={setDemandMonth}
+                upcoming={upcomingRecurringMonths}
+                locale={locale}
+                thisMonthLabel={tp("thisMonthChip")}
+                upcomingLabel={tp("upcomingMonthsLabel")}
+                emptyUpcomingLabel={tp("noUpcomingDemands")}
+                currentCount={currentRecurringCount}
+              />
               <ActiveRecurringWorksTable
+                month={recurringMonthActive}
                 rows={recurringWorkRows}
                 expandedKey={expandedRecurringKey}
                 openRow={openRecurringWork}
@@ -2263,6 +2324,7 @@ function RecurringBriefingModal({
 }
 
 function ActiveRecurringWorksTable({
+  month,
   rows,
   expandedKey,
   openRow,
@@ -2274,6 +2336,7 @@ function ActiveRecurringWorksTable({
   formatCurrency,
   tp,
 }: {
+  month: string;
   rows: RecurringWorkRow[];
   expandedKey: string | null;
   openRow: (key: string) => void;
@@ -2288,9 +2351,8 @@ function ActiveRecurringWorksTable({
   const { t: ta } = useTranslation("app");
   const { i18n } = useTranslation();
   const locale = intlLocale(normalizeLocale(i18n.language));
-  const month = currentYearMonth();
-  const monthLabelRaw = new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
-  const monthLabel = monthLabelRaw.charAt(0).toUpperCase() + monthLabelRaw.slice(1);
+  const isCurrentMonth = month === currentYearMonth();
+  const monthLabel = formatMonthLabel(month, locale);
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -2326,8 +2388,8 @@ function ActiveRecurringWorksTable({
         const companyName = sample.contract.company?.name || tp("partnerCompany");
         const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
-        const monthItems = list.filter((work) => work.item && itemInMonth(work.item, month));
-        if (monthItems.length === 0 && sample.contract.status !== "active") return null;
+        const monthItems = list.filter((work) => work.item && recurringDemandMonth(work, currentYearMonth()) === month);
+        if (monthItems.length === 0 && (!isCurrentMonth || sample.contract.status !== "active")) return null;
         const monthRows = monthItems.filter((work) => {
           if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
           return true;
@@ -2347,7 +2409,7 @@ function ActiveRecurringWorksTable({
       })
       .filter((section): section is NonNullable<typeof section> => Boolean(section))
       .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
-  }, [rows, companyFilter, statusFilter, month, tp]);
+  }, [rows, companyFilter, statusFilter, month, isCurrentMonth, tp]);
 
   const monthCount = sections.reduce((sum, section) => sum + section.monthRows.length, 0);
   const openWork = useMemo(
@@ -2389,7 +2451,9 @@ function ActiveRecurringWorksTable({
         />
       </div>
       {sections.length === 0 ? (
-        <div className="rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm font-medium text-slate-500">{tp("noFilterResults")}</div>
+        <div className="rounded-[20px] border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm font-medium text-slate-500">
+          {companyFilter !== "all" || statusFilter !== "all" ? tp("noFilterResults") : tp("noPendingThisMonth")}
+        </div>
       ) : (
         sections.map((section) => (
           <article key={section.key} className="overflow-hidden rounded-[20px] border border-purple-200/90 bg-white shadow-sm">

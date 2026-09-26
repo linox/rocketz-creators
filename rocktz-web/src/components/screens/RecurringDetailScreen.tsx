@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
+import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertTriangle,
@@ -16,8 +17,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Clapperboard,
   Clock,
@@ -245,12 +244,6 @@ function todayIsoDate() {
 function currentMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function shiftMonth(value: string, delta: number) {
-  const [y, m] = value.split("-").map(Number);
-  const next = new Date(y, m - 1 + delta, 1);
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function contractMonths(start?: string | null, end?: string | null) {
@@ -529,8 +522,8 @@ function DetailInner() {
   }
 
   const items = (contract?.items ?? []).filter((item) => !isCreator || !ownCreatorId || item.creator_id === ownCreatorId);
+  const upcomingMonths = futureMonthCounts(items.map((item) => planningDemandMonth(item)));
   const allocated = (contract?.creators ?? []).filter((row) => !isCreator || !ownCreatorId || row.creator_id === ownCreatorId);
-  const monthLabel = new Date(`${selectedMonth}-02`).toLocaleDateString(locale, { month: "long", year: "numeric" });
 
   function profile(row: ContractCreator) {
     const extra = catalog.find((c) => c.id === row.creator_id);
@@ -1185,16 +1178,18 @@ function DetailInner() {
               <BarChart3 size={14} /> {t("recurringDetail.tabMetrics")}
             </button>
           ) : null}
-          <div className="ml-auto flex items-center gap-2">
-            <span className="hidden text-[11px] font-bold tracking-wider text-slate-400 uppercase sm:inline">{t("recurringDetail.refMonth")}</span>
-            <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"><ChevronLeft size={14} /></button>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm">
-              <Calendar size={13} className="text-slate-400" />
-              <span className="capitalize">{monthLabel}</span>
-              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="sr-only" />
-            </label>
-            <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"><ChevronRight size={14} /></button>
-          </div>
+        </div>
+        <div className="mt-4">
+        <MonthScopeBar
+          selected={selectedMonth}
+          onChange={setSelectedMonth}
+          upcoming={upcomingMonths}
+          locale={locale}
+          thisMonthLabel={t("recurring.thisMonth")}
+          upcomingLabel={t("recurring.upcomingMonths")}
+          prevLabel={t("recurring.prevMonth")}
+          nextLabel={t("recurring.nextMonth")}
+        />
         </div>
       </div>
 

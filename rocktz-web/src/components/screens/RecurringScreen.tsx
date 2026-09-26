@@ -4,13 +4,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
+import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import {
   Building2,
   Calendar,
   CalendarCheck,
   Camera,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   Clapperboard,
   DollarSign,
@@ -161,12 +161,6 @@ const EMPTY_CONTENT = {
 function currentMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function shiftMonth(value: string, delta: number) {
-  const [y, m] = value.split("-").map(Number);
-  const next = new Date(y, m - 1 + delta, 1);
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function contractMonths(start?: string | null, end?: string | null) {
@@ -384,6 +378,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const publishedMonth = monthItems.filter((item) => item.status === "published").length;
   const monthPercent = monthItems.length ? Math.round((publishedMonth / monthItems.length) * 100) : 0;
   const monthLabel = new Date(`${selectedMonth}-02`).toLocaleDateString(locale, { month: "long", year: "numeric" });
+  const upcomingMonths = futureMonthCounts(kpiItems.map((item) => planningDemandMonth(item)));
   const agendaCreatorId = creatorFilter !== "all" ? Number(creatorFilter) : rosterCreators[0]?.id;
   const agendaCreator = rosterCreators.find((c) => c.id === agendaCreatorId);
   const showAgencyData = !isAdmin || Boolean(companyFilter);
@@ -693,20 +688,18 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             </button>
           ))}
         </div>
-        <div className="flex shrink-0 items-center gap-2 pb-3">
-          <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50" title={t("recurring.prevMonth")}>
-            <ChevronLeft size={16} />
-          </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm">
-            <Calendar size={14} className="shrink-0 text-slate-400" />
-            <span className="capitalize">{monthLabel}</span>
-            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="sr-only" />
-          </label>
-          <button type="button" onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))} className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50" title={t("recurring.nextMonth")}>
-            <ChevronRight size={16} />
-          </button>
-        </div>
       </div>
+
+      <MonthScopeBar
+        selected={selectedMonth}
+        onChange={setSelectedMonth}
+        upcoming={upcomingMonths}
+        locale={locale}
+        thisMonthLabel={t("recurring.thisMonth")}
+        upcomingLabel={t("recurring.upcomingMonths")}
+        prevLabel={t("recurring.prevMonth")}
+        nextLabel={t("recurring.nextMonth")}
+      />
 
       {innerTab === "contracts" ? (
         <div className="space-y-6">

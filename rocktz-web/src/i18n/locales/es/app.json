@@ -1359,6 +1359,8 @@
     "tabCreatorCalendar": "Calendario del Creador",
     "prevMonth": "Mes anterior",
     "nextMonth": "Mes siguiente",
+    "thisMonth": "Este mes",
+    "upcomingMonths": "Próximos meses",
     "searchPh": "Buscar contrato por empresa o nombre del proyecto...",
     "allCompanies": "Todas las Empresas",
     "selectCompany": "Empresa",
