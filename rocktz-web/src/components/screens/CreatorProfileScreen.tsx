@@ -137,7 +137,7 @@ function campaignDemandMonth(
   row: { delivery_date?: string | null; post_date?: string | null },
   current: string,
 ) {
-  const dated = [row.delivery_date, row.post_date, campaign.end_date, campaign.start_date]
+  const dated = [row.delivery_date || campaign.delivery_date, row.post_date, campaign.end_date, campaign.start_date]
     .map((value) => value?.match(/^(\d{4}-\d{2})/)?.[1])
     .filter((value): value is string => Boolean(value));
   if (dated.length === 0) return campaign.status === "finished" ? null : current;
@@ -2705,7 +2705,7 @@ function CampaignBriefingModal({
           <p className="m-0 mt-0.5 truncate text-xs font-semibold text-slate-500">{campaign.company?.name}</p>
           <div className="mt-2">
             <WorkDatePair
-              delivery={row.delivery_date || campaign.end_date}
+              delivery={row.delivery_date || campaign.delivery_date || campaign.end_date}
               post={row.post_date}
               fmtDate={(value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString(i18n.language) : "—")}
               tp={tp}
@@ -2862,7 +2862,7 @@ function ActiveCampaignsTable({
               </div>
               <div className="mt-3 flex flex-col gap-2">
                 <WorkDatePair
-                  delivery={row.delivery_date || campaign.end_date}
+                  delivery={row.delivery_date || campaign.delivery_date || campaign.end_date}
                   post={row.post_date}
                   fmtDate={fmtDate}
                   tp={tp}
@@ -2932,7 +2932,7 @@ function ActiveCampaignsTable({
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
                     </td>
                     <td className="p-3.5">
-                      <WorkDateCell value={row.delivery_date || campaign.end_date} fmtDate={fmtDate} showIcon />
+                      <WorkDateCell value={row.delivery_date || campaign.delivery_date || campaign.end_date} fmtDate={fmtDate} showIcon />
                     </td>
                     <td className="p-3.5">
                       <WorkDateCell value={row.post_date} fmtDate={fmtDate} />

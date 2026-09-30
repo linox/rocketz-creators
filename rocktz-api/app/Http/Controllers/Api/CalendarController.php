@@ -61,7 +61,29 @@ class CalendarController extends Controller
             $query->whereHas('campaign', fn ($q) => $q->where('company_id', $user->actingCompanyId()));
         }
 
-        $this->constrainDates($query, $start, $end, $kind, 'delivery_date', 'post_date');
+        $from = $start->toDateString();
+        $to = $end->toDateString();
+        $query->where(function ($builder) use ($kind, $from, $to) {
+            $matchesDelivery = function ($delivery) use ($from, $to) {
+                $delivery->whereBetween('delivery_date', [$from, $to])
+                    ->orWhere(function ($fallback) use ($from, $to) {
+                        $fallback->whereNull('delivery_date')
+                            ->whereHas('campaign', fn ($campaign) => $campaign->whereBetween('delivery_date', [$from, $to]));
+                    });
+            };
+
+            if ($kind === 'delivery') {
+                $builder->where($matchesDelivery);
+
+                return;
+            }
+            if ($kind === 'post') {
+                $builder->whereBetween('post_date', [$from, $to]);
+
+                return;
+            }
+            $builder->where($matchesDelivery)->orWhereBetween('post_date', [$from, $to]);
+        });
 
         $events = [];
         foreach ($query->get() as $row) {
@@ -75,14 +97,15 @@ class CalendarController extends Controller
             $title = $campaign?->name ?: 'Campaign';
             $status = $row->delivery_status?->value;
             $format = $row->delivery_type;
+            $deliveryDate = $row->delivery_date ?? $campaign?->delivery_date;
 
-            if ($this->includesKind($kind, 'delivery') && $this->inRange($row->delivery_date, $start, $end)) {
+            if ($this->includesKind($kind, 'delivery') && $this->inRange($deliveryDate, $start, $end)) {
                 $events[] = $this->event(
                     'campaign:delivery:'.$row->id,
                     'delivery',
                     'campaign',
                     (int) $row->campaign_id,
-                    $row->delivery_date->toDateString(),
+                    $deliveryDate->toDateString(),
                     $title,
                     $format,
                     $status,

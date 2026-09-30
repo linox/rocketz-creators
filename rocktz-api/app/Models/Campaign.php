@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'objective',
     'start_date',
     'end_date',
+    'delivery_date',
     'total_budget',
     'agency_fee',
     'agency_fee_percent',
@@ -74,6 +75,7 @@ class Campaign extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
+            'delivery_date' => 'date',
             'total_budget' => 'decimal:2',
             'agency_fee' => 'decimal:2',
             'agency_fee_percent' => 'decimal:2',

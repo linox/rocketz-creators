@@ -14,6 +14,8 @@ import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Campaign, CampaignCreator } from "@/lib/types";
+import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
+import { PostingProfileNotice } from "@/components/PostingProfileCards";
 import { isBrandPosting } from "@/lib/posting-profile";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
@@ -33,7 +35,7 @@ type Props = {
 };
 
 export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmitted, showBriefingToggle = true }: Props) {
-  const { t: tp } = useTranslation("profile");
+  const { t: tp, i18n } = useTranslation("profile");
   const uploadManager = useOptionalUploadManager();
 
   const [briefingOpen, setBriefingOpen] = useState(true);
@@ -297,6 +299,14 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
 
   return (
     <div className="flex flex-col gap-5 border-l-4 border-l-brand-primary bg-indigo-50/20 p-5 sm:p-6">
+      <PostingProfileNotice profile={campaign.posting_profile} audience="creator" />
+      <CampaignCreatorDates
+        generalDate={campaign.delivery_date || null}
+        deliveryDate={row.delivery_date}
+        postDate={row.post_date || null}
+        canEdit={false}
+        locale={i18n.language}
+      />
       {briefingOpen ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">

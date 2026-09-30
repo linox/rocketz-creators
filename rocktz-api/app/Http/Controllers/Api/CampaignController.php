@@ -559,6 +559,7 @@ class CampaignController extends Controller
             'objective' => ['nullable', 'string'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
+            'delivery_date' => ['nullable', 'date'],
             'total_budget' => ['nullable', 'numeric'],
             'agency_fee' => ['nullable', 'numeric'],
             'agency_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],

@@ -63,7 +63,8 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
-import { PostingProfileCards } from "@/components/PostingProfileCards";
+import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
+import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
@@ -81,6 +82,7 @@ import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } fro
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
+import { effectiveCampaignDeliveryDate } from "@/lib/delivery-date";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -480,6 +482,7 @@ function DetailInner() {
     agency_fee_percent: "",
     start_date: "",
     end_date: "",
+    delivery_date: "",
     is_secret: false,
     is_direct_contract: false,
     is_barter: false,
@@ -623,6 +626,7 @@ function DetailInner() {
   const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
   const selectedCreator = selected?.creator;
   const selectedDeliveryState = selected && campaign ? campaignCreatorDeliveryState(selected, campaign.approval_flow) : null;
+  const selectedDeliveryWhen = selected && campaign ? effectiveCampaignDeliveryDate(selected, campaign) : { date: null, personalized: false };
 
   useEffect(() => {
     setPublishedLinkDraft(selected?.content?.published_link || "");
@@ -876,6 +880,7 @@ function DetailInner() {
       agency_fee_percent: String(currentAgencyFeePercent(campaign)),
       start_date: campaign.start_date || "",
       end_date: campaign.end_date || "",
+      delivery_date: campaign.delivery_date || "",
       is_secret: campaign.is_secret,
       is_direct_contract: campaign.is_direct_contract,
       is_barter: campaign.is_barter,
@@ -952,6 +957,7 @@ function DetailInner() {
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
+        delivery_date: editForm.delivery_date || null,
         image_url: imageUrl || null,
         is_secret: editForm.is_secret,
         is_direct_contract: editForm.is_direct_contract,
@@ -1035,6 +1041,16 @@ function DetailInner() {
         published_link: creatorEdit.published_link || null,
       });
       setEditing(null);
+      await load();
+      await alertSuccess(t("campaignDetail.detailsSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function saveCreatorDates(rowId: number, dates: { delivery_date: string | null; post_date: string | null }) {
+    try {
+      await api.updateParticipation(rowId, dates);
       await load();
       await alertSuccess(t("campaignDetail.detailsSaved"));
     } catch (err) {
@@ -1495,6 +1511,7 @@ function DetailInner() {
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
                     const cardTag = creatorCardTag(row, creatorFilter);
                     const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
+                    const deliveryWhen = effectiveCampaignDeliveryDate(row, campaign);
                     const tagLabel = cardTag === "attention"
                       ? t("campaignDetail.attentionBadge")
                       : cardTag === "owing"
@@ -1533,6 +1550,11 @@ function DetailInner() {
                             <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
                           ) : null}
                           <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          {deliveryWhen.date ? (
+                            <span className="mt-1 max-w-full truncate text-[9px] font-bold text-slate-500">
+                              {new Date(`${deliveryWhen.date}T00:00:00`).toLocaleDateString(locale)}
+                            </span>
+                          ) : null}
                           <span className={cn("mt-1.5 rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(deliveryState), "border-slate-200 bg-slate-50")}>
                             {deliveryLabel(deliveryState, t)}
                           </span>
@@ -1595,6 +1617,13 @@ function DetailInner() {
                             </button>
                           </div>
                         </div>
+                        {deliveryWhen.date ? (
+                          <p className="m-0 text-[10px] font-bold text-slate-500">
+                            {new Date(`${deliveryWhen.date}T00:00:00`).toLocaleDateString(locale)}
+                            {" · "}
+                            {deliveryWhen.personalized ? t("campaignDetail.personalizedBadge") : t("campaignDetail.generalBadge")}
+                          </p>
+                        ) : null}
                         <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[10px]">
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
@@ -1710,7 +1739,16 @@ function DetailInner() {
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryDate")}</span>
-                    <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.delivery_date ? new Date(`${selected.delivery_date}T00:00:00`).toLocaleDateString(locale) : "—"}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-800">
+                      {selectedDeliveryWhen.date
+                        ? new Date(`${selectedDeliveryWhen.date}T00:00:00`).toLocaleDateString(locale)
+                        : "—"}
+                    </span>
+                    {selectedDeliveryWhen.date ? (
+                      <span className="mt-0.5 text-[9px] font-bold tracking-wider text-slate-400 uppercase">
+                        {selectedDeliveryWhen.personalized ? t("campaignDetail.personalizedBadge") : t("campaignDetail.generalBadge")}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.postDate")}</span>
@@ -1734,6 +1772,18 @@ function DetailInner() {
                     </div>
                   </div>
                 </div>
+
+                {canManage ? (
+                  <CampaignCreatorDates
+                    key={selected.id}
+                    generalDate={campaign.delivery_date || null}
+                    deliveryDate={selected.delivery_date}
+                    postDate={selected.post_date || null}
+                    canEdit
+                    locale={locale}
+                    onSave={(dates) => saveCreatorDates(selected.id, dates)}
+                  />
+                ) : null}
 
                 {hasSubmittedMaterial(selected) ? (
                   <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -2238,6 +2288,27 @@ function DetailInner() {
               </button>
             ) : null}
           </div>
+          <PostingProfileNotice profile={campaign.posting_profile} audience={isCreator ? "creator" : "team"} />
+          {isCreator && applications[0] ? (
+            <CampaignCreatorDates
+              key={`briefing-${applications[0].id}`}
+              generalDate={campaign.delivery_date || null}
+              deliveryDate={applications[0].delivery_date}
+              postDate={applications[0].post_date || null}
+              canEdit={false}
+              locale={locale}
+            />
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
+              <div>
+                <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaigns.generalDeliveryDate")}</p>
+                <p className="m-0 mt-0.5 text-sm font-black text-slate-900">
+                  {campaign.delivery_date ? new Date(`${campaign.delivery_date}T00:00:00`).toLocaleDateString(locale) : t("campaignDetail.noGeneralDate")}
+                </p>
+              </div>
+              <p className="m-0 max-w-xs text-right text-[11px] leading-relaxed text-slate-500">{t("campaigns.generalDeliveryDateHint")}</p>
+            </div>
+          )}
           <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -2648,6 +2719,11 @@ function DetailInner() {
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.endDate")}</label>
                     <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" value={editForm.end_date} onChange={(event) => setEditForm({ ...editForm, end_date: event.target.value })} />
                   </div>
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.generalDeliveryDate")}</label>
+                    <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs sm:w-56" value={editForm.delivery_date} onChange={(event) => setEditForm({ ...editForm, delivery_date: event.target.value })} />
+                    <span className="text-[10px] font-medium normal-case tracking-normal text-slate-500">{t("campaigns.generalDeliveryDateHint")}</span>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.approvalLabel")}</label>
@@ -2724,10 +2800,6 @@ function DetailInner() {
                     })}
                   </div>
                 </div>
-                <PostingProfileCards
-                  value={editForm.posting_profile}
-                  onChange={(value) => setEditForm({ ...editForm, posting_profile: value })}
-                />
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.objective")}</label>
                   <textarea
@@ -2782,6 +2854,10 @@ function DetailInner() {
                     </div>
                   ))}
                 </div>
+                <PostingProfileCards
+                  value={editForm.posting_profile}
+                  onChange={(value) => setEditForm({ ...editForm, posting_profile: value })}
+                />
                 {(
                   [
                     ["product", t("campaignDetail.product")],
@@ -2829,8 +2905,9 @@ function DetailInner() {
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.deliveryFormat")} value={creatorEdit.delivery_type} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_type: event.target.value })} />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
-                    {t("campaignDetail.deliveryDate")}
+                    {t("campaignDetail.personalizedDeliveryDate")}
                     <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold normal-case tracking-normal text-slate-800" value={creatorEdit.delivery_date} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_date: event.target.value })} />
+                    <span className="mt-1 block text-[10px] font-medium normal-case tracking-normal text-slate-500">{t("campaignDetail.personalizedDeliveryHint")}</span>
                   </label>
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
                     {t("campaignDetail.postDate")}

@@ -3,7 +3,7 @@
 import { Building2, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
-import type { PostingProfile } from "@/lib/posting-profile";
+import { isBrandPosting, type PostingProfile } from "@/lib/posting-profile";
 
 export function PostingProfileCards({
   value,
@@ -68,6 +68,43 @@ export function PostingProfileCards({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+export function PostingProfileNotice({
+  profile,
+  audience = "team",
+}: {
+  profile?: string | null;
+  audience?: "team" | "creator";
+}) {
+  const { t } = useTranslation("app");
+  const brand = isBrandPosting(profile);
+  const Icon = brand ? Building2 : User;
+  const you = audience === "creator";
+  const title = brand
+    ? t(you ? "postingProfile.explicitBrandYou" : "postingProfile.explicitBrand")
+    : t(you ? "postingProfile.explicitCreatorYou" : "postingProfile.explicitCreator");
+  const body = brand
+    ? t(you ? "postingProfile.explicitBrandYouBody" : "postingProfile.explicitBrandBody")
+    : t(you ? "postingProfile.explicitCreatorYouBody" : "postingProfile.explicitCreatorBody");
+
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-2xl border p-4",
+        brand ? "border-amber-200 bg-amber-50/80" : "border-indigo-200 bg-indigo-50/80",
+      )}
+    >
+      <div className={cn("rounded-xl p-2 text-white", brand ? "bg-amber-600" : "bg-indigo-600")}>
+        <Icon size={16} />
+      </div>
+      <div className="min-w-0">
+        <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("postingProfile.explicitTitle")}</p>
+        <p className="m-0 mt-0.5 text-sm font-black text-slate-900">{title}</p>
+        <p className="m-0 mt-1 text-xs leading-relaxed text-slate-600">{body}</p>
       </div>
     </div>
   );

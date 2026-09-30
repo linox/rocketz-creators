@@ -297,7 +297,7 @@ function buildCampaignStageItem(
   const resubmission = isScript
     ? ((row.content?.script_version ?? 0) > 1 || Boolean(row.script_feedback?.trim()))
     : ((row.content?.video_version ?? 0) > 1 || Boolean(row.video_feedback?.trim()));
-  const status = stageStatus(stageStatusValue, null, row.delivery_date, { resubmission });
+  const status = stageStatus(stageStatusValue, null, row.delivery_date || campaign.delivery_date, { resubmission });
   const contentType: DeliveryContentType = isScript ? "script" : mapCampaignContentType(row);
   const scriptFileUrl = row.content?.script_file_url || null;
   const scriptFileName = row.content?.script_file_name || fileNameFromUrl(scriptFileUrl);
@@ -381,7 +381,7 @@ function buildCampaignStageItem(
     status,
     createdAt,
     viewedAt: null,
-    approvalDeadline: row.delivery_date,
+    approvalDeadline: row.delivery_date || campaign.delivery_date || null,
     publicationDate: row.post_date ?? campaign.end_date,
     responsibleUserName: "Rocketz",
     currentVersion,
@@ -393,7 +393,7 @@ function buildCampaignStageItem(
     approvalStage: stage,
     stagePart: opts.part,
     stageTotal: opts.total,
-    period: (row.delivery_date || campaign.end_date || "").slice(0, 7) || null,
+    period: (row.delivery_date || campaign.delivery_date || campaign.end_date || "").slice(0, 7) || null,
   };
 }
 

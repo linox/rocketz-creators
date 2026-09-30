@@ -161,6 +161,7 @@ export type Campaign = {
   objective: string | null;
   start_date: string | null;
   end_date: string | null;
+  delivery_date?: string | null;
   total_budget: number | null;
   agency_fee: number | null;
   agency_fee_percent?: number | null;

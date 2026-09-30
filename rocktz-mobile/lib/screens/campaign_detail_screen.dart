@@ -179,6 +179,18 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                     Text(t('briefing'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
                     const SizedBox(height: 8),
                     Text(
+                      campaign?['posting_profile'] == 'brand' ? t('whoPostsBrand') : t('whoPostsCreator'),
+                      style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    if ((campaign?['delivery_date'] ?? _own?['delivery_date']) != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_own?['delivery_date'] != null ? t('yourDelivery') : t('generalDelivery')}: ${(_own?['delivery_date'] ?? campaign?['delivery_date'])}',
+                        style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
                       briefing['key_message'] as String? ?? briefing['product'] as String? ?? '',
                       style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600),
                     ),

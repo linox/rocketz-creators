@@ -243,7 +243,7 @@ class MailNotifier
             'nome_criador' => $row->creator?->artistic_name,
             'nome_campanha' => $campaign?->name,
             'nome_empresa' => $campaign?->company?->name,
-            'data_entrega' => optional($row->delivery_date)?->isoFormat('D MMM YYYY'),
+            'data_entrega' => optional($row->delivery_date ?? $campaign?->delivery_date)?->isoFormat('D MMM YYYY'),
             'motivo_reprovacao' => $approved ? null : $reason,
             'cta_url' => $approved
                 ? FrontendUrl::to('/campaigns/'.$row->campaign_id)
