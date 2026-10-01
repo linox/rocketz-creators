@@ -76,7 +76,7 @@ return [
     'landing_slug_reserved' => 'This identifier cannot be used.',
     'landing_slug_taken' => 'This identifier is already in use.',
     'landing_signup_title' => 'New creator from your landing page',
-    'landing_signup_message' => ':name completed signup and is waiting for your review.',
+    'landing_signup_message' => ':name completed signup through :landing and is waiting for your review.',
     'creator_registered_by_company' => 'Registered manually by the company.',
     'creator_must_accept_contract' => 'You must sign the image usage agreement before applying to campaigns.',
     'creator_must_accept_campaign_contract' => 'You must accept this campaign’s custom contract before applying.',

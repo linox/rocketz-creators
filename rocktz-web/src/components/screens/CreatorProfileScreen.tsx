@@ -634,6 +634,13 @@ function ProfileInner() {
   const [contractOpen, setContractOpen] = useState(false);
   const searchParams = useSearchParams();
   const fromLandingReview = searchParams.get("from") === "landing";
+  const landingSignupId = Number(searchParams.get("signup") || 0);
+  const landingReviews = creator?.landing_reviews?.length
+    ? creator.landing_reviews
+    : creator?.landing_review
+      ? [creator.landing_review]
+      : [];
+  const activeLandingReview = landingReviews.find((review) => review.id === landingSignupId) ?? landingReviews[0] ?? null;
   const isCreatorSelf = user.role === "creator" && user.creator?.id === id;
   const isCompanyViewer = user.role === "company";
   const tab = resolveProfileTab(searchParams.get("tab"), isCreatorSelf, pathLooksLikeStorefrontMetrics(pathname), isCompanyViewer);
@@ -667,7 +674,7 @@ function ProfileInner() {
 
   async function updateLandingReview(status: string) {
     const companyId = user.company?.id;
-    const signupId = creator?.landing_review?.id;
+    const signupId = activeLandingReview?.id;
     if (!companyId || !signupId) return;
     try {
       await api.updateLandingSignup(companyId, signupId, status);
@@ -987,6 +994,7 @@ function ProfileInner() {
     const params = new URLSearchParams();
     if (nextTab) params.set("tab", nextTab);
     if (fromLandingReview) params.set("from", "landing");
+    if (landingSignupId) params.set("signup", String(landingSignupId));
     const query = params.toString();
     return `/creators/${id ?? ""}` + (query ? `?${query}` : "");
   }
@@ -1287,15 +1295,18 @@ function ProfileInner() {
         </div>
       ) : null}
 
-      {user.role === "company" && fromLandingReview && creator.landing_review && creator.landing_review.status !== "approved" && creator.landing_review.status !== "rejected" ? (
+      {user.role === "company" && fromLandingReview && activeLandingReview && activeLandingReview.status !== "approved" && activeLandingReview.status !== "rejected" ? (
         <div className="flex flex-col gap-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm"><Globe size={20} /></div>
             <div>
               <h4 className="m-0 text-sm font-bold text-indigo-950">{ta("companyLanding.signups.bannerTitle")}</h4>
               <p className="mt-0.5 max-w-xl text-xs text-indigo-800">{ta("companyLanding.signups.bannerBody")}</p>
+              {activeLandingReview.landing?.display_name ? (
+                <p className="mt-1 text-xs font-bold text-indigo-950">{ta("companyLanding.signups.bannerLanding", { name: activeLandingReview.landing.display_name })}</p>
+              ) : null}
               <div className="mt-2">
-                <StatusBadge status={creator.landing_review.status} />
+                <StatusBadge status={activeLandingReview.status} />
               </div>
             </div>
           </div>

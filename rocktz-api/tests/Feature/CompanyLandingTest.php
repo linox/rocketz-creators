@@ -17,6 +17,7 @@ use App\Models\CreatorContractAcceptance;
 use App\Models\Notification;
 use App\Models\RecurringContract;
 use App\Models\User;
+use App\Services\CompanyLandingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -485,5 +486,109 @@ class CompanyLandingTest extends TestCase
             ])
             ->assertForbidden()
             ->assertJsonPath('message', __('auth.creator_not_in_company_pool'));
+    }
+
+    public function test_company_can_add_acquisition_landings_and_tell_signups_apart(): void
+    {
+        $this->seed();
+
+        $companyUser = User::query()->where('email', 'empresa@rocketz.test')->firstOrFail();
+        $company = $companyUser->company;
+        $token = $companyUser->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson("/api/companies/{$company->id}/landings")
+            ->assertOk();
+
+        $this->withToken($token)
+            ->postJson("/api/companies/{$company->id}/landings", [
+                'display_name' => 'Influenciadores SP',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.display_name', 'Influenciadores SP')
+            ->assertJsonPath('data.company_id', $company->id)
+            ->assertJsonPath('data.status', LandingPageStatus::Draft->value);
+
+        $listed = $this->withToken($token)
+            ->getJson("/api/companies/{$company->id}/landings")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertGreaterThanOrEqual(2, count($listed));
+        $page = collect($listed)->firstWhere('display_name', 'Influenciadores SP');
+        $this->assertNotNull($page);
+
+        $this->withToken($token)
+            ->postJson("/api/companies/{$company->id}/landings/{$page['id']}/publish")
+            ->assertOk()
+            ->assertJsonPath('data.status', LandingPageStatus::Published->value);
+
+        $creator = User::query()->where('email', 'ana.creator@rocketz.test')->firstOrFail()->creator;
+        $signup = app(CompanyLandingService::class)->attributeCreator($page['slug'], $creator);
+        $this->assertSame('Influenciadores SP', $signup->landingPage?->display_name);
+
+        $signups = $this->withToken($token)
+            ->getJson("/api/companies/{$company->id}/landing/signups")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertTrue(collect($signups)->contains(
+            fn (array $row) => (int) $row['creator_id'] === $creator->id
+                && ($row['landing']['display_name'] ?? null) === 'Influenciadores SP',
+        ));
+    }
+
+    public function test_creators_index_shows_landing_page_and_company_origin(): void
+    {
+        $company = Company::factory()->active()->create(['name' => 'Marca Aurora']);
+        $other = Company::factory()->active()->create(['name' => 'Outra Marca']);
+        $page = CompanyLandingPage::factory()->published()->create([
+            'company_id' => $company->id,
+            'display_name' => 'Influenciadores SP',
+        ]);
+        $otherPage = CompanyLandingPage::factory()->published()->create([
+            'company_id' => $other->id,
+            'display_name' => 'Casting RJ',
+        ]);
+        $creator = Creator::factory()->active()->create();
+        CompanyLandingSignup::query()->create([
+            'company_id' => $company->id,
+            'company_landing_page_id' => $page->id,
+            'creator_id' => $creator->id,
+            'status' => LandingSignupStatus::Pending,
+        ]);
+        CompanyLandingSignup::query()->create([
+            'company_id' => $other->id,
+            'company_landing_page_id' => $otherPage->id,
+            'creator_id' => $creator->id,
+            'status' => LandingSignupStatus::Pending,
+        ]);
+
+        $admin = User::factory()->admin()->create();
+        $adminRows = $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->getJson('/api/creators')
+            ->assertOk()
+            ->json('data');
+        $adminRow = collect($adminRows)->firstWhere('id', $creator->id);
+        $origins = collect($adminRow['landing_origins'] ?? []);
+        $this->assertTrue($origins->contains(fn (array $origin) => ($origin['landing']['display_name'] ?? null) === 'Influenciadores SP' && ($origin['company']['name'] ?? null) === 'Marca Aurora'));
+        $this->assertTrue($origins->contains(fn (array $origin) => ($origin['landing']['display_name'] ?? null) === 'Casting RJ' && ($origin['company']['name'] ?? null) === 'Outra Marca'));
+
+        $companyUser = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $companyUser->id,
+            'company_id' => $company->id,
+        ]);
+        $this->flushHeaders();
+        auth()->forgetGuards();
+        $companyRows = $this->withToken($companyUser->createToken('auth')->plainTextToken)
+            ->getJson('/api/creators')
+            ->assertOk()
+            ->json('data');
+        $companyRow = collect($companyRows)->firstWhere('id', $creator->id);
+        $this->assertNotNull($companyRow);
+        $this->assertCount(1, $companyRow['landing_origins']);
+        $this->assertSame('Influenciadores SP', $companyRow['landing_origins'][0]['landing']['display_name']);
+        $this->assertSame('Marca Aurora', $companyRow['landing_origins'][0]['company']['name']);
     }
 }

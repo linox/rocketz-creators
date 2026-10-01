@@ -66,9 +66,27 @@ class CreatorResource extends JsonResource
                 'id' => $this->invitedByCompany->id,
                 'name' => $this->invitedByCompany->name,
             ] : null),
+            'landing_origins' => $this->whenLoaded('landingSignups', fn () => $this->landingSignups
+                ->map(fn (CompanyLandingSignup $signup) => [
+                    'id' => $signup->id,
+                    'landing' => $signup->relationLoaded('landingPage') && $signup->landingPage ? [
+                        'id' => $signup->landingPage->id,
+                        'display_name' => $signup->landingPage->display_name,
+                        'slug' => $signup->landingPage->slug,
+                    ] : null,
+                    'company' => $signup->relationLoaded('company') && $signup->company ? [
+                        'id' => $signup->company->id,
+                        'name' => $signup->company->name,
+                    ] : null,
+                ])
+                ->values()),
             'landing_review' => $this->when(
                 $request->user()?->role?->value === 'company' && $request->route('creator'),
-                fn () => $this->landingReviewForViewer($request),
+                fn () => $this->landingReviewsForViewer($request)[0] ?? null,
+            ),
+            'landing_reviews' => $this->when(
+                $request->user()?->role?->value === 'company' && $request->route('creator'),
+                fn () => $this->landingReviewsForViewer($request),
             ),
             'portfolio' => $this->whenLoaded('portfolioVideos', fn () => $this->portfolioVideos->map(fn ($video) => [
                 'id' => $video->id,
@@ -128,30 +146,36 @@ class CreatorResource extends JsonResource
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return list<array<string, mixed>>
      */
-    private function landingReviewForViewer(Request $request): ?array
+    private function landingReviewsForViewer(Request $request): array
     {
         $companyId = $request->user()?->actingCompanyId();
         if (! $companyId) {
-            return null;
+            return [];
         }
 
-        $signup = CompanyLandingSignup::query()
+        return CompanyLandingSignup::query()
+            ->with('landingPage')
             ->where('company_id', $companyId)
             ->where('creator_id', $this->id)
-            ->first();
-
-        if (! $signup) {
-            return null;
-        }
-
-        return [
-            'id' => $signup->id,
-            'status' => $signup->status?->value,
-            'source' => 'company_landing_page',
-            'reviewed_at' => $signup->reviewed_at?->toIso8601String(),
-            'created_at' => $signup->created_at?->toIso8601String(),
-        ];
+            ->orderByRaw("case when status in ('pending', 'reviewing') then 0 else 1 end")
+            ->latest()
+            ->get()
+            ->map(function (CompanyLandingSignup $signup) {
+                return [
+                    'id' => $signup->id,
+                    'status' => $signup->status?->value,
+                    'source' => 'company_landing_page',
+                    'reviewed_at' => $signup->reviewed_at?->toIso8601String(),
+                    'created_at' => $signup->created_at?->toIso8601String(),
+                    'landing' => $signup->landingPage ? [
+                        'id' => $signup->landingPage->id,
+                        'display_name' => $signup->landingPage->display_name,
+                        'slug' => $signup->landingPage->slug,
+                    ] : null,
+                ];
+            })
+            ->all();
     }
 }

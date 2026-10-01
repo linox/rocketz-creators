@@ -106,6 +106,17 @@ export const api = {
     laravelFetch<Item<StorefrontItem>>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteStorefrontItem: (creatorId: number, itemId: number) =>
     laravelFetch<{ ok: boolean }>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "DELETE" }),
+  companyLandings: (companyId: number) => laravelFetch<List<CompanyLandingPage>>(`/companies/${companyId}/landings`),
+  createCompanyLanding: (companyId: number, body: { display_name: string; slug?: string }) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings`, { method: "POST", body: JSON.stringify(body) }),
+  companyLandingPage: (companyId: number, landingId: number) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings/${landingId}`),
+  updateCompanyLandingPage: (companyId: number, landingId: number, body: unknown) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings/${landingId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  publishCompanyLandingPage: (companyId: number, landingId: number) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings/${landingId}/publish`, { method: "POST" }),
+  disableCompanyLandingPage: (companyId: number, landingId: number) =>
+    laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings/${landingId}/disable`, { method: "POST" }),
   companyLanding: (companyId: number) => laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`),
   updateCompanyLanding: (companyId: number, body: unknown) =>
     laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landing`, { method: "PATCH", body: JSON.stringify(body) }),

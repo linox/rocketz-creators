@@ -16,6 +16,11 @@ class CompanyLandingSignupResource extends JsonResource
             'id' => $this->id,
             'company_id' => $this->company_id,
             'company_landing_page_id' => $this->company_landing_page_id,
+            'landing' => $this->whenLoaded('landingPage', fn () => $this->landingPage ? [
+                'id' => $this->landingPage->id,
+                'display_name' => $this->landingPage->display_name,
+                'slug' => $this->landingPage->slug,
+            ] : null),
             'creator_id' => $this->creator_id,
             'source' => 'company_landing_page',
             'status' => $this->status?->value,

@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink, Eye, Globe, QrCode, Share2, UploadCloud } from "lucide-react";
+import { Copy, ExternalLink, Eye, Globe, Plus, QrCode, Share2, UploadCloud } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CompanyPublicLanding } from "@/components/CompanyPublicLanding";
 import { PageHeader, StatCard } from "@/components/ui/PageHeader";
@@ -113,9 +113,13 @@ function CompanyLandingInner() {
   const queryCompanyId = Number(searchParams.get("companyId") || 0);
   const companyId = isAdmin ? queryCompanyId || 0 : (user.company?.id ?? 0);
 
+  const [pages, setPages] = useState<CompanyLandingPage[]>([]);
   const [page, setPage] = useState<CompanyLandingPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const landingParam = Number(searchParams.get("landing") || 0);
   const [preview, setPreview] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [form, setForm] = useState({
@@ -150,14 +154,33 @@ function CompanyLandingInner() {
       setLoading(false);
       return;
     }
-    api.companyLanding(companyId)
-      .then((res) => {
+    let cancelled = false;
+    api.companyLandings(companyId)
+      .then(async (list) => {
+        if (cancelled) return;
+        setPages(list.data);
+        const selected = list.data.find((item) => item.id === landingParam) ?? list.data[0];
+        if (!selected) return;
+        const res = await api.companyLandingPage(companyId, selected.id);
+        if (cancelled) return;
         setPage(res.data);
         hydrate(res.data);
       })
       .catch(alertApiError)
-      .finally(() => setLoading(false));
-  }, [companyId, isAdmin, router]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, isAdmin, router, landingParam]);
+
+  function openLanding(id: number) {
+    const params = new URLSearchParams();
+    if (isAdmin && companyId) params.set("companyId", String(companyId));
+    params.set("landing", String(id));
+    router.replace(`/company-landing?${params.toString()}`);
+  }
 
   function hydrate(data: CompanyLandingPage) {
     setForm({
@@ -181,9 +204,9 @@ function CompanyLandingInner() {
 
   async function persistImage(field: "logo_url" | "banner_url", url: string) {
     setForm((current) => ({ ...current, [field]: url }));
-    if (!companyId) return;
+    if (!companyId || !page) return;
     try {
-      const res = await api.updateCompanyLanding(companyId, { [field]: url || null });
+      const res = await api.updateCompanyLandingPage(companyId, page.id, { [field]: url || null });
       setPage(res.data);
     } catch (err) {
       await alertApiError(err);
@@ -199,11 +222,11 @@ function CompanyLandingInner() {
 
   async function save(event?: FormEvent) {
     event?.preventDefault();
-    if (!companyId) return false;
+    if (!companyId || !page) return false;
     const current = formRef.current;
     setSaving(true);
     try {
-      const res = await api.updateCompanyLanding(companyId, {
+      const res = await api.updateCompanyLandingPage(companyId, page.id, {
         slug: current.slug,
         display_name: current.display_name,
         logo_url: current.logo_url || null,
@@ -223,6 +246,7 @@ function CompanyLandingInner() {
         },
       });
       setPage(res.data);
+      setPages((currentPages) => currentPages.map((item) => (item.id === res.data.id ? { ...item, ...res.data } : item)));
       hydrate(res.data);
       await alertSuccess(t("companyLanding.saved"));
       return true;
@@ -235,11 +259,12 @@ function CompanyLandingInner() {
   }
 
   async function publish() {
-    if (!companyId) return;
+    if (!companyId || !page) return;
     if (!(await save())) return;
     try {
-      const res = await api.publishCompanyLanding(companyId);
+      const res = await api.publishCompanyLandingPage(companyId, page.id);
       setPage(res.data);
+      setPages((currentPages) => currentPages.map((item) => (item.id === res.data.id ? { ...item, ...res.data } : item)));
       await alertSuccess(t("companyLanding.published"));
     } catch (err) {
       await alertApiError(err);
@@ -247,13 +272,35 @@ function CompanyLandingInner() {
   }
 
   async function disable() {
-    if (!companyId) return;
+    if (!companyId || !page) return;
     try {
-      const res = await api.disableCompanyLanding(companyId);
+      const res = await api.disableCompanyLandingPage(companyId, page.id);
       setPage(res.data);
+      setPages((currentPages) => currentPages.map((item) => (item.id === res.data.id ? { ...item, ...res.data } : item)));
       await alertSuccess(t("companyLanding.disabled"));
     } catch (err) {
       await alertApiError(err);
+    }
+  }
+
+  async function createLanding(event: FormEvent) {
+    event.preventDefault();
+    const name = newName.trim();
+    if (!companyId || !name) {
+      await alertWarning(t("companyLanding.nameRequired"));
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.createCompanyLanding(companyId, { display_name: name });
+      setNewName("");
+      setCreating(false);
+      await alertSuccess(t("companyLanding.created"));
+      openLanding(res.data.id);
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -309,7 +356,7 @@ function CompanyLandingInner() {
         subtitle={t("companyLanding.subtitle")}
         actions={
           <>
-            <Link href={`/company-landing/signups${isAdmin ? `?companyId=${companyId}` : ""}`} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700">
+            <Link href={`/company-landing/signups?${new URLSearchParams({ ...(isAdmin && companyId ? { companyId: String(companyId) } : {}), ...(page ? { landing: String(page.id) } : {}) }).toString()}`} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700">
               {t("companyLanding.viewSignups")}
             </Link>
             <button type="button" onClick={() => setPreview(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700">
@@ -318,6 +365,61 @@ function CompanyLandingInner() {
           </>
         }
       />
+
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black tracking-wider text-slate-900 uppercase">{t("companyLanding.pagesTitle")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t("companyLanding.newPageHint")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreating((value) => !value)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2.5 text-xs font-bold text-white"
+          >
+            <Plus size={14} /> {t("companyLanding.newPage")}
+          </button>
+        </div>
+        {creating ? (
+          <form noValidate onSubmit={(event) => void createLanding(event)} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="block flex-1 text-xs font-bold text-slate-700">
+              {t("companyLanding.pageName")}
+              <input
+                className={`${fieldClass} mt-1`}
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder={t("companyLanding.pageNamePh")}
+              />
+            </label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setCreating(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700">
+                {t("cancel", { ns: "common" })}
+              </button>
+              <button disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
+                {saving ? t("companyLanding.creating") : t("companyLanding.create")}
+              </button>
+            </div>
+          </form>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {pages.map((item, index) => {
+            const active = item.id === page?.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openLanding(item.id)}
+                className={`rounded-xl border px-3 py-2 text-left text-xs ${active ? "border-violet-300 bg-violet-50 text-violet-900" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"}`}
+              >
+                <span className="block font-bold">{item.display_name}</span>
+                <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {index === 0 ? t("companyLanding.primaryPage") : item.slug}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <StatusBadge status={page.status} />

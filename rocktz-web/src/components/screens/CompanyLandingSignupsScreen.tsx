@@ -12,7 +12,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError } from "@/lib/alerts";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
-import type { CompanyLandingSignup } from "@/lib/types";
+import type { CompanyLandingPage, CompanyLandingSignup } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
 function CompanyLandingSignupsInner() {
@@ -25,7 +25,9 @@ function CompanyLandingSignupsInner() {
   const queryCompanyId = Number(searchParams.get("companyId") || 0);
   const companyId = isAdmin ? queryCompanyId || 0 : (user.company?.id ?? 0);
   const [rows, setRows] = useState<CompanyLandingSignup[]>([]);
+  const [pages, setPages] = useState<CompanyLandingPage[]>([]);
   const [status, setStatus] = useState("all");
+  const [landingId, setLandingId] = useState(searchParams.get("landing") || "all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,16 +42,28 @@ function CompanyLandingSignupsInner() {
       setLoading(false);
       return;
     }
-    api.companyLandingSignups(companyId)
-      .then((res) => setRows(res.data))
+    Promise.all([api.companyLandingSignups(companyId), api.companyLandings(companyId)])
+      .then(([signups, landings]) => {
+        setRows(signups.data);
+        setPages(landings.data);
+      })
       .catch(alertApiError)
       .finally(() => setLoading(false));
   }, [companyId, isAdmin, router]);
 
   const filtered = useMemo(
-    () => rows.filter((row) => status === "all" || row.status === status),
-    [rows, status],
+    () => rows.filter((row) => {
+      const statusOk = status === "all" || row.status === status;
+      const landingOk = landingId === "all" || String(row.company_landing_page_id) === landingId;
+      return statusOk && landingOk;
+    }),
+    [rows, status, landingId],
   );
+
+  const landingOptions = [
+    { value: "all", label: t("companyLanding.signups.allPages") },
+    ...pages.map((item) => ({ value: String(item.id), label: item.display_name })),
+  ];
 
   const statusOptions = [
     { value: "all", label: t("companyLanding.signups.all") },
@@ -70,7 +84,8 @@ function CompanyLandingSignupsInner() {
           </Link>
         }
       />
-      <div className="mb-4 max-w-xs">
+      <div className="mb-4 grid max-w-xl gap-3 sm:grid-cols-2">
+        <Select2Field theme="light" value={landingId} options={landingOptions} onChange={setLandingId} />
         <Select2Field theme="light" value={status} options={statusOptions} onChange={setStatus} />
       </div>
       {loading ? (
@@ -105,14 +120,16 @@ function CompanyLandingSignupsInner() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">{t("companyLanding.signups.origin")}</td>
+                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                    {row.landing?.display_name || t("companyLanding.signups.origin")}
+                  </td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : "—"}
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
                   <td className="px-4 py-3">
                     <Link
-                      href={`/creators/${row.creator_id}?from=landing`}
+                      href={`/creators/${row.creator_id}?from=landing&signup=${row.id}`}
                       className="text-xs font-bold text-brand-primary hover:underline"
                     >
                       {row.status === "approved" || row.status === "rejected" ? t("companyLanding.signups.view") : t("companyLanding.signups.analyze")}

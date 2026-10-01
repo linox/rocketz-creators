@@ -129,9 +129,14 @@ class Company extends Model
         return $this->hasMany(Creator::class, 'invited_by_company_id');
     }
 
+    public function landingPages(): HasMany
+    {
+        return $this->hasMany(CompanyLandingPage::class);
+    }
+
     public function landingPage(): HasOne
     {
-        return $this->hasOne(CompanyLandingPage::class);
+        return $this->hasOne(CompanyLandingPage::class)->oldestOfMany();
     }
 
     public function landingSignups(): HasMany

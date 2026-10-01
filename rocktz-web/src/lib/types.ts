@@ -32,13 +32,13 @@ export type Creator = {
   can_moderate?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
-  landing_review?: {
+  landing_origins?: {
     id: number;
-    status: string;
-    source?: string;
-    reviewed_at?: string | null;
-    created_at?: string | null;
-  } | null;
+    landing?: { id: number; display_name: string; slug: string } | null;
+    company?: { id: number; name: string } | null;
+  }[];
+  landing_review?: LandingReview | null;
+  landing_reviews?: LandingReview[];
   portfolio?: {
     id: number;
     title: string;
@@ -98,6 +98,15 @@ export type Company = {
   creator_invite_code?: string | null;
 };
 
+export type LandingReview = {
+  id: number;
+  status: string;
+  source?: string;
+  reviewed_at?: string | null;
+  created_at?: string | null;
+  landing?: { id: number; display_name: string; slug: string } | null;
+};
+
 export type CompanyLandingPage = {
   id: number;
   company_id: number;
@@ -144,6 +153,7 @@ export type CompanyLandingSignup = {
   id: number;
   company_id: number;
   company_landing_page_id: number;
+  landing?: { id: number; display_name: string; slug: string } | null;
   creator_id: number;
   source: string;
   status: "pending" | "reviewing" | "approved" | "rejected" | string;

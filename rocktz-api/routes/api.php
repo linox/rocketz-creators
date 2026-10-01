@@ -135,6 +135,12 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
         Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
         Route::post('companies/{company}/invite-code', [CompanyController::class, 'rotateInviteCode']);
+        Route::get('companies/{company}/landings', [CompanyLandingController::class, 'index']);
+        Route::post('companies/{company}/landings', [CompanyLandingController::class, 'store']);
+        Route::get('companies/{company}/landings/{landing}', [CompanyLandingController::class, 'showOne']);
+        Route::patch('companies/{company}/landings/{landing}', [CompanyLandingController::class, 'updateOne']);
+        Route::post('companies/{company}/landings/{landing}/publish', [CompanyLandingController::class, 'publishOne']);
+        Route::post('companies/{company}/landings/{landing}/disable', [CompanyLandingController::class, 'disableOne']);
         Route::get('companies/{company}/landing', [CompanyLandingController::class, 'show']);
         Route::patch('companies/{company}/landing', [CompanyLandingController::class, 'update']);
         Route::post('companies/{company}/landing/publish', [CompanyLandingController::class, 'publish']);

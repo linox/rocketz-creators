@@ -48,7 +48,7 @@ class CreatorController extends Controller
             $companyId = (int) $user->actingCompanyId();
             abort_unless($companyId, 403, __('auth.company_not_linked'));
             $query->inCompanyPool($companyId)
-                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
+                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)->with($this->landingOriginRelations())]);
         } elseif ($user->role === UserRole::Admin && $request->filled('company_id')) {
             $data = $request->validate([
                 'company_id' => ['required', 'integer', 'exists:companies,id'],
@@ -56,7 +56,9 @@ class CreatorController extends Controller
             ]);
             $companyId = (int) $data['company_id'];
             $query->availableToCompanyContext($companyId, (bool) ($data['include_global'] ?? false))
-                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)]);
+                ->with(['landingSignups' => fn ($inner) => $inner->where('company_id', $companyId)->with($this->landingOriginRelations())]);
+        } elseif ($user->role === UserRole::Admin) {
+            $query->with(['landingSignups' => fn ($inner) => $inner->with($this->landingOriginRelations())]);
         }
 
         if ($status = $request->string('status')->toString()) {
@@ -496,6 +498,17 @@ class CreatorController extends Controller
         ]);
 
         return response()->json(['data' => $acceptance], 201);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function landingOriginRelations(): array
+    {
+        return [
+            'landingPage:id,display_name,slug',
+            'company:id,name',
+        ];
     }
 
     private function authorizeCreator(Request $request, Creator $creator): void

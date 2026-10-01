@@ -36,6 +36,33 @@ class CompanyLandingService
         ]);
     }
 
+    public function create(Company $company, string $displayName, ?string $slug = null): CompanyLandingPage
+    {
+        $name = trim($displayName);
+        if ($name === '') {
+            throw ValidationException::withMessages([
+                'display_name' => [__('validation.required', ['attribute' => 'display_name'])],
+            ]);
+        }
+
+        $resolvedSlug = filled($slug)
+            ? CompanyLandingPage::normalizeSlug($slug)
+            : $this->uniqueSlug($name);
+
+        if (filled($slug)) {
+            $this->assertSlugAvailable($resolvedSlug);
+        }
+
+        return CompanyLandingPage::query()->create([
+            'company_id' => $company->id,
+            'slug' => $resolvedSlug,
+            'display_name' => $name,
+            'logo_url' => $company->logo_url,
+            'status' => LandingPageStatus::Draft,
+            'socials' => [],
+        ]);
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -122,11 +149,11 @@ class CompanyLandingService
 
         $signup = CompanyLandingSignup::query()->firstOrCreate(
             [
-                'company_id' => $page->company_id,
+                'company_landing_page_id' => $page->id,
                 'creator_id' => $creator->id,
             ],
             [
-                'company_landing_page_id' => $page->id,
+                'company_id' => $page->company_id,
                 'status' => LandingSignupStatus::Pending,
             ],
         );
@@ -135,11 +162,11 @@ class CompanyLandingService
             $page->increment('signups_completed_count');
 
             if ($notify) {
-                $this->notifyCompanyOfSignup($page, $creator);
+                $this->notifyCompanyOfSignup($page, $creator, $signup);
             }
         }
 
-        return $signup->fresh(['creator.user', 'creator.portfolioVideos']) ?? $signup;
+        return $signup->fresh(['creator.user', 'creator.portfolioVideos', 'landingPage']) ?? $signup;
     }
 
     public function updateSignupStatus(
@@ -258,16 +285,19 @@ class CompanyLandingService
         return $clean;
     }
 
-    private function notifyCompanyOfSignup(CompanyLandingPage $page, Creator $creator): void
+    private function notifyCompanyOfSignup(CompanyLandingPage $page, Creator $creator, CompanyLandingSignup $signup): void
     {
         $name = $creator->artistic_name ?: $creator->full_name;
 
         $this->notifications->notifyCompany($page->company_id, [
             'creator_id' => $creator->id,
             'title' => __('auth.landing_signup_title'),
-            'message' => __('auth.landing_signup_message', ['name' => $name]),
+            'message' => __('auth.landing_signup_message', [
+                'name' => $name,
+                'landing' => $page->display_name,
+            ]),
             'type' => NotificationType::Application,
-            'link' => '/creators/'.$creator->id.'?from=landing',
+            'link' => '/creators/'.$creator->id.'?from=landing&signup='.$signup->id,
         ]);
         $page->loadMissing('company');
         if ($page->company) {

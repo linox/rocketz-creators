@@ -36,6 +36,25 @@ const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", passw
 const FILTER_TRIGGER =
   "h-[42px] rounded-lg border-[#E2E8F0] bg-[#F9FAFB] px-4 text-xs font-bold tracking-wide text-[#64748B] uppercase";
 
+function CreatorLandingOrigins({ creator }: { creator: Creator }) {
+  const { t } = useTranslation("app");
+  const origins = (creator.landing_origins ?? []).filter((origin) => origin.landing?.display_name || origin.company?.name);
+  if (origins.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {origins.map((origin) => (
+        <span key={origin.id} className="rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold leading-snug text-violet-800">
+          {t("creators.landingOrigin", {
+            landing: origin.landing?.display_name || "—",
+            company: origin.company?.name || "—",
+          })}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function orderedCreatorTags(categories: string[] | undefined, selected: string, limit: number) {
   const list = categories || [];
   if (!selected || selected === "all") return list.slice(0, limit);
@@ -213,6 +232,7 @@ function CreatorCard({
             <div className="min-w-0">
               <h3 className="m-0 truncate font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
               {location ? <p className="m-0 truncate text-[11px] font-medium text-slate-500">{location}</p> : null}
+              <CreatorLandingOrigins creator={creator} />
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={creator.status} />
                 <span
@@ -406,6 +426,7 @@ function CreatorListRow({
             <p className="m-0 truncate text-[11px] font-medium text-slate-500">{creator.full_name}</p>
           ) : null}
           {location ? <p className="m-0 truncate text-[11px] text-slate-400">{location}</p> : null}
+          <CreatorLandingOrigins creator={creator} />
           <div className="mt-1 flex flex-wrap gap-1">
             {orderedCreatorTags(creator.categories, highlightedCategory, 3).map((cat) => (
               <span key={cat} className={cn(creatorTagClass(cat, highlightedCategory), "px-1.5 text-[9px]")}>

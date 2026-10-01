@@ -76,7 +76,7 @@ return [
     'landing_slug_reserved' => 'Este identificador não pode ser usado.',
     'landing_slug_taken' => 'Este identificador já está em uso.',
     'landing_signup_title' => 'Novo creator pela sua Landing Page',
-    'landing_signup_message' => ':name concluiu o cadastro e está aguardando sua análise.',
+    'landing_signup_message' => ':name concluiu o cadastro pela landing :landing e está aguardando sua análise.',
     'creator_registered_by_company' => 'Cadastrado manualmente pela empresa.',
     'creator_must_accept_contract' => 'Você precisa assinar o contrato de uso de imagem para se candidatar às campanhas.',
     'creator_must_accept_campaign_contract' => 'Você precisa aceitar o contrato personalizado desta campanha para se candidatar.',
