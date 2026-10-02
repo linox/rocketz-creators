@@ -179,9 +179,9 @@ function CampaignCard({
                 <Scale size={10} /> {t("campaigns.customContract")}
               </span>
             ) : null}
-            {campaign.restrict_to_landing ? (
+            {campaign.restrict_to_landing || campaign.landing_page ? (
               <span className="flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-violet-200 uppercase backdrop-blur-md">
-                <LayoutTemplate size={10} /> {t("campaigns.landingLimited")}
+                <LayoutTemplate size={10} /> {campaign.landing_page?.display_name ? t("campaigns.landingLimitedNamed", { name: campaign.landing_page.display_name }) : t("campaigns.landingLimited")}
               </span>
             ) : null}
             {campaign.limit_by_city ? (

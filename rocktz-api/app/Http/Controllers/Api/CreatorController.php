@@ -11,9 +11,11 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CreatorResource;
 use App\Jobs\SyncCreatorSocialsJob;
+use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
 use App\Models\Creator;
 use App\Models\User;
+use App\Services\CompanyLandingService;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Services\SocialMetricsService;
@@ -109,9 +111,51 @@ class CreatorController extends Controller
             }
         }
 
-        $creator->load(['user', 'portfolioVideos', 'contractAcceptances' => fn ($q) => $q->latest(), 'invitedByCompany']);
+        $relations = [
+            'user',
+            'portfolioVideos',
+            'contractAcceptances' => fn ($q) => $q->latest(),
+            'invitedByCompany',
+        ];
+        if ($user->role === UserRole::Admin || $user->role === UserRole::Company) {
+            $relations['landingSignups'] = function ($query) use ($user) {
+                $query->with($this->landingOriginRelations());
+                if ($user->role === UserRole::Company) {
+                    $query->where('company_id', (int) $user->actingCompanyId());
+                }
+            };
+        }
+        $creator->load($relations);
 
         return response()->json(['data' => new CreatorResource($creator)]);
+    }
+
+    public function attachLandingOrigin(Request $request, Creator $creator): JsonResponse
+    {
+        $user = $request->user();
+        $page = $this->landingPageForOrigin($request, $creator);
+
+        app(CompanyLandingService::class)->assignOrigin($page, $creator, $user);
+
+        return $this->show($request, $creator->fresh());
+    }
+
+    public function detachLandingOrigin(Request $request, Creator $creator, CompanyLandingSignup $signup): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless((int) $signup->creator_id === (int) $creator->id, 404);
+
+        if ($user->role === UserRole::Company) {
+            $companyId = (int) $user->actingCompanyId();
+            abort_unless($companyId > 0 && (int) $signup->company_id === $companyId, 403, __('auth.forbidden'));
+            abort_unless($creator->isAccessibleByCompany($companyId), 403, __('auth.profile_unavailable'));
+        } elseif ($user->role !== UserRole::Admin) {
+            abort(403, __('auth.forbidden'));
+        }
+
+        $signup->delete();
+
+        return $this->show($request, $creator->fresh());
     }
 
     public function store(Request $request): JsonResponse
@@ -503,6 +547,25 @@ class CreatorController extends Controller
     /**
      * @return array<string, mixed>
      */
+    private function landingPageForOrigin(Request $request, Creator $creator): CompanyLandingPage
+    {
+        $user = $request->user();
+        abort_unless(in_array($user->role, [UserRole::Admin, UserRole::Company], true), 403, __('auth.forbidden'));
+
+        $data = $request->validate([
+            'company_landing_page_id' => ['required', 'integer', 'exists:company_landing_pages,id'],
+        ]);
+        $page = CompanyLandingPage::query()->findOrFail($data['company_landing_page_id']);
+
+        if ($user->role === UserRole::Company) {
+            $companyId = (int) $user->actingCompanyId();
+            abort_unless($companyId > 0 && (int) $page->company_id === $companyId, 403, __('auth.forbidden'));
+            abort_unless($creator->isAccessibleByCompany($companyId), 403, __('auth.profile_unavailable'));
+        }
+
+        return $page;
+    }
+
     private function landingOriginRelations(): array
     {
         return [

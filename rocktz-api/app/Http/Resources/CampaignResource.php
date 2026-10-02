@@ -46,6 +46,12 @@ class CampaignResource extends JsonResource
             'is_barter' => (bool) $this->is_barter,
             'limit_by_city' => (bool) $this->limit_by_city,
             'restrict_to_landing' => (bool) $this->restrict_to_landing,
+            'company_landing_page_id' => $this->company_landing_page_id ? (int) $this->company_landing_page_id : null,
+            'landing_page' => $this->whenLoaded('landingPage', fn () => $this->landingPage ? [
+                'id' => $this->landingPage->id,
+                'display_name' => $this->landingPage->display_name,
+                'slug' => $this->landingPage->slug,
+            ] : null),
             'state' => $this->state,
             'city' => $this->city,
             'barter_details' => $this->barter_details,

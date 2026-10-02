@@ -223,6 +223,7 @@ jobs:
           sudo apt-get install -y -qq lftp
           token="$(openssl rand -hex 16)"
           reset_name="deploy-opcache-${token}.php"
+          migrate_name="deploy-migrate-${token}.php"
           cleanup() {
             lftp -c "
               set ssl:verify-certificate no;
@@ -230,6 +231,7 @@ jobs:
               open -u ${FTP_USER},${FTP_PASS} ftp://api.creatorz.digital;
               cd ${SERVER_DIR};
               rm -f public/${reset_name};
+              rm -f public/${migrate_name};
             " >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
@@ -247,6 +249,7 @@ jobs:
             put -O bootstrap/cache rocktz-api/bootstrap/cache/packages.php;
             put -O bootstrap/cache rocktz-api/bootstrap/cache/services.php;
             put scripts/cpanel-opcache-reset.php -o public/${reset_name};
+            put scripts/cpanel-migrate.php -o public/${migrate_name};
             rm -f bootstrap/cache/config.php;
             rm -f bootstrap/cache/events.php;
             rm -f bootstrap/cache/routes.php;
@@ -295,6 +298,12 @@ jobs:
             chmod 755 bin/ffmpeg;
             chmod 755 bin/ffprobe;
           " || true
+          migrate_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${migrate_name}")"
+          echo "$migrate_json"
+          echo "$migrate_json" | grep -q '"ok":true' || {
+            echo "php artisan migrate --force falhou no servidor." >&2
+            exit 1
+          }
           reset_json="$(curl -fsS -H 'Cache-Control: no-cache' "https://api.creatorz.digital/${reset_name}")"
           echo "$reset_json"
           echo "$reset_json" | grep -q '"vendor_autoload":true' || {

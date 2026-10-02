@@ -490,6 +490,7 @@ function DetailInner() {
     custom_contract_terms: "",
     limit_by_city: false,
     restrict_to_landing: false,
+    company_landing_page_id: "",
     state: "",
     city: "",
     barter_details: "",
@@ -887,7 +888,8 @@ function DetailInner() {
       has_custom_contract: Boolean(campaign.has_custom_contract),
       custom_contract_terms: campaign.custom_contract_terms || "",
       limit_by_city: Boolean(campaign.limit_by_city),
-      restrict_to_landing: Boolean(campaign.restrict_to_landing),
+      restrict_to_landing: Boolean(campaign.restrict_to_landing || campaign.company_landing_page_id),
+      company_landing_page_id: campaign.company_landing_page_id ? String(campaign.company_landing_page_id) : "",
       state: campaign.state || "",
       city: campaign.city || "",
       barter_details: campaign.barter_details || "",
@@ -966,6 +968,7 @@ function DetailInner() {
         custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
         limit_by_city: editForm.limit_by_city,
         restrict_to_landing: editForm.restrict_to_landing,
+        company_landing_page_id: editForm.restrict_to_landing && editForm.company_landing_page_id ? Number(editForm.company_landing_page_id) : null,
         state: editForm.limit_by_city ? editForm.state || null : null,
         city: editForm.limit_by_city ? editForm.city.trim() : null,
         barter_details: editForm.is_barter ? editForm.barter_details : null,
@@ -1167,9 +1170,9 @@ function DetailInner() {
                       <Scale size={9} /> {t("campaigns.customContract")}
                     </span>
                   ) : null}
-                  {campaign.restrict_to_landing ? (
+                  {campaign.restrict_to_landing || campaign.landing_page ? (
                     <span className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
-                      <LayoutTemplate size={9} /> {t("campaigns.landingLimited")}
+                      <LayoutTemplate size={9} /> {campaign.landing_page?.display_name ? t("campaigns.landingLimitedNamed", { name: campaign.landing_page.display_name }) : t("campaigns.landingLimited")}
                     </span>
                   ) : null}
                   {campaign.limit_by_city ? (
@@ -2674,7 +2677,7 @@ function DetailInner() {
                   {isAdmin ? (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.company")}</label>
-                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value, state: "" })} />
+                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value, state: "", company_landing_page_id: "" })} />
                     </div>
                   ) : null}
                   {canChangeStatus ? (
@@ -2835,7 +2838,10 @@ function DetailInner() {
                 </div>
                 <CampaignLandingFields
                   enabled={editForm.restrict_to_landing}
-                  onEnabledChange={(value) => setEditForm({ ...editForm, restrict_to_landing: value })}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, restrict_to_landing: value, company_landing_page_id: value ? editForm.company_landing_page_id : "" })}
+                  companyId={Number(editForm.company_id) || campaign.company_id}
+                  landingPageId={editForm.company_landing_page_id}
+                  onLandingPageIdChange={(value) => setEditForm({ ...editForm, company_landing_page_id: value })}
                 />
                 <CampaignLocationFields
                   country={companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country}

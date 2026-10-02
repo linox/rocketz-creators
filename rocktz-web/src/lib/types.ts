@@ -166,6 +166,8 @@ export type CompanyLandingSignup = {
 export type Campaign = {
   id: number;
   company_id: number;
+  company_landing_page_id?: number | null;
+  landing_page?: { id: number; display_name: string; slug: string } | null;
   company?: { id: number; name: string; logo_url: string | null; status: string; segment?: string | null; country?: string | null; currency?: string | null };
   name: string;
   objective: string | null;

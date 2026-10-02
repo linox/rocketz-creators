@@ -61,6 +61,7 @@ import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubm
 import { CreatorContractModal } from "@/components/CreatorContractModal";
 import { CreatorPautaSubmissionPanel } from "@/components/CreatorPautaSubmissionPanel";
 import { CategoryTagsField } from "@/components/CategoryTagsField";
+import { CreatorLandingOriginCard } from "@/components/CreatorLandingOriginCard";
 import { CreatorPortfolioPanel } from "@/components/CreatorPortfolioPanel";
 import { CreatorStorefrontPanel } from "@/components/CreatorStorefrontPanel";
 import { StorefrontMetricsPanel } from "@/components/screens/StorefrontMetricsScreen";
@@ -1316,6 +1317,10 @@ function ProfileInner() {
             <button type="button" onClick={() => void updateLandingReview("rejected")} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-800">{ta("companyLanding.signups.reject")}</button>
           </div>
         </div>
+      ) : null}
+
+      {user.role === "admin" || user.role === "company" ? (
+        <CreatorLandingOriginCard creator={creator} onChanged={load} />
       ) : null}
 
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center md:gap-4">

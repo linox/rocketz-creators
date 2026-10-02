@@ -132,6 +132,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::delete('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'destroyItem']);
         Route::delete('campaigns/{campaign}', [CampaignController::class, 'destroy']);
         Route::delete('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'destroy']);
+        Route::post('creators/{creator}/landing-origins', [CreatorController::class, 'attachLandingOrigin']);
+        Route::delete('creators/{creator}/landing-origins/{signup}', [CreatorController::class, 'detachLandingOrigin']);
         Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
         Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
         Route::post('companies/{company}/invite-code', [CompanyController::class, 'rotateInviteCode']);

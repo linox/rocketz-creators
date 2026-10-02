@@ -21,6 +21,7 @@ use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
+use App\Models\CompanyLandingPage;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\Geo;
@@ -47,7 +48,7 @@ class CampaignController extends Controller
         $includeContent = $this->wantsInclude($request, 'content');
         $user = $request->user();
         $query = $this->scoped($request)
-            ->with(['company', 'deliverable'])
+            ->with(['company', 'deliverable', 'landingPage'])
             ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         if ($user?->role === UserRole::Creator) {
@@ -93,7 +94,7 @@ class CampaignController extends Controller
         );
 
         $query = Campaign::query()
-            ->with(['company', 'briefing', 'deliverable', 'campaignCreators'])
+            ->with(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators'])
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
@@ -114,7 +115,7 @@ class CampaignController extends Controller
     public function show(Request $request, Campaign $campaign): JsonResponse
     {
         $this->assertCanView($request, $campaign);
-        $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators.creator', 'campaignCreators.content']);
         $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -199,7 +200,7 @@ class CampaignController extends Controller
             return $campaign;
         });
 
-        $campaign->load(['company', 'briefing', 'deliverable']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage']);
         if ($campaign->isPendingAgency()) {
             $this->notifyAgencyReview($campaign);
             $this->mail->campaignPendingAgency($campaign);
@@ -235,7 +236,7 @@ class CampaignController extends Controller
             }
         });
 
-        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']);
+        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -304,7 +305,7 @@ class CampaignController extends Controller
         abort_unless(
             $campaign->matchesCreatorOrigin($creator),
             403,
-            __('auth.campaign_landing_restricted'),
+            $this->landingRestrictionMessage($campaign),
         );
 
         $data = $request->validate([
@@ -572,6 +573,7 @@ class CampaignController extends Controller
             'is_barter' => ['sometimes', 'boolean'],
             'limit_by_city' => ['sometimes', 'boolean'],
             'restrict_to_landing' => ['sometimes', 'boolean'],
+            'company_landing_page_id' => ['sometimes', 'nullable', 'integer'],
             'state' => ['nullable', 'string', 'max:12'],
             'city' => ['nullable', 'string', 'max:120'],
             'barter_details' => ['nullable', 'string'],
@@ -610,6 +612,7 @@ class CampaignController extends Controller
         if ($creating && ! array_key_exists('restrict_to_landing', $data)) {
             $data['restrict_to_landing'] = false;
         }
+        $data = $this->withLandingTarget($request, $data, $creating, $companyId);
         $data = $this->withCustomContract($request, $data);
         if (! $user->canPublishWithoutApproval()) {
             if ($creating) {
@@ -630,6 +633,53 @@ class CampaignController extends Controller
             $creating ? null : $request->route('campaign'),
             $user,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withLandingTarget(Request $request, array $data, bool $creating, int $companyId): array
+    {
+        $existing = $creating ? null : $request->route('campaign');
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $landingId = array_key_exists('company_landing_page_id', $data) && $data['company_landing_page_id']
+            ? (int) $data['company_landing_page_id']
+            : null;
+
+        if ($landingId) {
+            $page = CompanyLandingPage::query()->whereKey($landingId)->where('company_id', $companyId)->first();
+            abort_unless($page, 422, __('auth.landing_not_in_company'));
+            $data['company_landing_page_id'] = $page->id;
+            $data['restrict_to_landing'] = true;
+        } elseif (array_key_exists('company_landing_page_id', $data)) {
+            $data['company_landing_page_id'] = null;
+        } elseif (
+            $campaign?->company_landing_page_id
+            && $companyId
+            && (int) $campaign->company_id !== $companyId
+        ) {
+            $ownsPage = CompanyLandingPage::query()
+                ->whereKey($campaign->company_landing_page_id)
+                ->where('company_id', $companyId)
+                ->exists();
+            if (! $ownsPage) {
+                $data['company_landing_page_id'] = null;
+            }
+        }
+
+        if (array_key_exists('restrict_to_landing', $data) && ! $data['restrict_to_landing']) {
+            $data['company_landing_page_id'] = null;
+        }
+
+        return $data;
+    }
+
+    private function landingRestrictionMessage(Campaign $campaign): string
+    {
+        return $campaign->company_landing_page_id
+            ? __('auth.campaign_landing_page_restricted')
+            : __('auth.campaign_landing_restricted');
     }
 
     /**
@@ -790,7 +840,7 @@ class CampaignController extends Controller
             $campaign->loadMissing('company');
             abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
             abort_unless($user->creator && $campaign->matchesCreatorLocation($user->creator), 403, __('auth.campaign_city_restricted'));
-            abort_unless($user->creator && $campaign->matchesCreatorOrigin($user->creator), 403, __('auth.campaign_landing_restricted'));
+            abort_unless($user->creator && $campaign->matchesCreatorOrigin($user->creator), 403, $this->landingRestrictionMessage($campaign));
 
             return;
         }

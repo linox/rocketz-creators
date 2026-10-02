@@ -169,6 +169,32 @@ class CompanyLandingService
         return $signup->fresh(['creator.user', 'creator.portfolioVideos', 'landingPage']) ?? $signup;
     }
 
+    public function assignOrigin(CompanyLandingPage $page, Creator $creator, User $reviewer): CompanyLandingSignup
+    {
+        $signup = CompanyLandingSignup::query()->firstOrCreate(
+            [
+                'company_landing_page_id' => $page->id,
+                'creator_id' => $creator->id,
+            ],
+            [
+                'company_id' => $page->company_id,
+                'status' => LandingSignupStatus::Approved,
+                'reviewed_at' => now(),
+                'reviewed_by_user_id' => $reviewer->id,
+            ],
+        );
+
+        if ($signup->status !== LandingSignupStatus::Approved) {
+            $signup->forceFill([
+                'status' => LandingSignupStatus::Approved,
+                'reviewed_at' => now(),
+                'reviewed_by_user_id' => $reviewer->id,
+            ])->save();
+        }
+
+        return $signup->load(['landingPage:id,display_name,slug', 'company:id,name']);
+    }
+
     public function updateSignupStatus(
         CompanyLandingSignup $signup,
         LandingSignupStatus $status,

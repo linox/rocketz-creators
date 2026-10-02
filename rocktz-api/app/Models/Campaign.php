@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'company_id',
+    'company_landing_page_id',
     'name',
     'objective',
     'start_date',
@@ -96,6 +97,11 @@ class Campaign extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function landingPage(): BelongsTo
+    {
+        return $this->belongsTo(CompanyLandingPage::class, 'company_landing_page_id');
     }
 
     public function briefing(): HasOne
@@ -194,6 +200,10 @@ class Campaign extends Model
 
     public function matchesCreatorOrigin(?Creator $creator): bool
     {
+        if ($this->company_landing_page_id) {
+            return $creator?->cameFromLanding((int) $this->company_landing_page_id) ?? false;
+        }
+
         if (! $this->restrict_to_landing) {
             return true;
         }
@@ -226,14 +236,25 @@ class Campaign extends Model
     public function scopeMatchingCreatorOrigin($query, Creator $creator)
     {
         $companyIds = $creator->originCompanyIds();
+        $landingIds = $creator->originLandingPageIds();
 
-        return $query->where(function ($builder) use ($companyIds) {
-            $builder->where('restrict_to_landing', false);
+        return $query->where(function ($builder) use ($companyIds, $landingIds) {
+            $builder->where(function ($open) {
+                $open->where('restrict_to_landing', false)
+                    ->whereNull('company_landing_page_id');
+            });
+
+            if ($landingIds !== []) {
+                $builder->orWhereIn('company_landing_page_id', $landingIds);
+            }
+
             if ($companyIds === []) {
                 return;
             }
+
             $builder->orWhere(function ($limited) use ($companyIds) {
                 $limited->where('restrict_to_landing', true)
+                    ->whereNull('company_landing_page_id')
                     ->whereIn('company_id', $companyIds);
             });
         });

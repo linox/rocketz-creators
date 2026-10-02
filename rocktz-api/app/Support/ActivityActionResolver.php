@@ -59,6 +59,8 @@ class ActivityActionResolver
         'POST companies/*/landing/publish' => 'landing.publish',
         'POST companies/*/landing/disable' => 'landing.disable',
         'PATCH companies/*/landing/signups/*' => 'landing.signup.update',
+        'POST creators/*/landing-origins' => 'landing.signup.update',
+        'DELETE creators/*/landing-origins/*' => 'landing.signup.update',
         'POST landings/*/claim' => 'landing.claim',
         'POST campaigns' => 'campaign.create',
         'PATCH campaigns/*' => 'campaign.update',

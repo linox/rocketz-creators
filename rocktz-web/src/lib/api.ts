@@ -106,6 +106,13 @@ export const api = {
     laravelFetch<Item<StorefrontItem>>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteStorefrontItem: (creatorId: number, itemId: number) =>
     laravelFetch<{ ok: boolean }>(`/creators/${creatorId}/storefront/items/${itemId}`, { method: "DELETE" }),
+  attachCreatorLanding: (creatorId: number, companyLandingPageId: number) =>
+    laravelFetch<Item<Creator>>(`/creators/${creatorId}/landing-origins`, {
+      method: "POST",
+      body: JSON.stringify({ company_landing_page_id: companyLandingPageId }),
+    }),
+  detachCreatorLanding: (creatorId: number, signupId: number) =>
+    laravelFetch<Item<Creator>>(`/creators/${creatorId}/landing-origins/${signupId}`, { method: "DELETE" }),
   companyLandings: (companyId: number) => laravelFetch<List<CompanyLandingPage>>(`/companies/${companyId}/landings`),
   createCompanyLanding: (companyId: number, body: { display_name: string; slug?: string }) =>
     laravelFetch<Item<CompanyLandingPage>>(`/companies/${companyId}/landings`, { method: "POST", body: JSON.stringify(body) }),

@@ -128,6 +128,7 @@ export function CreateCampaignModal({
   const [customContractTerms, setCustomContractTerms] = useState("");
   const [limitByCity, setLimitByCity] = useState(false);
   const [restrictToLanding, setRestrictToLanding] = useState(false);
+  const [landingPageId, setLandingPageId] = useState("");
   const [regionState, setRegionState] = useState("");
   const [city, setCity] = useState("");
   const [barterDetails, setBarterDetails] = useState("");
@@ -189,6 +190,8 @@ export function CreateCampaignModal({
     setHasCustomContract(false);
     setCustomContractTerms("");
     setLimitByCity(false);
+    setRestrictToLanding(false);
+    setLandingPageId("");
     setRegionState("");
     setCity("");
     setBarterDetails("");
@@ -294,6 +297,7 @@ export function CreateCampaignModal({
         custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
         limit_by_city: limitByCity,
         restrict_to_landing: restrictToLanding,
+        company_landing_page_id: restrictToLanding && landingPageId ? Number(landingPageId) : null,
         state: limitByCity ? regionState || null : null,
         city: limitByCity ? city.trim() : null,
         barter_details: isBarter ? barterDetails : null,
@@ -404,6 +408,7 @@ export function CreateCampaignModal({
                       setBudget((current) => remaskMoney(current, currency, nextCurrency));
                       setCreatorCache((current) => remaskMoney(current, currency, nextCurrency));
                       setCompanyId(value);
+                      setLandingPageId("");
                       setRegionState("");
                     }} />
                   </div>
@@ -447,7 +452,16 @@ export function CreateCampaignModal({
                     />
                   ) : null}
                 </div>
-                <CampaignLandingFields enabled={restrictToLanding} onEnabledChange={setRestrictToLanding} />
+                <CampaignLandingFields
+                  enabled={restrictToLanding}
+                  onEnabledChange={(value) => {
+                    setRestrictToLanding(value);
+                    if (!value) setLandingPageId("");
+                  }}
+                  companyId={isAdmin ? (companyId ? Number(companyId) : null) : defaultCompanyId}
+                  landingPageId={landingPageId}
+                  onLandingPageIdChange={setLandingPageId}
+                />
                 <CampaignLocationFields
                   country={selectedCompany?.country}
                   enabled={limitByCity}

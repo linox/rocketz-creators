@@ -225,6 +225,33 @@ class Creator extends Model
         return array_values(array_unique(array_filter($ids)));
     }
 
+    /**
+     * @return list<int>
+     */
+    public function originLandingPageIds(): array
+    {
+        $signups = $this->relationLoaded('landingSignups')
+            ? $this->landingSignups
+            : $this->landingSignups()->get(['company_landing_page_id']);
+
+        return array_values(array_unique($signups
+            ->pluck('company_landing_page_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->all()));
+    }
+
+    public function cameFromLanding(int $landingPageId): bool
+    {
+        if ($this->relationLoaded('landingSignups')) {
+            return $this->landingSignups->contains(
+                fn (CompanyLandingSignup $signup) => (int) $signup->company_landing_page_id === $landingPageId
+            );
+        }
+
+        return $this->landingSignups()->where('company_landing_page_id', $landingPageId)->exists();
+    }
+
     public function canBeModeratedBy(?User $user): bool
     {
         if (! $user || $this->status !== CreatorStatus::Review) {
