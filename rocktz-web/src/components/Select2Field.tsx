@@ -10,34 +10,51 @@ export type Select2Option = {
   label: string;
 };
 
-type Select2FieldProps = {
-  value: string;
-  onChange: (value: string) => void;
+type Select2SharedProps = {
   options: Select2Option[];
   placeholder?: string;
   theme?: "light" | "dark";
   searchable?: boolean;
-  allowClear?: boolean;
   disabled?: boolean;
   name?: string;
   className?: string;
   triggerClassName?: string;
 };
 
+type Select2SingleProps = Select2SharedProps & {
+  multiple?: false;
+  value: string;
+  onChange: (value: string) => void;
+  allowClear?: boolean;
+};
+
+type Select2MultiProps = Select2SharedProps & {
+  multiple: true;
+  value: string[];
+  onChange: (value: string[]) => void;
+  /** Clears the selection. Shown as selected while nothing else is chosen. */
+  exclusiveValue?: string;
+};
+
+export type Select2FieldProps = Select2SingleProps | Select2MultiProps;
+
 type MenuPos = { top: number; left: number; width: number; maxHeight: number };
 
-export function Select2Field({
-  value,
-  onChange,
-  options,
-  placeholder,
-  theme = "light",
-  searchable,
-  disabled = false,
-  name,
-  className,
-  triggerClassName,
-}: Select2FieldProps) {
+export function Select2Field(props: Select2FieldProps) {
+  const {
+    options,
+    placeholder,
+    theme = "light",
+    searchable,
+    disabled = false,
+    name,
+    className,
+    triggerClassName,
+  } = props;
+  const multiple = props.multiple === true;
+  const exclusiveValue = props.multiple ? props.exclusiveValue : undefined;
+  const selectedValues = props.multiple ? props.value.filter((item) => item !== props.exclusiveValue) : [];
+  const singleValue = props.multiple ? "" : props.value;
   const { t } = useTranslation("common");
   const resolvedPlaceholder = placeholder ?? t("select2.placeholder");
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -49,7 +66,13 @@ export function Select2Field({
   const [pos, setPos] = useState<MenuPos | null>(null);
 
   const enableSearch = searchable ?? options.length > 8;
-  const selected = options.find((option) => option.value === value);
+  const selected = options.find((option) => option.value === singleValue);
+  const selectedLabels = selectedValues.map((item) => options.find((option) => option.value === item)?.label ?? item);
+  const triggerLabel = multiple
+    ? selectedLabels.length === 0
+      ? (options.find((option) => option.value === exclusiveValue)?.label ?? resolvedPlaceholder)
+      : selectedLabels.join(", ")
+    : (selected?.label ?? resolvedPlaceholder);
   const dark = theme === "dark";
 
   const filtered = useMemo(() => {
@@ -73,10 +96,11 @@ export function Select2Field({
     const spaceAbove = rect.top - 12;
     const maxHeight = Math.min(280, Math.max(spaceBelow, spaceAbove, 160));
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const width = multiple ? Math.max(rect.width, 260) : rect.width;
     setPos({
       top: openUp ? Math.max(8, rect.top - maxHeight - 6) : rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      width,
       maxHeight,
     });
   }
@@ -87,8 +111,18 @@ export function Select2Field({
   }
 
   function pick(next: string) {
-    onChange(next);
-    close();
+    if (!props.multiple) {
+      props.onChange(next);
+      close();
+      return;
+    }
+    if (props.exclusiveValue && next === props.exclusiveValue) {
+      props.onChange([]);
+      close();
+      return;
+    }
+    const current = Array.isArray(props.value) ? props.value.filter((item) => item !== props.exclusiveValue) : [];
+    props.onChange(current.includes(next) ? current.filter((item) => item !== next) : [...current, next]);
   }
 
   useEffect(() => {
@@ -130,6 +164,7 @@ export function Select2Field({
             ref={menuRef}
             id={listId}
             role="listbox"
+            aria-multiselectable={multiple || undefined}
             style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
             className={cn(
               "fixed z-[400] flex flex-col overflow-hidden rounded-xl border shadow-xl",
@@ -155,7 +190,11 @@ export function Select2Field({
                 <li className="px-3 py-2 text-sm text-slate-400">{t("select2.empty")}</li>
               ) : (
                 filtered.map((option, index) => {
-                  const active = option.value === value;
+                  const active = multiple
+                    ? option.value === exclusiveValue
+                      ? selectedValues.length === 0
+                      : selectedValues.includes(option.value)
+                    : option.value === singleValue;
                   return (
                     <li key={option.value ? `${option.value}-${index}` : `option-${index}`}>
                       <button
@@ -163,7 +202,7 @@ export function Select2Field({
                         role="option"
                         aria-selected={active}
                         className={cn(
-                          "flex w-full px-3 py-2 text-left text-sm",
+                          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
                           active ? "bg-purple-600 text-white" : dark ? "text-slate-200 hover:bg-purple-600 hover:text-white" : "text-slate-800 hover:bg-purple-600 hover:text-white",
                         )}
                         onMouseDown={(event) => {
@@ -172,7 +211,22 @@ export function Select2Field({
                           pick(option.value);
                         }}
                       >
-                        {option.label}
+                        {multiple ? (
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                              active ? "border-white bg-white text-purple-600" : "border-current/40",
+                            )}
+                          >
+                            {active ? (
+                              <svg width="10" height="8" viewBox="0 0 10 8">
+                                <path d="M1 4.2 3.4 6.5 9 1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            ) : null}
+                          </span>
+                        ) : null}
+                        <span className="min-w-0 flex-1">{option.label}</span>
                       </button>
                     </li>
                   );
@@ -186,7 +240,7 @@ export function Select2Field({
 
   return (
     <div className={cn("select2-field", dark ? "select2-field-dark" : "select2-field-light", className)}>
-      {name ? <input type="hidden" name={name} value={value} /> : null}
+      {name ? <input type="hidden" name={name} value={multiple ? selectedValues.join(",") : singleValue} /> : null}
       <button
         ref={triggerRef}
         type="button"
@@ -210,8 +264,11 @@ export function Select2Field({
           setOpen((current) => !current);
         }}
       >
-        <span className={cn("truncate", !selected && (dark ? "text-slate-400" : "text-slate-400"))}>
-          {selected?.label ?? resolvedPlaceholder}
+        <span
+          title={multiple && selectedLabels.length > 1 ? selectedLabels.join(", ") : undefined}
+          className={cn("truncate", !multiple && !selected && "text-slate-400", multiple && selectedLabels.length === 0 && !exclusiveValue && "text-slate-400")}
+        >
+          {triggerLabel}
         </span>
         <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden className={cn("shrink-0", open && "rotate-180")}>
           <path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

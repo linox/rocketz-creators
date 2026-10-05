@@ -562,7 +562,7 @@ function CreatorsInner() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
-  const [regionFilter, setRegionFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [groups, setGroups] = useState<CreatorGroup[]>([]);
   const [groupFilter, setGroupFilter] = useState("all");
@@ -723,8 +723,8 @@ function CreatorsInner() {
       const matchesCountry = countryFilter === "all" || normalizeCountry(creator.country) === countryFilter;
       const matchesRegion =
         countryFilter === "all" ||
-        regionFilter === "all" ||
-        normalizeRegion(creator.state) === regionFilter;
+        regionFilter.length === 0 ||
+        regionFilter.includes(normalizeRegion(creator.state));
       const matchesMinFollowers = !minFollowers || followers >= parseIntegerMask(minFollowers);
       const matchesMaxFollowers = !maxFollowers || followers <= parseIntegerMask(maxFollowers);
       const matchesNetwork = !bounds || matchesNetworkRange(followers, bounds.min, bounds.max);
@@ -1133,18 +1133,19 @@ function CreatorsInner() {
             emptyLabel={t("creators.allCountries").toUpperCase()}
             onChange={(country) => {
               setCountryFilter(country);
-              setRegionFilter("all");
+              setRegionFilter([]);
             }}
             className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
           <RegionSelect
+            multiple
             theme="light"
             country={countryFilter}
             value={regionFilter}
             emptyLabel={t("creators.allRegions").toUpperCase()}
             onChange={setRegionFilter}
-            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
+            className="min-w-[220px] flex-1 lg:w-64 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
         </div>

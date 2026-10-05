@@ -55,42 +55,64 @@ export function CountrySelect({
   );
 }
 
-export function RegionSelect({
-  theme = "light",
-  country,
-  value,
-  onChange,
-  placeholder,
-  className,
-  triggerClassName,
-  disabled,
-  emptyLabel,
-}: {
+type RegionSelectShared = {
   theme?: Theme;
   country: string;
-  value: string;
-  onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
   triggerClassName?: string;
   disabled?: boolean;
   emptyLabel?: string;
-}) {
+};
+
+type RegionSelectSingle = RegionSelectShared & {
+  multiple?: false;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+type RegionSelectMulti = RegionSelectShared & {
+  multiple: true;
+  value: string[];
+  onChange: (value: string[]) => void;
+};
+
+export function RegionSelect(props: RegionSelectSingle | RegionSelectMulti) {
+  const { theme = "light", country, placeholder, className, triggerClassName, disabled, emptyLabel } = props;
   const locale = useGeoLocale();
   const options = useMemo<Select2Option[]>(() => {
     const list = country && country !== "all" ? regionOptions(country, locale) : [];
     return emptyLabel ? [{ value: "all", label: emptyLabel }, ...list] : list;
   }, [country, locale, emptyLabel]);
+  const isDisabled = disabled || options.filter((option) => option.value !== "all").length === 0;
+
+  if (props.multiple) {
+    return (
+      <Select2Field
+        multiple
+        exclusiveValue={emptyLabel ? "all" : undefined}
+        theme={theme}
+        searchable
+        disabled={isDisabled}
+        placeholder={placeholder}
+        value={props.value}
+        options={options}
+        onChange={props.onChange}
+        className={className}
+        triggerClassName={triggerClassName}
+      />
+    );
+  }
 
   return (
     <Select2Field
       theme={theme}
       searchable
-      disabled={disabled || options.filter((option) => option.value !== "all").length === 0}
+      disabled={isDisabled}
       placeholder={placeholder}
-      value={value}
+      value={props.value}
       options={options}
-      onChange={onChange}
+      onChange={props.onChange}
       className={className}
       triggerClassName={triggerClassName}
     />
