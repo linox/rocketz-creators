@@ -22,6 +22,8 @@ use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
+use App\Models\Creator;
+use App\Models\CreatorGroup;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\Geo;
@@ -48,7 +50,7 @@ class CampaignController extends Controller
         $includeContent = $this->wantsInclude($request, 'content');
         $user = $request->user();
         $query = $this->scoped($request)
-            ->with(['company', 'deliverable', 'landingPage'])
+            ->with(['company', 'deliverable', 'landingPage', 'creatorGroups'])
             ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         if ($user?->role === UserRole::Creator) {
@@ -94,7 +96,7 @@ class CampaignController extends Controller
         );
 
         $query = Campaign::query()
-            ->with(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators'])
+            ->with(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators'])
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
@@ -115,7 +117,7 @@ class CampaignController extends Controller
     public function show(Request $request, Campaign $campaign): JsonResponse
     {
         $this->assertCanView($request, $campaign);
-        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
         $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -176,7 +178,7 @@ class CampaignController extends Controller
             return response()->json(['status' => $status], 202);
         }
 
-        $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
         $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
 
         return response()->json([
@@ -189,18 +191,23 @@ class CampaignController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validatedCampaign($request);
-        $campaign = DB::transaction(function () use ($data) {
+        $groupIds = array_key_exists('creator_group_ids', $data) ? $data['creator_group_ids'] : null;
+        unset($data['creator_group_ids']);
+        $campaign = DB::transaction(function () use ($data, $groupIds) {
             $briefing = $data['briefing'] ?? [];
             $deliverables = $data['deliverables'] ?? [];
             unset($data['briefing'], $data['deliverables']);
             $campaign = Campaign::query()->create($data);
             $campaign->briefing()->create($briefing);
             $campaign->deliverable()->create($deliverables);
+            if (is_array($groupIds)) {
+                $this->syncCreatorGroups($campaign, $groupIds);
+            }
 
             return $campaign;
         });
 
-        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups']);
         if ($campaign->isPendingAgency()) {
             $this->notifyAgencyReview($campaign);
             $this->mail->campaignPendingAgency($campaign);
@@ -216,6 +223,9 @@ class CampaignController extends Controller
         $this->assertCanManage($request, $campaign);
         $previousStatus = $campaign->status;
         $data = $this->validatedCampaign($request, false);
+        $hasGroups = array_key_exists('creator_group_ids', $data);
+        $groupIds = $hasGroups ? $data['creator_group_ids'] : null;
+        unset($data['creator_group_ids']);
         if (
             array_key_exists('company_id', $data)
             && $data['company_id']
@@ -223,10 +233,12 @@ class CampaignController extends Controller
         ) {
             Company::assertApproved((int) $data['company_id']);
         }
-        DB::transaction(function () use ($campaign, $data) {
+        DB::transaction(function () use ($campaign, $data, $hasGroups, $groupIds) {
             $briefing = $data['briefing'] ?? null;
             $deliverables = $data['deliverables'] ?? null;
             unset($data['briefing'], $data['deliverables']);
+            $companyChanged = array_key_exists('company_id', $data)
+                && (int) $data['company_id'] !== (int) $campaign->company_id;
             $campaign->fill($data)->save();
             if (is_array($briefing)) {
                 $campaign->briefing()->updateOrCreate(['campaign_id' => $campaign->id], $briefing);
@@ -234,9 +246,17 @@ class CampaignController extends Controller
             if (is_array($deliverables)) {
                 $campaign->deliverable()->updateOrCreate(['campaign_id' => $campaign->id], $deliverables);
             }
+            if ($hasGroups) {
+                $this->syncCreatorGroups($campaign, is_array($groupIds) ? $groupIds : []);
+            } elseif ($companyChanged) {
+                $stale = $campaign->creatorGroups()
+                    ->where('creator_groups.company_id', '!=', $campaign->company_id)
+                    ->pluck('creator_groups.id');
+                $campaign->creatorGroups()->detach($stale);
+            }
         });
 
-        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'campaignCreators.creator']);
+        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -256,7 +276,7 @@ class CampaignController extends Controller
             'status' => CampaignStatus::Briefing,
             ...Campaign::feeSplit((float) $campaign->total_budget, $percent),
         ]);
-        $campaign->load(['company', 'briefing', 'deliverable', 'campaignCreators.creator']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -307,6 +327,7 @@ class CampaignController extends Controller
             403,
             $this->landingRestrictionMessage($campaign),
         );
+        $this->assertCreatorAudience($campaign, $creator);
 
         $data = $request->validate([
             'notes' => ['nullable', 'string'],
@@ -574,6 +595,10 @@ class CampaignController extends Controller
             'limit_by_city' => ['sometimes', 'boolean'],
             'restrict_to_landing' => ['sometimes', 'boolean'],
             'company_landing_page_id' => ['sometimes', 'nullable', 'integer'],
+            'creator_group_ids' => ['sometimes', 'array'],
+            'creator_group_ids.*' => ['integer', 'distinct', 'exists:creator_groups,id'],
+            'min_followers' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'max_followers' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'state' => ['nullable', 'string', 'max:12'],
             'city' => ['nullable', 'string', 'max:120'],
             'barter_details' => ['nullable', 'string'],
@@ -609,6 +634,7 @@ class CampaignController extends Controller
             $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         }
         $data = $this->withLocationLimit($request, $data, $creating, $company);
+        $data = $this->withNetworkRange($request, $data, $creating);
         if ($creating && ! array_key_exists('restrict_to_landing', $data)) {
             $data['restrict_to_landing'] = false;
         }
@@ -673,6 +699,47 @@ class CampaignController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * @param  list<int|string>  $groupIds
+     */
+    private function syncCreatorGroups(Campaign $campaign, array $groupIds): void
+    {
+        $ids = collect($groupIds)->map(fn ($id) => (int) $id)->unique()->filter()->values();
+        $valid = CreatorGroup::query()
+            ->where('company_id', $campaign->company_id)
+            ->whereIn('id', $ids)
+            ->pluck('id');
+        abort_unless($valid->count() === $ids->count(), 422, __('auth.creator_group_not_in_company'));
+        $campaign->creatorGroups()->sync($valid->all());
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withNetworkRange(Request $request, array $data, bool $creating): array
+    {
+        if (! array_key_exists('min_followers', $data) && ! array_key_exists('max_followers', $data)) {
+            return $data;
+        }
+
+        $existing = $creating ? null : $request->route('campaign');
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $min = array_key_exists('min_followers', $data) ? $data['min_followers'] : $campaign?->min_followers;
+        $max = array_key_exists('max_followers', $data) ? $data['max_followers'] : $campaign?->max_followers;
+        if ($min !== null && $max !== null && (int) $max < (int) $min) {
+            abort(422, __('auth.network_range_invalid'));
+        }
+
+        return $data;
+    }
+
+    private function assertCreatorAudience(Campaign $campaign, Creator $creator): void
+    {
+        abort_unless($campaign->matchesCreatorGroups($creator), 403, __('auth.campaign_group_restricted'));
+        abort_unless($campaign->matchesCreatorNetwork($creator), 403, __('auth.campaign_network_restricted'));
     }
 
     private function landingRestrictionMessage(Campaign $campaign): string
@@ -801,7 +868,9 @@ class CampaignController extends Controller
                             $builder->orWhere(function ($open) use ($user) {
                                 $open->where('is_secret', false)
                                     ->matchingCreatorLocation($user->creator)
-                                    ->matchingCreatorOrigin($user->creator);
+                                    ->matchingCreatorOrigin($user->creator)
+                                    ->matchingCreatorGroups($user->creator)
+                                    ->matchingCreatorNetwork($user->creator);
                             });
                         } else {
                             $country = $user->creator?->countryCode() ?: Geo::DEFAULT_COUNTRY;
@@ -809,7 +878,9 @@ class CampaignController extends Controller
                                 $inner->where('is_secret', false)
                                     ->whereHas('company', fn ($q) => $q->where('country', $country))
                                     ->matchingCreatorLocation($user->creator)
-                                    ->matchingCreatorOrigin($user->creator);
+                                    ->matchingCreatorOrigin($user->creator)
+                                    ->matchingCreatorGroups($user->creator)
+                                    ->matchingCreatorNetwork($user->creator);
                             });
                         }
                     })
@@ -841,6 +912,9 @@ class CampaignController extends Controller
             abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
             abort_unless($user->creator && $campaign->matchesCreatorLocation($user->creator), 403, __('auth.campaign_city_restricted'));
             abort_unless($user->creator && $campaign->matchesCreatorOrigin($user->creator), 403, $this->landingRestrictionMessage($campaign));
+            if ($user->creator) {
+                $this->assertCreatorAudience($campaign, $user->creator);
+            }
 
             return;
         }

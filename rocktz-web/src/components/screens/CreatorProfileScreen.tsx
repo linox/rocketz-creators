@@ -597,6 +597,15 @@ function maskPII(value: string | null | undefined, hidden: boolean | undefined, 
   return value;
 }
 
+function followersAwaitingSync(creator: Creator) {
+  const metrics = creator.metrics ?? {};
+  const socials = creator.socials ?? {};
+  return (["instagram", "tiktok", "youtube"] as const).some((network) => {
+    const handle = String(socials[network] ?? "").trim();
+    return handle !== "" && !metrics[`${network}_synced_at`];
+  });
+}
+
 function statusChip(status: string, labels: { active: string; review: string; paused: string; rejected: string }) {
   if (status === "active") return { label: labels.active, className: "bg-emerald-100 text-emerald-800 border-emerald-200" };
   if (status === "review") return { label: labels.review, className: "bg-amber-100 text-amber-800 border-amber-200" };
@@ -821,8 +830,17 @@ function ProfileInner() {
         setError(tp("notFound"));
         return;
       }
-      setCreator(res.data);
-      hydrate(res.data);
+      let next = res.data;
+      if (followersAwaitingSync(next) && (user.role === "admin" || user.creator?.id === next.id)) {
+        try {
+          const sync = await api.waitForCreatorSocialSync(next.id);
+          if (sync.data) next = sync.data;
+        } catch {
+          // Show the saved profile even when the network lookup fails.
+        }
+      }
+      setCreator(next);
+      hydrate(next);
       setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message || tp("loadError") : tp("loadError"));
@@ -1137,7 +1155,7 @@ function ProfileInner() {
       return;
     }
     try {
-      await api.updateCreator(profile.id, {
+      const saved = await api.updateCreator(profile.id, {
         full_name: fullName.trim(),
         artistic_name: artisticName.replace(/^@/, "").trim(),
         whatsapp: whatsapp || null,
@@ -1189,6 +1207,13 @@ function ProfileInner() {
         categories: normalizeCreatorCategories(categories),
         photo_url: photoUrl.trim() || null,
       });
+      if (saved.social_sync === "queued") {
+        try {
+          await api.waitForCreatorSocialSync(profile.id);
+        } catch {
+          // The profile is already saved. Follower refresh can fail on its own.
+        }
+      }
       if (user.creator?.id === profile.id) {
         await api.updateMe({
           name: fullName.trim(),

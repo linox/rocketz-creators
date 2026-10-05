@@ -7,6 +7,7 @@ use App\Enums\ApprovalFlowType;
 use App\Enums\CampaignStatus;
 use App\Enums\PostingProfile;
 use App\Support\Geo;
+use App\Support\NetworkSize;
 use Database\Factories\CampaignFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,6 +38,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_barter',
     'limit_by_city',
     'restrict_to_landing',
+    'min_followers',
+    'max_followers',
     'state',
     'city',
     'barter_details',
@@ -88,6 +91,8 @@ class Campaign extends Model
             'is_barter' => 'boolean',
             'limit_by_city' => 'boolean',
             'restrict_to_landing' => 'boolean',
+            'min_followers' => 'integer',
+            'max_followers' => 'integer',
             'has_custom_contract' => 'boolean',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
@@ -122,6 +127,12 @@ class Campaign extends Model
     public function creators(): BelongsToMany
     {
         return $this->belongsToMany(Creator::class, 'campaign_creators')
+            ->withTimestamps();
+    }
+
+    public function creatorGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(CreatorGroup::class, 'campaign_creator_group')
             ->withTimestamps();
     }
 
@@ -214,6 +225,45 @@ class Campaign extends Model
         return $creator->isInCompanyPool((int) $this->company_id);
     }
 
+    public function matchesCreatorGroups(?Creator $creator): bool
+    {
+        $hasGroups = $this->relationLoaded('creatorGroups')
+            ? $this->creatorGroups->isNotEmpty()
+            : $this->creatorGroups()->exists();
+        if (! $hasGroups) {
+            return true;
+        }
+        if (! $creator) {
+            return false;
+        }
+
+        $groupIds = $this->relationLoaded('creatorGroups')
+            ? $this->creatorGroups->modelKeys()
+            : $this->creatorGroups()->pluck('creator_groups.id')->all();
+
+        return $creator->creatorGroups()->whereIn('creator_groups.id', $groupIds)->exists();
+    }
+
+    public function matchesCreatorNetwork(?Creator $creator): bool
+    {
+        if ($this->min_followers === null && $this->max_followers === null) {
+            return true;
+        }
+        if (! $creator) {
+            return false;
+        }
+
+        $size = NetworkSize::of($creator->metrics);
+        if ($this->min_followers !== null && $size < (int) $this->min_followers) {
+            return false;
+        }
+        if ($this->max_followers !== null && $size > (int) $this->max_followers) {
+            return false;
+        }
+
+        return true;
+    }
+
     public function scopeMatchingCreatorLocation($query, Creator $creator)
     {
         return $query->where(function ($builder) use ($creator) {
@@ -260,6 +310,29 @@ class Campaign extends Model
         });
     }
 
+    public function scopeMatchingCreatorGroups($query, Creator $creator)
+    {
+        return $query->where(function ($builder) use ($creator) {
+            $builder->whereDoesntHave('creatorGroups')
+                ->orWhereHas('creatorGroups', function ($groups) use ($creator) {
+                    $groups->whereHas('creators', fn ($members) => $members->where('creators.id', $creator->id));
+                });
+        });
+    }
+
+    public function scopeMatchingCreatorNetwork($query, Creator $creator)
+    {
+        $size = NetworkSize::of($creator->metrics);
+
+        return $query->where(function ($builder) use ($size) {
+            $builder->where(function ($min) use ($size) {
+                $min->whereNull('min_followers')->orWhere('min_followers', '<=', $size);
+            })->where(function ($max) use ($size) {
+                $max->whereNull('max_followers')->orWhere('max_followers', '>=', $size);
+            });
+        });
+    }
+
     public function scopeForCreatorMarketplace($query, Creator $creator)
     {
         if (! $creator->canAccessAllCountries()) {
@@ -269,7 +342,9 @@ class Campaign extends Model
         return $query->where(function ($builder) use ($creator) {
             $builder->where(function ($eligible) use ($creator) {
                 $eligible->matchingCreatorLocation($creator)
-                    ->matchingCreatorOrigin($creator);
+                    ->matchingCreatorOrigin($creator)
+                    ->matchingCreatorGroups($creator)
+                    ->matchingCreatorNetwork($creator);
             })->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $creator->id));
         });
     }

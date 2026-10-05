@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -571,6 +573,190 @@ HTML, 200),
             ->postJson("/api/creators/{$creator->id}/social-sync", ['network' => 'youtube', 'handle' => 'demo'])
             ->assertOk()
             ->assertJsonPath('sync.youtube.followers', 18200);
+    }
+
+    public function test_register_fetches_followers_for_the_new_creator(): void
+    {
+        config()->set('services.social.auto_sync_in_tests', true);
+        config()->set('services.social.fetch_delay_ms', 0);
+
+        Http::fake([
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
+            'https://www.instagram.com/*' => Http::response($this->instagramHtml(), 200),
+        ]);
+
+        $this->postJson('/api/auth/register/creator', [
+            'full_name' => 'Maria Silva',
+            'artistic_name' => 'mariasilva',
+            'email' => 'maria.followers@example.com',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'whatsapp' => '11999999999',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'instagram' => 'demo',
+            'category' => 'UGC Content',
+            'lgpd_accepted' => true,
+        ])->assertCreated();
+
+        $creator = User::query()->where('email', 'maria.followers@example.com')->firstOrFail()->creator;
+
+        $this->assertSame(12300, $creator->metrics['instagram_followers'] ?? null);
+        $this->assertSame(12300, $creator->metrics['followers'] ?? null);
+    }
+
+    public function test_saving_socials_refreshes_followers(): void
+    {
+        config()->set('services.social.auto_sync_in_tests', true);
+        config()->set('services.social.fetch_delay_ms', 0);
+
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'old']);
+
+        Http::fake([
+            'https://i.instagram.com/*' => Http::response('Not Found', 404),
+            'https://www.instagram.com/*' => Http::response($this->instagramHtml(), 200),
+        ]);
+
+        $this->withToken($token)
+            ->patchJson("/api/creators/{$creator->id}", [
+                'socials' => ['instagram' => '@demo'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('social_sync', 'queued')
+            ->assertJsonPath('data.metrics.instagram_followers', 12300)
+            ->assertJsonPath('data.socials.instagram', 'demo');
+    }
+
+    public function test_profile_save_without_socials_does_not_fetch_followers(): void
+    {
+        Http::preventStrayRequests();
+
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'demo']);
+        $creator->update(['metrics' => ['followers' => 10, 'instagram_followers' => 10]]);
+
+        $this->withToken($token)
+            ->patchJson("/api/creators/{$creator->id}", [
+                'city' => 'Curitiba',
+            ])
+            ->assertOk()
+            ->assertJsonMissingPath('social_sync');
+
+        $this->assertSame(10, $creator->fresh()->metrics['instagram_followers'] ?? null);
+
+        $this->withToken($token)
+            ->getJson("/api/creators/{$creator->id}/social-sync")
+            ->assertOk()
+            ->assertJsonPath('status', 'idle');
+    }
+
+    public function test_admin_can_refresh_followers_for_one_creator_in_sequence(): void
+    {
+        config()->set('services.social.fetch_delay_ms', 0);
+        $creator = Creator::factory()->create([
+            'socials' => ['youtube' => 'demo'],
+            'metrics' => [],
+        ]);
+        $admin = User::factory()->admin()->create();
+
+        Http::fake([
+            'https://www.youtube.com/*' => Http::response($this->youtubeHtml(), 200),
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->postJson('/api/creators/follower-sync', [
+                'creator_id' => $creator->id,
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('data.metrics.youtube_followers', 18200);
+    }
+
+    public function test_fresh_creator_is_skipped_without_calling_the_network(): void
+    {
+        Http::preventStrayRequests();
+        $creator = Creator::factory()->create([
+            'socials' => ['youtube' => 'demo'],
+            'metrics' => [
+                'youtube_followers' => 100,
+                'youtube_synced_at' => now()->timestamp,
+            ],
+        ]);
+        $admin = User::factory()->admin()->create();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->postJson('/api/creators/follower-sync', [
+                'creator_id' => $creator->id,
+                'force' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('status', 'skipped')
+            ->assertJsonPath('reason', 'fresh');
+
+        $this->assertSame(100, $creator->fresh()->metrics['youtube_followers']);
+    }
+
+    public function test_company_can_refresh_a_creator_from_its_casting(): void
+    {
+        config()->set('services.social.fetch_delay_ms', 0);
+        $companyUser = User::factory()->company()->create();
+        $company = Company::factory()->active()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $companyUser->id,
+            'company_id' => $company->id,
+        ]);
+        $companyUser->forceFill(['active_company_id' => $company->id])->save();
+        $creator = Creator::factory()->create([
+            'invited_by_company_id' => $company->id,
+            'socials' => ['youtube' => 'demo'],
+            'metrics' => [],
+        ]);
+
+        Http::fake([
+            'https://www.youtube.com/*' => Http::response($this->youtubeHtml(), 200),
+        ]);
+
+        $this->withToken($companyUser->createToken('auth')->plainTextToken)
+            ->postJson('/api/creators/follower-sync', [
+                'creator_id' => $creator->id,
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.metrics.youtube_followers', 18200);
+    }
+
+    public function test_company_cannot_refresh_a_creator_outside_its_casting(): void
+    {
+        Http::preventStrayRequests();
+        $companyUser = User::factory()->company()->create();
+        $company = Company::factory()->active()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $companyUser->id,
+            'company_id' => $company->id,
+        ]);
+        $creator = Creator::factory()->create([
+            'socials' => ['youtube' => 'demo'],
+            'metrics' => [],
+        ]);
+
+        $this->withToken($companyUser->createToken('auth')->plainTextToken)
+            ->postJson('/api/creators/follower-sync', [
+                'creator_id' => $creator->id,
+                'force' => true,
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_creator_cannot_start_the_casting_follower_refresh(): void
+    {
+        [$creator, $token] = $this->creatorWithToken(['youtube' => 'demo']);
+
+        $this->withToken($token)
+            ->postJson('/api/creators/follower-sync', [
+                'creator_id' => $creator->id,
+                'force' => true,
+            ])
+            ->assertForbidden();
     }
 
     /**

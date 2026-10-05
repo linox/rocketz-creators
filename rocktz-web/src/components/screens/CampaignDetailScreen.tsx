@@ -54,6 +54,7 @@ import {
   TrendingUp,
   UserCheck,
   Users,
+  UsersRound,
   Video,
   X,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
+import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
@@ -79,12 +81,13 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
-import { moneyToMask, parseMoneyMask } from "@/lib/masks";
+import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
+import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { effectiveCampaignDeliveryDate } from "@/lib/delivery-date";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
-import type { Campaign, CampaignCreator, Company, Creator, RevisionHistoryEntry } from "@/lib/types";
+import type { Campaign, CampaignCreator, Company, Creator, CreatorGroup, RevisionHistoryEntry } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -460,6 +463,10 @@ function DetailInner() {
   const [watchingVideoUrl, setWatchingVideoUrl] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerGroup, setPickerGroup] = useState("all");
+  const [pickerNetwork, setPickerNetwork] = useState("all");
+  const [audienceGroups, setAudienceGroups] = useState<CreatorGroup[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
@@ -491,6 +498,10 @@ function DetailInner() {
     limit_by_city: false,
     restrict_to_landing: false,
     company_landing_page_id: "",
+    creator_group_ids: [] as number[],
+    network_tier: "",
+    min_followers: "",
+    max_followers: "",
     state: "",
     city: "",
     barter_details: "",
@@ -547,6 +558,14 @@ function DetailInner() {
       .then((res) => setCreators(res.data))
       .catch(() => undefined);
   }, [isAdmin, campaign?.company_id]);
+
+  useEffect(() => {
+    if (!campaign?.company_id || user.role === "creator") return;
+    const query = isAdmin ? `?company_id=${campaign.company_id}` : "";
+    api.creatorGroups(query)
+      .then((res) => setAudienceGroups(res.data.filter((group) => group.company_id === campaign.company_id)))
+      .catch(() => setAudienceGroups([]));
+  }, [campaign?.company_id, isAdmin, user.role]);
 
   useEffect(() => {
     if (!campaign) return;
@@ -890,6 +909,10 @@ function DetailInner() {
       limit_by_city: Boolean(campaign.limit_by_city),
       restrict_to_landing: Boolean(campaign.restrict_to_landing || campaign.company_landing_page_id),
       company_landing_page_id: campaign.company_landing_page_id ? String(campaign.company_landing_page_id) : "",
+      creator_group_ids: (campaign.creator_groups ?? []).map((group) => group.id),
+      network_tier: tierFromRange(campaign.min_followers, campaign.max_followers),
+      min_followers: tierFromRange(campaign.min_followers, campaign.max_followers) === "custom" && campaign.min_followers ? integerToMask(campaign.min_followers) : "",
+      max_followers: tierFromRange(campaign.min_followers, campaign.max_followers) === "custom" && campaign.max_followers ? integerToMask(campaign.max_followers) : "",
       state: campaign.state || "",
       city: campaign.city || "",
       barter_details: campaign.barter_details || "",
@@ -939,6 +962,11 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
       return;
     }
+    const audience = rangeFromTier(editForm.network_tier, editForm.min_followers, editForm.max_followers);
+    if (audience.min != null && audience.max != null && audience.max < audience.min) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.networkRangeInvalid"));
+      return;
+    }
     try {
       let scriptFileUrl = editForm.script_file_url.trim() || null;
       let scriptFileName = editForm.script_file_name.trim() || null;
@@ -969,6 +997,9 @@ function DetailInner() {
         limit_by_city: editForm.limit_by_city,
         restrict_to_landing: editForm.restrict_to_landing,
         company_landing_page_id: editForm.restrict_to_landing && editForm.company_landing_page_id ? Number(editForm.company_landing_page_id) : null,
+        creator_group_ids: editForm.creator_group_ids,
+        min_followers: audience.min,
+        max_followers: audience.max,
         state: editForm.limit_by_city ? editForm.state || null : null,
         city: editForm.limit_by_city ? editForm.city.trim() : null,
         barter_details: editForm.is_barter ? editForm.barter_details : null,
@@ -1178,6 +1209,16 @@ function DetailInner() {
                   {campaign.limit_by_city ? (
                     <span className="flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700">
                       <MapPin size={9} /> {campaignLocationLabel(locale, campaign) || t("campaigns.cityLimited")}
+                    </span>
+                  ) : null}
+                  {(campaign.creator_groups?.length ?? 0) > 0 ? (
+                    <span className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-700">
+                      <UsersRound size={9} /> {campaign.creator_groups?.length === 1 ? t("campaigns.groupLimited", { name: campaign.creator_groups[0]?.name }) : t("campaigns.groupsLimited", { count: campaign.creator_groups?.length ?? 0 })}
+                    </span>
+                  ) : null}
+                  {networkTierI18nKey(tierFromRange(campaign.min_followers, campaign.max_followers)) ? (
+                    <span className="flex items-center gap-1 rounded-md border border-fuchsia-200 bg-fuchsia-50 px-2 py-0.5 text-[9px] font-bold text-fuchsia-700">
+                      {t(networkTierI18nKey(tierFromRange(campaign.min_followers, campaign.max_followers)) || "creators.networkCustom")}
                     </span>
                   ) : null}
                 </div>
@@ -1509,7 +1550,7 @@ function DetailInner() {
                 ) : (
                   filteredCreators.map((row) => {
                     const expanded = expandedIds.includes(row.id);
-                    const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+                    const followers = networkSize(row.creator?.metrics);
                     const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.delivery");
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
                     const cardTag = creatorCardTag(row, creatorFilter);
@@ -2143,7 +2184,7 @@ function DetailInner() {
                 const isUpdating = updatingId === row.id;
                 const amountMasked = customAmounts[row.id] ?? moneyToMask(suggestedFee(row, campaign), moneyCurrency(campaign));
                 const location = [row.creator?.city, row.creator?.state].filter(Boolean).join(", ");
-                const followers = metricValue(row.creator?.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+                const followers = networkSize(row.creator?.metrics);
                 const engagement = metricValue(row.creator?.metrics, ["engagementRate", "engagement_rate"]);
                 const waUrl = whatsappLink(row.creator?.whatsapp, t("campaignDetail.whatsappText", { handle: row.creator?.artistic_name || "", campaign: campaign.name }));
                 const niches = row.creator?.categories ?? [];
@@ -2605,7 +2646,46 @@ function DetailInner() {
                 <button type="button" onClick={() => setAddOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
               <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5 sm:p-6">
-                {creators.map((creator) => {
+                <div className="grid gap-2 sm:grid-cols-[1fr_180px_180px]">
+                  <input
+                    value={pickerSearch}
+                    onChange={(event) => setPickerSearch(event.target.value)}
+                    placeholder={t("creatorGroups.search")}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+                  />
+                  <Select2Field
+                    theme="light"
+                    searchable={false}
+                    value={pickerNetwork}
+                    options={[
+                      { value: "all", label: t("creators.allNetworkSizes") },
+                      { value: "nano", label: t("creators.networkNano") },
+                      { value: "micro", label: t("creators.networkMicro") },
+                      { value: "mid", label: t("creators.networkMid") },
+                      { value: "macro", label: t("creators.networkMacro") },
+                      { value: "mega", label: t("creators.networkMega") },
+                    ]}
+                    onChange={setPickerNetwork}
+                  />
+                  <Select2Field
+                    theme="light"
+                    value={pickerGroup}
+                    options={[
+                      { value: "all", label: t("creators.allGroups") },
+                      ...audienceGroups.map((group) => ({ value: String(group.id), label: group.name })),
+                    ]}
+                    onChange={setPickerGroup}
+                  />
+                </div>
+                {creators.filter((creator) => {
+                  const term = pickerSearch.trim().toLowerCase();
+                  const bounds = pickerNetwork !== "all" ? NETWORK_TIER_BOUNDS[pickerNetwork as keyof typeof NETWORK_TIER_BOUNDS] : null;
+                  const group = audienceGroups.find((item) => String(item.id) === pickerGroup);
+                  const matchesSearch = !term || (creator.artistic_name || "").toLowerCase().includes(term) || (creator.full_name || "").toLowerCase().includes(term);
+                  const matchesNetwork = !bounds || matchesNetworkRange(networkSize(creator.metrics), bounds.min, bounds.max);
+                  const matchesGroup = !group || (group.creators ?? []).some((member) => member.id === creator.id);
+                  return matchesSearch && matchesNetwork && matchesGroup;
+                }).map((creator) => {
                   const already = approvedCreators.some((row) => row.creator_id === creator.id);
                   return (
                     <div key={creator.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5">
@@ -2614,6 +2694,7 @@ function DetailInner() {
                         <div>
                           <p className="text-sm font-black text-slate-900">@{creator.artistic_name}</p>
                           {creator.full_name ? <p className="text-xs text-slate-500">{creator.full_name}</p> : null}
+                          <p className="text-[11px] font-semibold text-slate-500">{formatNumber(networkSize(creator.metrics))}</p>
                         </div>
                       </div>
                       {already ? (
@@ -2677,7 +2758,7 @@ function DetailInner() {
                   {isAdmin ? (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.company")}</label>
-                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value, state: "", company_landing_page_id: "" })} />
+                      <Select2Field theme="light" searchable={false} value={editForm.company_id} options={companies.map((company) => ({ value: String(company.id), label: company.name }))} onChange={(value) => setEditForm({ ...editForm, company_id: value, state: "", company_landing_page_id: "", creator_group_ids: [] })} />
                     </div>
                   ) : null}
                   {canChangeStatus ? (
@@ -2836,6 +2917,17 @@ function DetailInner() {
                     />
                   ) : null}
                 </div>
+                <CampaignAudienceFields
+                  companyId={Number(editForm.company_id) || campaign.company_id}
+                  groupIds={editForm.creator_group_ids}
+                  onGroupIdsChange={(ids) => setEditForm({ ...editForm, creator_group_ids: ids })}
+                  tier={editForm.network_tier}
+                  onTierChange={(value) => setEditForm({ ...editForm, network_tier: value, min_followers: value === "custom" ? editForm.min_followers : "", max_followers: value === "custom" ? editForm.max_followers : "" })}
+                  minFollowers={editForm.min_followers}
+                  maxFollowers={editForm.max_followers}
+                  onMinFollowersChange={(value) => setEditForm({ ...editForm, min_followers: value })}
+                  onMaxFollowersChange={(value) => setEditForm({ ...editForm, max_followers: value })}
+                />
                 <CampaignLandingFields
                   enabled={editForm.restrict_to_landing}
                   onEnabledChange={(value) => setEditForm({ ...editForm, restrict_to_landing: value, company_landing_page_id: value ? editForm.company_landing_page_id : "" })}

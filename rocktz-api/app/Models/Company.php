@@ -109,6 +109,11 @@ class Company extends Model
             ->withTimestamps();
     }
 
+    public function creatorGroups(): HasMany
+    {
+        return $this->hasMany(CreatorGroup::class);
+    }
+
     public function campaigns(): HasMany
     {
         return $this->hasMany(Campaign::class);

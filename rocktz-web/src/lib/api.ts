@@ -6,6 +6,7 @@ import type {
   Campaign,
   CampaignCreator,
   Company,
+  CreatorGroup,
   CompanyLandingPage,
   CompanyLandingSignup,
   CompanyLandingMetrics,
@@ -25,6 +26,7 @@ import type {
 
 type List<T> = { data: T[] };
 type Item<T> = { data: T };
+type CreatorWrite = Item<Creator> & { social_sync?: "queued" };
 
 type Queued<T> = T & { status?: MetricsJobStatus; message?: string };
 
@@ -50,8 +52,8 @@ export const api = {
   nav: () => laravelFetch<{ unread: number; pending_applications: number }>("/nav"),
   creators: (query = "") => laravelFetch<List<Creator>>(`/creators${query}`),
   creator: (id: number | string) => laravelFetch<Item<Creator>>(`/creators/${id}`),
-  createCreator: (body: unknown) => laravelFetch<Item<Creator>>("/creators", { method: "POST", body: JSON.stringify(body) }),
-  updateCreator: (id: number, body: unknown) => laravelFetch<Item<Creator>>(`/creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  createCreator: (body: unknown) => laravelFetch<CreatorWrite>("/creators", { method: "POST", body: JSON.stringify(body) }),
+  updateCreator: (id: number, body: unknown) => laravelFetch<CreatorWrite>(`/creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   approveCreator: (id: number) => laravelFetch<Item<Creator>>(`/creators/${id}/approve`, { method: "POST" }),
   rejectCreator: (id: number, reason?: string) => laravelFetch<Item<Creator>>(`/creators/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
   updateCreatorPassword: (id: number, password: string) => laravelFetch<{ message: string }>(`/creators/${id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
@@ -60,6 +62,19 @@ export const api = {
   addPortfolio: (id: number, body: unknown) => laravelFetch(`/creators/${id}/portfolio`, { method: "POST", body: JSON.stringify(body) }),
   removePortfolio: (id: number, video: number) => laravelFetch(`/creators/${id}/portfolio/${video}`, { method: "DELETE" }),
   acceptContract: (id: number, body: unknown) => laravelFetch(`/creators/${id}/contract`, { method: "POST", body: JSON.stringify(body) }),
+  waitForCreatorSocialSync: async (id: number) => {
+    const path = `/creators/${id}/social-sync`;
+    const started = await laravelFetch<Item<Creator> & { sync?: Record<string, SocialSyncResult>; status?: MetricsJobStatus; message?: string }>(path);
+    return waitForQueuedJob(started, () => laravelFetch(`${path}`));
+  },
+  refreshCreatorFollowers: async (id: number, force = false) => {
+    const started = await laravelFetch<Item<Creator> & { status?: MetricsJobStatus; reason?: "fresh" | "none"; sync?: Record<string, SocialSyncResult>; message?: string }>("/creators/follower-sync", {
+      method: "POST",
+      body: JSON.stringify({ creator_id: id, force }),
+    });
+    if (started.status === "skipped" || started.status === "done" || started.status === "idle") return started;
+    return waitForQueuedJob(started, () => laravelFetch(`/creators/follower-sync?creator_id=${id}`));
+  },
   syncCreatorSocial: async (id: number, body: { network?: "instagram" | "tiktok" | "youtube"; handle?: string; handles?: Partial<Record<"instagram" | "tiktok" | "youtube", string>>; force?: boolean }) => {
     const path = `/creators/${id}/social-sync`;
     const started = await laravelFetch<Item<Creator> & { sync?: Record<string, SocialSyncResult>; status?: MetricsJobStatus }>(path, {
@@ -79,6 +94,14 @@ export const api = {
   deleteCompany: (id: number) => laravelFetch<{ message: string }>(`/companies/${id}`, { method: "DELETE" }),
   rotateCompanyInviteCode: (id: number) => laravelFetch<Item<Company>>(`/companies/${id}/invite-code`, { method: "POST" }),
   toggleFavorite: (companyId: number, creatorId: number) => laravelFetch<Item<Company>>(`/companies/${companyId}/favorites/${creatorId}`, { method: "POST" }),
+  creatorGroups: (query = "") => laravelFetch<List<CreatorGroup>>(`/creator-groups${query}`),
+  createCreatorGroup: (body: unknown) => laravelFetch<Item<CreatorGroup>>("/creator-groups", { method: "POST", body: JSON.stringify(body) }),
+  updateCreatorGroup: (id: number, body: unknown) => laravelFetch<Item<CreatorGroup>>(`/creator-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCreatorGroup: (id: number) => laravelFetch<{ message: string }>(`/creator-groups/${id}`, { method: "DELETE" }),
+  attachCreatorGroupMember: (groupId: number, creatorId: number) =>
+    laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members`, { method: "POST", body: JSON.stringify({ creator_id: creatorId }) }),
+  detachCreatorGroupMember: (groupId: number, creatorId: number) =>
+    laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members/${creatorId}`, { method: "DELETE" }),
   publicLanding: (slug: string) => laravelFetch<Item<CompanyLandingPage>>(`/landings/${encodeURIComponent(slug)}`),
   trackLandingEvent: (slug: string, event: "view" | "cta_click" | "signup_started") =>
     laravelFetch<{ ok: boolean }>(`/landings/${encodeURIComponent(slug)}/events`, { method: "POST", body: JSON.stringify({ event }) }),

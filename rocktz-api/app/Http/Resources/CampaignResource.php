@@ -47,6 +47,15 @@ class CampaignResource extends JsonResource
             'limit_by_city' => (bool) $this->limit_by_city,
             'restrict_to_landing' => (bool) $this->restrict_to_landing,
             'company_landing_page_id' => $this->company_landing_page_id ? (int) $this->company_landing_page_id : null,
+            'min_followers' => $this->audienceVisible($request) && $this->min_followers !== null ? (int) $this->min_followers : null,
+            'max_followers' => $this->audienceVisible($request) && $this->max_followers !== null ? (int) $this->max_followers : null,
+            'creator_groups' => $this->when(
+                $this->audienceVisible($request) && $this->relationLoaded('creatorGroups'),
+                fn () => $this->creatorGroups->map(fn ($group) => [
+                    'id' => $group->id,
+                    'name' => $group->name,
+                ])->values(),
+            ),
             'landing_page' => $this->whenLoaded('landingPage', fn () => $this->landingPage ? [
                 'id' => $this->landingPage->id,
                 'display_name' => $this->landingPage->display_name,
@@ -96,5 +105,18 @@ class CampaignResource extends JsonResource
             'accepting_applications' => $this->isAcceptingApplications(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
+    }
+
+    private function audienceVisible(Request $request): bool
+    {
+        $viewer = $request->user();
+        if (! $viewer || $viewer->role === UserRole::Creator) {
+            return false;
+        }
+        if ($viewer->role === UserRole::Admin) {
+            return true;
+        }
+
+        return $viewer->role === UserRole::Company && $viewer->belongsToCompany((int) $this->company_id);
     }
 }

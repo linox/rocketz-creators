@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
 use App\Http\Controllers\Api\CreatorController;
+use App\Http\Controllers\Api\CreatorGroupController;
 use App\Http\Controllers\Api\CreatorStorefrontController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceTokenController;
@@ -76,6 +77,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);
 
     Route::get('creators', [CreatorController::class, 'index']);
+    Route::post('creators/follower-sync', [CreatorController::class, 'refreshFollowers'])->middleware('throttle:30,1');
+    Route::get('creators/follower-sync', [CreatorController::class, 'refreshFollowersStatus'])->middleware('throttle:120,1');
     Route::get('creators/{creator}', [CreatorController::class, 'show']);
     Route::patch('creators/{creator}', [CreatorController::class, 'update']);
     Route::post('creators/{creator}/portfolio', [CreatorController::class, 'storePortfolio']);
@@ -120,6 +123,12 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('notification-preferences', [NotificationPreferenceController::class, 'update']);
 
     Route::middleware('role:admin,company')->group(function () {
+        Route::get('creator-groups', [CreatorGroupController::class, 'index']);
+        Route::post('creator-groups', [CreatorGroupController::class, 'store']);
+        Route::patch('creator-groups/{creatorGroup}', [CreatorGroupController::class, 'update']);
+        Route::delete('creator-groups/{creatorGroup}', [CreatorGroupController::class, 'destroy']);
+        Route::post('creator-groups/{creatorGroup}/members', [CreatorGroupController::class, 'attachMember']);
+        Route::delete('creator-groups/{creatorGroup}/members/{creator}', [CreatorGroupController::class, 'detachMember']);
         Route::post('creators', [CreatorController::class, 'store']);
         Route::post('campaigns', [CampaignController::class, 'store']);
         Route::patch('campaigns/{campaign}', [CampaignController::class, 'update']);

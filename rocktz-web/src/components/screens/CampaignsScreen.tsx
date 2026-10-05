@@ -25,6 +25,7 @@ import {
   Lock,
   MapPin,
   Megaphone,
+  UsersRound,
   Package,
   Plus,
   Scale,
@@ -38,6 +39,7 @@ import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { networkTierI18nKey, tierFromRange } from "@/lib/network-size";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -187,6 +189,16 @@ function CampaignCard({
             {campaign.limit_by_city ? (
               <span className="flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-200 uppercase backdrop-blur-md">
                 <MapPin size={10} /> {t("campaigns.cityLimited")}
+              </span>
+            ) : null}
+            {(campaign.creator_groups?.length ?? 0) > 0 ? (
+              <span className="flex items-center gap-1 rounded-full border border-indigo-400/40 bg-indigo-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-indigo-100 uppercase backdrop-blur-md">
+                <UsersRound size={10} /> {campaign.creator_groups?.length === 1 ? t("campaigns.groupLimited", { name: campaign.creator_groups[0]?.name }) : t("campaigns.groupsLimited", { count: campaign.creator_groups?.length ?? 0 })}
+              </span>
+            ) : null}
+            {networkTierI18nKey(tierFromRange(campaign.min_followers, campaign.max_followers)) ? (
+              <span className="flex items-center gap-1 rounded-full border border-fuchsia-400/40 bg-fuchsia-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-fuchsia-100 uppercase backdrop-blur-md">
+                {t(networkTierI18nKey(tierFromRange(campaign.min_followers, campaign.max_followers)) || "creators.networkCustom")}
               </span>
             ) : null}
           </div>

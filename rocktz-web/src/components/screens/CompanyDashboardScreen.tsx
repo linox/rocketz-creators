@@ -21,11 +21,13 @@ import {
   Repeat,
   Sparkles,
   Users,
+  UsersRound,
   X,
 } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { CompanyCreatorGroupsPanel } from "@/components/CompanyCreatorGroupsPanel";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
@@ -41,7 +43,7 @@ import type { Campaign, Company, CompanyLandingPage, Creator, PlanningItem, Recu
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
-type DashTab = "overview" | "campaigns" | "recurring" | "favorites";
+type DashTab = "overview" | "campaigns" | "recurring" | "favorites" | "groups";
 
 type PendingApproval = {
   key: string;
@@ -111,6 +113,7 @@ function CompanyDashboardInner() {
   const [favSearch, setFavSearch] = useState("");
   const [materialItem, setMaterialItem] = useState<PendingApproval | null>(null);
   const [approvingCampaign, setApprovingCampaign] = useState<Campaign | null>(null);
+  const [groupCount, setGroupCount] = useState(0);
 
   const companyId = isAdmin
     ? (queryCompanyId || companies[0]?.id || 0)
@@ -133,10 +136,13 @@ function CompanyDashboardInner() {
       api.recurring("?include=items").then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
       api.creators(`?company_id=${companyId}`).then((res) => setCreators(res.data)),
       api.companyLanding(companyId).then((res) => setLanding(res.data)).catch(() => setLanding(null)),
+      api.creatorGroups(isAdmin ? `?company_id=${companyId}` : "").then((res) => {
+        setGroupCount(res.data.filter((group) => group.company_id === companyId).length);
+      }).catch(() => setGroupCount(0)),
     ])
       .catch(alertApiError)
       .finally(() => setLoading(false));
-  }, [companyId]);
+  }, [companyId, isAdmin]);
 
   function selectCompany(id: string) {
     router.replace(`/company-dashboard?companyId=${id}`);
@@ -614,6 +620,7 @@ function CompanyDashboardInner() {
             ["campaigns", Megaphone, t("companyDash.tabs.campaigns", { count: campaigns.length }), "text-indigo-600"],
             ["recurring", Repeat, t("companyDash.tabs.recurring", { count: activeRecurring.length }), "text-purple-600"],
             ["favorites", Heart, t("companyDash.tabs.favorites"), "text-indigo-600"],
+            ["groups", UsersRound, t("companyDash.tabs.groups", { count: groupCount }), "text-indigo-600"],
           ] as const).map(([key, Icon, label, activeColor]) => (
             <button
               key={key}
@@ -937,6 +944,10 @@ function CompanyDashboardInner() {
             </Link>
           ))}
         </div>
+      ) : null}
+
+      {tab === "groups" && companyId ? (
+        <CompanyCreatorGroupsPanel companyId={companyId} onCountChange={setGroupCount} />
       ) : null}
 
       {tab === "favorites" ? (

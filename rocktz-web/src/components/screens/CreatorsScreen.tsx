@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, Download, FileText, KeyRound, LayoutGrid, LayoutList, Plus, Repeat, Search, Trash2, Users } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, KeyRound, LayoutGrid, LayoutList, Plus, RefreshCw, Repeat, Search, Trash2, Users, UsersRound } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { PasswordField } from "@/components/PasswordField";
@@ -21,7 +21,8 @@ import { DEFAULT_COUNTRY, currencyForProfile, formatLocation, formatMoneyGroups,
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentPlaceholder, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { usePrivacy } from "@/lib/privacy";
-import type { Creator, RecurringContract } from "@/lib/types";
+import type { Creator, CreatorGroup, RecurringContract } from "@/lib/types";
+import { matchesNetworkRange, networkSize, NETWORK_TIER_BOUNDS } from "@/lib/network-size";
 import { CREATOR_CATEGORY_VALUES, creatorCategoryOptions } from "@/lib/creatorCategories";
 import { creatorTermAudit, downloadCreatorTermDocument, type CreatorTermDocLabels } from "@/lib/creator-contract-document";
 import { useAuth } from "@/lib/use-auth";
@@ -29,7 +30,30 @@ import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
+const FOLLOWER_SYNC_GAP_MS = 3500;
+const FOLLOWER_STALE_SECONDS = 24 * 60 * 60;
+const SYNCABLE_NETWORKS = ["instagram", "tiktok", "youtube"] as const;
 type CatalogLayout = "list" | "grid";
+type RefreshScope = "stale" | "filtered";
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function syncableNetworks(creator: Creator) {
+  return SYNCABLE_NETWORKS.filter((network) => String(creator.socials?.[network] ?? "").trim() !== "");
+}
+
+function followersAreStale(creator: Creator) {
+  const networks = syncableNetworks(creator);
+  if (networks.length === 0) return false;
+  const metrics = creator.metrics ?? {};
+  const now = Date.now() / 1000;
+  return networks.some((network) => {
+    const syncedAt = Number(metrics[`${network}_synced_at`] || 0);
+    return !syncedAt || now - syncedAt >= FOLLOWER_STALE_SECONDS;
+  });
+}
 
 const EMPTY_FORM = { full_name: "", artistic_name: "", cpf: "", email: "", password: "", category: "UGC Content", photo_url: "", country: DEFAULT_COUNTRY, state: "" };
 
@@ -309,7 +333,7 @@ function CreatorCard({
         <div className="mb-4 grid grid-cols-2 gap-4 border-t border-b border-[#F1F5F9] py-3.5">
           <div className="flex flex-col">
             <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.followers")}</span>
-            <span className="text-[14px] font-bold text-[#0F172A]">{formatNumber(metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]))}</span>
+            <span className="text-[14px] font-bold text-[#0F172A]">{formatNumber(networkSize(creator.metrics))}</span>
           </div>
           <div className="flex flex-col">
             <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.avgViews")}</span>
@@ -385,7 +409,7 @@ function CreatorListRow({
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
   const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
-  const followers = formatNumber(metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]));
+  const followers = formatNumber(networkSize(creator.metrics));
   const avgViews = formatNumber(metricValue(creator.metrics, ["avgViews", "avg_views"]));
   const companyNames = creatorContracts.map((c) => c.company?.name ?? c.title).join(", ");
   const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
@@ -540,6 +564,9 @@ function CreatorsInner() {
   const [countryFilter, setCountryFilter] = useState("all");
   const [regionFilter, setRegionFilter] = useState("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [groups, setGroups] = useState<CreatorGroup[]>([]);
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [networkFilter, setNetworkFilter] = useState("all");
   const [minFollowers, setMinFollowers] = useState("");
   const [maxFollowers, setMaxFollowers] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -550,6 +577,10 @@ function CreatorsInner() {
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
   const [termCreator, setTermCreator] = useState<Creator | null>(null);
   const [layout, setLayout] = useState<CatalogLayout>("list");
+  const [refreshScope, setRefreshScope] = useState<RefreshScope>("stale");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+  const refreshCancelRef = useRef(false);
   const filterCurrency = moneyCurrency(user.company);
 
   const categoryLabels = tAuth("categories", { returnObjects: true }) as Record<string, string>;
@@ -606,12 +637,14 @@ function CreatorsInner() {
   async function load() {
     if (user.role === "creator") return;
     try {
-      const [creatorsRes, recurringRes] = await Promise.all([
+      const [creatorsRes, recurringRes, groupsRes] = await Promise.all([
         api.creators(),
         api.recurring().catch(() => ({ data: [] as RecurringContract[] })),
+        api.creatorGroups().catch(() => ({ data: [] as CreatorGroup[] })),
       ]);
       setCreators(creatorsRes.data);
       setRecurringContracts(recurringRes.data);
+      setGroups(groupsRes.data);
     } catch (err) {
       await alertApiError(err);
     }
@@ -649,10 +682,34 @@ function CreatorsInner() {
   const pendingCount = creators.filter((c) => c.status === "review").length;
   const activeCount = creators.filter((c) => c.status === "active").length;
 
+  const groupMemberIds = useMemo(() => {
+    if (groupFilter === "all") return null;
+    const group = groups.find((item) => String(item.id) === groupFilter);
+    return new Set((group?.creators ?? []).map((creator) => creator.id));
+  }, [groups, groupFilter]);
+
+  const networkOptions = useMemo(() => [
+    { value: "all", label: t("creators.allNetworkSizes").toUpperCase() },
+    { value: "nano", label: t("creators.networkNano").toUpperCase() },
+    { value: "micro", label: t("creators.networkMicro").toUpperCase() },
+    { value: "mid", label: t("creators.networkMid").toUpperCase() },
+    { value: "macro", label: t("creators.networkMacro").toUpperCase() },
+    { value: "mega", label: t("creators.networkMega").toUpperCase() },
+  ], [t]);
+
+  const groupOptions = useMemo(() => [
+    { value: "all", label: t("creators.allGroups").toUpperCase() },
+    ...groups.map((group) => ({
+      value: String(group.id),
+      label: (isAdmin && group.company?.name ? `${group.name} · ${group.company.name}` : group.name).toUpperCase(),
+    })),
+  ], [groups, isAdmin, t]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const bounds = networkFilter !== "all" ? NETWORK_TIER_BOUNDS[networkFilter as keyof typeof NETWORK_TIER_BOUNDS] : null;
     return creators.filter((creator) => {
-      const followers = metricValue(creator.metrics, ["followers", "instagram_followers", "tiktok_followers"]);
+      const followers = networkSize(creator.metrics);
       const reel = Number(creator.pricing?.reel || 0);
       const matchesSearch =
         !term ||
@@ -670,11 +727,13 @@ function CreatorsInner() {
         normalizeRegion(creator.state) === regionFilter;
       const matchesMinFollowers = !minFollowers || followers >= parseIntegerMask(minFollowers);
       const matchesMaxFollowers = !maxFollowers || followers <= parseIntegerMask(maxFollowers);
+      const matchesNetwork = !bounds || matchesNetworkRange(followers, bounds.min, bounds.max);
+      const matchesGroup = !groupMemberIds || groupMemberIds.has(creator.id);
       const matchesMinPrice = !minPrice || reel >= parseMoneyMask(minPrice, filterCurrency);
       const matchesMaxPrice = !maxPrice || reel <= parseMoneyMask(maxPrice, filterCurrency);
-      return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesMinPrice && matchesMaxPrice;
+      return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesNetwork && matchesGroup && matchesMinPrice && matchesMaxPrice;
     });
-  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency]);
+  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, groupMemberIds]);
 
   async function approve(creator: Creator) {
     if (!(await alertConfirm(t("creators.approveTitle"), t("creators.approveText", { name: creator.artistic_name })))) return;
@@ -707,6 +766,69 @@ function CreatorsInner() {
     } catch (err) {
       await alertApiError(err);
     }
+  }
+
+  const refreshScopeOptions = useMemo(
+    () => [
+      { value: "stale", label: t("creators.refreshScopeStale") },
+      { value: "filtered", label: t("creators.refreshScopeFiltered") },
+    ],
+    [t],
+  );
+
+  async function refreshFollowers() {
+    const targets = filtered.filter((creator) => {
+      if (syncableNetworks(creator).length === 0) return false;
+      return refreshScope === "filtered" || followersAreStale(creator);
+    });
+    if (targets.length === 0) {
+      await alertWarning(
+        t("creators.refreshNoneTitle"),
+        refreshScope === "filtered" ? t("creators.refreshNoneFiltered") : t("creators.refreshNoneStale"),
+      );
+      return;
+    }
+    if (!(await alertConfirm(t("creators.refreshConfirmTitle"), t("creators.refreshConfirmText", { count: targets.length }), t("creators.refreshConfirm")))) return;
+
+    refreshCancelRef.current = false;
+    setRefreshing(true);
+    let updated = 0;
+    let failed = 0;
+    let skipped = 0;
+    let stoppedAt = 0;
+
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        if (refreshCancelRef.current) break;
+        const creator = targets[index];
+        stoppedAt = index + 1;
+        setRefreshProgress({ current: index + 1, total: targets.length, name: creator.artistic_name });
+        let skippedOne = false;
+        try {
+          const result = await api.refreshCreatorFollowers(creator.id, refreshScope === "filtered");
+          if (result.status === "skipped") {
+            skipped += 1;
+            skippedOne = true;
+          } else {
+            updated += 1;
+          }
+        } catch {
+          failed += 1;
+        }
+        if (refreshCancelRef.current || index === targets.length - 1) break;
+        await wait(skippedOne ? 400 : FOLLOWER_SYNC_GAP_MS);
+      }
+    } finally {
+      setRefreshing(false);
+      setRefreshProgress(null);
+    }
+
+    if (refreshCancelRef.current) {
+      await alertWarning(t("creators.refreshCancelledTitle"), t("creators.refreshCancelled", { current: stoppedAt, total: targets.length, updated }));
+    } else {
+      await alertSuccess(t("creators.refreshDoneTitle"), t("creators.refreshDone", { updated, failed, skipped }));
+    }
+    load();
   }
 
   async function resetCasting() {
@@ -747,7 +869,7 @@ function CreatorsInner() {
       return;
     }
     try {
-      await api.createCreator({
+      const created = await api.createCreator({
         full_name: form.full_name.trim(),
         artistic_name: form.artistic_name.replace(/^@/, "").trim(),
         email: form.email.trim(),
@@ -759,6 +881,13 @@ function CreatorsInner() {
         country: form.country,
         state: form.state || null,
       });
+      if (isAdmin && created.social_sync === "queued" && created.data?.id) {
+        try {
+          await api.waitForCreatorSocialSync(created.data.id);
+        } catch {
+          // The creator is already saved. Follower refresh can fail on its own.
+        }
+      }
       setModalOpen(false);
       setForm(EMPTY_FORM);
       await alertSuccess(isCompany ? t("creators.createdCompany") : t("creators.created"));
@@ -816,6 +945,15 @@ function CreatorsInner() {
             </button>
           ) : null}
           {isAdmin || isCompany ? (
+            <Link
+              href="/creator-groups"
+              className="flex h-11 items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
+            >
+              <UsersRound size={16} />
+              {t("creators.groupsLink")}
+            </Link>
+          ) : null}
+          {isAdmin || isCompany ? (
             <button
               type="button"
               onClick={() => setModalOpen(true)}
@@ -827,6 +965,57 @@ function CreatorsInner() {
           ) : null}
         </div>
       </header>
+
+      {isAdmin || isCompany ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-56">
+              <Select2Field
+                theme="light"
+                searchable={false}
+                value={refreshScope}
+                options={refreshScopeOptions}
+                disabled={refreshing}
+                onChange={(value) => setRefreshScope(value === "filtered" ? "filtered" : "stale")}
+                triggerClassName="h-11 rounded-lg px-3 text-xs font-bold"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshFollowers()}
+              disabled={refreshing}
+              title={t("creators.refreshFollowersHint")}
+              className="flex h-11 items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 text-sm font-bold text-indigo-700 shadow-xs transition-all hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-70"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+              {t("creators.refreshFollowers")}
+            </button>
+          </div>
+          {refreshProgress ? (
+            <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+              <RefreshCw size={16} className="shrink-0 animate-spin text-indigo-600" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-bold text-indigo-950">
+                  {t("creators.refreshProgress", { current: refreshProgress.current, total: refreshProgress.total, name: refreshProgress.name })}
+                </p>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-indigo-100">
+                  <div
+                    className="h-full rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${Math.round((refreshProgress.current / refreshProgress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { refreshCancelRef.current = true; }}
+                className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold text-indigo-800 hover:bg-indigo-100"
+              >
+                {tc("cancel")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {isAdmin || isCompany ? (
       <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
@@ -915,6 +1104,25 @@ function CreatorsInner() {
               value={statusFilter}
               options={statusOptions.filter((option) => option.value === "all" || option.value === "active" || option.value === "review")}
               onChange={setStatusFilter}
+              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              triggerClassName={FILTER_TRIGGER}
+            />
+          ) : null}
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={networkFilter}
+            options={networkOptions}
+            onChange={setNetworkFilter}
+            className="min-w-[220px] flex-1 lg:w-60 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
+          {groups.length > 0 ? (
+            <Select2Field
+              theme="light"
+              value={groupFilter}
+              options={groupOptions}
+              onChange={setGroupFilter}
               className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
               triggerClassName={FILTER_TRIGGER}
             />

@@ -94,7 +94,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
       });
 
       if (hasCreator && user.creator) {
-        await api.updateCreator(user.creator.id, {
+        const saved = await api.updateCreator(user.creator.id, {
           full_name: fullName.trim(),
           artistic_name: artisticName.replace(/^@+/, "").trim() || user.creator.artistic_name,
           photo_url: trimmedPhoto,
@@ -111,6 +111,13 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
             tiktok: formatTikTok(tiktok).replace(/^@+/, ""),
           },
         });
+        if (saved.social_sync === "queued") {
+          try {
+            await api.waitForCreatorSocialSync(user.creator.id);
+          } catch {
+            // The profile is already saved. Follower refresh can fail on its own.
+          }
+        }
       } else if (user.role === "company" && user.company?.id) {
         await api.updateCompany(user.company.id, {
           name: companyName.trim() || user.company.name,

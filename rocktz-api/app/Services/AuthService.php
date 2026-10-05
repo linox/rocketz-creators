@@ -78,8 +78,12 @@ class AuthService
         });
 
         $user->load('creator');
-        if (filled($data['landing_slug'] ?? null) && $user->creator) {
-            app(CompanyLandingService::class)->attributeCreator((string) $data['landing_slug'], $user->creator);
+        if ($user->creator) {
+            if (filled($data['landing_slug'] ?? null)) {
+                app(CompanyLandingService::class)->attributeCreator((string) $data['landing_slug'], $user->creator);
+            }
+
+            app(SocialMetricsService::class)->queue($user->creator);
         }
 
         $this->safelyNotify(fn () => app(MailNotifier::class)->creatorRegistered($user->fresh(['creator'])));

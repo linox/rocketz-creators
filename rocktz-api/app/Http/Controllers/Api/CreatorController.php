@@ -34,6 +34,7 @@ class CreatorController extends Controller
     public function __construct(
         private readonly NotificationService $notifications,
         private readonly MailNotifier $mail,
+        private readonly SocialMetricsService $socialMetrics,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -243,7 +244,9 @@ class CreatorController extends Controller
             }
         }
 
-        return response()->json(['data' => new CreatorResource($creator)], 201);
+        $queued = $this->socialMetrics->queue($creator);
+
+        return response()->json($this->creatorPayload($creator->fresh()->load('user'), $queued), 201);
     }
 
     public function update(Request $request, Creator $creator): JsonResponse
@@ -322,7 +325,44 @@ class CreatorController extends Controller
             $creator->user?->update(['name' => $data['full_name']]);
         }
 
-        return response()->json(['data' => new CreatorResource($creator->fresh()->load(['user', 'portfolioVideos']))]);
+        $queued = array_key_exists('socials', $data) && $this->socialMetrics->queue($creator->refresh(), true);
+
+        return response()->json($this->creatorPayload($creator->fresh()->load(['user', 'portfolioVideos']), $queued));
+    }
+
+    public function refreshFollowers(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'creator_id' => ['required', 'integer', 'exists:creators,id'],
+            'force' => ['sometimes', 'boolean'],
+        ]);
+
+        $creator = Creator::query()->findOrFail($data['creator_id']);
+        $this->authorizeFollowerRefresh($request, $creator);
+
+        $handles = $this->socialMetrics->storedHandles($creator);
+        if ($handles === []) {
+            return response()->json(['status' => 'skipped', 'reason' => 'none']);
+        }
+
+        $force = (bool) ($data['force'] ?? false);
+        if (! $force && $this->socialMetrics->followersAreFresh($creator)) {
+            return response()->json(['status' => 'skipped', 'reason' => 'fresh']);
+        }
+
+        return $this->queueCreatorSocialSync($creator, null, $handles, $force);
+    }
+
+    public function refreshFollowersStatus(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'creator_id' => ['required', 'integer', 'exists:creators,id'],
+        ]);
+
+        $creator = Creator::query()->findOrFail($data['creator_id']);
+        $this->authorizeFollowerRefresh($request, $creator);
+
+        return $this->socialSyncJobResponse($creator, MetricsSyncStatus::creatorKey($creator->id));
     }
 
     public function syncSocials(Request $request, Creator $creator): JsonResponse
@@ -345,24 +385,8 @@ class CreatorController extends Controller
         }
 
         $network = $data['network'] ?? null;
-        $key = MetricsSyncStatus::creatorKey($creator->id, $network);
 
-        if (! MetricsSyncStatus::busy($key)) {
-            MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
-            $job = new SyncCreatorSocialsJob(
-                $creator->id,
-                $network,
-                $handles,
-                (bool) ($data['force'] ?? false),
-            );
-            if (app()->runningUnitTests()) {
-                dispatch_sync($job);
-            } else {
-                dispatch($job)->afterResponse();
-            }
-        }
-
-        return $this->socialSyncJobResponse($creator, $key);
+        return $this->queueCreatorSocialSync($creator, $network, $handles, (bool) ($data['force'] ?? false));
     }
 
     public function socialSyncStatus(Request $request, Creator $creator): JsonResponse
@@ -377,8 +401,12 @@ class CreatorController extends Controller
 
     private function socialSyncJobResponse(Creator $creator, string $key): JsonResponse
     {
-        $state = MetricsSyncStatus::get($key) ?? ['status' => MetricsSyncStatus::QUEUED];
-        $status = (string) ($state['status'] ?? MetricsSyncStatus::QUEUED);
+        $state = MetricsSyncStatus::get($key);
+        if ($state === null) {
+            return response()->json(['status' => MetricsSyncStatus::IDLE]);
+        }
+
+        $status = (string) ($state['status'] ?? MetricsSyncStatus::IDLE);
 
         if ($status === MetricsSyncStatus::FAILED) {
             return response()->json([
@@ -572,6 +600,57 @@ class CreatorController extends Controller
             'landingPage:id,display_name,slug',
             'company:id,name',
         ];
+    }
+
+    /**
+     * @return array{data: CreatorResource, social_sync?: string}
+     */
+    private function creatorPayload(Creator $creator, bool $queued): array
+    {
+        $payload = ['data' => new CreatorResource($creator)];
+
+        if ($queued) {
+            $payload['social_sync'] = 'queued';
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param  array<string, string|null>  $handles
+     */
+    private function queueCreatorSocialSync(Creator $creator, ?string $network, array $handles, bool $force): JsonResponse
+    {
+        $key = MetricsSyncStatus::creatorKey($creator->id, $network);
+
+        if (! MetricsSyncStatus::busy($key)) {
+            MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
+            $job = new SyncCreatorSocialsJob($creator->id, $network, $handles, $force);
+            if (app()->runningUnitTests()) {
+                dispatch_sync($job);
+            } else {
+                dispatch($job)->afterResponse();
+            }
+        }
+
+        return $this->socialSyncJobResponse($creator, $key);
+    }
+
+    private function authorizeFollowerRefresh(Request $request, Creator $creator): void
+    {
+        $user = $request->user();
+        if ($user->role === UserRole::Admin) {
+            return;
+        }
+
+        if ($user->role === UserRole::Company) {
+            $companyId = (int) $user->actingCompanyId();
+            abort_unless($companyId > 0 && $creator->isAccessibleByCompany($companyId), 403, __('auth.forbidden'));
+
+            return;
+        }
+
+        abort(403, __('auth.forbidden'));
     }
 
     private function authorizeCreator(Request $request, Creator $creator): void

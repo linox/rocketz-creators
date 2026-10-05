@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
+import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
@@ -32,6 +33,7 @@ import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
 import { parseMoneyMask, remaskMoney } from "@/lib/masks";
+import { rangeFromTier } from "@/lib/network-size";
 import { uploadScriptDocument } from "@/lib/script-document";
 import { usePrivacy } from "@/lib/privacy";
 import type { PostingProfile } from "@/lib/posting-profile";
@@ -129,6 +131,10 @@ export function CreateCampaignModal({
   const [limitByCity, setLimitByCity] = useState(false);
   const [restrictToLanding, setRestrictToLanding] = useState(false);
   const [landingPageId, setLandingPageId] = useState("");
+  const [groupIds, setGroupIds] = useState<number[]>([]);
+  const [networkTier, setNetworkTier] = useState("");
+  const [minFollowers, setMinFollowers] = useState("");
+  const [maxFollowers, setMaxFollowers] = useState("");
   const [regionState, setRegionState] = useState("");
   const [city, setCity] = useState("");
   const [barterDetails, setBarterDetails] = useState("");
@@ -192,6 +198,10 @@ export function CreateCampaignModal({
     setLimitByCity(false);
     setRestrictToLanding(false);
     setLandingPageId("");
+    setGroupIds([]);
+    setNetworkTier("");
+    setMinFollowers("");
+    setMaxFollowers("");
     setRegionState("");
     setCity("");
     setBarterDetails("");
@@ -258,6 +268,12 @@ export function CreateCampaignModal({
         return;
       }
     }
+    const audience = rangeFromTier(networkTier, minFollowers, maxFollowers);
+    if (audience.min != null && audience.max != null && audience.max < audience.min) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.networkRangeInvalid"));
+      return;
+    }
     if (hasCustomContract && !customContractTerms.trim()) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
@@ -298,6 +314,9 @@ export function CreateCampaignModal({
         limit_by_city: limitByCity,
         restrict_to_landing: restrictToLanding,
         company_landing_page_id: restrictToLanding && landingPageId ? Number(landingPageId) : null,
+        creator_group_ids: groupIds,
+        min_followers: audience.min,
+        max_followers: audience.max,
         state: limitByCity ? regionState || null : null,
         city: limitByCity ? city.trim() : null,
         barter_details: isBarter ? barterDetails : null,
@@ -409,6 +428,7 @@ export function CreateCampaignModal({
                       setCreatorCache((current) => remaskMoney(current, currency, nextCurrency));
                       setCompanyId(value);
                       setLandingPageId("");
+                      setGroupIds([]);
                       setRegionState("");
                     }} />
                   </div>
@@ -452,6 +472,17 @@ export function CreateCampaignModal({
                     />
                   ) : null}
                 </div>
+                <CampaignAudienceFields
+                  companyId={isAdmin ? (companyId ? Number(companyId) : null) : defaultCompanyId}
+                  groupIds={groupIds}
+                  onGroupIdsChange={setGroupIds}
+                  tier={networkTier}
+                  onTierChange={setNetworkTier}
+                  minFollowers={minFollowers}
+                  maxFollowers={maxFollowers}
+                  onMinFollowersChange={setMinFollowers}
+                  onMaxFollowersChange={setMaxFollowers}
+                />
                 <CampaignLandingFields
                   enabled={restrictToLanding}
                   onEnabledChange={(value) => {

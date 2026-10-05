@@ -23,6 +23,7 @@ import {
   Sparkles,
   Store,
   Users,
+  UsersRound,
   Video,
   X,
 } from "lucide-react";
@@ -291,6 +292,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("agency")}</div>
                 <SidebarItem href="/dashboard" label={t("dashboard")} icon={LayoutDashboard} active={isActive("/dashboard") || path === "/"} onClick={close} />
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
+                <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/companies" label={t("companies")} icon={Building2} active={isActive("/companies")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} badge={pendingCampaigns} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
@@ -323,6 +325,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("companyPanel")}</div>
                 <SidebarItem href="/company-dashboard" label={t("home")} icon={Home} active={isActive("/company-dashboard")} onClick={close} />
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
+                <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
                 <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />

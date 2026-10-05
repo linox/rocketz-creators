@@ -28,6 +28,7 @@ use App\Services\CompanyLandingService;
 use App\Services\GoogleAuthService;
 use App\Services\Mail\MailNotifier;
 use App\Services\Mail\TransactionalMailService;
+use App\Services\SocialMetricsService;
 use App\Services\TwoFactorService;
 use App\Support\FrontendUrl;
 use App\Support\Geo;
@@ -527,13 +528,17 @@ class AuthController extends Controller
             ]);
         });
 
-        if ($type === 'creator' && filled($request->input('landing_slug'))) {
+        if ($type === 'creator') {
             $user->load('creator');
             if ($user->creator) {
-                app(CompanyLandingService::class)->attributeCreator(
-                    (string) $request->input('landing_slug'),
-                    $user->creator,
-                );
+                if (filled($request->input('landing_slug'))) {
+                    app(CompanyLandingService::class)->attributeCreator(
+                        (string) $request->input('landing_slug'),
+                        $user->creator,
+                    );
+                }
+
+                app(SocialMetricsService::class)->queue($user->creator);
             }
         }
     }

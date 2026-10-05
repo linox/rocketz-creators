@@ -14,6 +14,8 @@ class MetricsSyncStatus
 
     public const FAILED = 'failed';
 
+    public const IDLE = 'idle';
+
     /**
      * @param  array<string, mixed>  $extra
      */

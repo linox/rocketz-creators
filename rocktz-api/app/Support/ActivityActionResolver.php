@@ -19,6 +19,7 @@ class ActivityActionResolver
         '#^api/media/uploads$#',
         '#^api/mail/templates/[^/]+/preview$#',
         '#^api/creators/[^/]+/social-sync$#',
+        '#^api/creators/follower-sync$#',
         '#^api/campaigns/[^/]+/post-metrics-sync$#',
         '#^api/recurring-contracts/[^/]+/post-metrics-sync$#',
         '#^api/landings/.+/events$#',

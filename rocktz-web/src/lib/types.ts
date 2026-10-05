@@ -75,7 +75,7 @@ export type SocialSyncResult = {
   message?: string;
 };
 
-export type MetricsJobStatus = "queued" | "running" | "done" | "failed";
+export type MetricsJobStatus = "queued" | "running" | "done" | "failed" | "idle" | "skipped";
 
 export type Company = {
   id: number;
@@ -163,10 +163,32 @@ export type CompanyLandingSignup = {
   created_at?: string | null;
 };
 
+export type CreatorGroupMember = {
+  id: number;
+  artistic_name: string;
+  photo_url: string | null;
+  metrics?: Record<string, number>;
+  status?: string | null;
+  city?: string | null;
+};
+
+export type CreatorGroup = {
+  id: number;
+  company_id: number;
+  company?: { id: number; name: string } | null;
+  name: string;
+  description: string | null;
+  members_count: number;
+  creators?: CreatorGroupMember[];
+};
+
 export type Campaign = {
   id: number;
   company_id: number;
   company_landing_page_id?: number | null;
+  min_followers?: number | null;
+  max_followers?: number | null;
+  creator_groups?: { id: number; name: string }[];
   landing_page?: { id: number; display_name: string; slug: string } | null;
   company?: { id: number; name: string; logo_url: string | null; status: string; segment?: string | null; country?: string | null; currency?: string | null };
   name: string;

@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Exceptions\SocialMetricsException;
+use App\Jobs\SyncCreatorSocialsJob;
 use App\Models\Creator;
 use App\Services\SocialMetrics\SocialSnapshot;
+use App\Support\MetricsSyncStatus;
 use App\Support\SocialHandle;
 use App\Support\SocialNumbers;
 use Illuminate\Http\Client\PendingRequest;
@@ -32,6 +34,79 @@ class SocialMetricsService
     private array $instagramCookies = [];
 
     private bool $instagramPrimed = false;
+
+    /**
+     * @return array<string, string>
+     */
+    public function storedHandles(Creator $creator): array
+    {
+        $handles = [];
+        $socials = $creator->socials ?? [];
+
+        foreach (self::NETWORKS as $network) {
+            $raw = $socials[$network] ?? null;
+            $handle = SocialHandle::normalize($network, is_scalar($raw) ? (string) $raw : null);
+            if ($handle !== '') {
+                $handles[$network] = $handle;
+            }
+        }
+
+        return $handles;
+    }
+
+    public function followersAreFresh(Creator $creator): bool
+    {
+        $handles = $this->storedHandles($creator);
+        if ($handles === []) {
+            return false;
+        }
+
+        $metrics = $creator->metrics ?? [];
+        $freshAfter = now()->subHours($this->cacheHours())->timestamp;
+
+        foreach (array_keys($handles) as $network) {
+            $syncedAt = (int) ($metrics["{$network}_synced_at"] ?? 0);
+            if ($syncedAt < $freshAfter || ! array_key_exists("{$network}_followers", $metrics)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Refresh follower counts from the handles already stored on the creator.
+     * Returns false when there is nothing to fetch. The HTTP response is not held
+     * while the networks are contacted.
+     */
+    public function queue(Creator $creator, bool $force = false): bool
+    {
+        $handles = $this->storedHandles($creator);
+
+        if ($handles === []) {
+            return false;
+        }
+
+        if (app()->runningUnitTests() && ! config('services.social.auto_sync_in_tests')) {
+            return false;
+        }
+
+        $key = MetricsSyncStatus::creatorKey($creator->id);
+        if (MetricsSyncStatus::busy($key)) {
+            return true;
+        }
+
+        MetricsSyncStatus::put($key, MetricsSyncStatus::QUEUED);
+        $job = new SyncCreatorSocialsJob($creator->id, null, $handles, $force);
+
+        if (app()->runningUnitTests()) {
+            dispatch_sync($job);
+        } else {
+            dispatch($job)->afterResponse();
+        }
+
+        return true;
+    }
 
     /**
      * @param  array<string, string|null>  $handles

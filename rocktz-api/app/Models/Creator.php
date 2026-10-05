@@ -119,6 +119,12 @@ class Creator extends Model
             ->withTimestamps();
     }
 
+    public function creatorGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(CreatorGroup::class, 'creator_group_members')
+            ->withTimestamps();
+    }
+
     public function campaignCreators(): HasMany
     {
         return $this->hasMany(CampaignCreator::class);
