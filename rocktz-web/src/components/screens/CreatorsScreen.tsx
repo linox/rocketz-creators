@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, Download, FileText, KeyRound, LayoutGrid, LayoutList, Plus, RefreshCw, Repeat, Search, Trash2, Users, UsersRound } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, ExternalLink, FileText, Instagram, KeyRound, LayoutGrid, LayoutList, Plus, RefreshCw, Repeat, Search, Sparkles, Trash2, Users, UsersRound, Youtube } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { PasswordField } from "@/components/PasswordField";
@@ -28,8 +28,12 @@ import { creatorTermAudit, downloadCreatorTermDocument, type CreatorTermDocLabel
 import { useAuth } from "@/lib/use-auth";
 import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 
 const LAYOUT_STORAGE_KEY = "rocktz.creatorsCatalogLayout";
+const PAGE_SIZE_STORAGE_KEY = "rocktz.creatorsPageSize";
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 20;
 const FOLLOWER_SYNC_GAP_MS = 3500;
 const FOLLOWER_STALE_SECONDS = 24 * 60 * 60;
 const SYNCABLE_NETWORKS = ["instagram", "tiktok", "youtube"] as const;
@@ -102,6 +106,133 @@ function metricValue(metrics: Record<string, number> | undefined, keys: string[]
     if (value) return value;
   }
   return 0;
+}
+
+const SOCIAL_NETWORKS = [
+  { key: "instagram" as const, labelKey: "creators.networkInstagram", icon: Instagram, iconClass: "text-pink-600", followerKeys: ["instagram_followers"], fallbackKeys: ["followers"], viewKeys: ["instagram_views", "avgViews", "avg_views"], viewFallback: true },
+  { key: "tiktok" as const, labelKey: "creators.networkTiktok", icon: Clapperboard, iconClass: "text-slate-800", followerKeys: ["tiktok_followers"], fallbackKeys: [] as string[], viewKeys: ["tiktok_views"], viewFallback: false },
+  { key: "youtube" as const, labelKey: "creators.networkYoutube", icon: Youtube, iconClass: "text-red-600", followerKeys: ["youtube_followers", "youtube_subscribers"], fallbackKeys: [] as string[], viewKeys: ["youtube_views"], viewFallback: false },
+  { key: "kwai" as const, labelKey: "creators.networkKwai", icon: Sparkles, iconClass: "text-orange-500", followerKeys: ["kwai_followers"], fallbackKeys: [] as string[], viewKeys: ["kwai_views"], viewFallback: false },
+];
+
+function socialProfileHref(network: (typeof SOCIAL_NETWORKS)[number]["key"], handle: string) {
+  const raw = handle.trim();
+  if (!raw) return undefined;
+  if (/^https?:\/\//i.test(raw)) return safeHttpUrl(raw);
+  const id = raw.replace(/^@+/, "").split(/[/?#]/)[0]?.trim() ?? "";
+  if (!id) return undefined;
+  if (network === "instagram") return safeHttpUrl(`https://www.instagram.com/${id}/`);
+  if (network === "tiktok") return safeHttpUrl(`https://www.tiktok.com/@${id}`);
+  if (network === "youtube") {
+    const channel = /^UC[A-Za-z0-9_-]{20,}$/.test(id);
+    return safeHttpUrl(channel ? `https://www.youtube.com/channel/${id}` : `https://www.youtube.com/@${id}`);
+  }
+  return safeHttpUrl(`https://www.kwai.com/@${id}`);
+}
+
+function displayHandle(handle: string) {
+  const raw = handle.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const path = new URL(raw).pathname.replace(/^\/+|\/+$/g, "");
+      const id = (path.split("/").filter(Boolean).pop() ?? "").replace(/^@/, "");
+      return id ? `@${id}` : raw;
+    } catch {
+      return raw;
+    }
+  }
+  const id = raw.replace(/^@+/, "").split(/[/?#]/)[0] ?? "";
+  return id ? `@${id}` : raw;
+}
+
+function creatorSocialRows(creator: Creator) {
+  const socials = creator.socials ?? {};
+  return SOCIAL_NETWORKS.flatMap((network) => {
+    const handle = String(socials[network.key] ?? "").trim();
+    const followers = metricValue(creator.metrics, handle ? [...network.followerKeys, ...network.fallbackKeys] : network.followerKeys);
+    const views = metricValue(creator.metrics, handle || !network.viewFallback ? network.viewKeys : network.viewKeys.slice(0, 1));
+    if (!handle && followers <= 0 && views <= 0) return [];
+    return [{
+      ...network,
+      followers,
+      views,
+      href: handle ? socialProfileHref(network.key, handle) : undefined,
+      display: handle ? displayHandle(handle) : "",
+    }];
+  });
+}
+
+function CreatorFollowerNetworks({ creator, compact = false }: { creator: Creator; compact?: boolean }) {
+  const { t } = useTranslation("app");
+  const { formatNumber } = usePrivacy();
+  const rows = creatorSocialRows(creator);
+  const headline = networkSize(creator.metrics);
+  const numberClass = compact ? "text-[13px] font-bold text-[#0F172A]" : "text-[14px] font-bold text-[#0F172A]";
+
+  if (rows.length === 0) {
+    return <span className={numberClass}>{formatNumber(headline)}</span>;
+  }
+
+  const primary = rows.find((row) => row.followers > 0 && row.followers === headline) ?? rows[0];
+
+  return (
+    <div className="min-w-0">
+      <span className={numberClass}>{formatNumber(headline)}</span>
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          const network = t(row.labelKey);
+          const countLabel = row.key === "youtube" ? t("creators.subscribers") : t("creators.followers");
+          const showTooltip = row.key !== primary.key;
+          const icon = <Icon size={13} className={row.iconClass} />;
+          const className = cn(
+            "group relative flex h-6 w-6 items-center justify-center rounded-md border",
+            row.key === primary.key ? "border-purple-200 bg-purple-50" : "border-slate-200 bg-white hover:border-purple-200",
+          );
+          const tooltip = showTooltip ? (
+            <span role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 flex w-max max-w-[180px] flex-col rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="text-[10px] font-bold text-slate-800">{network}</span>
+              <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.followers)} <span className="font-semibold text-slate-500">{countLabel}</span></span>
+              {row.views > 0 ? <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.views)} <span className="font-semibold text-slate-500">{t("creators.avgViews")}</span></span> : null}
+              {row.display ? <span className="mt-0.5 truncate text-[10px] font-semibold text-brand-primary">{row.display}</span> : null}
+            </span>
+          ) : null;
+
+          if (!row.href) {
+            return (
+              <span key={row.key} className={className} title={network}>
+                {icon}
+                {tooltip}
+              </span>
+            );
+          }
+
+          return (
+            <a
+              key={row.key}
+              href={row.href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={showTooltip ? `${network}: ${formatNumber(row.followers)} ${countLabel}. ${t("creators.openNetwork", { network })}` : t("creators.openNetwork", { network })}
+              className={className}
+            >
+              {icon}
+              {tooltip}
+            </a>
+          );
+        })}
+        {primary.href ? (
+          <a href={primary.href} target="_blank" rel="noreferrer" title={t("creators.openNetwork", { network: t(primary.labelKey) })} className="inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] font-semibold text-brand-primary hover:underline">
+            <span className="truncate">{primary.display ? `${t(primary.labelKey)} · ${primary.display}` : t(primary.labelKey)}</span>
+            <ExternalLink size={10} className="shrink-0" />
+          </a>
+        ) : (
+          <span className="truncate text-[11px] font-semibold text-slate-500">{primary.display ? `${t(primary.labelKey)} · ${primary.display}` : t(primary.labelKey)}</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function creatorRecurringContracts(creator: Creator, recurringContracts: RecurringContract[]) {
@@ -331,9 +462,9 @@ function CreatorCard({
         ) : null}
 
         <div className="mb-4 grid grid-cols-2 gap-4 border-t border-b border-[#F1F5F9] py-3.5">
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.followers")}</span>
-            <span className="text-[14px] font-bold text-[#0F172A]">{formatNumber(networkSize(creator.metrics))}</span>
+            <CreatorFollowerNetworks creator={creator} />
           </div>
           <div className="flex flex-col">
             <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.avgViews")}</span>
@@ -409,7 +540,6 @@ function CreatorListRow({
   const { t, i18n } = useTranslation("app");
   const { formatNumber } = usePrivacy();
   const creatorContracts = creatorRecurringContracts(creator, recurringContracts);
-  const followers = formatNumber(networkSize(creator.metrics));
   const avgViews = formatNumber(metricValue(creator.metrics, ["avgViews", "avg_views"]));
   const companyNames = creatorContracts.map((c) => c.company?.name ?? c.title).join(", ");
   const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
@@ -462,9 +592,9 @@ function CreatorListRow({
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center sm:gap-5">
-        <div className="flex min-w-[72px] flex-col">
+        <div className="flex min-w-0 flex-col sm:min-w-[168px] sm:max-w-[220px]">
           <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
-          <span className="text-[13px] font-bold text-[#0F172A]">{followers}</span>
+          <CreatorFollowerNetworks creator={creator} compact />
         </div>
         <div className="flex min-w-[72px] flex-col">
           <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
@@ -577,6 +707,10 @@ function CreatorsInner() {
   const [passwordCreator, setPasswordCreator] = useState<Creator | null>(null);
   const [termCreator, setTermCreator] = useState<Creator | null>(null);
   const [layout, setLayout] = useState<CatalogLayout>("list");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const pageScrollReady = useRef(false);
   const [refreshScope, setRefreshScope] = useState<RefreshScope>("stale");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number; name: string } | null>(null);
@@ -665,6 +799,8 @@ function CreatorsInner() {
     try {
       const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
       if (stored === "list" || stored === "grid") setLayout(stored);
+      const storedPageSize = Number(window.localStorage.getItem(PAGE_SIZE_STORAGE_KEY));
+      if (PAGE_SIZE_OPTIONS.includes(storedPageSize as (typeof PAGE_SIZE_OPTIONS)[number])) setPageSize(storedPageSize);
     } catch {
       /* ignore */
     }
@@ -734,6 +870,36 @@ function CreatorsInner() {
       return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesNetwork && matchesGroup && matchesMinPrice && matchesMaxPrice;
     });
   }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, groupMemberIds]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, networkFilter, groupFilter, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const rangeFrom = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeTo = Math.min(safePage * pageSize, filtered.length);
+
+  useEffect(() => {
+    if (!pageScrollReady.current) {
+      pageScrollReady.current = true;
+      return;
+    }
+    resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [page]);
+
+  function changePageSize(value: string) {
+    const next = Number(value);
+    const size = PAGE_SIZE_OPTIONS.includes(next as (typeof PAGE_SIZE_OPTIONS)[number]) ? next : DEFAULT_PAGE_SIZE;
+    setPageSize(size);
+    setPage(1);
+    try {
+      window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(size));
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function approve(creator: Creator) {
     if (!(await alertConfirm(t("creators.approveTitle"), t("creators.approveText", { name: creator.artistic_name })))) return;
@@ -1148,6 +1314,15 @@ function CreatorsInner() {
             className="min-w-[220px] flex-1 lg:w-64 lg:flex-none"
             triggerClassName={FILTER_TRIGGER}
           />
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={String(pageSize)}
+            options={PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: t("creators.pageSize", { count: size }) }))}
+            onChange={changePageSize}
+            className="min-w-[180px] flex-1 lg:w-44 lg:flex-none"
+            triggerClassName={FILTER_TRIGGER}
+          />
         </div>
       </div>
 
@@ -1208,8 +1383,8 @@ function CreatorsInner() {
         </div>
       ) : null}
 
-      <div className={cn(layout === "grid" ? "grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4" : "flex flex-col gap-2.5")}>
-        {filtered.map((creator) =>
+      <div ref={resultsRef} className={cn(layout === "grid" ? "grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4" : "flex flex-col gap-2.5")}>
+        {paged.map((creator) =>
           layout === "grid" ? (
             <CreatorCard
               key={creator.id}
@@ -1247,6 +1422,37 @@ function CreatorsInner() {
           ),
         )}
       </div>
+
+      {filtered.length > 0 ? (
+        <div className="flex flex-col gap-3 rounded-[16px] border border-[#E2E8F0] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] font-semibold text-slate-500">
+            {t("creators.showingRange", { from: rangeFrom, to: rangeTo, total: filtered.length })}
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => setPage(Math.max(1, safePage - 1))}
+              className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={14} />
+              {t("creators.previousPage")}
+            </button>
+            <span className="min-w-[7rem] text-center text-[11px] font-bold text-slate-600">
+              {t("creators.pageOf", { page: safePage, pages: pageCount })}
+            </span>
+            <button
+              type="button"
+              disabled={safePage >= pageCount}
+              onClick={() => setPage(Math.min(pageCount, safePage + 1))}
+              className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t("creators.nextPage")}
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
