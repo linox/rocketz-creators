@@ -70,15 +70,18 @@ function CreatorLandingOrigins({ creator }: { creator: Creator }) {
   if (origins.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      {origins.map((origin) => (
-        <span key={origin.id} className="rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold leading-snug text-violet-800">
-          {t("creators.landingOrigin", {
-            landing: origin.landing?.display_name || "—",
-            company: origin.company?.name || "—",
-          })}
-        </span>
-      ))}
+    <div className="mt-1.5 flex min-w-0 flex-col gap-1">
+      {origins.map((origin) => {
+        const label = t("creators.landingOrigin", {
+          landing: origin.landing?.display_name || "—",
+          company: origin.company?.name || "—",
+        });
+        return (
+          <span key={origin.id} title={label} className="block max-w-full truncate rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-800">
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -179,57 +182,60 @@ function CreatorFollowerNetworks({ creator, compact = false }: { creator: Creato
   return (
     <div className="min-w-0">
       <span className={numberClass}>{formatNumber(headline)}</span>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        {rows.map((row) => {
-          const Icon = row.icon;
-          const network = t(row.labelKey);
-          const countLabel = row.key === "youtube" ? t("creators.subscribers") : t("creators.followers");
-          const showTooltip = row.key !== primary.key;
-          const icon = <Icon size={13} className={row.iconClass} />;
-          const className = cn(
-            "group relative flex h-6 w-6 items-center justify-center rounded-md border",
-            row.key === primary.key ? "border-purple-200 bg-purple-50" : "border-slate-200 bg-white hover:border-purple-200",
-          );
-          const tooltip = showTooltip ? (
-            <span role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 flex w-max max-w-[180px] flex-col rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="text-[10px] font-bold text-slate-800">{network}</span>
-              <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.followers)} <span className="font-semibold text-slate-500">{countLabel}</span></span>
-              {row.views > 0 ? <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.views)} <span className="font-semibold text-slate-500">{t("creators.avgViews")}</span></span> : null}
-              {row.display ? <span className="mt-0.5 truncate text-[10px] font-semibold text-brand-primary">{row.display}</span> : null}
-            </span>
-          ) : null;
+      <div className="mt-1 flex min-w-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
+          {rows.map((row) => {
+            const Icon = row.icon;
+            const network = t(row.labelKey);
+            const countLabel = row.key === "youtube" ? t("creators.subscribers") : t("creators.followers");
+            const showTooltip = row.key !== primary.key;
+            const icon = <Icon size={13} className={row.iconClass} />;
+            const className = cn(
+              "group relative flex h-6 w-6 items-center justify-center rounded-md border",
+              row.key === primary.key ? "border-purple-200 bg-purple-50" : "border-slate-200 bg-white hover:border-purple-200",
+            );
+            const tooltip = showTooltip ? (
+              <span role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 flex w-max max-w-[180px] flex-col rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                <span className="text-[10px] font-bold text-slate-800">{network}</span>
+                <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.followers)} <span className="font-semibold text-slate-500">{countLabel}</span></span>
+                {row.views > 0 ? <span className="text-[11px] font-bold text-[#0F172A]">{formatNumber(row.views)} <span className="font-semibold text-slate-500">{t("creators.avgViews")}</span></span> : null}
+                {row.display ? <span className="mt-0.5 truncate text-[10px] font-semibold text-brand-primary">{row.display}</span> : null}
+              </span>
+            ) : null;
 
-          if (!row.href) {
+            if (!row.href) {
+              return (
+                <span key={row.key} className={className} title={network}>
+                  {icon}
+                  {tooltip}
+                </span>
+              );
+            }
+
             return (
-              <span key={row.key} className={className} title={network}>
+              <a
+                key={row.key}
+                href={row.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={showTooltip ? `${network}: ${formatNumber(row.followers)} ${countLabel}. ${t("creators.openNetwork", { network })}` : t("creators.openNetwork", { network })}
+                title={network}
+                className={className}
+              >
                 {icon}
                 {tooltip}
-              </span>
+              </a>
             );
-          }
-
-          return (
-            <a
-              key={row.key}
-              href={row.href}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={showTooltip ? `${network}: ${formatNumber(row.followers)} ${countLabel}. ${t("creators.openNetwork", { network })}` : t("creators.openNetwork", { network })}
-              className={className}
-            >
-              {icon}
-              {tooltip}
-            </a>
-          );
-        })}
+          })}
+        </div>
         {primary.href ? (
-          <a href={primary.href} target="_blank" rel="noreferrer" title={t("creators.openNetwork", { network: t(primary.labelKey) })} className="inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] font-semibold text-brand-primary hover:underline">
-            <span className="truncate">{primary.display ? `${t(primary.labelKey)} · ${primary.display}` : t(primary.labelKey)}</span>
+          <a href={primary.href} target="_blank" rel="noreferrer" title={t("creators.openNetwork", { network: t(primary.labelKey) })} className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-brand-primary hover:underline">
+            <span className="truncate">{primary.display || t(primary.labelKey)}</span>
             <ExternalLink size={10} className="shrink-0" />
           </a>
-        ) : (
-          <span className="truncate text-[11px] font-semibold text-slate-500">{primary.display ? `${t(primary.labelKey)} · ${primary.display}` : t(primary.labelKey)}</span>
-        )}
+        ) : primary.display ? (
+          <span className="truncate text-[11px] font-semibold text-slate-500">{primary.display}</span>
+        ) : null}
       </div>
     </div>
   );
@@ -544,17 +550,51 @@ function CreatorListRow({
   const companyNames = creatorContracts.map((c) => c.company?.name ?? c.title).join(", ");
   const location = formatLocation(intlLocale(normalizeLocale(i18n.language)), creator);
 
+  const rowActions = (
+    <>
+      {isAdmin && onViewTerm && onDownloadTerm && termLabels ? (
+        <CreatorTermActions creator={creator} labels={termLabels} onView={onViewTerm} onDownload={onDownloadTerm} />
+      ) : null}
+      {isAdmin ? (
+        <button
+          type="button"
+          title={t("creators.changePassword")}
+          onClick={() => onChangePassword(creator)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
+        >
+          <KeyRound size={14} />
+        </button>
+      ) : null}
+      {canRemove ? (
+        <button
+          type="button"
+          title={t("creators.delete")}
+          onClick={() => onRemove(creator)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+        >
+          <Trash2 size={14} />
+        </button>
+      ) : null}
+      <Link
+        href={`/creators/${creator.id}`}
+        className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
+      >
+        {t("creators.viewShort")}
+      </Link>
+    </>
+  );
+
   return (
     <motion.article
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "flex flex-col gap-3 rounded-2xl border bg-white p-3.5 transition-all hover:border-brand-primary sm:flex-row sm:items-center sm:gap-4",
+        "flex flex-col gap-3 rounded-2xl border bg-white p-3.5 transition-all hover:border-brand-primary",
         creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex items-start gap-3">
         <UserAvatar
           src={creator.photo_url}
           name={creator.artistic_name || creator.full_name}
@@ -565,7 +605,7 @@ function CreatorListRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <h3 className="m-0 truncate text-sm font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
+            <h3 className="m-0 max-w-full truncate text-sm font-bold text-[#0F172A]">@{creator.artistic_name}</h3>
             <StatusBadge status={creator.status} />
             <span
               className={cn(
@@ -576,12 +616,15 @@ function CreatorListRow({
               {creator.role === "admin" ? t("creators.admin") : t("creators.influencer")}
             </span>
           </div>
-          {creator.full_name ? (
-            <p className="m-0 truncate text-[11px] font-medium text-slate-500">{creator.full_name}</p>
+          {creator.full_name || location ? (
+            <p className="m-0 truncate text-[11px] font-medium text-slate-500">
+              {creator.full_name}
+              {creator.full_name && location ? <span className="text-slate-300"> · </span> : null}
+              {location ? <span className="font-normal text-slate-400">{location}</span> : null}
+            </p>
           ) : null}
-          {location ? <p className="m-0 truncate text-[11px] text-slate-400">{location}</p> : null}
           <CreatorLandingOrigins creator={creator} />
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {orderedCreatorTags(creator.categories, highlightedCategory, 3).map((cat) => (
               <span key={cat} className={cn(creatorTagClass(cat, highlightedCategory), "px-1.5 text-[9px]")}>
                 {cat}
@@ -589,89 +632,61 @@ function CreatorListRow({
             ))}
           </div>
         </div>
+        <div className="hidden shrink-0 items-center gap-2 lg:flex">{rowActions}</div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center sm:gap-5">
-        <div className="flex min-w-0 flex-col sm:min-w-[168px] sm:max-w-[220px]">
-          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
-          <CreatorFollowerNetworks creator={creator} compact />
-        </div>
-        <div className="flex min-w-[72px] flex-col">
-          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
-          <span className="text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
-        </div>
-        <div className="col-span-2 flex min-w-[120px] flex-col sm:col-span-1 sm:max-w-[160px]">
-          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
-          {creatorContracts.length > 0 ? (
-            <span className="flex items-center gap-1 truncate text-[12px] font-bold text-purple-800" title={companyNames}>
-              <Repeat size={11} className="shrink-0 text-purple-600" />
-              {creatorContracts.length === 1
-                ? (creatorContracts[0].company?.name ?? creatorContracts[0].title)
-                : `${creatorContracts.length} ${t("creators.recurringCompanies")}`}
+      <div className="flex flex-col gap-3 border-t border-[#F1F5F9] pt-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+          <div className="min-w-0">
+            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
+            <CreatorFollowerNetworks creator={creator} compact />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
+            <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
+          </div>
+          <div className="min-w-0">
+            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
+            {creatorContracts.length > 0 ? (
+              <span className="flex items-center gap-1 truncate text-[12px] font-bold text-purple-800" title={companyNames}>
+                <Repeat size={11} className="shrink-0 text-purple-600" />
+                {creatorContracts.length === 1
+                  ? (creatorContracts[0].company?.name ?? creatorContracts[0].title)
+                  : `${creatorContracts.length} ${t("creators.recurringCompanies")}`}
+              </span>
+            ) : (
+              <span className="text-[12px] font-semibold text-slate-400">—</span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFee")}</span>
+            <span className="text-[13px] font-bold text-[#0F172A]">
+              <CreatorFeeValue creator={creator} contracts={creatorContracts} />
             </span>
-          ) : (
-            <span className="text-[12px] font-semibold text-slate-400">—</span>
-          )}
+          </div>
         </div>
-        <div className="flex min-w-[88px] flex-col">
-          <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFee")}</span>
-          <span className="text-[13px] font-bold text-[#0F172A]">
-            <CreatorFeeValue creator={creator} contracts={creatorContracts} />
-          </span>
-        </div>
+        {creator.status === "review" && canModerate ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onApprove(creator)}
+              className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 sm:flex-none"
+            >
+              <CheckCircle2 size={13} />
+              {t("creators.approve")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onReject(creator)}
+              className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 sm:flex-none"
+            >
+              {t("creators.reject")}
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      {creator.status === "review" && canModerate ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onApprove(creator)}
-            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 sm:flex-none"
-          >
-            <CheckCircle2 size={13} />
-            {t("creators.approve")}
-          </button>
-          <button
-            type="button"
-            onClick={() => onReject(creator)}
-            className="flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"
-          >
-            {t("creators.reject")}
-          </button>
-        </div>
-      ) : null}
-
-      <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#F1F5F9] pt-3 sm:border-0 sm:pt-0">
-        {isAdmin && onViewTerm && onDownloadTerm && termLabels ? (
-          <CreatorTermActions creator={creator} labels={termLabels} onView={onViewTerm} onDownload={onDownloadTerm} />
-        ) : null}
-        {isAdmin ? (
-          <button
-            type="button"
-            title={t("creators.changePassword")}
-            onClick={() => onChangePassword(creator)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-purple-300 hover:bg-purple-50 hover:text-brand-primary"
-          >
-            <KeyRound size={14} />
-          </button>
-        ) : null}
-        {canRemove ? (
-          <button
-            type="button"
-            title={t("creators.delete")}
-            onClick={() => onRemove(creator)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/80 text-slate-500 shadow-2xs transition-all hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
-          >
-            <Trash2 size={14} />
-          </button>
-        ) : null}
-        <Link
-          href={`/creators/${creator.id}`}
-          className="flex items-center gap-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-brand-primary shadow-xs transition-all hover:bg-brand-primary hover:text-white"
-        >
-          {t("creators.viewShort")}
-        </Link>
-      </div>
+      <div className="flex items-center justify-end gap-2 border-t border-[#F1F5F9] pt-3 lg:hidden">{rowActions}</div>
     </motion.article>
   );
 }
