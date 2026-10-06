@@ -234,7 +234,7 @@
     "awaitingHint": "Registrado en el sitio. Aprueba para liberar el perfil en campañas.",
     "awaitingHintCompany": "Registro de tu empresa. Autoriza para liberar el perfil en campañas.",
     "awaitingHintInvited": "Se registró con el código de {{company}}. La agencia también puede autorizar.",
-    "landingOrigin": "Landing: {{landing}} · Empresa: {{company}}",
+    "landingOrigin": "Origen: {{landing}} · {{company}}",
     "originTitle": "Origen de la landing",
     "originHint": "Marca manualmente de qué landing y empresa vino este creador. Las campañas limitadas a esa página pasan a aparecerle.",
     "originCompany": "Empresa",

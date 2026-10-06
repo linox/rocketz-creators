@@ -234,7 +234,7 @@
     "awaitingHint": "Signed up on the site. Approve to make this profile available for campaigns.",
     "awaitingHintCompany": "Signup for your company. Approve it to unlock the profile for campaigns.",
     "awaitingHintInvited": "Signed up with the {{company}} code. The agency can also authorize.",
-    "landingOrigin": "Landing: {{landing}} · Company: {{company}}",
+    "landingOrigin": "Origin: {{landing}} · {{company}}",
     "originTitle": "Landing origin",
     "originHint": "Manually set which landing and company this creator came from. Campaigns limited to that page then become visible to them.",
     "originCompany": "Company",

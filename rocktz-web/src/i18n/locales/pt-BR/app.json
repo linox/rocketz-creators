@@ -234,7 +234,7 @@
     "awaitingHint": "Cadastrado pelo site. Aprove para liberar o perfil em campanhas.",
     "awaitingHintCompany": "Cadastro da sua empresa. Autorize para liberar o perfil em campanhas.",
     "awaitingHintInvited": "Cadastrou-se com o código de {{company}}. A agência também pode autorizar.",
-    "landingOrigin": "Landing: {{landing}} · Empresa: {{company}}",
+    "landingOrigin": "Origem: {{landing}} · {{company}}",
     "originTitle": "Origem da landing",
     "originHint": "Marque manualmente de qual landing e empresa este criador veio. Campanhas limitadas a essa página passam a aparecer para ele.",
     "originCompany": "Empresa",

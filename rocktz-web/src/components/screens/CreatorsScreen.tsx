@@ -70,19 +70,19 @@ function CreatorLandingOrigins({ creator }: { creator: Creator }) {
   if (origins.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex min-w-0 flex-col gap-1">
+    <>
       {origins.map((origin) => {
         const label = t("creators.landingOrigin", {
           landing: origin.landing?.display_name || "—",
           company: origin.company?.name || "—",
         });
         return (
-          <span key={origin.id} title={label} className="block max-w-full truncate rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-800">
+          <span key={origin.id} title={label} className="inline-block max-w-[220px] truncate rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-800">
             {label}
           </span>
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -590,7 +590,7 @@ function CreatorListRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "flex flex-col gap-3 rounded-2xl border bg-white p-3.5 transition-all hover:border-brand-primary",
+        "flex flex-col gap-2 rounded-2xl border bg-white px-3 py-2.5 transition-all hover:border-brand-primary",
         creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
       )}
     >
@@ -623,8 +623,8 @@ function CreatorListRow({
               {location ? <span className="font-normal text-slate-400">{location}</span> : null}
             </p>
           ) : null}
-          <CreatorLandingOrigins creator={creator} />
-          <div className="mt-1.5 flex flex-wrap gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <CreatorLandingOrigins creator={creator} />
             {orderedCreatorTags(creator.categories, highlightedCategory, 3).map((cat) => (
               <span key={cat} className={cn(creatorTagClass(cat, highlightedCategory), "px-1.5 text-[9px]")}>
                 {cat}
@@ -635,17 +635,16 @@ function CreatorListRow({
         <div className="hidden shrink-0 items-center gap-2 lg:flex">{rowActions}</div>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[#F1F5F9] pt-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <div className="min-w-0">
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-2 border-t border-[#F1F5F9] pt-2">
+          <div className="min-w-0 max-w-[11rem]">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
             <CreatorFollowerNetworks creator={creator} compact />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-[4.25rem]">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
             <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 max-w-[9rem]">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
             {creatorContracts.length > 0 ? (
               <span className="flex items-center gap-1 truncate text-[12px] font-bold text-purple-800" title={companyNames}>
@@ -664,9 +663,8 @@ function CreatorListRow({
               <CreatorFeeValue creator={creator} contracts={creatorContracts} />
             </span>
           </div>
-        </div>
         {creator.status === "review" && canModerate ? (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 sm:ml-1">
             <button
               type="button"
               onClick={() => onApprove(creator)}
@@ -686,7 +684,7 @@ function CreatorListRow({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-[#F1F5F9] pt-3 lg:hidden">{rowActions}</div>
+      <div className="flex items-center justify-end gap-2 border-t border-[#F1F5F9] pt-2 lg:hidden">{rowActions}</div>
     </motion.article>
   );
 }
