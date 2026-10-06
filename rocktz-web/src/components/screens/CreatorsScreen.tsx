@@ -180,9 +180,9 @@ function CreatorFollowerNetworks({ creator, compact = false }: { creator: Creato
   const primary = rows.find((row) => row.followers > 0 && row.followers === headline) ?? rows[0];
 
   return (
-    <div className="min-w-0">
-      <span className={numberClass}>{formatNumber(headline)}</span>
-      <div className="mt-1 flex min-w-0 items-center gap-1.5">
+    <div className={cn("flex min-w-0", compact ? "items-center gap-1.5" : "flex-col")}>
+      <span className={cn(numberClass, "shrink-0")}>{formatNumber(headline)}</span>
+      <div className={cn("flex min-w-0 items-center gap-1", compact ? "" : "mt-1")}>
         <div className="flex shrink-0 items-center gap-1">
           {rows.map((row) => {
             const Icon = row.icon;
@@ -635,16 +635,17 @@ function CreatorListRow({
         <div className="hidden shrink-0 items-center gap-2 lg:flex">{rowActions}</div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-2 border-t border-[#F1F5F9] pt-2">
-          <div className="min-w-0 max-w-[11rem]">
+      <div className="flex flex-col gap-2 border-t border-[#F1F5F9] pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid min-w-0 flex-1 grid-cols-2 items-start gap-x-4 gap-y-2 sm:grid-cols-4">
+          <div className="min-w-0">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
             <CreatorFollowerNetworks creator={creator} compact />
           </div>
-          <div className="min-w-[4.25rem]">
+          <div className="min-w-0">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
             <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
           </div>
-          <div className="min-w-0 max-w-[9rem]">
+          <div className="min-w-0">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
             {creatorContracts.length > 0 ? (
               <span className="flex items-center gap-1 truncate text-[12px] font-bold text-purple-800" title={companyNames}>
@@ -663,8 +664,9 @@ function CreatorListRow({
               <CreatorFeeValue creator={creator} contracts={creatorContracts} />
             </span>
           </div>
+        </div>
         {creator.status === "review" && canModerate ? (
-          <div className="flex shrink-0 items-center gap-2 sm:ml-1">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => onApprove(creator)}
@@ -1245,25 +1247,26 @@ function CreatorsInner() {
       </div>
       ) : null}
 
-      <div className="flex flex-col items-center gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-6 shadow-sm lg:flex-row">
-        <div className="relative w-full flex-1">
-          <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={18} />
+      <div className="flex flex-col gap-3 rounded-[16px] border border-[#E2E8F0] bg-white p-4 shadow-sm">
+        <div className="relative w-full min-w-0">
+          <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={18} />
           <input
-            type="text"
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("creators.search")}
-            className="w-full rounded-lg border border-[#E2E8F0] py-2.5 pr-4 pl-10 text-sm outline-none transition-all focus:border-brand-primary"
+            aria-label={t("creators.search")}
+            className="h-[42px] w-full rounded-lg border border-[#E2E8F0] bg-[#F9FAFB] pr-4 pl-10 text-sm outline-none transition-all focus:border-brand-primary focus:bg-white"
           />
         </div>
-        <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Select2Field
             theme="light"
             searchable={false}
             value={categoryFilter}
             options={categoryOptions}
             onChange={setCategoryFilter}
-            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
+            className="min-w-0"
             triggerClassName={FILTER_TRIGGER}
           />
           {isAdmin ? (
@@ -1273,7 +1276,7 @@ function CreatorsInner() {
               value={statusFilter}
               options={statusOptions}
               onChange={setStatusFilter}
-              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              className="min-w-0"
               triggerClassName={FILTER_TRIGGER}
             />
           ) : isCompany ? (
@@ -1283,7 +1286,7 @@ function CreatorsInner() {
               value={statusFilter}
               options={statusOptions.filter((option) => option.value === "all" || option.value === "active" || option.value === "review")}
               onChange={setStatusFilter}
-              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              className="min-w-0"
               triggerClassName={FILTER_TRIGGER}
             />
           ) : null}
@@ -1293,7 +1296,7 @@ function CreatorsInner() {
             value={networkFilter}
             options={networkOptions}
             onChange={setNetworkFilter}
-            className="min-w-[220px] flex-1 lg:w-60 lg:flex-none"
+            className="min-w-0"
             triggerClassName={FILTER_TRIGGER}
           />
           {groups.length > 0 ? (
@@ -1302,7 +1305,7 @@ function CreatorsInner() {
               value={groupFilter}
               options={groupOptions}
               onChange={setGroupFilter}
-              className="min-w-[200px] flex-1 lg:w-56 lg:flex-none"
+              className="min-w-0"
               triggerClassName={FILTER_TRIGGER}
             />
           ) : null}
@@ -1314,7 +1317,7 @@ function CreatorsInner() {
               setCountryFilter(country);
               setRegionFilter([]);
             }}
-            className="min-w-[200px] flex-1 lg:w-52 lg:flex-none"
+            className="min-w-0"
             triggerClassName={FILTER_TRIGGER}
           />
           <RegionSelect
@@ -1324,7 +1327,7 @@ function CreatorsInner() {
             value={regionFilter}
             emptyLabel={t("creators.allRegions").toUpperCase()}
             onChange={setRegionFilter}
-            className="min-w-[220px] flex-1 lg:w-64 lg:flex-none"
+            className="min-w-0"
             triggerClassName={FILTER_TRIGGER}
           />
           <Select2Field
@@ -1333,7 +1336,7 @@ function CreatorsInner() {
             value={String(pageSize)}
             options={PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: t("creators.pageSize", { count: size }) }))}
             onChange={changePageSize}
-            className="min-w-[180px] flex-1 lg:w-44 lg:flex-none"
+            className="min-w-0"
             triggerClassName={FILTER_TRIGGER}
           />
         </div>
