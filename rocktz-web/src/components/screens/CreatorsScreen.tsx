@@ -636,14 +636,16 @@ function CreatorListRow({
       </div>
 
       <div className="flex flex-col gap-2 border-t border-[#F1F5F9] pt-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid min-w-0 flex-1 grid-cols-2 items-start gap-x-4 gap-y-2 sm:grid-cols-4">
-          <div className="min-w-0">
-            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
-            <CreatorFollowerNetworks creator={creator} compact />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
-            <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-6 gap-y-2">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="min-w-0">
+              <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colFollowers")}</span>
+              <CreatorFollowerNetworks creator={creator} compact />
+            </div>
+            <div className="shrink-0 border-l border-[#E2E8F0] pl-3">
+              <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colAvgViews")}</span>
+              <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
+            </div>
           </div>
           <div className="min-w-0">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
