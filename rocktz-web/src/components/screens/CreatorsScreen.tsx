@@ -714,6 +714,7 @@ function CreatorsInner() {
   const [groups, setGroups] = useState<CreatorGroup[]>([]);
   const [groupFilter, setGroupFilter] = useState("all");
   const [networkFilter, setNetworkFilter] = useState("all");
+  const [socialFilter, setSocialFilter] = useState("all");
   const [minFollowers, setMinFollowers] = useState("");
   const [maxFollowers, setMaxFollowers] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -841,6 +842,11 @@ function CreatorsInner() {
     return new Set((group?.creators ?? []).map((creator) => creator.id));
   }, [groups, groupFilter]);
 
+  const socialOptions = useMemo(() => [
+    { value: "all", label: t("creators.allSocialNetworks").toUpperCase() },
+    ...SOCIAL_NETWORKS.map((network) => ({ value: network.key, label: t(network.labelKey).toUpperCase() })),
+  ], [t]);
+
   const networkOptions = useMemo(() => [
     { value: "all", label: t("creators.allNetworkSizes").toUpperCase() },
     { value: "nano", label: t("creators.networkNano").toUpperCase() },
@@ -881,16 +887,17 @@ function CreatorsInner() {
       const matchesMinFollowers = !minFollowers || followers >= parseIntegerMask(minFollowers);
       const matchesMaxFollowers = !maxFollowers || followers <= parseIntegerMask(maxFollowers);
       const matchesNetwork = !bounds || matchesNetworkRange(followers, bounds.min, bounds.max);
+      const matchesSocial = socialFilter === "all" || String(creator.socials?.[socialFilter] ?? "").trim() !== "";
       const matchesGroup = !groupMemberIds || groupMemberIds.has(creator.id);
       const matchesMinPrice = !minPrice || reel >= parseMoneyMask(minPrice, filterCurrency);
       const matchesMaxPrice = !maxPrice || reel <= parseMoneyMask(maxPrice, filterCurrency);
-      return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesNetwork && matchesGroup && matchesMinPrice && matchesMaxPrice;
+      return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesNetwork && matchesSocial && matchesGroup && matchesMinPrice && matchesMaxPrice;
     });
-  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, groupMemberIds]);
+  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, socialFilter, groupMemberIds]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, networkFilter, groupFilter, pageSize]);
+  }, [search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, networkFilter, socialFilter, groupFilter, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -1292,6 +1299,15 @@ function CreatorsInner() {
               triggerClassName={FILTER_TRIGGER}
             />
           ) : null}
+          <Select2Field
+            theme="light"
+            searchable={false}
+            value={socialFilter}
+            options={socialOptions}
+            onChange={setSocialFilter}
+            className="min-w-0"
+            triggerClassName={FILTER_TRIGGER}
+          />
           <Select2Field
             theme="light"
             searchable={false}
