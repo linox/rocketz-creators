@@ -197,6 +197,11 @@ function CampaignCard({
                 <Cake size={10} /> {t("campaigns.ageLimited")}
               </span>
             ) : null}
+            {campaign.max_approved_creators != null ? (
+              <span className="flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-slate-100 uppercase backdrop-blur-md">
+                <Users size={10} /> {campaign.approved_creators_count != null ? t("campaigns.approvedLimitProgress", { count: campaign.approved_creators_count, max: campaign.max_approved_creators }) : t("campaigns.approvedLimitBadge", { count: campaign.max_approved_creators })}
+              </span>
+            ) : null}
             {(campaign.creator_groups?.length ?? 0) > 0 ? (
               <span className="flex items-center gap-1 rounded-full border border-indigo-400/40 bg-indigo-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-indigo-100 uppercase backdrop-blur-md">
                 <UsersRound size={10} /> {campaign.creator_groups?.length === 1 ? t("campaigns.groupLimited", { name: campaign.creator_groups[0]?.name }) : t("campaigns.groupsLimited", { count: campaign.creator_groups?.length ?? 0 })}

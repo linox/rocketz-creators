@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\User;
 
@@ -18,5 +19,14 @@ class CreatorPrivacy
         }
 
         return $viewer->role === UserRole::Creator && (int) $viewer->creator?->id === $creatorId;
+    }
+
+    public static function hidesCreatorValues(?User $viewer): bool
+    {
+        if (! $viewer || ! in_array($viewer->role, [UserRole::Admin, UserRole::Company], true)) {
+            return false;
+        }
+
+        return $viewer->hasPermission(Permission::CreatorsHideValues);
     }
 }

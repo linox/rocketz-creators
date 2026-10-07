@@ -40,6 +40,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'limit_by_age',
     'min_age',
     'max_age',
+    'max_approved_creators',
     'restrict_to_landing',
     'min_followers',
     'max_followers',
@@ -100,6 +101,7 @@ class Campaign extends Model
             'limit_by_age' => 'boolean',
             'min_age' => 'integer',
             'max_age' => 'integer',
+            'max_approved_creators' => 'integer',
             'restrict_to_landing' => 'boolean',
             'min_followers' => 'integer',
             'max_followers' => 'integer',
@@ -189,8 +191,33 @@ class Campaign extends Model
         return (bool) $this->has_custom_contract && filled($this->custom_contract_terms);
     }
 
+    public function approvedCreatorsCount(bool $fresh = false): int
+    {
+        if (! $fresh && array_key_exists('approved_creators_count', $this->attributes)) {
+            return (int) $this->attributes['approved_creators_count'];
+        }
+
+        return (int) $this->campaignCreators()
+            ->where('application_status', ApplicationStatus::Approved)
+            ->count();
+    }
+
+    public function approvedCreatorsLimitReached(bool $fresh = false): bool
+    {
+        $limit = $this->max_approved_creators;
+        if ($limit === null || (int) $limit < 1) {
+            return false;
+        }
+
+        return $this->approvedCreatorsCount($fresh) >= (int) $limit;
+    }
+
     public function isAcceptingApplications(): bool
     {
+        if ($this->status === CampaignStatus::Finished || $this->approvedCreatorsLimitReached()) {
+            return false;
+        }
+
         if ($this->is_barter) {
             return true;
         }

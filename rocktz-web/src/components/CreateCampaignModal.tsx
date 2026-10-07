@@ -23,6 +23,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignAgeFields } from "@/components/CampaignAgeFields";
+import { CampaignApprovedLimitFields, parseApprovedLimit } from "@/components/CampaignApprovedLimitFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
@@ -37,7 +38,9 @@ import { parseMoneyMask, remaskMoney } from "@/lib/masks";
 import { parseAgeLimit } from "@/lib/campaign-age";
 import { rangeFromTier } from "@/lib/network-size";
 import { uploadScriptDocument } from "@/lib/script-document";
+import { userHidesCreatorValues } from "@/lib/auth";
 import { usePrivacy } from "@/lib/privacy";
+import { useAuth } from "@/lib/use-auth";
 import type { PostingProfile } from "@/lib/posting-profile";
 
 type Tab = "geral" | "entregas" | "briefing";
@@ -113,6 +116,7 @@ export function CreateCampaignModal({
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const { formatCurrency } = usePrivacy();
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   const [tab, setTab] = useState<Tab>("geral");
   const [farthestTab, setFarthestTab] = useState<Tab>("geral");
   const [saving, setSaving] = useState(false);
@@ -134,6 +138,8 @@ export function CreateCampaignModal({
   const [limitByAge, setLimitByAge] = useState(false);
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
+  const [limitApproved, setLimitApproved] = useState(false);
+  const [maxApproved, setMaxApproved] = useState("");
   const [restrictToLanding, setRestrictToLanding] = useState(false);
   const [landingPageId, setLandingPageId] = useState("");
   const [groupIds, setGroupIds] = useState<number[]>([]);
@@ -255,7 +261,7 @@ export function CreateCampaignModal({
         return;
       }
     }
-    if (!isBarter && (!creatorCache.trim() || parseMoneyMask(creatorCache, currency) <= 0)) {
+    if (!hideCreatorValues && !isBarter && (!creatorCache.trim() || parseMoneyMask(creatorCache, currency) <= 0)) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
       return;
@@ -278,6 +284,12 @@ export function CreateCampaignModal({
       setTab("geral");
       const message = ageLimit.error === "range" ? t("campaigns.ageRangeInvalid") : ageLimit.error === "required" ? t("campaigns.ageRequired") : t("campaigns.ageInvalid");
       await alertWarning(tc("alerts.incompleteTitle"), message);
+      return;
+    }
+    const approvedLimit = parseApprovedLimit(limitApproved, maxApproved);
+    if (!approvedLimit.ok) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.maxApprovedRequired"));
       return;
     }
     const audience = rangeFromTier(networkTier, minFollowers, maxFollowers);
@@ -315,7 +327,7 @@ export function CreateCampaignModal({
         end_date: endDate,
         delivery_date: deliveryDate || null,
         total_budget: isBarter ? 0 : budget ? parseMoneyMask(budget, currency) : null,
-        creator_cache: isBarter ? 0 : creatorCache ? parseMoneyMask(creatorCache, currency) : null,
+        ...(hideCreatorValues ? {} : { creator_cache: isBarter ? 0 : creatorCache ? parseMoneyMask(creatorCache, currency) : null }),
         agency_fee_percent: isAdmin ? feePercent ?? DEFAULT_AGENCY_FEE_PERCENT : undefined,
         image_url: imageUrl || null,
         is_secret: isSecret,
@@ -327,6 +339,7 @@ export function CreateCampaignModal({
         limit_by_age: ageLimit.limit_by_age,
         min_age: ageLimit.min_age,
         max_age: ageLimit.max_age,
+        max_approved_creators: approvedLimit.max_approved_creators,
         restrict_to_landing: restrictToLanding,
         company_landing_page_id: restrictToLanding && landingPageId ? Number(landingPageId) : null,
         creator_group_ids: groupIds,
@@ -464,12 +477,14 @@ export function CreateCampaignModal({
                   </div>
                 </div>
 
-                <div className={`grid gap-4 ${isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
+                <div className={`grid gap-4 ${hideCreatorValues ? (isAdmin ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1") : isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
+                  {hideCreatorValues ? null : (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.creatorCache", { currency })}{!isBarter ? " *" : ""}</label>
                     <MoneyInput currency={currency} placeholder={t("campaigns.creatorCachePh")} disabled={isBarter} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={setCreatorCache} />
                     <span className="text-[10px] leading-relaxed text-[#64748B]">{t("campaigns.creatorCacheHint")}</span>
                   </div>
+                  )}
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.budget", { currency })}</label>
@@ -536,6 +551,15 @@ export function CreateCampaignModal({
                   onStateChange={setRegionState}
                   city={city}
                   onCityChange={setCity}
+                />
+                <CampaignApprovedLimitFields
+                  enabled={limitApproved}
+                  onEnabledChange={(value) => {
+                    setLimitApproved(value);
+                    if (!value) setMaxApproved("");
+                  }}
+                  maxApproved={maxApproved}
+                  onMaxApprovedChange={setMaxApproved}
                 />
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                   <input type="checkbox" checked={isSecret} onChange={(e) => setIsSecret(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600" />

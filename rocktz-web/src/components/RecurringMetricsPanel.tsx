@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { PostMetricsPanel, type PostMetricsRow } from "@/components/CampaignMetricsPanel";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
+import { userHidesCreatorValues } from "@/lib/auth";
+import { useAuth } from "@/lib/use-auth";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { moneyCurrency } from "@/lib/geo";
 import type { PlanningItem, RecurringContract } from "@/lib/types";
@@ -29,6 +31,7 @@ function networkHint(contentType: string): string {
 
 export function RecurringMetricsPanel({ contract, items, month, onMonthChange, locale, formatNumber, onContract }: Props) {
   const { t } = useTranslation("app");
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   const [syncing, setSyncing] = useState<"all" | number | null>(null);
 
   const monthOptions = useMemo(() => {
@@ -46,10 +49,10 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
   const costByCreator = useMemo(() => {
     const map = new Map<number, number>();
     for (const row of contract.creators ?? []) {
-      map.set(row.creator_id, Number(row.monthly_cache ?? row.monthly_fee ?? 0));
+      map.set(row.creator_id, hideCreatorValues ? 0 : Number(row.monthly_cache ?? row.monthly_fee ?? 0));
     }
     return map;
-  }, [contract.creators]);
+  }, [contract.creators, hideCreatorValues]);
 
   const rows = useMemo<PostMetricsRow[]>(
     () =>

@@ -106,6 +106,7 @@ return [
     'creator_group_removed' => 'Grupo removido.',
     'network_range_invalid' => 'O máximo de seguidores precisa ser maior ou igual ao mínimo.',
     'campaign_budget_full' => 'Esta campanha já atingiu o orçamento dos criadores aprovados e não recebe novas candidaturas.',
+    'campaign_approved_limit_full' => 'Esta campanha já atingiu o limite de pessoas aprovadas e foi encerrada.',
     'social_handle_required' => 'Informe o usuário ou o link do canal para buscar os dados.',
     'social_network_unsupported' => 'Rede social não suportada para busca automática.',
     'social_profile_not_found' => 'Não encontramos esse canal. Confira o usuário e tente de novo.',

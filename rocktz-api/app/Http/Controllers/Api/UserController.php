@@ -73,7 +73,7 @@ class UserController extends Controller
 
             $slugs = array_key_exists('permissions', $data)
                 ? array_map(fn ($slug) => (string) $slug, $data['permissions'] ?? [])
-                : Permission::slugsForRole($role);
+                : Permission::defaultSlugsForRole($role);
             $this->permissions->sync($user, $slugs);
 
             return $user;

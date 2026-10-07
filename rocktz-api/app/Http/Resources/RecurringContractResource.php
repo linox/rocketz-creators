@@ -16,6 +16,7 @@ class RecurringContractResource extends JsonResource
     public function toArray(Request $request): array
     {
         $isCreator = $request->user()?->role === UserRole::Creator;
+        $hideCreatorValues = CreatorPrivacy::hidesCreatorValues($request->user());
 
         return [
             'id' => $this->id,
@@ -53,9 +54,9 @@ class RecurringContractResource extends JsonResource
                     'categories' => $row->creator->categories ?? [],
                     'socials' => $row->creator->socials ?? [],
                 ] : null,
-                'monthly_cache' => $row->monthly_cache !== null ? (float) $row->monthly_cache : null,
-                'monthly_fee' => $row->monthly_fee !== null ? (float) $row->monthly_fee : null,
-                'deliverables_fee' => $row->deliverables_fee !== null ? (float) $row->deliverables_fee : null,
+                'monthly_cache' => $hideCreatorValues ? null : ($row->monthly_cache !== null ? (float) $row->monthly_cache : null),
+                'monthly_fee' => $hideCreatorValues ? null : ($row->monthly_fee !== null ? (float) $row->monthly_fee : null),
+                'deliverables_fee' => $hideCreatorValues ? null : ($row->deliverables_fee !== null ? (float) $row->deliverables_fee : null),
                 'monthly_deliverables' => $row->monthly_deliverables ?? [],
                 'notes' => $row->notes,
             ])),

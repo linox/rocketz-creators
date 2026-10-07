@@ -26,7 +26,7 @@ import { matchesNetworkRange, networkSize, NETWORK_TIER_BOUNDS } from "@/lib/net
 import { CREATOR_CATEGORY_VALUES, creatorCategoryOptions } from "@/lib/creatorCategories";
 import { creatorTermAudit, downloadCreatorTermDocument, type CreatorTermDocLabels } from "@/lib/creator-contract-document";
 import { useAuth } from "@/lib/use-auth";
-import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
+import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 
@@ -256,6 +256,9 @@ function CreatorFeeValue({
 }) {
   const { t } = useTranslation("app");
   const { formatCurrency } = usePrivacy();
+  if (userHidesCreatorValues(useAuth())) {
+    return <>{HIDDEN_CREATOR_VALUE}</>;
+  }
   const monthly = formatMoneyGroups(
     formatCurrency,
     contracts.map((contract) => {
@@ -833,6 +836,7 @@ function CreatorsInner() {
     }
   }
 
+  const hideCreatorValues = userHidesCreatorValues(user);
   const pendingCount = creators.filter((c) => c.status === "review").length;
   const activeCount = creators.filter((c) => c.status === "active").length;
 
@@ -889,11 +893,11 @@ function CreatorsInner() {
       const matchesNetwork = !bounds || matchesNetworkRange(followers, bounds.min, bounds.max);
       const matchesSocial = socialFilter === "all" || String(creator.socials?.[socialFilter] ?? "").trim() !== "";
       const matchesGroup = !groupMemberIds || groupMemberIds.has(creator.id);
-      const matchesMinPrice = !minPrice || reel >= parseMoneyMask(minPrice, filterCurrency);
-      const matchesMaxPrice = !maxPrice || reel <= parseMoneyMask(maxPrice, filterCurrency);
+      const matchesMinPrice = hideCreatorValues || !minPrice || reel >= parseMoneyMask(minPrice, filterCurrency);
+      const matchesMaxPrice = hideCreatorValues || !maxPrice || reel <= parseMoneyMask(maxPrice, filterCurrency);
       return matchesSearch && matchesStatus && matchesCategory && matchesCountry && matchesRegion && matchesMinFollowers && matchesMaxFollowers && matchesNetwork && matchesSocial && matchesGroup && matchesMinPrice && matchesMaxPrice;
     });
-  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, socialFilter, groupMemberIds]);
+  }, [creators, search, statusFilter, categoryFilter, countryFilter, regionFilter, minFollowers, maxFollowers, minPrice, maxPrice, filterCurrency, networkFilter, socialFilter, groupMemberIds, hideCreatorValues]);
 
   useEffect(() => {
     setPage(1);
@@ -1384,7 +1388,7 @@ function CreatorsInner() {
                 />
               </div>
             ))}
-            {[
+            {hideCreatorValues ? null : [
               { label: t("creators.minPrice"), value: minPrice, set: setMinPrice, placeholder: t("creators.minPricePh") },
               { label: t("creators.maxPrice"), value: maxPrice, set: setMaxPrice, placeholder: t("creators.maxPricePh") },
             ].map((field) => (

@@ -522,6 +522,15 @@
     "ageRequired": "Informe a idade mínima, a máxima ou as duas.",
     "ageRangeInvalid": "A idade máxima precisa ser maior ou igual à mínima.",
     "ageInvalid": "Informe idades entre 0 e 120.",
+    "limitApprovedTitle": "Limitar pessoas aprovadas",
+    "limitApprovedHint": "Ao atingir essa quantidade de pessoas aprovadas, a campanha é encerrada e deixa de receber candidaturas. Se uma aprovação for desfeita e sobrar vaga, ela volta para seleção.",
+    "maxApproved": "Quantidade",
+    "maxApprovedPh": "Ex: 10",
+    "maxApprovedRequired": "Informe quantas pessoas aprovadas encerram a campanha.",
+    "approvedLimitBadge": "Fecha com {{count}}",
+    "approvedLimitProgress": "{{count}} de {{max}} aprovados",
+    "approvedLimitClosedTitle": "Campanha encerrada",
+    "approvedLimitClosed": "O limite de {{count}} pessoas aprovadas foi atingido e a campanha foi encerrada.",
     "ageLimited": "Idade validada",
     "ageBetween": "{{min}} a {{max}} anos",
     "ageMin": "A partir de {{min}} anos",
@@ -942,6 +951,10 @@
       "logs_view": {
         "label": "Ver logs da plataforma",
         "hint": "Consultar acessos, logins e ações feitas na plataforma."
+      },
+      "creators_hide_values": {
+        "label": "Ocultar valores de criadores",
+        "hint": "Não vê nem altera cachês, tabelas de preço e pagamentos de criadores."
       }
     }
   },

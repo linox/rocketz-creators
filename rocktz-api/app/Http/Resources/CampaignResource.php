@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\UserRole;
+use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -15,6 +16,7 @@ class CampaignResource extends JsonResource
     public function toArray(Request $request): array
     {
         $isCreator = $request->user()?->role === UserRole::Creator;
+        $hideCreatorValues = CreatorPrivacy::hidesCreatorValues($request->user());
 
         return [
             'id' => $this->id,
@@ -36,8 +38,8 @@ class CampaignResource extends JsonResource
             'total_budget' => $isCreator ? null : ($this->total_budget !== null ? (float) $this->total_budget : null),
             'agency_fee' => $isCreator ? null : ($this->agency_fee !== null ? (float) $this->agency_fee : null),
             'agency_fee_percent' => $isCreator ? null : ($this->agency_fee_percent !== null ? (float) $this->agency_fee_percent : null),
-            'creators_budget' => $isCreator ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
-            'creator_cache' => $this->creator_cache !== null ? (float) $this->creator_cache : null,
+            'creators_budget' => $isCreator || $hideCreatorValues ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
+            'creator_cache' => $hideCreatorValues ? null : ($this->creator_cache !== null ? (float) $this->creator_cache : null),
             'currency' => $this->currency ?: $this->company?->currency,
             'status' => $this->status?->value,
             'image_url' => MediaUrl::publicAbsolute($this->image_url),
@@ -48,6 +50,8 @@ class CampaignResource extends JsonResource
             'limit_by_age' => (bool) $this->limit_by_age,
             'min_age' => $this->min_age !== null ? (int) $this->min_age : null,
             'max_age' => $this->max_age !== null ? (int) $this->max_age : null,
+            'max_approved_creators' => $this->max_approved_creators !== null ? (int) $this->max_approved_creators : null,
+            'approved_creators_count' => $this->when(! $isCreator, fn () => $this->approvedCreatorsCount()),
             'restrict_to_landing' => (bool) $this->restrict_to_landing,
             'company_landing_page_id' => $this->company_landing_page_id ? (int) $this->company_landing_page_id : null,
             'min_followers' => $this->audienceVisible($request) && $this->min_followers !== null ? (int) $this->min_followers : null,

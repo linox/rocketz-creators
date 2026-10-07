@@ -54,6 +54,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { formatMoneyGroups, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask, remaskMoney } from "@/lib/masks";
 import type { Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
+import { userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
@@ -210,6 +211,7 @@ function TypeBadge({ type, short }: { type: string; short?: boolean }) {
 
 export function RecurringInner({ embedded: _embedded = false }: { embedded?: boolean }) {
   const user = useAuth();
+  const hideCreatorValues = userHidesCreatorValues(user);
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const { formatCurrency } = usePrivacy();
@@ -789,8 +791,10 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         ) : null}
                       </div>
                       {canManage && fee > 0 ? (
-                        <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5 @[520px]:grid-cols-3">
+                        <div className={cn("mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5", hideCreatorValues ? "" : "@[520px]:grid-cols-3")}>
                           <BudgetCell label={t("recurring.budgetMonthly")} value={pay(fee, contract)} hint={t("recurring.perMonth")} />
+                          {hideCreatorValues ? null : (
+                            <>
                           <BudgetCell label={t("recurring.creatorsLabel", { count: contract.creators?.length || 0 })} value={pay(cost, contract)} hint={t("recurring.perMonth")} />
                           <BudgetCell
                             label={t("recurring.remaining")}
@@ -798,6 +802,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                             hint={remaining >= 0 ? `+${margin}%` : t("recurring.deficit")}
                             tone={remaining >= 0 ? "positive" : "negative"}
                           />
+                            </>
+                          )}
                         </div>
                       ) : isCreator && cost > 0 ? (
                         <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5">
@@ -1287,6 +1293,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                       <span>{t("recurring.projectBudget")}</span>
                       <span className="font-bold text-slate-800">{pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency), editingContract)}</span>
                     </div>
+                    {hideCreatorValues ? null : (
+                      <>
                     <div className="flex items-center justify-between text-slate-500">
                       <span>{t("recurring.creatorsCost", { count: editingContract.creators?.length || 0 })}</span>
                       <span className="font-bold text-slate-700">{pay((editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}</span>
@@ -1297,6 +1305,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         {pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}
                       </span>
                     </div>
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-100 pt-4">
                     <span className="text-xs font-bold tracking-wider text-slate-800 uppercase">{t("recurring.allocatedCreators", { count: editingContract.creators?.length || 0 })}</span>

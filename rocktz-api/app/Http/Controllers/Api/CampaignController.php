@@ -26,6 +26,7 @@ use App\Models\Creator;
 use App\Models\CreatorGroup;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
+use App\Support\CreatorPrivacy;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
@@ -51,7 +52,10 @@ class CampaignController extends Controller
         $user = $request->user();
         $query = $this->scoped($request)
             ->with(['company', 'deliverable', 'landingPage', 'creatorGroups'])
-            ->withCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
+            ->withCount([
+                'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
+                'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+            ]);
 
         if ($user?->role === UserRole::Creator) {
             $creatorId = $user->creator?->id ?: 0;
@@ -97,6 +101,7 @@ class CampaignController extends Controller
 
         $query = Campaign::query()
             ->with(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators'])
+            ->withCount(['campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved)])
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
@@ -118,7 +123,10 @@ class CampaignController extends Controller
     {
         $this->assertCanView($request, $campaign);
         $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
-        $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
+        $campaign->loadCount([
+            'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
+            'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+        ]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
     }
@@ -179,7 +187,10 @@ class CampaignController extends Controller
         }
 
         $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
-        $campaign->loadCount(['campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending)]);
+        $campaign->loadCount([
+            'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
+            'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+        ]);
 
         return response()->json([
             'status' => $status,
@@ -258,6 +269,7 @@ class CampaignController extends Controller
 
         $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
+        $this->syncCampaignApprovedLimit($campaign, false);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
     }
@@ -278,6 +290,7 @@ class CampaignController extends Controller
         ]);
         $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
+        $this->syncCampaignApprovedLimit($campaign, false);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
     }
@@ -349,7 +362,9 @@ class CampaignController extends Controller
             abort_unless(
                 $alreadyOpen || $locked->isAcceptingApplications(),
                 403,
-                __('auth.campaign_budget_full'),
+                $locked->approvedCreatorsLimitReached(true)
+                    ? __('auth.campaign_approved_limit_full')
+                    : __('auth.campaign_budget_full'),
             );
 
             $payload = [
@@ -417,6 +432,9 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing('campaign');
         abort_unless($campaignCreator->campaign, 404);
         $data = $this->authorizeParticipationUpdate($request, $campaignCreator, $data);
+        if (CreatorPrivacy::hidesCreatorValues($request->user())) {
+            unset($data['amount']);
+        }
         $data = SafeHttpUrl::validateFields($data, ['video_url', 'image_url', 'published_link', 'script_file_url']);
 
         $contentFields = array_intersect_key($data, array_flip(['script', 'script_file_url', 'script_file_name', 'video_url', 'video_file_size', 'image_url', 'published_link']));
@@ -452,7 +470,23 @@ class CampaignController extends Controller
             $data['payment_date'] = now()->toDateString();
         }
 
-        $campaignCreator->fill($data)->save();
+        $wasApproved = $campaignCreator->application_status === ApplicationStatus::Approved;
+        $becomingApproved = $nextStatus === $approvedStatus && ! $wasApproved;
+        $leavingApproved = $wasApproved && $nextStatus !== null && $nextStatus !== $approvedStatus;
+
+        DB::transaction(function () use ($campaignCreator, $data, $becomingApproved, $leavingApproved) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaignCreator->campaign_id);
+            $wasFull = $locked->approvedCreatorsLimitReached(true);
+            if ($becomingApproved && $wasFull) {
+                abort(422, __('auth.campaign_approved_limit_full'));
+            }
+
+            $campaignCreator->fill($data)->save();
+            $campaignCreator->setRelation('campaign', $locked);
+            if ($becomingApproved || ($leavingApproved && $wasFull)) {
+                $this->syncCampaignApprovedLimit($locked, $leavingApproved && $wasFull);
+            }
+        });
 
         if ($contentFields) {
             CampaignCreatorContent::query()->updateOrCreate(
@@ -520,7 +554,15 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing('campaign');
         abort_unless($campaignCreator->campaign, 404);
         $this->assertCanManage($request, $campaignCreator->campaign);
-        $campaignCreator->delete();
+        $wasApproved = $campaignCreator->application_status === ApplicationStatus::Approved;
+        DB::transaction(function () use ($campaignCreator, $wasApproved) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaignCreator->campaign_id);
+            $wasFull = $wasApproved && $locked->approvedCreatorsLimitReached(true);
+            $campaignCreator->delete();
+            if ($wasFull) {
+                $this->syncCampaignApprovedLimit($locked, true);
+            }
+        });
 
         return response()->json(['message' => __('auth.creator_removed')]);
     }
@@ -533,27 +575,45 @@ class CampaignController extends Controller
             'delivery_type' => ['nullable', 'string'],
         ]);
 
+        if (CreatorPrivacy::hidesCreatorValues($request->user())) {
+            unset($data['amount']);
+        }
+
         $creator = Creator::query()->findOrFail($data['creator_id']);
         $this->assertCreatorEligibility($campaign, $creator, true);
 
-        $existing = CampaignCreator::query()
-            ->where('campaign_id', $campaign->id)
-            ->where('creator_id', $data['creator_id'])
-            ->first();
-        $shouldNotify = $existing === null
-            || $existing->application_status !== ApplicationStatus::Approved;
+        $shouldNotify = false;
+        $row = DB::transaction(function () use ($campaign, $data, &$shouldNotify) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
+            $existing = CampaignCreator::query()
+                ->where('campaign_id', $locked->id)
+                ->where('creator_id', $data['creator_id'])
+                ->lockForUpdate()
+                ->first();
+            $alreadyApproved = $existing?->application_status === ApplicationStatus::Approved;
+            if (! $alreadyApproved && $locked->approvedCreatorsLimitReached(true)) {
+                abort(422, __('auth.campaign_approved_limit_full'));
+            }
 
-        $row = CampaignCreator::query()->updateOrCreate(
-            ['campaign_id' => $campaign->id, 'creator_id' => $data['creator_id']],
-            [
-                'amount' => array_key_exists('amount', $data) && $data['amount'] !== null
-                    ? $data['amount']
-                    : $this->defaultCreatorAmount($campaign),
-                'delivery_type' => $data['delivery_type'] ?? 'ugc',
-                'application_status' => ApplicationStatus::Approved,
-                'delivery_status' => DeliveryStatus::Pending,
-            ],
-        );
+            $created = CampaignCreator::query()->updateOrCreate(
+                ['campaign_id' => $locked->id, 'creator_id' => $data['creator_id']],
+                [
+                    'amount' => array_key_exists('amount', $data) && $data['amount'] !== null
+                        ? $data['amount']
+                        : $this->defaultCreatorAmount($locked),
+                    'delivery_type' => $data['delivery_type'] ?? 'ugc',
+                    'application_status' => ApplicationStatus::Approved,
+                    'delivery_status' => DeliveryStatus::Pending,
+                ],
+            );
+            if (! $alreadyApproved) {
+                $this->syncCampaignApprovedLimit($locked, false);
+            }
+            $created->setRelation('campaign', $locked);
+            $shouldNotify = ! $alreadyApproved;
+
+            return $created;
+        });
 
         if ($shouldNotify && ! $campaign->isPendingAgency()) {
             $this->notifications->notifyCreator((int) $data['creator_id'], [
@@ -590,7 +650,7 @@ class CampaignController extends Controller
             'agency_fee' => ['nullable', 'numeric'],
             'agency_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'creators_budget' => ['nullable', 'numeric'],
-            'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter')), 'nullable', 'numeric', 'min:0'],
+            'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter') && ! CreatorPrivacy::hidesCreatorValues($user)), 'nullable', 'numeric', 'min:0'],
             'status' => ['nullable', Rule::enum(CampaignStatus::class)],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'is_secret' => ['sometimes', 'boolean'],
@@ -600,6 +660,7 @@ class CampaignController extends Controller
             'limit_by_age' => ['sometimes', 'boolean'],
             'min_age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
             'max_age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
+            'max_approved_creators' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10000'],
             'restrict_to_landing' => ['sometimes', 'boolean'],
             'company_landing_page_id' => ['sometimes', 'nullable', 'integer'],
             'creator_group_ids' => ['sometimes', 'array'],
@@ -660,6 +721,10 @@ class CampaignController extends Controller
         if ($creating) {
             $data['approval_flow'] ??= ApprovalFlowType::ScriptAndVideo;
             $data['posting_profile'] ??= PostingProfile::Creator;
+        }
+
+        if (CreatorPrivacy::hidesCreatorValues($user)) {
+            unset($data['creator_cache'], $data['creators_budget']);
         }
 
         return $this->withAgencyFeeSplit(
@@ -1137,6 +1202,25 @@ class CampaignController extends Controller
         }
 
         $this->mail->campaignVisible($campaign);
+    }
+
+    private function syncCampaignApprovedLimit(Campaign $campaign, bool $mayReopen): void
+    {
+        $limit = $campaign->max_approved_creators;
+        if ($limit === null || (int) $limit < 1) {
+            return;
+        }
+
+        $reached = $campaign->approvedCreatorsLimitReached(true);
+        if ($reached && ! in_array($campaign->status, [CampaignStatus::Finished, CampaignStatus::PendingAgency], true)) {
+            $campaign->forceFill(['status' => CampaignStatus::Finished])->save();
+
+            return;
+        }
+
+        if ($mayReopen && ! $reached && $campaign->status === CampaignStatus::Finished) {
+            $campaign->forceFill(['status' => CampaignStatus::Selection])->save();
+        }
     }
 
     private function defaultCreatorAmount(Campaign $campaign): float

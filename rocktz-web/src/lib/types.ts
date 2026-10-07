@@ -231,6 +231,8 @@ export type Campaign = {
   limit_by_age?: boolean;
   min_age?: number | null;
   max_age?: number | null;
+  max_approved_creators?: number | null;
+  approved_creators_count?: number | null;
   restrict_to_landing?: boolean;
   state?: string | null;
   city?: string | null;

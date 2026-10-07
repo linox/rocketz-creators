@@ -21,6 +21,7 @@ use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
+use App\Support\CreatorPrivacy;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
@@ -251,6 +252,9 @@ class RecurringContractController extends Controller
             'monthly_deliverables' => ['nullable', 'array'],
             'notes' => ['nullable', 'string'],
         ]);
+        if (CreatorPrivacy::hidesCreatorValues($request->user())) {
+            unset($data['monthly_cache'], $data['monthly_fee'], $data['deliverables_fee']);
+        }
         $this->assertCompanyCanAssignCreators($request, [(int) $data['creator_id']], $recurringContract);
         $this->publishIfActorCan($request, $recurringContract);
         $row = $recurringContract->recurringContractCreators()->updateOrCreate(
@@ -264,7 +268,13 @@ class RecurringContractController extends Controller
             $this->notifyRecurringAssigned($recurringContract, (int) $row->creator_id);
         }
 
-        return response()->json(['data' => $row->load('creator')], 201);
+        $row->load('creator');
+        if (CreatorPrivacy::hidesCreatorValues($request->user())) {
+            $row->makeHidden(['monthly_cache', 'monthly_fee', 'deliverables_fee']);
+            $row->creator?->makeHidden(['pricing']);
+        }
+
+        return response()->json(['data' => $row], 201);
     }
 
     public function generateMonthDemands(Request $request, RecurringContract $recurringContract): JsonResponse

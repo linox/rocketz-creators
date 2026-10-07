@@ -6,6 +6,8 @@ import { ArrowDownWideNarrow, ArrowUpNarrowWide, BarChart3, Clapperboard, Downlo
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { userHidesCreatorValues } from "@/lib/auth";
+import { useAuth } from "@/lib/use-auth";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { moneyCurrency } from "@/lib/geo";
@@ -664,6 +666,7 @@ export function PostMetricsPanel({
 
 export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onCampaign }: CampaignProps) {
   const { t } = useTranslation("app");
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   const [syncing, setSyncing] = useState<"all" | number | null>(null);
 
   const mapped = useMemo<PostMetricsRow[]>(
@@ -673,14 +676,14 @@ export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onC
         creator: row.creator,
         published_link: row.content?.published_link ?? null,
         metrics: row.content?.metrics,
-        cost: campaign.is_barter || campaign.is_direct_contract ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0,
+        cost: hideCreatorValues || campaign.is_barter || campaign.is_direct_contract ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0,
         costKey: row.creator_id || row.id,
         videoDownloadUrl:
           row.video_status === "approved"
             ? row.content?.video_download_url || row.content?.video_url || null
             : null,
       })),
-    [campaign.creator_cache, campaign.is_barter, campaign.is_direct_contract, rows],
+    [campaign.creator_cache, campaign.is_barter, campaign.is_direct_contract, hideCreatorValues, rows],
   );
 
   async function refresh(campaignCreatorId?: number) {

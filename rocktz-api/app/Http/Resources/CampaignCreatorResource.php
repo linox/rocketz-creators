@@ -14,11 +14,13 @@ class CampaignCreatorResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $hideCreatorValues = CreatorPrivacy::hidesCreatorValues($request->user());
+
         return [
             'id' => $this->id,
             'campaign_id' => $this->campaign_id,
             'creator_id' => $this->creator_id,
-            'creator' => $this->whenLoaded('creator', function () use ($request) {
+            'creator' => $this->whenLoaded('creator', function () use ($request, $hideCreatorValues) {
                 $canSeePersonal = CreatorPrivacy::canViewPersonalData($request->user(), (int) $this->creator->id);
                 $creator = [
                     'id' => $this->creator->id,
@@ -42,7 +44,7 @@ class CampaignCreatorResource extends JsonResource
                     $creator['shipping_address'] = $this->creator->shipping_address;
                     $creator['categories'] = $this->creator->categories ?? [];
                     $creator['metrics'] = $this->creator->metrics ?? [];
-                    $creator['pricing'] = $this->creator->pricing ?? [];
+                    $creator['pricing'] = $hideCreatorValues ? [] : ($this->creator->pricing ?? []);
                     $creator['socials'] = $this->creator->socials ?? [];
                 }
 
@@ -56,7 +58,7 @@ class CampaignCreatorResource extends JsonResource
                 'currency' => $this->campaign->currency,
             ]),
             'delivery_type' => $this->delivery_type,
-            'amount' => $this->amount !== null ? (float) $this->amount : null,
+            'amount' => $hideCreatorValues ? null : ($this->amount !== null ? (float) $this->amount : null),
             'delivery_date' => $this->delivery_date?->toDateString(),
             'post_date' => $this->post_date?->toDateString(),
             'delivery_status' => $this->delivery_status?->value,

@@ -67,6 +67,7 @@ import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignMo
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignAgeFields } from "@/components/CampaignAgeFields";
+import { CampaignApprovedLimitFields, parseApprovedLimit } from "@/components/CampaignApprovedLimitFields";
 import { CampaignShippingPanel } from "@/components/CampaignShippingPanel";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
@@ -94,6 +95,7 @@ import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryS
 import { effectiveCampaignDeliveryDate } from "@/lib/delivery-date";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, CreatorGroup, RevisionHistoryEntry } from "@/lib/types";
+import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -432,6 +434,7 @@ function CoverPicker({ value, onChange, label }: { value: string; onChange: (url
 
 function DetailInner() {
   const user = useAuth();
+  const hideCreatorValues = userHidesCreatorValues(user);
   const router = useRouter();
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
@@ -506,6 +509,8 @@ function DetailInner() {
     limit_by_age: false,
     min_age: "",
     max_age: "",
+    limit_approved: false,
+    max_approved_creators: "",
     restrict_to_landing: false,
     company_landing_page_id: "",
     creator_group_ids: [] as number[],
@@ -537,14 +542,16 @@ function DetailInner() {
   const [creatorEdit, setCreatorEdit] = useState({ amount: "", delivery_type: "", delivery_date: "", post_date: "", video_url: "", published_link: "" });
 
   async function load() {
-    if (!id || id === "_") return;
+    if (!id || id === "_") return null;
     try {
       const res = await api.campaign(id);
       setCampaign(res.data);
       setImageUrl(res.data.image_url || "");
+      return res.data;
     } catch (err) {
       await alertApiError(err);
       setCampaign(null);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -740,26 +747,31 @@ function DetailInner() {
     setUpdatingId(row.id);
     try {
       await api.updateParticipation(row.id, body);
-      await load();
-      return true;
+      return await load();
     } catch (err) {
       await alertApiError(err);
-      return false;
+      return null;
     } finally {
       setUpdatingId(null);
     }
   }
 
+  async function notifyIfApprovedLimitClosed(previous: Campaign, next: Campaign | null) {
+    if (!next || previous.status === "finished" || next.status !== "finished" || next.max_approved_creators == null) return;
+    await alertSuccess(t("campaigns.approvedLimitClosedTitle"), t("campaigns.approvedLimitClosed", { count: next.max_approved_creators }));
+  }
+
   async function approveApplication(row: CampaignCreator, amount: number) {
     if (!campaign) return;
     const deliveryType = row.delivery_type || formatDeliverablesSummary(campaign.deliverables) || "ugc";
-    await patch(row, {
+    const next = await patch(row, {
       application_status: "approved",
-      amount,
+      ...(hideCreatorValues ? {} : { amount }),
       delivery_status: row.delivery_status || "pending",
       delivery_type: deliveryType,
       rejection_reason: "",
     });
+    await notifyIfApprovedLimitClosed(campaign, next);
   }
 
   async function rejectApplication(row: CampaignCreator, reason: string) {
@@ -815,7 +827,7 @@ function DetailInner() {
   async function markPaid(row: CampaignCreator) {
     if (!campaign) return;
     if (campaign.is_barter || campaign.is_direct_contract) return;
-    const amount = moneyOrMode(effectiveCreatorFee(row, campaign));
+    const amount = creatorPay(effectiveCreatorFee(row, campaign));
     const pix = row.creator?.pix_key?.trim();
     const ok = await alertConfirm(
       t("campaignDetail.payConfirmTitle"),
@@ -855,7 +867,7 @@ function DetailInner() {
       t("campaignDetail.payAllTitle"),
       t("campaignDetail.payAllText", {
         count: financeSummary.readyRows.length,
-        amount: moneyOrMode(financeSummary.ready),
+        amount: creatorPay(financeSummary.ready),
       }),
       t("campaignDetail.payNow"),
     );
@@ -920,6 +932,8 @@ function DetailInner() {
       limit_by_age: Boolean(campaign.limit_by_age),
       min_age: campaign.min_age != null ? String(campaign.min_age) : "",
       max_age: campaign.max_age != null ? String(campaign.max_age) : "",
+      limit_approved: campaign.max_approved_creators != null,
+      max_approved_creators: campaign.max_approved_creators != null ? String(campaign.max_approved_creators) : "",
       restrict_to_landing: Boolean(campaign.restrict_to_landing || campaign.company_landing_page_id),
       company_landing_page_id: campaign.company_landing_page_id ? String(campaign.company_landing_page_id) : "",
       creator_group_ids: (campaign.creator_groups ?? []).map((group) => group.id),
@@ -977,6 +991,11 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), message);
       return;
     }
+    const approvedLimit = parseApprovedLimit(editForm.limit_approved, editForm.max_approved_creators);
+    if (!approvedLimit.ok) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.maxApprovedRequired"));
+      return;
+    }
     if (editForm.has_custom_contract && !editForm.custom_contract_terms.trim()) {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
       return;
@@ -1002,7 +1021,7 @@ function DetailInner() {
         approval_flow: editForm.approval_flow,
         posting_profile: editForm.posting_profile,
         total_budget: editForm.is_barter ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : null,
-        creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null,
+        ...(hideCreatorValues ? {} : { creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null }),
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
@@ -1017,6 +1036,7 @@ function DetailInner() {
         limit_by_age: ageLimit.limit_by_age,
         min_age: ageLimit.min_age,
         max_age: ageLimit.max_age,
+        max_approved_creators: approvedLimit.max_approved_creators,
         restrict_to_landing: editForm.restrict_to_landing,
         company_landing_page_id: editForm.restrict_to_landing && editForm.company_landing_page_id ? Number(editForm.company_landing_page_id) : null,
         creator_group_ids: editForm.creator_group_ids,
@@ -1070,14 +1090,19 @@ function DetailInner() {
 
   async function assign(creator: Creator) {
     if (!campaign) return;
+    const previous = campaign;
     try {
       await api.assignCreator(campaign.id, {
         creator_id: creator.id,
         delivery_type: formatDeliverablesSummary(campaign.deliverables) || "Reel",
-        amount: effectiveCreatorFee(null, campaign),
+        ...(hideCreatorValues ? {} : { amount: effectiveCreatorFee(null, campaign) }),
       });
       setAddOpen(false);
-      await load();
+      const next = await load();
+      if (previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
+        await alertSuccess(t("campaigns.approvedLimitClosedTitle"), t("campaigns.approvedLimitClosed", { count: next.max_approved_creators }));
+        return;
+      }
       await alertSuccess(t("campaignDetail.added"));
     } catch (err) {
       await alertApiError(err);
@@ -1089,7 +1114,7 @@ function DetailInner() {
     if (!editing) return;
     try {
       await api.updateParticipation(editing.id, {
-        amount: creatorEdit.amount ? parseMoneyMask(creatorEdit.amount, moneyCurrency(campaign)) : 0,
+        ...(hideCreatorValues ? {} : { amount: creatorEdit.amount ? parseMoneyMask(creatorEdit.amount, moneyCurrency(campaign)) : 0 }),
         delivery_type: creatorEdit.delivery_type,
         delivery_date: creatorEdit.delivery_date || null,
         post_date: creatorEdit.post_date || null,
@@ -1162,6 +1187,7 @@ function DetailInner() {
 
   const companyName = campaign.company?.name || t("campaigns.client");
   const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value, moneyCurrency(campaign)));
+  const creatorPay = (value: number) => (hideCreatorValues ? HIDDEN_CREATOR_VALUE : moneyOrMode(value));
   const myFeeDisplay = (() => {
     if (campaign.is_barter) return t("deliveries.barter");
     if (campaign.is_direct_contract) return t("deliveries.direct");
@@ -1236,6 +1262,11 @@ function DetailInner() {
                   {campaign.limit_by_age ? (
                     <span className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
                       <Cake size={9} /> {campaignAgeLabel(t, campaign)}
+                    </span>
+                  ) : null}
+                  {campaign.max_approved_creators != null ? (
+                    <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-700">
+                      <Users size={9} /> {campaign.approved_creators_count != null ? t("campaigns.approvedLimitProgress", { count: campaign.approved_creators_count, max: campaign.max_approved_creators }) : t("campaigns.approvedLimitBadge", { count: campaign.max_approved_creators })}
                     </span>
                   ) : null}
                   {(campaign.creator_groups?.length ?? 0) > 0 ? (
@@ -1423,7 +1454,7 @@ function DetailInner() {
                 {approvedCreators.length === 1 ? t("campaignDetail.kpiCastingOne", { count: approvedCreators.length }) : t("campaignDetail.kpiCastingMany", { count: approvedCreators.length })}
               </span>
             </div>
-            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{moneyOrMode(castingCost)}</span>
+            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{creatorPay(castingCost)}</span>
           </div>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1702,7 +1733,7 @@ function DetailInner() {
                         <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[10px]">
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
-                            <span className="mt-0.5 truncate font-black text-slate-800">{moneyOrMode(effectiveCreatorFee(row, campaign))}</span>
+                            <span className="mt-0.5 truncate font-black text-slate-800">{creatorPay(effectiveCreatorFee(row, campaign))}</span>
                           </div>
                           <div className="flex flex-col justify-between rounded-lg border border-slate-200/60 bg-white/80 p-1.5">
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryStatus")}</span>
@@ -1821,7 +1852,7 @@ function DetailInner() {
                 <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.agreedFee")}</span>
-                    <span className="mt-1 truncate text-sm font-black text-slate-900">{moneyOrMode(effectiveCreatorFee(selected, campaign))}</span>
+                    <span className="mt-1 truncate text-sm font-black text-slate-900">{creatorPay(effectiveCreatorFee(selected, campaign))}</span>
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryFormat")}</span>
@@ -2301,6 +2332,12 @@ function DetailInner() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-col items-stretch gap-4 border-t border-slate-100 pt-3 sm:flex-row sm:items-center lg:flex-col lg:items-end lg:border-t-0 lg:pt-0 xl:flex-row xl:items-center">
+                      {hideCreatorValues ? (
+                        <div className="flex min-w-[140px] flex-col gap-1">
+                          <span className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.agreedFee")}</span>
+                          <span className="text-xs font-black text-slate-900">{HIDDEN_CREATOR_VALUE}</span>
+                        </div>
+                      ) : (
                       <div className="flex min-w-[140px] flex-col gap-1">
                         <label className="text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.agreedFee")}</label>
                         <MoneyInput
@@ -2312,6 +2349,7 @@ function DetailInner() {
                         />
                         <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
                       </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-2">
                         {isAdmin && waUrl ? (
                           <a href={waUrl} target="_blank" rel="noreferrer" title={t("campaignDetail.whatsappTitle")} className="flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
@@ -2536,25 +2574,25 @@ function DetailInner() {
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.paySummaryTotal")}</p>
-                <p className="mt-1 text-lg font-black text-slate-900">{moneyOrMode(financeSummary.total)}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{creatorPay(financeSummary.total)}</p>
               </div>
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
                 <p className="text-[10px] font-black tracking-wider text-emerald-700 uppercase">{t("campaignDetail.paySummaryReady")}</p>
-                <p className="mt-1 text-lg font-black text-emerald-800">{moneyOrMode(financeSummary.ready)}</p>
+                <p className="mt-1 text-lg font-black text-emerald-800">{creatorPay(financeSummary.ready)}</p>
               </div>
               <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
                 <p className="text-[10px] font-black tracking-wider text-indigo-700 uppercase">{t("campaignDetail.paySummaryScheduled")}</p>
-                <p className="mt-1 text-lg font-black text-indigo-800">{moneyOrMode(financeSummary.scheduled)}</p>
+                <p className="mt-1 text-lg font-black text-indigo-800">{creatorPay(financeSummary.scheduled)}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.paySummaryPaid")}</p>
-                <p className="mt-1 text-lg font-black text-slate-900">{moneyOrMode(financeSummary.paid)}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{creatorPay(financeSummary.paid)}</p>
               </div>
             </div>
           ) : null}
           {canManage && financeSummary.readyRows.length > 0 && !campaign.is_barter ? (
             <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-semibold text-emerald-800">{t("campaignDetail.payReadyHint", { count: financeSummary.readyRows.length, amount: moneyOrMode(financeSummary.ready) })}</p>
+              <p className="text-xs font-semibold text-emerald-800">{t("campaignDetail.payReadyHint", { count: financeSummary.readyRows.length, amount: creatorPay(financeSummary.ready) })}</p>
               <button type="button" onClick={() => void payAllReady()} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-extrabold text-white hover:bg-emerald-700">
                 <Banknote size={14} /> {t("campaignDetail.payAllReady")}
               </button>
@@ -2604,7 +2642,7 @@ function DetailInner() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-black text-slate-900">{moneyOrMode(amount)}</p>
+                        <p className="font-black text-slate-900">{creatorPay(amount)}</p>
                         {row.payment_status === "scheduled" && row.payment_date ? (
                           <p className="text-[10px] font-semibold text-indigo-600">{t("campaignDetail.scheduledFor", { date: formatPayDate(row.payment_date) })}</p>
                         ) : null}
@@ -2829,10 +2867,12 @@ function DetailInner() {
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget", { currency: moneyCurrency(campaign) })}</label>
                     <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.total_budget} onChange={(value) => setEditForm({ ...editForm, total_budget: value })} />
                   </div>
+                  {hideCreatorValues ? null : (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache", { currency: moneyCurrency(campaign) })}</label>
                     <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.creator_cache} onChange={(value) => setEditForm({ ...editForm, creator_cache: value })} />
                   </div>
+                  )}
                   {isAdmin ? (
                     <AgencyFeePercentField
                       value={editForm.agency_fee_percent}
@@ -3001,6 +3041,12 @@ function DetailInner() {
                   city={editForm.city}
                   onCityChange={(value) => setEditForm({ ...editForm, city: value })}
                 />
+                <CampaignApprovedLimitFields
+                  enabled={editForm.limit_approved}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, limit_approved: value, max_approved_creators: value ? editForm.max_approved_creators : "" })}
+                  maxApproved={editForm.max_approved_creators}
+                  onMaxApprovedChange={(value) => setEditForm({ ...editForm, max_approved_creators: value })}
+                />
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                   {(["reels", "stories", "tiktok", "ugc", "posts", "youtube"] as const).map((key) => (
                     <div key={key} className="flex flex-col gap-1">
@@ -3056,7 +3102,9 @@ function DetailInner() {
                 <button type="button" onClick={() => setEditing(null)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
               <form noValidate onSubmit={saveCreatorEdit} className="flex flex-col gap-3 p-5">
+                {hideCreatorValues ? null : (
                 <MoneyInput currency={moneyCurrency(campaign)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-brand-primary" placeholder={t("campaignDetail.agreedFee")} value={creatorEdit.amount} onChange={(value) => setCreatorEdit({ ...creatorEdit, amount: value })} />
+                )}
                 <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.deliveryFormat")} value={creatorEdit.delivery_type} onChange={(event) => setCreatorEdit({ ...creatorEdit, delivery_type: event.target.value })} />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
@@ -3139,7 +3187,7 @@ function DetailInner() {
               <p className="text-xs text-slate-600">
                 {t("campaignDetail.scheduleModalHint", {
                   name: payModal.row.creator?.artistic_name ?? "",
-                  amount: moneyOrMode(effectiveCreatorFee(payModal.row, campaign)),
+                  amount: creatorPay(effectiveCreatorFee(payModal.row, campaign)),
                 })}
               </p>
               {payModal.row.creator?.pix_key ? (

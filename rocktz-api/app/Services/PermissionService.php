@@ -10,7 +10,7 @@ class PermissionService
 {
     public function grantDefaults(User $user): void
     {
-        $this->sync($user, Permission::slugsForRole($user->role));
+        $this->sync($user, Permission::defaultSlugsForRole($user->role));
     }
 
     /**

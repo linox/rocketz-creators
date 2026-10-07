@@ -72,6 +72,7 @@ import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
+import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -414,6 +415,7 @@ function CreatorRibbon({ kind, label }: { kind: RibbonKind | null; label: string
 
 function DetailInner() {
   const user = useAuth();
+  const hideCreatorValues = userHidesCreatorValues(user);
   const router = useRouter();
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
@@ -755,7 +757,7 @@ function DetailInner() {
         creator_id: Number(creatorForm.creator_id),
         start_date: creatorForm.start_date,
         end_date: creatorForm.end_date || null,
-        monthly_cache: creatorForm.monthly_cache ? parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract)) : 0,
+        ...(hideCreatorValues ? {} : { monthly_cache: creatorForm.monthly_cache ? parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract)) : 0 }),
         notes: creatorForm.notes || null,
         monthly_deliverables: {
           reels: Number(creatorForm.reels) || 0,
@@ -1134,6 +1136,8 @@ function DetailInner() {
           ) : (
             <>
           <MetricTile icon={DollarSign} iconClass="bg-indigo-100/80 text-brand-primary" label={t("recurringDetail.budget")} badge={t("recurringDetail.clientFee")} value={formatCurrency(fee)} unit={t("recurringDetail.perMonth")} extra={contract.end_date && months > 1 ? { label: t("recurringDetail.periodTotal"), value: formatCurrency(fee * months) } : undefined} />
+          {hideCreatorValues ? null : (
+            <>
           <MetricTile icon={Users} iconClass="bg-blue-100/80 text-blue-700" label={t("recurringDetail.creatorsCost")} badge={t(allocated.length === 1 ? "recurringDetail.creatorOne" : "recurringDetail.creatorMany", { count: allocated.length })} badgeClass="bg-blue-50 text-blue-700 border-blue-200" value={formatCurrency(cost)} unit={t("recurringDetail.perMonth")} extra={contract.end_date && months > 1 ? { label: t("recurringDetail.periodTotal"), value: formatCurrency(cost * months) } : undefined} />
           <div className={cn("flex flex-col justify-between gap-2.5 rounded-2xl border p-4 shadow-2xs", remaining >= 0 ? "border-emerald-200/70 bg-emerald-50/40" : "border-rose-200/70 bg-rose-50/40")}>
             <div className="flex items-center justify-between gap-2">
@@ -1148,6 +1152,8 @@ function DetailInner() {
               <span className="text-xs font-semibold text-slate-400">{t("recurringDetail.perMonth")}</span>
             </div>
           </div>
+            </>
+          )}
             </>
           )}
           <div className="flex flex-col justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-2xs">
@@ -1394,7 +1400,7 @@ function DetailInner() {
                           <div className="rounded-xl border border-slate-200/60 bg-slate-50/90 p-2.5">
                             <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.monthlyCache")}</span>
                             <div className="mt-0.5 flex items-baseline gap-1">
-                              <span className="text-sm font-black text-slate-900">{formatCurrency(creatorCost(row))}</span>
+                              <span className="text-sm font-black text-slate-900">{hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatCurrency(creatorCost(row))}</span>
                               <span className="text-[10px] font-semibold text-slate-400">{t("recurringDetail.perMonth")}</span>
                             </div>
                           </div>
@@ -1593,7 +1599,7 @@ function DetailInner() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 sm:grid-cols-4">
-                  <MiniStat label={t("recurringDetail.monthlyCache")} value={formatCurrency(creatorCost(selectedRow))} hint={t("recurringDetail.perMonth")} icon={DollarSign} />
+                  <MiniStat label={t("recurringDetail.monthlyCache")} value={hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatCurrency(creatorCost(selectedRow))} hint={t("recurringDetail.perMonth")} icon={DollarSign} />
                   <MiniStat
                     label={t("recurringDetail.completed")}
                     value={`${selectedSummary.completedCount}/${selectedSummary.quota}`}
@@ -2269,6 +2275,7 @@ function DetailInner() {
                 </div>
               </div>
 
+                {hideCreatorValues ? null : (
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-slate-700">{t("recurringDetail.cache")} *</label>
                   <MoneyInput
@@ -2295,6 +2302,7 @@ function DetailInner() {
                   </div>
                 ) : null}
               </div>
+                )}
 
               <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <span className="text-[11px] font-black tracking-wider text-slate-800 uppercase">{t("recurringDetail.quotaTitle")}</span>

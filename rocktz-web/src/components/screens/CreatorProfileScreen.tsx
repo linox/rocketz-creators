@@ -102,7 +102,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
-import { userCanModerateCreator, userHasPermission } from "@/lib/auth";
+import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
 
 type RecurringWorkRow = {
   key: string;
@@ -622,6 +622,7 @@ function statusChip(status: string, labels: { active: string; review: string; pa
 
 function ProfileInner() {
   const user = useAuth();
+  const hideCreatorValues = userHidesCreatorValues(user);
   const { t: tp } = useTranslation("profile");
   const { t: ta } = useTranslation("app");
   const { t: tc } = useTranslation("common");
@@ -1022,6 +1023,7 @@ function ProfileInner() {
   const profile = creator;
   const payCurrency = currencyForProfile(profile.currency, profile.country);
   const formatPay = (value?: number | null) => formatCurrency(value, payCurrency);
+  const payCreator = (value?: number | null) => (hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatPay(value));
   const storefrontUrl = profile.storefront?.unlocked ? profile.storefront.public_url : null;
   const chip = statusChip(profile.status, {
     active: tp("statusChipActive"),
@@ -1168,6 +1170,7 @@ function ProfileInner() {
   }
 
   function creatorFeeText(campaign: Campaign, row: { amount: number | null; payment_status?: string | null }) {
+    if (hideCreatorValues) return HIDDEN_CREATOR_VALUE;
     if (campaign.is_barter) return ta("available.barterPay");
     const amount = Number(row.amount) || Number(campaign.creator_cache) || 0;
     if (amount > 0) return formatPay(amount);
@@ -1340,16 +1343,18 @@ function ProfileInner() {
           avgViews: parseIntegerMask(networks.instagram.views),
           avgEngagement: parsePercentInput(networks.instagram.engagement),
         },
-        pricing: {
-          ...profile.pricing,
-          story: parseMoneyMask(prices.story, priceCurrency),
-          reel: parseMoneyMask(prices.reel, priceCurrency),
-          post: parseMoneyMask(prices.post, priceCurrency),
-          combo: parseMoneyMask(prices.combo, priceCurrency),
-          tiktok: parseMoneyMask(prices.tiktok, priceCurrency),
-          youtube: parseMoneyMask(prices.youtube, priceCurrency),
-          kwai: parseMoneyMask(prices.kwai, priceCurrency),
-        },
+        ...(hideCreatorValues ? {} : {
+          pricing: {
+            ...profile.pricing,
+            story: parseMoneyMask(prices.story, priceCurrency),
+            reel: parseMoneyMask(prices.reel, priceCurrency),
+            post: parseMoneyMask(prices.post, priceCurrency),
+            combo: parseMoneyMask(prices.combo, priceCurrency),
+            tiktok: parseMoneyMask(prices.tiktok, priceCurrency),
+            youtube: parseMoneyMask(prices.youtube, priceCurrency),
+            kwai: parseMoneyMask(prices.kwai, priceCurrency),
+          },
+        }),
         accepts_exchange: acceptsExchange,
         accepts_paid_traffic: acceptsPaidTraffic,
         accepts_exclusivity: acceptsExclusivity,
@@ -1688,7 +1693,7 @@ function ProfileInner() {
               <NetworkMetricsSummary
                 metrics={creator.metrics}
                 socials={creator.socials}
-                pricing={creator.pricing}
+                pricing={hideCreatorValues ? null : creator.pricing}
                 formatNumber={formatNumber}
                 formatCurrency={(value) => formatCurrency(value, currencyForProfile(creator.currency, creator.country))}
               />
@@ -2141,8 +2146,8 @@ function ProfileInner() {
                   currency={priceCurrency}
                 />
                 </div>
-                <div className="grid grid-cols-1 gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:grid-cols-2 sm:p-6">
-                  <MoneyField label={tp("comboCommercial")} value={prices.combo} onChange={(value) => patchPrice("combo", value)} currency={priceCurrency} />
+                <div className={cn("grid grid-cols-1 gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6", hideCreatorValues && "sm:grid-cols-1")}>
+                  {hideCreatorValues ? null : <MoneyField label={tp("comboCommercial")} value={prices.combo} onChange={(value) => patchPrice("combo", value)} currency={priceCurrency} />}
                   <div className="flex flex-col justify-end gap-2">
                     <span className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{tp("affinitiesPrefs")}</span>
                     <div className="flex flex-wrap gap-2">
@@ -2201,12 +2206,12 @@ function ProfileInner() {
                 <div className="flex shrink-0 items-center gap-6 rounded-2xl border border-white/10 bg-white/5 p-4 font-medium backdrop-blur-sm">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("monthlyEarnings")}</span>
-                    <span className="mt-1 text-xl font-black text-emerald-400">{formatPay(monthlyEarnings)}</span>
+                    <span className="mt-1 text-xl font-black text-emerald-400">{payCreator(monthlyEarnings)}</span>
                   </div>
                   <div className="h-10 w-px bg-white/10" />
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("paidLabel")}</span>
-                    <span className="mt-1 text-sm font-bold text-slate-200">{formatPay(totalReceived)}</span>
+                    <span className="mt-1 text-sm font-bold text-slate-200">{payCreator(totalReceived)}</span>
                   </div>
                 </div>
               </div>
@@ -2249,7 +2254,7 @@ function ProfileInner() {
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("monthlyEarnings")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-purple-700">{formatPay(monthlyEarnings)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-purple-700">{payCreator(monthlyEarnings)}</h3>
                     <p className="mt-1 mb-0 text-[11px] font-medium text-slate-500">{tp("monthlyEarningsHint")}</p>
                   </div>
                   <div className="rounded-xl bg-purple-50 p-3 text-purple-600"><Repeat size={18} /></div>
@@ -2257,14 +2262,14 @@ function ProfileInner() {
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("receivedPaid")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{formatPay(totalReceived)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{payCreator(totalReceived)}</h3>
                   </div>
                   <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><CheckCircle2 size={18} /></div>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
                   <div>
                     <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("toReceiveApproved")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{formatPay(totalToReceive)}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{payCreator(totalToReceive)}</h3>
                   </div>
                   <div className="rounded-xl bg-indigo-50 p-3 text-brand-primary"><DollarSign size={18} /></div>
                 </div>
@@ -2748,6 +2753,7 @@ function ActiveRecurringWorksTable({
 }) {
   const { t: ta } = useTranslation("app");
   const { i18n } = useTranslation();
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   const locale = intlLocale(normalizeLocale(i18n.language));
   const isCurrentMonth = month === currentYearMonth();
   const monthLabel = formatMonthLabel(month, locale);
@@ -2859,7 +2865,7 @@ function ActiveRecurringWorksTable({
               name={section.companyName}
               projectTitle={section.contract.title}
               logoUrl={section.logoUrl}
-              feeLabel={section.fee != null ? formatCurrency(Number(section.fee) || 0) : "—"}
+              feeLabel={hideCreatorValues ? HIDDEN_CREATOR_VALUE : section.fee != null ? formatCurrency(Number(section.fee) || 0) : "—"}
               quotaItems={quotaEntries(section.deliverables)}
               pendingCount={section.pendingRows.length}
               quotaCount={section.monthTotal}
@@ -3408,6 +3414,7 @@ function NetworkCard({
   fetching?: boolean;
 }) {
   const { t: tp } = useTranslation("profile");
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   return (
     <section className="rounded-[16px] border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-center gap-2">
@@ -3448,6 +3455,7 @@ function NetworkCard({
             </Field>
           </div>
         </div>
+        {!hideCreatorValues && prices.length > 0 ? (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{tp("pricingTitle")}</p>
           <div className={cn("grid gap-3", prices.length > 1 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2")}>
@@ -3456,6 +3464,7 @@ function NetworkCard({
             ))}
           </div>
         </div>
+        ) : null}
       </div>
     </section>
   );
@@ -3465,6 +3474,7 @@ function CreatorMediaKitPanel({ creator }: { creator: Creator }) {
   const { t, i18n } = useTranslation();
   const { t: tp } = useTranslation("profile");
   const { formatCurrency, formatNumber } = usePrivacy();
+  const hideCreatorValues = userHidesCreatorValues(useAuth());
   const categoryLabels = t("auth:categories", { returnObjects: true }) as Record<string, string>;
   const categories = creator.categories ?? [];
   const affinities = creator.work_affinities ?? [];
@@ -3510,7 +3520,7 @@ function CreatorMediaKitPanel({ creator }: { creator: Creator }) {
           <NetworkMetricsSummary
             metrics={creator.metrics}
             socials={creator.socials}
-            pricing={creator.pricing}
+            pricing={hideCreatorValues ? null : creator.pricing}
             formatNumber={formatNumber}
             formatCurrency={(value) => formatCurrency(value, currencyForProfile(creator.currency, creator.country))}
           />

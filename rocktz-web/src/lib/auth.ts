@@ -100,6 +100,16 @@ export function homePathForUser(user: AuthUser): string {
 
 export const AUTH_COOKIE = "rocktz_token";
 
+export const CREATORS_HIDE_VALUES_PERMISSION = "creators.hide_values";
+export const HIDDEN_CREATOR_VALUE = "•••••";
+
+export function userHidesCreatorValues(
+  user: { role?: string | null; permissions?: string[] } | null | undefined,
+) {
+  if (!user || (user.role !== "admin" && user.role !== "company")) return false;
+  return (user.permissions ?? []).includes(CREATORS_HIDE_VALUES_PERMISSION);
+}
+
 export function userHasPermission(user: AuthUser | null | undefined, slug: string) {
   if (!user) return false;
   if (user.role !== "admin" && user.role !== "company") return false;

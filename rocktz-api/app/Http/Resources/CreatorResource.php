@@ -42,7 +42,7 @@ class CreatorResource extends JsonResource
             'socials' => $this->socials ?? [],
             'metrics' => $this->metrics ?? [],
             'categories' => $this->categories ?? [],
-            'pricing' => $this->pricing ?? [],
+            'pricing' => CreatorPrivacy::hidesCreatorValues($request->user()) ? [] : ($this->pricing ?? []),
             'accepts_exchange' => (bool) $this->accepts_exchange,
             'accepts_paid_traffic' => (bool) $this->accepts_paid_traffic,
             'accepts_exclusivity' => (bool) $this->accepts_exclusivity,

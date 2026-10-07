@@ -522,6 +522,15 @@
     "ageRequired": "Indica la edad mínima, la máxima o ambas.",
     "ageRangeInvalid": "La edad máxima debe ser mayor o igual que la mínima.",
     "ageInvalid": "Indica edades entre 0 y 120.",
+    "limitApprovedTitle": "Limitar personas aprobadas",
+    "limitApprovedHint": "Al llegar a esa cantidad de personas aprobadas, la campaña se cierra y deja de recibir postulaciones. Si se deshace una aprobación y queda un cupo, vuelve a selección.",
+    "maxApproved": "Cantidad",
+    "maxApprovedPh": "Ej: 10",
+    "maxApprovedRequired": "Indica cuántas personas aprobadas cierran la campaña.",
+    "approvedLimitBadge": "Cierra con {{count}}",
+    "approvedLimitProgress": "{{count}} de {{max}} aprobados",
+    "approvedLimitClosedTitle": "Campaña cerrada",
+    "approvedLimitClosed": "Se alcanzó el límite de {{count}} personas aprobadas y la campaña fue cerrada.",
     "ageLimited": "Edad validada",
     "ageBetween": "{{min}} a {{max}} años",
     "ageMin": "Desde {{min}} años",
@@ -938,6 +947,10 @@
       "mail_manage": {
         "label": "Gestionar e-mails",
         "hint": "Editar templates transaccionales y consultar el historial de envíos."
+      },
+      "creators_hide_values": {
+        "label": "Ocultar valores de creadores",
+        "hint": "No ve ni cambia cachés, tarifas ni pagos de creadores."
       },
       "logs_view": {
         "label": "Ver logs de la plataforma",

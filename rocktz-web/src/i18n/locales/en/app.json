@@ -522,6 +522,15 @@
     "ageRequired": "Enter a minimum age, a maximum age, or both.",
     "ageRangeInvalid": "The maximum age must be greater than or equal to the minimum age.",
     "ageInvalid": "Enter ages between 0 and 120.",
+    "limitApprovedTitle": "Limit approved people",
+    "limitApprovedHint": "When this many people are approved, the campaign closes and stops taking applications. If an approval is undone and a spot opens, it returns to selection.",
+    "maxApproved": "Quantity",
+    "maxApprovedPh": "E.g. 10",
+    "maxApprovedRequired": "Enter how many approved people close the campaign.",
+    "approvedLimitBadge": "Closes at {{count}}",
+    "approvedLimitProgress": "{{count}} of {{max}} approved",
+    "approvedLimitClosedTitle": "Campaign closed",
+    "approvedLimitClosed": "The limit of {{count}} approved people was reached and the campaign was closed.",
     "ageLimited": "Age validated",
     "ageBetween": "{{min}} to {{max}} years",
     "ageMin": "From {{min}} years",
@@ -942,6 +951,10 @@
       "logs_view": {
         "label": "View platform logs",
         "hint": "Inspect logins, access and actions taken in the platform."
+      },
+      "creators_hide_values": {
+        "label": "Hide creator values",
+        "hint": "Cannot see or change creator fees, rate cards, or creator payments."
       }
     }
   },

@@ -106,6 +106,7 @@ return [
     'creator_group_removed' => 'Group removed.',
     'network_range_invalid' => 'The maximum follower count must be greater than or equal to the minimum.',
     'campaign_budget_full' => 'This campaign has already reached the approved creators budget and is not accepting new applications.',
+    'campaign_approved_limit_full' => 'This campaign has already reached the approved people limit and has been closed.',
     'social_handle_required' => 'Enter the username or channel link to fetch the stats.',
     'social_network_unsupported' => 'This social network cannot be fetched automatically.',
     'social_profile_not_found' => 'We could not find that channel. Check the username and try again.',

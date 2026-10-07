@@ -28,14 +28,20 @@ const ADMIN_PERMISSIONS = [
   "data.reset",
   "mail.manage",
   "logs.view",
+  "creators.hide_values",
 ] as const;
 
-const COMPANY_PERMISSIONS = ["campaigns.publish_without_approval"] as const;
+const COMPANY_PERMISSIONS = ["campaigns.publish_without_approval", "creators.hide_values"] as const;
 
 function permissionsForRole(role: string) {
   if (role === "admin") return [...ADMIN_PERMISSIONS];
   if (role === "company") return [...COMPANY_PERMISSIONS];
   return [];
+}
+
+function defaultPermissionsForRole(role: string) {
+  if (role !== "admin") return [];
+  return permissionsForRole(role).filter((slug) => slug !== "creators.hide_values");
 }
 
 function permissionKey(slug: string) {
@@ -62,7 +68,7 @@ function UsersInner() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [formPerms, setFormPerms] = useState<string[]>([...ADMIN_PERMISSIONS]);
+  const [formPerms, setFormPerms] = useState<string[]>(defaultPermissionsForRole("admin"));
   const [editing, setEditing] = useState<AuthUser | null>(null);
   const [editPerms, setEditPerms] = useState<string[]>([]);
   const [addCompanyId, setAddCompanyId] = useState("");
@@ -129,13 +135,13 @@ function UsersInner() {
 
   function openCreate() {
     setForm(EMPTY_FORM);
-    setFormPerms([...ADMIN_PERMISSIONS]);
+    setFormPerms(defaultPermissionsForRole("admin"));
     setCreateOpen(true);
   }
 
   function onRoleChange(role: string) {
     setForm((current) => ({ ...current, role, company_id: role === "company" ? current.company_id : "" }));
-    setFormPerms(role === "admin" ? [...ADMIN_PERMISSIONS] : []);
+    setFormPerms(defaultPermissionsForRole(role));
   }
 
   async function onCreate(event: FormEvent) {

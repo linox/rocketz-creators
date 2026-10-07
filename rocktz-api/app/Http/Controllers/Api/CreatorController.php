@@ -19,6 +19,7 @@ use App\Services\CompanyLandingService;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Services\SocialMetricsService;
+use App\Support\CreatorPrivacy;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\SafeHttpUrl;
@@ -312,6 +313,9 @@ class CreatorController extends Controller
         $isAdmin = $user->role === UserRole::Admin;
         if (! $isAdmin) {
             unset($data['status'], $data['internal_notes'], $data['can_access_all_countries'], $data['metrics'], $data['storefront_enabled']);
+        }
+        if (CreatorPrivacy::hidesCreatorValues($user)) {
+            unset($data['pricing']);
         }
 
         if (isset($data['country'])) {

@@ -19,6 +19,8 @@ use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
+use App\Support\CreatorPrivacy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -322,7 +324,7 @@ class DashboardController extends Controller
     private function recurringMonthlyValue(RecurringContract $contract): float
     {
         $fee = (float) ($contract->monthly_fee ?? 0);
-        if ($fee > 0) {
+        if ($fee > 0 || CreatorPrivacy::hidesCreatorValues(request()->user())) {
             return $fee;
         }
 
@@ -332,8 +334,8 @@ class DashboardController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<CampaignCreator>  $deliveryQuery
-     * @param  \Illuminate\Database\Eloquent\Builder<ContentPlanningItem>  $planningQuery
+     * @param  Builder<CampaignCreator>  $deliveryQuery
+     * @param  Builder<ContentPlanningItem>  $planningQuery
      * @return list<array<string, mixed>>
      */
     private function upcomingDeliveries($deliveryQuery, $planningQuery): array

@@ -40,6 +40,7 @@ import { formatLocation, moneyCurrency } from "@/lib/geo";
 import { companyLandingPath } from "@/lib/landing-origin";
 import { usePrivacy } from "@/lib/privacy";
 import type { Campaign, Company, CompanyLandingPage, Creator, PlanningItem, RecurringContract } from "@/lib/types";
+import { userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
@@ -94,6 +95,7 @@ function isActiveCampaign(status: string) {
 
 function CompanyDashboardInner() {
   const user = useAuth();
+  const hideCreatorValues = userHidesCreatorValues(user);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t, i18n } = useTranslation("app");
@@ -218,6 +220,7 @@ function CompanyDashboardInner() {
 
   const contractMonthlyValue = (contract: RecurringContract) => {
     if (contract.monthly_fee) return Number(contract.monthly_fee);
+    if (hideCreatorValues) return 0;
     return (contract.creators ?? []).reduce((inner, row) => inner + (Number(row.monthly_cache ?? row.monthly_fee) || 0), 0);
   };
 
