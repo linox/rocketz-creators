@@ -12,11 +12,13 @@ import {
   EyeOff,
   Globe,
   Home,
+  Landmark,
   LayoutDashboard,
   Mail,
   Megaphone,
   Menu,
   MoreHorizontal,
+  Package,
   Repeat,
   ScrollText,
   ShieldCheck,
@@ -245,6 +247,8 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const isCreatorStorefrontActive = onCreatorProfile && creatorTab === "storefront";
   const isCreatorStorefrontMetricsActive = onCreatorProfile && (creatorTab === "storefront-metrics" || path.includes("/storefront-metrics"));
   const isCreatorProfileActive = onCreatorProfile && creatorTab === "about";
+  const isCreatorShippingActive = onCreatorProfile && creatorTab === "shipping";
+  const isCreatorBankActive = onCreatorProfile && creatorTab === "bank";
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
   const isJoinActive = isActive("/join");
@@ -269,7 +273,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
           { href: creatorProfileBase ? `${creatorProfileBase}?tab=campaigns` : "/campaigns", label: t("campaigns"), icon: Megaphone, active: isCreatorCampaignsActive },
           { href: creatorProfileBase ? `${creatorProfileBase}?tab=recurring` : "/recurring", label: t("tabRecurring"), icon: Repeat, active: isCreatorRecurringActive },
         ];
-  const moreActive = !primaryNav.some((item) => item.active);
+  const moreActive = !primaryNav.some((item) => item.active) && !isCreatorShippingActive && !isCreatorBankActive;
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[#F9FAFB] font-sans">
@@ -359,6 +363,8 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront-metrics`} label={t("storefrontMetrics")} icon={BarChart3} active={isCreatorStorefrontMetricsActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}
+                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=shipping`} label={t("shippingAddress")} icon={Package} active={isCreatorShippingActive} onClick={close} /> : null}
+                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=bank`} label={t("bankAccount")} icon={Landmark} active={isCreatorBankActive} onClick={close} /> : null}
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
               </>
             )}

@@ -756,7 +756,7 @@
     "howItWorksText": "Describe how you can help the brand reach its goals. Your profile, metrics and proposal will be reviewed by the casting team.",
     "barterBanner": "This campaign is a barter / product gifting format",
     "shippingRequiredTitle": "Add a shipping address to apply",
-    "shippingRequiredText": "Barter campaigns ship a product. You can't apply until your profile has a shipping address.",
+    "shippingRequiredText": "Barter campaigns ship a product. You can't apply until the shipping address is saved.",
     "shippingRequiredLink": "Add address",
     "customContractTitle": "Custom contract for this campaign",
     "customContractAccept": "I have read and accept this campaign’s custom terms",

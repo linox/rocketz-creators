@@ -173,7 +173,7 @@ function AvailableInner() {
 
   async function promptShippingAddress() {
     if (!user.creator?.id) return;
-    const href = `/creators/${user.creator.id}?tab=about&shipping=1`;
+    const href = `/creators/${user.creator.id}?tab=shipping`;
     const go = await alertWarningLink({
       title: t("available.shippingRequiredTitle"),
       text: t("available.shippingRequiredText"),

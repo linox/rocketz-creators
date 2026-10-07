@@ -488,7 +488,7 @@ const ROLE_OPTION_VALUES = [
   { value: "admin", labelKey: "roleAdministrator" as const },
 ];
 
-type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront" | "storefront-metrics";
+type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront" | "storefront-metrics" | "shipping" | "bank";
 
 const creatorTabClass = "flex min-w-max flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border-none px-2 py-1.5 text-[10px] font-bold tracking-wide whitespace-nowrap uppercase sm:gap-1.5 sm:px-2.5 sm:py-2 sm:text-[11px]";
 
@@ -500,7 +500,8 @@ function pathLooksLikeStorefrontMetrics(pathname: string): boolean {
 
 function resolveProfileTab(value: string | null, creatorSelf: boolean, pathLooksLikeMetrics: boolean, companyViewer = false): ProfileTab {
   if (pathLooksLikeMetrics) return "storefront-metrics";
-  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics") {
+  if ((value === "shipping" || value === "bank") && companyViewer) return "about";
+  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics" || value === "shipping" || value === "bank") {
     return value;
   }
   if (creatorSelf) return "dashboard";
@@ -674,7 +675,6 @@ function ProfileInner() {
   const [birthDate, setBirthDate] = useState("");
   const [shipping, setShipping] = useState<ShippingForm>(EMPTY_SHIPPING);
   const [bank, setBank] = useState<BankForm>(EMPTY_BANK);
-  const bankDirty = useRef(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [lookingUpZip, setLookingUpZip] = useState(false);
   const zipLookupTimer = useRef<number | null>(null);
@@ -726,7 +726,6 @@ function ProfileInner() {
     setCpf(data.cpf || data.document || "");
     setBirthDate(data.birth_date || "");
     setShipping(shippingFormFromAddress(nextCountry, data.shipping_address));
-    bankDirty.current = false;
     setBank(bankFormFromAccount(data.bank_account, data.pix_key));
     setBio(data.bio ?? "");
     setNetworks({
@@ -900,14 +899,14 @@ function ProfileInner() {
     setContractOpen(true);
   }, [shouldOpenContract, creator, isAdmin, user.creator?.id]);
 
-  const shouldScrollShipping = searchParams.get("shipping") === "1";
   useEffect(() => {
-    if (!shouldScrollShipping || tab !== "about" || !creator) return;
-    const timer = window.setTimeout(() => {
-      document.getElementById("creator-shipping")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [shouldScrollShipping, tab, creator]);
+    if (searchParams.get("shipping") !== "1" || !id) return;
+    const params = new URLSearchParams();
+    params.set("tab", "shipping");
+    if (fromLandingReview) params.set("from", "landing");
+    if (landingSignupId) params.set("signup", String(landingSignupId));
+    router.replace(`/creators/${id}?${params.toString()}`);
+  }, [searchParams, id, fromLandingReview, landingSignupId, router]);
 
   async function reloadMyCampaigns(options?: { silent?: boolean }) {
     if (!options?.silent) setLoadingCampaigns(true);
@@ -1221,8 +1220,61 @@ function ProfileInner() {
   }
 
   function patchBank(next: Partial<BankForm>) {
-    bankDirty.current = true;
     setBank((current) => ({ ...current, ...next }));
+  }
+
+  async function saveShipping(event: FormEvent) {
+    event.preventDefault();
+    if (savingProfile) return;
+    const addressIssue = shippingIssue(country, shipping);
+    if (addressIssue === "zip") {
+      await alertWarning(tp("incompleteTitle"), tp("shippingZipInvalid"));
+      return;
+    }
+    if (addressIssue === "incomplete") {
+      await alertWarning(tp("incompleteTitle"), tp("shippingIncomplete"));
+      return;
+    }
+    setSavingProfile(true);
+    alertLoading(tp("savingProfileTitle"), tp("savingProfileBody"));
+    try {
+      await api.updateCreator(profile.id, { shipping_address: shippingPayload(country, shipping) });
+      closeAlert();
+      await alertSuccess(tp("shippingSaved"));
+      load();
+    } catch (err) {
+      closeAlert();
+      await alertApiError(err);
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function saveBank(event: FormEvent) {
+    event.preventDefault();
+    if (savingProfile) return;
+    const paymentIssue = bankIssue(bank);
+    if (paymentIssue === "bank") {
+      await alertWarning(tp("incompleteTitle"), tp("bankIncomplete"));
+      return;
+    }
+    if (paymentIssue === "pix") {
+      await alertWarning(tp("incompleteTitle"), tp("bankPixInvalid"));
+      return;
+    }
+    setSavingProfile(true);
+    alertLoading(tp("savingProfileTitle"), tp("savingProfileBody"));
+    try {
+      await api.updateCreator(profile.id, { bank_account: bankPayload(bank) });
+      closeAlert();
+      await alertSuccess(tp("bankSaved"));
+      load();
+    } catch (err) {
+      closeAlert();
+      await alertApiError(err);
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function saveProfile(event: FormEvent) {
@@ -1248,26 +1300,6 @@ function ProfileInner() {
       await alertWarning(tp("incompleteTitle"), tp("birthDateInvalid"));
       return;
     }
-    const addressIssue = shippingIssue(country, shipping);
-    if (addressIssue === "zip") {
-      await alertWarning(tp("incompleteTitle"), tp("shippingZipInvalid"));
-      return;
-    }
-    if (addressIssue === "incomplete") {
-      await alertWarning(tp("incompleteTitle"), tp("shippingIncomplete"));
-      return;
-    }
-    if (bankDirty.current) {
-      const paymentIssue = bankIssue(bank);
-      if (paymentIssue === "bank") {
-        await alertWarning(tp("incompleteTitle"), tp("bankIncomplete"));
-        return;
-      }
-      if (paymentIssue === "pix") {
-        await alertWarning(tp("incompleteTitle"), tp("bankPixInvalid"));
-        return;
-      }
-    }
     setSavingProfile(true);
     alertLoading(tp("savingProfileTitle"), tp("savingProfileBody"));
     try {
@@ -1282,8 +1314,6 @@ function ProfileInner() {
         cpf: cpf || null,
         document: cpf || null,
         birth_date: birthDate || null,
-        shipping_address: shippingPayload(country, shipping),
-        ...(bankDirty.current ? { bank_account: bankPayload(bank) } : {}),
         bio,
         socials: {
           ...(profile.socials ?? {}),
@@ -1684,6 +1714,7 @@ function ProfileInner() {
                   ) : (
                     <span>{tp("notInformed")}</span>
                   )}
+                  <button type="button" onClick={() => goTab("shipping")} className="mt-2 text-[11px] font-bold text-amber-700 hover:underline">{tp("openShippingPage")}</button>
                 </div>
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("bankTitle")}</span>
@@ -1692,6 +1723,7 @@ function ProfileInner() {
                   ) : (
                     <span>{maskPII(creator.pix_key, hideValues, tp("notInformed"))}</span>
                   )}
+                  <button type="button" onClick={() => goTab("bank")} className="mt-2 text-[11px] font-bold text-emerald-700 hover:underline">{tp("openBankPage")}</button>
                 </div>
                 <SocialLinks socials={creator.socials} emptyLabel={tp("notInformed")} />
                 {(creator.categories ?? []).length > 0 ? (
@@ -1799,59 +1831,11 @@ function ProfileInner() {
               </button>
             </div>
           ) : null}
-          {(agencyView && editing) || (showCreatorTabs && tab === "about") ? (
-            <form noValidate onSubmit={saveProfile} className="flex flex-col gap-5">
-              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-5">
-                  <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><UserCheck size={20} className="text-brand-primary" /> {tp("professionalDataTitle")}</h3>
-                  <p className="mt-1 text-[12px] text-[#64748B]">{tp("professionalDataHint")}</p>
-                </div>
-                <div className="mb-5">
-                  <ProfilePhotoPicker photoUrl={photoUrl} name={artisticName || fullName} onPhotoUrlChange={setPhotoUrl} />
-                </div>
-                <div className="mb-5">
-                  <Field label={tp("nicheCategories")}>
-                    <CategoryTagsField values={categories} onChange={setCategories} />
-                  </Field>
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label={tp("fullName")}><input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
-                  <Field label={tp("artisticName")}>
-                    <div className="relative">
-                      <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">@</span>
-                      <input className={cn(inputClass, "pl-8 font-semibold")} value={artisticName} onChange={(e) => setArtisticName(e.target.value.replace(/^@+/, ""))} />
-                    </div>
-                  </Field>
-                  <Field label={tp("whatsappContact")}><input className={inputClass} value={whatsapp} onChange={(e) => setWhatsapp(formatWhatsApp(e.target.value))} /></Field>
-                  <Field label={tp("country")}>
-                    <CountrySelect theme="light" value={country} onChange={(value) => {
-                      const nextCurrency = defaultCurrencyForCountry(value);
-                      setPrices((current) => remaskAllPrices(current, priceCurrency, nextCurrency));
-                      setCountry(value);
-                      setCurrency(nextCurrency);
-                      setState("");
-                      setCpf((current) => formatTaxDocument(value, current));
-                    }} />
-                  </Field>
-                  <Field label={tp("currency")}>
-                    <CurrencySelect theme="light" value={currency} onChange={(value) => {
-                      setPrices((current) => remaskAllPrices(current, priceCurrency, value));
-                      setCurrency(value);
-                    }} />
-                    <p className="text-[10px] text-slate-500">{tp("currencyHint")}</p>
-                  </Field>
-                  <Field label={tp("stateUf")}>
-                    <RegionSelect theme="light" country={country} value={state} onChange={setState} />
-                  </Field>
-                  <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-                  <Field label={tp("cpfCreator", { documents: documentsLabel })}><input className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(e) => setCpf(formatTaxDocument(country, e.target.value))} /></Field>
-                  <Field label={tp("birthDate")}>
-                    <input type="date" className={inputClass} value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthDate(e.target.value)} />
-                    <p className="text-[10px] text-slate-500">{tp("birthDateHint")}</p>
-                  </Field>
-                </div>
-              </div>
-
+          {canEdit && tab === "shipping" ? (
+            <form noValidate onSubmit={saveShipping} className="flex flex-col gap-5">
+              <button type="button" onClick={() => goTab(showCreatorTabs ? "about" : "portfolio")} className="inline-flex w-fit items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-brand-primary">
+                <ArrowLeft size={16} /> {tp("backToProfile")}
+              </button>
               <div id="creator-shipping" className="scroll-mt-24 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
                 <div className="mb-5">
                   <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><Package size={20} className="text-amber-600" /> {tp("shippingTitle")}</h3>
@@ -1921,6 +1905,18 @@ function ProfileInner() {
                 </div>
               </div>
 
+              <div className="flex justify-end">
+                <button disabled={savingProfile} className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-primary px-6 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70">
+                  {savingProfile ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {savingProfile ? tp("savingProfile") : tp("saveShipping")}
+                </button>
+              </div>
+            </form>
+          ) : canEdit && tab === "bank" ? (
+            <form noValidate onSubmit={saveBank} className="flex flex-col gap-5">
+              <button type="button" onClick={() => goTab(showCreatorTabs ? "about" : "portfolio")} className="inline-flex w-fit items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-brand-primary">
+                <ArrowLeft size={16} /> {tp("backToProfile")}
+              </button>
               <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
                 <div className="mb-5">
                   <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><Landmark size={20} className="text-emerald-600" /> {tp("bankTitle")}</h3>
@@ -1976,6 +1972,71 @@ function ProfileInner() {
                       autoComplete={bank.pixType === "email" ? "email" : "off"}
                       onChange={(e) => patchBank({ pixKey: formatPixKey(bank.pixType, e.target.value) })}
                     />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button disabled={savingProfile} className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-primary px-6 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70">
+                  {savingProfile ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {savingProfile ? tp("savingProfile") : tp("saveBank")}
+                </button>
+              </div>
+            </form>
+          ) : (agencyView && editing) || (showCreatorTabs && tab === "about") ? (
+            <form noValidate onSubmit={saveProfile} className="flex flex-col gap-5">
+              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><UserCheck size={20} className="text-brand-primary" /> {tp("professionalDataTitle")}</h3>
+                  <p className="mt-1 text-[12px] text-[#64748B]">{tp("professionalDataHint")}</p>
+                </div>
+                <div className="mb-5">
+                  <ProfilePhotoPicker photoUrl={photoUrl} name={artisticName || fullName} onPhotoUrlChange={setPhotoUrl} />
+                </div>
+                <div className="mb-5">
+                  <Field label={tp("nicheCategories")}>
+                    <CategoryTagsField values={categories} onChange={setCategories} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label={tp("fullName")}><input className={inputClass} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
+                  <Field label={tp("artisticName")}>
+                    <div className="relative">
+                      <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-slate-400">@</span>
+                      <input className={cn(inputClass, "pl-8 font-semibold")} value={artisticName} onChange={(e) => setArtisticName(e.target.value.replace(/^@+/, ""))} />
+                    </div>
+                  </Field>
+                  <Field label={tp("whatsappContact")}><input className={inputClass} value={whatsapp} onChange={(e) => setWhatsapp(formatWhatsApp(e.target.value))} /></Field>
+                  <Field label={tp("country")}>
+                    <CountrySelect theme="light" value={country} onChange={(value) => {
+                      const nextCurrency = defaultCurrencyForCountry(value);
+                      setPrices((current) => remaskAllPrices(current, priceCurrency, nextCurrency));
+                      setCountry(value);
+                      setCurrency(nextCurrency);
+                      setState("");
+                      setCpf((current) => formatTaxDocument(value, current));
+                    }} />
+                  </Field>
+                  <Field label={tp("currency")}>
+                    <CurrencySelect theme="light" value={currency} onChange={(value) => {
+                      setPrices((current) => remaskAllPrices(current, priceCurrency, value));
+                      setCurrency(value);
+                    }} />
+                    <p className="text-[10px] text-slate-500">{tp("currencyHint")}</p>
+                  </Field>
+                  <Field label={tp("stateUf")}>
+                    <RegionSelect theme="light" country={country} value={state} onChange={setState} />
+                  </Field>
+                  <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
+                  <Field label={tp("cpfCreator", { documents: documentsLabel })}><input className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(e) => setCpf(formatTaxDocument(country, e.target.value))} /></Field>
+                  <Field label={tp("birthDate")}>
+                    <input type="date" className={inputClass} value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthDate(e.target.value)} />
+                    <p className="text-[10px] text-slate-500">{tp("birthDateHint")}</p>
+                  </Field>
+                </div>
+                <div className="mt-4">
+                  <Field label={tp("bioLabel")}>
+                    <textarea className="min-h-28 w-full rounded-lg border border-[#E2E8F0] p-3 text-sm outline-none focus:border-brand-primary" value={bio} onChange={(e) => setBio(e.target.value)} />
                   </Field>
                 </div>
               </div>
@@ -2080,10 +2141,7 @@ function ProfileInner() {
                   currency={priceCurrency}
                 />
                 </div>
-              </div>
-
-              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:grid-cols-2 sm:p-6">
                   <MoneyField label={tp("comboCommercial")} value={prices.combo} onChange={(value) => patchPrice("combo", value)} currency={priceCurrency} />
                   <div className="flex flex-col justify-end gap-2">
                     <span className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{tp("affinitiesPrefs")}</span>
@@ -2094,10 +2152,27 @@ function ProfileInner() {
                     </div>
                   </div>
                 </div>
-                <Field label={tp("bioLabel")}>
-                  <textarea className="min-h-28 w-full rounded-lg border border-[#E2E8F0] p-3 text-sm outline-none focus:border-brand-primary" value={bio} onChange={(e) => setBio(e.target.value)} />
-                </Field>
-                <div className="mt-5 flex justify-end gap-2">
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button type="button" onClick={() => goTab("shipping")} className="flex items-center gap-3 rounded-[16px] border border-amber-200 bg-white p-4 text-left shadow-sm hover:border-amber-300">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Package size={20} /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0F172A]">{tp("shippingTitle")}</span>
+                    <span className="mt-0.5 block text-xs text-[#64748B]">{tp("shippingOpenHint")}</span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => goTab("bank")} className="flex items-center gap-3 rounded-[16px] border border-emerald-200 bg-white p-4 text-left shadow-sm hover:border-emerald-300">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Landmark size={20} /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0F172A]">{tp("bankTitle")}</span>
+                    <span className="mt-0.5 block text-xs text-[#64748B]">{tp("bankOpenHint")}</span>
+                  </span>
+                </button>
+              </div>
+
+              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -2134,6 +2209,23 @@ function ProfileInner() {
                     <span className="mt-1 text-sm font-bold text-slate-200">{formatPay(totalReceived)}</span>
                   </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button type="button" onClick={() => goTab("shipping")} className="flex items-center gap-3 rounded-[16px] border border-amber-200 bg-white p-4 text-left shadow-sm hover:border-amber-300">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Package size={20} /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0F172A]">{tp("shippingTitle")}</span>
+                    <span className="mt-0.5 block text-xs text-[#64748B]">{tp("shippingOpenHint")}</span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => goTab("bank")} className="flex items-center gap-3 rounded-[16px] border border-emerald-200 bg-white p-4 text-left shadow-sm hover:border-emerald-300">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Landmark size={20} /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0F172A]">{tp("bankTitle")}</span>
+                    <span className="mt-0.5 block text-xs text-[#64748B]">{tp("bankOpenHint")}</span>
+                  </span>
+                </button>
               </div>
 
               <div className="flex flex-col gap-3">
