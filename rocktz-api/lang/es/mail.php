@@ -40,10 +40,10 @@ return [
             'cta' => 'Acceder a mi perfil',
         ],
         'creator.approved' => [
-            'subject' => 'Tu perfil fue aprobado en Creatorz!',
+            'subject' => 'Tu registro fue aprobado en Creatorz',
             'greeting' => 'Hola, {{nome_criador}}!',
-            'body' => "Tu perfil fue aprobado y ya puedes participar en las oportunidades de Creatorz by Rocketz.\n\nMantén tus datos actualizados y sigue las campañas compatibles con tu perfil.",
-            'cta' => 'Ver oportunidades',
+            'body' => "Creatorz aprobó tu registro en la plataforma Creatorz by Rocketz.\n\nEsta aprobación es de Creatorz. No es una aprobación en una campaña y no la hizo una empresa socia.\n\nCon el registro activo, ya puedes entrar a la plataforma, completar tu perfil y seguir las oportunidades disponibles.",
+            'cta' => 'Acceder a la plataforma',
         ],
         'creator.rejected' => [
             'subject' => 'Actualización sobre tu registro en Creatorz',

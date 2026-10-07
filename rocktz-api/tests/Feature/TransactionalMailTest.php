@@ -140,6 +140,14 @@ class TransactionalMailTest extends TestCase
             'email' => $creator->user->email,
             'template_key' => MailTemplateKey::CreatorApproved->value,
         ]);
+
+        $message = MailMessage::query()
+            ->where('template_key', MailTemplateKey::CreatorApproved->value)
+            ->firstOrFail();
+        $body = (string) ($message->payload['copy']['body'] ?? '');
+        $this->assertStringContainsString('Essa aprovação é da Creatorz', $body);
+        $this->assertStringContainsString('não foi feita por uma empresa parceira', $body);
+        $this->assertStringNotContainsString('campanhas e demandas', $body);
     }
 
     public function test_rejecting_creator_includes_reason_when_provided(): void
