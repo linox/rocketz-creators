@@ -505,6 +505,7 @@ function DetailInner() {
     is_barter: false,
     has_custom_contract: false,
     custom_contract_terms: "",
+    application_question: "",
     limit_by_city: false,
     limit_by_age: false,
     min_age: "",
@@ -928,6 +929,7 @@ function DetailInner() {
       is_barter: campaign.is_barter,
       has_custom_contract: Boolean(campaign.has_custom_contract),
       custom_contract_terms: campaign.custom_contract_terms || "",
+      application_question: campaign.application_question || "",
       limit_by_city: Boolean(campaign.limit_by_city),
       limit_by_age: Boolean(campaign.limit_by_age),
       min_age: campaign.min_age != null ? String(campaign.min_age) : "",
@@ -1032,6 +1034,7 @@ function DetailInner() {
         is_barter: editForm.is_barter,
         has_custom_contract: editForm.has_custom_contract,
         custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
+        application_question: editForm.application_question.trim() || null,
         limit_by_city: editForm.limit_by_city,
         limit_by_age: ageLimit.limit_by_age,
         min_age: ageLimit.min_age,
@@ -2010,8 +2013,8 @@ function DetailInner() {
                     )}
                     {selected.notes ? (
                       <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
-                        <strong className="mb-0.5 block">{t("campaignDetail.creatorNotes")}</strong>
-                        {selected.notes}
+                        <strong className={cn("mb-0.5 block", campaign.application_question?.trim() ? "text-[11px] leading-snug font-bold normal-case" : "")}>{campaign.application_question?.trim() || t("campaignDetail.creatorNotes")}</strong>
+                        <span className="whitespace-pre-wrap">{selected.notes}</span>
                       </div>
                     ) : null}
 
@@ -2319,8 +2322,8 @@ function DetailInner() {
                         </div>
                         {row.notes ? (
                           <div className="mt-2 max-w-xl rounded-xl border border-slate-200/80 bg-slate-50 p-2.5 text-xs text-slate-700">
-                            <strong className="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.creatorMessage")}</strong>
-                            &ldquo;{row.notes}&rdquo;
+                            <strong className={cn("mb-0.5 block text-slate-500", campaign.application_question?.trim() ? "text-[11px] leading-snug font-bold normal-case text-slate-700" : "text-[10px] font-bold tracking-wider uppercase")}>{campaign.application_question?.trim() || t("campaignDetail.creatorMessage")}</strong>
+                            <span className="whitespace-pre-wrap">&ldquo;{row.notes}&rdquo;</span>
                           </div>
                         ) : null}
                         {isRejected && row.rejection_reason ? (
@@ -2981,6 +2984,18 @@ function DetailInner() {
                     className="w-full resize-none rounded-xl border border-slate-200 p-2.5 text-xs font-medium"
                     value={editForm.objective}
                     onChange={(event) => setEditForm({ ...editForm, objective: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.applicationQuestionLabel")}</label>
+                  <p className="text-[10px] leading-relaxed font-medium text-slate-500">{t("campaigns.applicationQuestionHint")}</p>
+                  <textarea
+                    rows={3}
+                    maxLength={2000}
+                    placeholder={t("campaigns.applicationQuestionPh")}
+                    className="w-full resize-y rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium"
+                    value={editForm.application_question}
+                    onChange={(event) => setEditForm({ ...editForm, application_question: event.target.value })}
                   />
                 </div>
                 <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">

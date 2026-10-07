@@ -458,7 +458,7 @@ class CreatorController extends Controller
 
     public function approve(Request $request, Creator $creator): JsonResponse
     {
-        $this->authorizeCreatorModeration($request, $creator);
+        $this->authorizeCreatorModeration($request, $creator, allowRejected: true);
 
         $creator->update(['status' => CreatorStatus::Active]);
         $this->syncCompanyLandingApproval($request, $creator);
@@ -499,6 +499,23 @@ class CreatorController extends Controller
             ]);
             $this->mail->creatorRejected($creator->fresh(['user']), $request->string('reason')->toString() ?: null);
         }
+
+        return response()->json(['data' => new CreatorResource($creator->fresh()->load('user'))]);
+    }
+
+    public function restore(Request $request, Creator $creator): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->role === UserRole::Admin) {
+            abort_unless($user->hasPermission(Permission::CreatorsModerate), 403, __('auth.forbidden_permission'));
+        } else {
+            abort_unless($creator->canRestoreRegistration($user), 403, __('auth.forbidden'));
+        }
+
+        abort_unless($creator->status === CreatorStatus::Rejected, 422, __('auth.creator_not_rejected'));
+
+        $creator->update(['status' => CreatorStatus::Review]);
 
         return response()->json(['data' => new CreatorResource($creator->fresh()->load('user'))]);
     }
@@ -886,7 +903,7 @@ class CreatorController extends Controller
         abort_unless($user->role === UserRole::Creator && $user->creator?->id === $creator->id, 403, __('auth.forbidden'));
     }
 
-    private function authorizeCreatorModeration(Request $request, Creator $creator): void
+    private function authorizeCreatorModeration(Request $request, Creator $creator, bool $allowRejected = false): void
     {
         $user = $request->user();
 
@@ -896,7 +913,10 @@ class CreatorController extends Controller
             return;
         }
 
-        abort_unless($creator->canBeModeratedBy($user), 403, __('auth.forbidden'));
+        $allowed = $creator->canBeModeratedBy($user)
+            || ($allowRejected && $creator->canRestoreRegistration($user));
+
+        abort_unless($allowed, 403, __('auth.forbidden'));
     }
 
     private function syncCompanyLandingApproval(Request $request, Creator $creator): void

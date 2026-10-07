@@ -134,6 +134,7 @@ export function CreateCampaignModal({
   const [isBarter, setIsBarter] = useState(false);
   const [hasCustomContract, setHasCustomContract] = useState(false);
   const [customContractTerms, setCustomContractTerms] = useState("");
+  const [applicationQuestion, setApplicationQuestion] = useState("");
   const [limitByCity, setLimitByCity] = useState(false);
   const [limitByAge, setLimitByAge] = useState(false);
   const [minAge, setMinAge] = useState("");
@@ -206,6 +207,7 @@ export function CreateCampaignModal({
     setIsBarter(false);
     setHasCustomContract(false);
     setCustomContractTerms("");
+    setApplicationQuestion("");
     setLimitByCity(false);
     setRestrictToLanding(false);
     setLandingPageId("");
@@ -335,6 +337,7 @@ export function CreateCampaignModal({
         is_barter: isBarter,
         has_custom_contract: hasCustomContract,
         custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
+        application_question: applicationQuestion.trim() || null,
         limit_by_city: limitByCity,
         limit_by_age: ageLimit.limit_by_age,
         min_age: ageLimit.min_age,
@@ -612,6 +615,13 @@ export function CreateCampaignModal({
                       <textarea value={customContractTerms} onChange={(e) => setCustomContractTerms(e.target.value)} placeholder={t("campaigns.customContractTermsPh")} className="h-36 w-full resize-y rounded-lg border border-[#E2E8F0] px-3 py-2 text-xs outline-none focus:border-brand-primary" />
                     </div>
                   ) : null}
+                </div>
+                <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-[#64748B] uppercase">
+                    <Megaphone size={12} className="text-brand-primary" /> {t("campaigns.applicationQuestionLabel")}
+                  </label>
+                  <p className="text-[10px] leading-relaxed text-[#64748B]">{t("campaigns.applicationQuestionHint")}</p>
+                  <textarea value={applicationQuestion} onChange={(e) => setApplicationQuestion(e.target.value)} placeholder={t("campaigns.applicationQuestionPh")} maxLength={2000} className="h-24 w-full resize-y rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary" />
                 </div>
               </>
             ) : null}

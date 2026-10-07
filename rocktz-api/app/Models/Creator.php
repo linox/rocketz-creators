@@ -264,10 +264,20 @@ class Creator extends Model
 
     public function canBeModeratedBy(?User $user): bool
     {
-        if (! $user || $this->status !== CreatorStatus::Review) {
-            return false;
-        }
+        return $user
+            && $this->status === CreatorStatus::Review
+            && $this->moderationAllowedFor($user);
+    }
 
+    public function canRestoreRegistration(?User $user): bool
+    {
+        return $user
+            && $this->status === CreatorStatus::Rejected
+            && $this->moderationAllowedFor($user);
+    }
+
+    private function moderationAllowedFor(User $user): bool
+    {
         if ($user->role === UserRole::Admin) {
             return $user->hasPermission(Permission::CreatorsModerate);
         }

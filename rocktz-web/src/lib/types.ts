@@ -50,6 +50,7 @@ export type Creator = {
   storefront_enabled?: boolean;
   storefront?: StorefrontEligibility;
   can_moderate?: boolean;
+  can_restore?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
   landing_origins?: {
@@ -254,6 +255,7 @@ export type Campaign = {
   } | null;
   has_custom_contract?: boolean;
   custom_contract_terms?: string | null;
+  application_question?: string | null;
   approval_flow: string | null;
   posting_profile?: "creator" | "brand" | string | null;
   briefing?: Record<string, string | string[] | null> | null;
@@ -344,7 +346,7 @@ export type CampaignCreator = {
     pricing?: Record<string, number>;
     socials?: Record<string, string>;
   };
-  campaign?: { id: number; name: string; status: string; image_url: string | null; currency?: string | null };
+  campaign?: { id: number; name: string; status: string; image_url: string | null; currency?: string | null; application_question?: string | null };
   delivery_type: string | null;
   amount: number | null;
   delivery_date: string | null;

@@ -677,6 +677,7 @@ class CampaignController extends Controller
                 'string',
                 'max:50000',
             ],
+            'application_question' => ['nullable', 'string', 'max:2000'],
             'approval_flow' => ['nullable', Rule::enum(ApprovalFlowType::class)],
             'posting_profile' => ['nullable', Rule::enum(PostingProfile::class)],
             'briefing' => ['nullable', 'array'],
@@ -686,6 +687,10 @@ class CampaignController extends Controller
         ];
 
         $data = $request->validate($rules);
+        if (array_key_exists('application_question', $data)) {
+            $question = trim((string) ($data['application_question'] ?? ''));
+            $data['application_question'] = $question !== '' ? $question : null;
+        }
         if (isset($data['briefing']) && is_array($data['briefing'])) {
             $data['briefing'] = SafeHttpUrl::validateFields($data['briefing'], ['link', 'script_file_url']);
         }

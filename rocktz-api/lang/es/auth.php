@@ -57,6 +57,7 @@ return [
     'casting_reset' => 'Casting vaciado.',
     'campaigns_reset' => 'Campañas vaciadas.',
     'creator_without_user' => 'El creador no tiene usuario vinculado.',
+    'creator_not_rejected' => 'Solo se puede revertir un registro rechazado.',
     'post_too_large' => 'El video supera el límite de envío del servidor. Prueba un archivo más pequeño.',
     'invalid_media_type' => 'Envía un video (MP4, MOV o WEBM), una imagen (JPEG, PNG o WEBP) o un documento (PDF, DOC o DOCX).',
     'upload_failed' => 'No fue posible guardar el archivo en el servidor. Inténtalo de nuevo.',

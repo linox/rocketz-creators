@@ -47,6 +47,7 @@ const ACTION_KEYS = [
   "creator.update",
   "creator.approve",
   "creator.reject",
+  "creator.restore",
   "creator.delete",
   "company.create",
   "company.update",

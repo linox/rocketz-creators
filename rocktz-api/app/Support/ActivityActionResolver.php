@@ -39,6 +39,7 @@ class ActivityActionResolver
         'POST creators/*/contract' => 'creator.contract.accept',
         'POST creators/*/approve' => 'creator.approve',
         'POST creators/*/reject' => 'creator.reject',
+        'POST creators/*/restore' => 'creator.restore',
         'POST creators/*/password' => 'creator.password.reset',
         'DELETE creators/*' => 'creator.delete',
         'POST creators/reset-casting' => 'creator.reset_casting',

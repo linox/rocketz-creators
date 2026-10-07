@@ -47,6 +47,7 @@ import {
   UserCheck,
   Video,
   X,
+  XCircle,
   Youtube,
   RefreshCw,
   Loader2,
@@ -102,7 +103,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { numericIdFromBrowser } from "@/lib/route-id";
 import type { Campaign, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
-import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
+import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userCanRestoreCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
 
 type RecurringWorkRow = {
   key: string;
@@ -699,6 +700,7 @@ function ProfileInner() {
   const isAdmin = user.role === "admin";
   const agencyView = isAdmin && viewMode === "agency";
   const canModerateCreator = creator ? userCanModerateCreator(user, creator) : false;
+  const canRestoreCreator = creator ? userCanRestoreCreator(user, creator) : false;
   const canRemove = userHasPermission(user, "users.manage");
 
   async function updateLandingReview(status: string) {
@@ -1474,6 +1476,55 @@ function ProfileInner() {
                 <Check size={16} /> {tp("approveCreator")}
               </button>
               <button type="button" onClick={async () => { if (!(await alertConfirm(tp("rejectTitle"), tp("rejectText"), tp("reject")))) return; await api.rejectCreator(creator.id).catch(alertApiError); load(); }} className="rounded-xl border border-rose-200 bg-rose-100 px-3 py-2 text-xs font-bold text-rose-800 hover:bg-rose-200">{tp("reject")}</button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {creator.status === "rejected" ? (
+        <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 shadow-sm sm:flex-row sm:items-center sm:p-5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm"><XCircle size={22} /></div>
+            <div>
+              <h4 className="m-0 text-sm font-bold text-rose-950">{tp("rejectedTitle")}</h4>
+              <p className="mt-0.5 max-w-xl text-xs text-rose-800">
+                {canRestoreCreator ? tp("rejectedAdminBody") : tp("rejectedCreatorBody")}
+              </p>
+            </div>
+          </div>
+          {canRestoreCreator ? (
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!(await alertConfirm(tp("restoreTitle"), tp("restoreText")))) return;
+                  try {
+                    await api.restoreCreator(creator.id);
+                    await alertSuccess(tp("restored"));
+                    load();
+                  } catch (err) {
+                    await alertApiError(err);
+                  }
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 py-2 text-xs font-bold text-rose-800 hover:bg-rose-100 sm:flex-none"
+              >
+                {tp("restoreRegistration")}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await api.approveCreator(creator.id);
+                    await alertSuccess(tp("approved"));
+                    load();
+                  } catch (err) {
+                    await alertApiError(err);
+                  }
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 sm:flex-none"
+              >
+                <Check size={16} /> {tp("approveCreator")}
+              </button>
             </div>
           ) : null}
         </div>

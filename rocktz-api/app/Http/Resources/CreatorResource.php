@@ -64,6 +64,7 @@ class CreatorResource extends JsonResource
             ),
             'invited_by_company_id' => $this->invited_by_company_id,
             'can_moderate' => $this->canBeModeratedBy($request->user()),
+            'can_restore' => $this->canRestoreRegistration($request->user()),
             'invited_by_company' => $this->whenLoaded('invitedByCompany', fn () => $this->invitedByCompany ? [
                 'id' => $this->invitedByCompany->id,
                 'name' => $this->invitedByCompany->name,

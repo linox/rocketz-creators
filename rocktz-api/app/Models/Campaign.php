@@ -53,6 +53,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'sender_address',
     'has_custom_contract',
     'custom_contract_terms',
+    'application_question',
     'approval_flow',
     'posting_profile',
 ])]

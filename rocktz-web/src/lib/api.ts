@@ -60,6 +60,7 @@ export const api = {
   updateCreator: (id: number, body: unknown) => laravelFetch<CreatorWrite>(`/creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   approveCreator: (id: number) => laravelFetch<Item<Creator>>(`/creators/${id}/approve`, { method: "POST" }),
   rejectCreator: (id: number, reason?: string) => laravelFetch<Item<Creator>>(`/creators/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  restoreCreator: (id: number) => laravelFetch<Item<Creator>>(`/creators/${id}/restore`, { method: "POST" }),
   updateCreatorPassword: (id: number, password: string) => laravelFetch<{ message: string }>(`/creators/${id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
   deleteCreator: (id: number) => laravelFetch<{ message: string }>(`/creators/${id}`, { method: "DELETE" }),
   resetCasting: () => laravelFetch<{ message: string; deleted: number }>("/creators/reset-casting", { method: "POST" }),

@@ -130,3 +130,17 @@ export function userCanModerateCreator(
   if (Number(creator.invited_by_company_id) === companyId) return true;
   return Boolean(creator.landing_review?.id);
 }
+
+export function userCanRestoreCreator(
+  user: { role?: string | null; company?: { id?: number | null } | null; permissions?: string[] } | null | undefined,
+  creator: { status?: string | null; invited_by_company_id?: number | null; can_restore?: boolean; landing_review?: { id?: number } | null },
+) {
+  if (creator.status !== "rejected") return false;
+  if (typeof creator.can_restore === "boolean") return creator.can_restore;
+  if (user?.role === "admin") return userHasPermission(user as AuthUser, "creators.moderate");
+  if (user?.role !== "company") return false;
+  const companyId = Number(user.company?.id);
+  if (!companyId) return false;
+  if (Number(creator.invited_by_company_id) === companyId) return true;
+  return Boolean(creator.landing_review?.id);
+}

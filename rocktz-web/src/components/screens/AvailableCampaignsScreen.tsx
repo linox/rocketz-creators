@@ -622,6 +622,12 @@ function AvailableInner() {
                   <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-emerald-700 uppercase"><CheckCircle2 size={13} /> {t("available.mustHaveTitle")}</span>
                   <p className="m-0 text-xs leading-relaxed whitespace-pre-line text-slate-800">{briefingStr(briefing, "must_have") || t("available.noExtra")}</p>
                 </div>
+                {briefing.application_question?.trim() ? (
+                  <div className="flex flex-col gap-1.5 rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                    <span className="text-[10px] font-extrabold tracking-wider text-amber-800 uppercase">{t("available.applicationQuestionTitle")}</span>
+                    <p className="m-0 text-xs leading-relaxed whitespace-pre-wrap text-slate-800">{briefing.application_question.trim()}</p>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1.5 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
                   <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-rose-700 uppercase"><AlertCircle size={13} /> {t("available.dontsTitle")}</span>
                   <p className="m-0 text-xs leading-relaxed whitespace-pre-line text-slate-800">{briefingStr(briefing, "donts") || t("available.noRestrictions")}</p>
@@ -710,11 +716,13 @@ function AvailableInner() {
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center justify-between text-[10px] font-bold tracking-wider text-slate-700 uppercase">
-                    <span>{t("available.helpLabel")} *</span>
-                    <span className="font-normal text-slate-400 normal-case">{t("available.required")}</span>
+                  <label className="flex items-start justify-between gap-3 text-slate-700">
+                    <span className={cn("font-bold", applying.application_question?.trim() ? "text-xs leading-relaxed normal-case" : "text-[10px] tracking-wider uppercase")}>
+                      {(applying.application_question?.trim() || t("available.helpLabel"))} *
+                    </span>
+                    <span className="shrink-0 text-[10px] font-normal text-slate-400">{t("available.required")}</span>
                   </label>
-                  <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("available.notesPh")} className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs font-medium leading-relaxed outline-none focus:border-brand-primary focus:bg-white" />
+                  <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={applying.application_question?.trim() ? t("available.answerPh") : t("available.notesPh")} className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs font-medium leading-relaxed outline-none focus:border-brand-primary focus:bg-white" />
                 </div>
                 <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
                   <button type="button" onClick={() => setApplying(null)} className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900">{tc("cancel")}</button>

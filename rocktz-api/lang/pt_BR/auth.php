@@ -57,6 +57,7 @@ return [
     'casting_reset' => 'Casting zerado.',
     'campaigns_reset' => 'Campanhas zeradas.',
     'creator_without_user' => 'Criador sem usuário vinculado.',
+    'creator_not_rejected' => 'Só é possível reverter um cadastro recusado.',
     'post_too_large' => 'O vídeo ultrapassa o limite de envio do servidor. Tente um arquivo menor.',
     'invalid_media_type' => 'Envie um vídeo (MP4, MOV ou WEBM), uma imagem (JPEG, PNG ou WEBP) ou um documento (PDF, DOC ou DOCX).',
     'upload_failed' => 'Não foi possível salvar o arquivo no servidor. Tente novamente.',

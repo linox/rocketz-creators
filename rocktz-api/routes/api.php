@@ -151,6 +151,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::delete('creators/{creator}/landing-origins/{signup}', [CreatorController::class, 'detachLandingOrigin']);
         Route::post('creators/{creator}/approve', [CreatorController::class, 'approve']);
         Route::post('creators/{creator}/reject', [CreatorController::class, 'reject']);
+        Route::post('creators/{creator}/restore', [CreatorController::class, 'restore']);
         Route::post('companies/{company}/invite-code', [CompanyController::class, 'rotateInviteCode']);
         Route::get('companies/{company}/landings', [CompanyLandingController::class, 'index']);
         Route::post('companies/{company}/landings', [CompanyLandingController::class, 'store']);

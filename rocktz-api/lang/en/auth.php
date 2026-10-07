@@ -57,6 +57,7 @@ return [
     'casting_reset' => 'Casting cleared.',
     'campaigns_reset' => 'Campaigns cleared.',
     'creator_without_user' => 'Creator has no linked user.',
+    'creator_not_rejected' => 'Only a rejected signup can be reversed.',
     'post_too_large' => 'The video exceeds the server upload limit. Try a smaller file.',
     'invalid_media_type' => 'Upload a video (MP4, MOV or WEBM), an image (JPEG, PNG or WEBP) or a document (PDF, DOC or DOCX).',
     'upload_failed' => 'Could not save the file on the server. Try again.',

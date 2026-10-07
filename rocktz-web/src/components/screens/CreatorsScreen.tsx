@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, ExternalLink, FileText, Instagram, KeyRound, LayoutGrid, LayoutList, Plus, RefreshCw, Repeat, Search, Sparkles, Trash2, Users, UsersRound, Youtube } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, ExternalLink, FileText, Instagram, KeyRound, LayoutGrid, LayoutList, Plus, RefreshCw, Repeat, Search, Sparkles, Trash2, Users, UsersRound, XCircle, Youtube } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ChangeCreatorPasswordModal } from "@/components/ChangeCreatorPasswordModal";
 import { PasswordField } from "@/components/PasswordField";
@@ -26,7 +26,7 @@ import { matchesNetworkRange, networkSize, NETWORK_TIER_BOUNDS } from "@/lib/net
 import { CREATOR_CATEGORY_VALUES, creatorCategoryOptions } from "@/lib/creatorCategories";
 import { creatorTermAudit, downloadCreatorTermDocument, type CreatorTermDocLabels } from "@/lib/creator-contract-document";
 import { useAuth } from "@/lib/use-auth";
-import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
+import { HIDDEN_CREATOR_VALUE, userCanModerateCreator, userCanRestoreCreator, userHasPermission, userHidesCreatorValues } from "@/lib/auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 
@@ -338,15 +338,60 @@ function CreatorTermActions({
   );
 }
 
+function RejectedRegistrationActions({
+  creator,
+  compact,
+  onApprove,
+  onRestore,
+}: {
+  creator: Creator;
+  compact?: boolean;
+  onApprove: (creator: Creator) => void;
+  onRestore: (creator: Creator) => void;
+}) {
+  const { t } = useTranslation("app");
+
+  return (
+    <div className={cn("flex gap-2 rounded-xl border border-rose-200 bg-rose-50", compact ? "flex-col px-3 py-2 sm:flex-row sm:items-center sm:justify-between" : "mb-4 flex-col p-3")}>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-rose-900">
+          <XCircle size={13} className="shrink-0 text-rose-600" />
+          <span>{t("creators.rejectedBanner")}</span>
+        </div>
+        {compact ? null : <p className="m-0 mt-1 text-[11px] leading-snug text-rose-800">{t("creators.rejectedHint")}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onRestore(creator)}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-bold text-rose-800 hover:bg-rose-100 sm:flex-none"
+        >
+          {t("creators.restore")}
+        </button>
+        <button
+          type="button"
+          onClick={() => onApprove(creator)}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 sm:flex-none"
+        >
+          <CheckCircle2 size={13} />
+          {t("creators.approve")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CreatorCard({
   creator,
   recurringContracts,
   isAdmin,
   canModerate,
+  canRestore,
   canRemove,
   highlightedCategory,
   onApprove,
   onReject,
+  onRestore,
   onChangePassword,
   onRemove,
   onViewTerm,
@@ -357,10 +402,12 @@ function CreatorCard({
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
   canModerate: boolean;
+  canRestore: boolean;
   canRemove: boolean;
   highlightedCategory: string;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
+  onRestore: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
   onRemove: (creator: Creator) => void;
   onViewTerm?: (creator: Creator) => void;
@@ -379,7 +426,11 @@ function CreatorCard({
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "group flex flex-col justify-between rounded-[16px] border bg-white p-5 transition-all hover:border-brand-primary",
-        creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
+        creator.status === "review"
+          ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20"
+          : creator.status === "rejected"
+            ? "border-rose-300 bg-rose-50/30"
+            : "border-[#E2E8F0]",
       )}
     >
       <div>
@@ -470,6 +521,8 @@ function CreatorCard({
           </div>
         ) : null}
 
+        {canRestore ? <RejectedRegistrationActions creator={creator} onApprove={onApprove} onRestore={onRestore} /> : null}
+
         <div className="mb-4 grid grid-cols-2 gap-4 border-t border-b border-[#F1F5F9] py-3.5">
           <div className="flex min-w-0 flex-col">
             <span className="mb-0.5 text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.followers")}</span>
@@ -522,10 +575,12 @@ function CreatorListRow({
   recurringContracts,
   isAdmin,
   canModerate,
+  canRestore,
   canRemove,
   highlightedCategory,
   onApprove,
   onReject,
+  onRestore,
   onChangePassword,
   onRemove,
   onViewTerm,
@@ -536,10 +591,12 @@ function CreatorListRow({
   recurringContracts: RecurringContract[];
   isAdmin: boolean;
   canModerate: boolean;
+  canRestore: boolean;
   canRemove: boolean;
   highlightedCategory: string;
   onApprove: (creator: Creator) => void;
   onReject: (creator: Creator) => void;
+  onRestore: (creator: Creator) => void;
   onChangePassword: (creator: Creator) => void;
   onRemove: (creator: Creator) => void;
   onViewTerm?: (creator: Creator) => void;
@@ -594,7 +651,11 @@ function CreatorListRow({
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "flex flex-col gap-2 rounded-2xl border bg-white px-3 py-2.5 transition-all hover:border-brand-primary",
-        creator.status === "review" ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20" : "border-[#E2E8F0]",
+        creator.status === "review"
+          ? "border-amber-300 bg-amber-50/10 ring-2 ring-amber-400/20"
+          : creator.status === "rejected"
+            ? "border-rose-300 bg-rose-50/30"
+            : "border-[#E2E8F0]",
       )}
     >
       <div className="flex items-start gap-3">
@@ -690,6 +751,8 @@ function CreatorListRow({
           </div>
         ) : null}
       </div>
+
+      {canRestore ? <RejectedRegistrationActions compact creator={creator} onApprove={onApprove} onRestore={onRestore} /> : null}
 
       <div className="flex items-center justify-end gap-2 border-t border-[#F1F5F9] pt-2 lg:hidden">{rowActions}</div>
     </motion.article>
@@ -839,6 +902,7 @@ function CreatorsInner() {
   const hideCreatorValues = userHidesCreatorValues(user);
   const pendingCount = creators.filter((c) => c.status === "review").length;
   const activeCount = creators.filter((c) => c.status === "active").length;
+  const rejectedCount = creators.filter((c) => c.status === "rejected").length;
 
   const groupMemberIds = useMemo(() => {
     if (groupFilter === "all") return null;
@@ -945,6 +1009,17 @@ function CreatorsInner() {
     try {
       await api.rejectCreator(creator.id);
       await alertSuccess(t("creators.rejectSuccess"), t("creators.rejectSuccessBody", { name: creator.artistic_name }));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function restore(creator: Creator) {
+    if (!(await alertConfirm(t("creators.restoreTitle"), t("creators.restoreText", { name: creator.artistic_name })))) return;
+    try {
+      await api.restoreCreator(creator.id);
+      await alertSuccess(t("creators.restored"), t("creators.restoredBody", { name: creator.artistic_name }));
       load();
     } catch (err) {
       await alertApiError(err);
@@ -1257,6 +1332,17 @@ function CreatorsInner() {
           {t("creators.paused")}
         </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => setStatusFilter("rejected")}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all",
+            statusFilter === "rejected" ? "bg-rose-600 text-white shadow-xs" : "border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+          )}
+        >
+          <XCircle size={13} />
+          {t("creators.rejectedCount", { count: rejectedCount })}
+        </button>
       </div>
       ) : null}
 
@@ -1297,7 +1383,7 @@ function CreatorsInner() {
               theme="light"
               searchable={false}
               value={statusFilter}
-              options={statusOptions.filter((option) => option.value === "all" || option.value === "active" || option.value === "review")}
+              options={statusOptions.filter((option) => option.value !== "paused")}
               onChange={setStatusFilter}
               className="min-w-0"
               triggerClassName={FILTER_TRIGGER}
@@ -1430,10 +1516,12 @@ function CreatorsInner() {
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
+              canRestore={userCanRestoreCreator(user, creator)}
               canRemove={canRemove}
               highlightedCategory={categoryFilter}
               onApprove={approve}
               onReject={reject}
+              onRestore={restore}
               onChangePassword={setPasswordCreator}
               onRemove={removeCreator}
               onViewTerm={isAdmin ? setTermCreator : undefined}
@@ -1447,10 +1535,12 @@ function CreatorsInner() {
               recurringContracts={recurringContracts}
               isAdmin={isAdmin}
               canModerate={userCanModerateCreator(user, creator)}
+              canRestore={userCanRestoreCreator(user, creator)}
               canRemove={canRemove}
               highlightedCategory={categoryFilter}
               onApprove={approve}
               onReject={reject}
+              onRestore={restore}
               onChangePassword={setPasswordCreator}
               onRemove={removeCreator}
               onViewTerm={isAdmin ? setTermCreator : undefined}

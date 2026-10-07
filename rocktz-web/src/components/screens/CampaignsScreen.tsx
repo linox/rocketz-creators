@@ -62,7 +62,7 @@ const STATUS_PILL: Record<string, string> = {
   finished: "bg-slate-900/80 text-slate-300 border-white/10",
 };
 
-type MaterialRow = CampaignCreator & { campaignName: string; companyName: string; companyLogo: string | null };
+type MaterialRow = CampaignCreator & { campaignName: string; companyName: string; companyLogo: string | null; applicationQuestion: string | null };
 
 function countValue(value?: string | number | null) {
   return Number(value ?? 0) || 0;
@@ -366,6 +366,7 @@ function CampaignsInner() {
           campaignName: campaign.name,
           companyName: campaign.company?.name || t("campaigns.client"),
           companyLogo: campaign.company?.logo_url ?? null,
+          applicationQuestion: campaign.application_question?.trim() || null,
         })),
       ),
     [items, t],
@@ -758,8 +759,8 @@ function CampaignsInner() {
                                     )}
                                     {row.notes ? (
                                       <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 text-xs text-amber-900">
-                                        <span className="mb-0.5 block font-bold">{t("campaigns.creatorNotes")}</span>
-                                        {row.notes}
+                                        <span className={cn("mb-0.5 block font-bold", row.applicationQuestion ? "text-[11px] leading-snug normal-case" : "")}>{row.applicationQuestion || t("campaigns.creatorNotes")}</span>
+                                        <span className="whitespace-pre-wrap">{row.notes}</span>
                                       </div>
                                     ) : null}
                                   </div>

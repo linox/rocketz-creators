@@ -79,6 +79,7 @@ class CampaignResource extends JsonResource
             ]),
             'has_custom_contract' => $this->requiresCustomContract(),
             'custom_contract_terms' => $this->requiresCustomContract() ? $this->custom_contract_terms : null,
+            'application_question' => $this->application_question ? trim((string) $this->application_question) : null,
             'approval_flow' => $this->approval_flow?->value,
             'posting_profile' => $this->posting_profile?->value ?? 'creator',
             'briefing' => $this->whenLoaded('briefing', fn () => $this->briefing ? [
