@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Check, Instagram, Mail, MapPin, Smartphone, Sparkles, User, X } from "lucide-react";
+import { Check, Instagram, Landmark, Mail, MapPin, Package, Smartphone, Sparkles, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
@@ -26,6 +27,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
   const { t } = useTranslation("app");
   const { t: tc } = useTranslation("common");
   const { t: tp } = useTranslation("profile");
+  const router = useRouter();
   const hasCreator = Boolean(user.creator?.id);
   const isCompany = user.role === "company";
   const [fullName, setFullName] = useState("");
@@ -58,8 +60,16 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
     setCountry(nextCountry);
     setCurrency(currencyForProfile(user.creator?.currency || user.company?.currency, nextCountry));
     setState(user.creator?.state || "");
-    setBio("");
+    setBio(user.creator?.bio ?? "");
     setCategories(normalizeCreatorCategories(user.creator?.categories ?? []));
+    if (!user.creator?.id) return;
+    let cancelled = false;
+    api.creator(user.creator.id).then((res) => {
+      if (!cancelled) setBio(res.data.bio ?? "");
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, user]);
 
   async function handleSubmit(event: FormEvent) {
@@ -103,7 +113,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
           country,
           currency,
           state: state || user.creator.state,
-          bio: bio.trim() || undefined,
+          bio: bio.trim() || null,
           categories: normalizeCreatorCategories(categories),
           socials: {
             ...(user.creator.socials ?? {}),
@@ -284,6 +294,39 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                   className="w-full resize-none rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-800 outline-none focus:border-brand-primary"
                 />
               </div>
+
+              {hasCreator && user.creator?.id ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      router.push(`/creators/${user.creator?.id}?tab=shipping`);
+                      onClose();
+                    }}
+                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-3 text-left hover:border-amber-300"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Package size={18} /></span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-slate-900">{tp("shippingTitle")}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{tp("shippingOpenHint")}</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      router.push(`/creators/${user.creator?.id}?tab=bank`);
+                      onClose();
+                    }}
+                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3 text-left hover:border-emerald-300"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><Landmark size={18} /></span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-slate-900">{tp("bankTitle")}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{tp("bankOpenHint")}</span>
+                    </span>
+                  </button>
+                </div>
+              ) : null}
 
               <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-white pt-4">
                 <button type="button" onClick={onClose} className="cursor-pointer rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">

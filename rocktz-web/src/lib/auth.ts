@@ -27,6 +27,7 @@ export type AuthUser = {
     can_access_all_countries?: boolean;
     categories?: string[];
     socials?: Record<string, string>;
+    bio?: string | null;
     portfolio_count?: number;
     storefront_unlocked?: boolean;
     contract_acceptance?: {
