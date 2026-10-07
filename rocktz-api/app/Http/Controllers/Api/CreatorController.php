@@ -27,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class CreatorController extends Controller
@@ -266,6 +267,15 @@ class CreatorController extends Controller
             'country' => Geo::countryRules(false),
             'currency' => Geo::currencyRules(false),
             'state' => Geo::regionRules($request->input('country') ?: $creator->country, false),
+            'birth_date' => ['sometimes', 'nullable', 'date', 'before_or_equal:today', 'after_or_equal:1900-01-01'],
+            'shipping_address' => ['sometimes', 'nullable', 'array'],
+            'shipping_address.zip' => ['nullable', 'string', 'max:20'],
+            'shipping_address.street' => ['nullable', 'string', 'max:180'],
+            'shipping_address.number' => ['nullable', 'string', 'max:30'],
+            'shipping_address.complement' => ['nullable', 'string', 'max:120'],
+            'shipping_address.neighborhood' => ['nullable', 'string', 'max:120'],
+            'shipping_address.city' => ['nullable', 'string', 'max:120'],
+            'shipping_address.state' => ['nullable', 'string', 'max:12'],
             'bio' => ['nullable', 'string'],
             'document' => ['nullable', 'string', 'max:40'],
             'cpf' => ['nullable', 'string', 'max:40'],
@@ -306,6 +316,12 @@ class CreatorController extends Controller
         if (isset($data['state'])) {
             $data['state'] = Geo::normalizeRegion($data['state']);
         }
+
+        if (array_key_exists('birth_date', $data) && $data['birth_date'] === '') {
+            $data['birth_date'] = null;
+        }
+
+        $data = $this->normalizeShippingAddress($creator, $data);
 
         $data = SafeHttpUrl::validateFields($data, ['photo_url']);
 
@@ -614,6 +630,80 @@ class CreatorController extends Controller
         }
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeShippingAddress(Creator $creator, array $data): array
+    {
+        if (! array_key_exists('shipping_address', $data)) {
+            return $data;
+        }
+
+        $raw = $data['shipping_address'];
+        if ($raw === null) {
+            $data['shipping_address'] = null;
+
+            return $data;
+        }
+
+        $country = Geo::normalizeCountry($data['country'] ?? $creator->country);
+        $state = trim((string) ($raw['state'] ?? ''));
+        $address = [
+            'zip' => $this->normalizeShippingZip($country, $raw['zip'] ?? null),
+            'street' => trim((string) ($raw['street'] ?? '')),
+            'number' => trim((string) ($raw['number'] ?? '')),
+            'complement' => trim((string) ($raw['complement'] ?? '')),
+            'neighborhood' => trim((string) ($raw['neighborhood'] ?? '')),
+            'city' => trim((string) ($raw['city'] ?? '')),
+            'state' => $state,
+        ];
+
+        $started = collect($address)->contains(fn ($value) => $value !== '');
+        if (! $started) {
+            $data['shipping_address'] = null;
+
+            return $data;
+        }
+
+        $errors = [];
+        foreach (['zip', 'street', 'number', 'neighborhood', 'city'] as $key) {
+            if ($address[$key] === '') {
+                $errors["shipping_address.{$key}"] = __('validation.required');
+            }
+        }
+        if (Geo::hasRegions($country)) {
+            if ($address['state'] === '') {
+                $errors['shipping_address.state'] = __('validation.required');
+            } elseif (! Geo::isValidRegion($country, $address['state'])) {
+                $errors['shipping_address.state'] = __('validation.in', ['attribute' => 'state']);
+            } else {
+                $address['state'] = Geo::normalizeRegion($address['state']);
+            }
+        }
+        if ($country === 'BR' && $address['zip'] !== '' && strlen($address['zip']) !== 8) {
+            $errors['shipping_address.zip'] = __('auth.shipping_zip_invalid');
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $address['complement'] = $address['complement'] !== '' ? $address['complement'] : null;
+        $data['shipping_address'] = $address;
+
+        return $data;
+    }
+
+    private function normalizeShippingZip(string $country, mixed $zip): string
+    {
+        $value = trim((string) $zip);
+        if ($country === 'BR') {
+            return preg_replace('/\D/', '', $value) ?? '';
+        }
+
+        return $value;
     }
 
     /**

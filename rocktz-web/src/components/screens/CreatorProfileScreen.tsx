@@ -40,6 +40,7 @@ import {
   Sparkles,
   Store,
   BarChart3,
+  Package,
   Trash2,
   User,
   UserCheck,
@@ -90,6 +91,7 @@ import {
 } from "@/lib/content-delivery-status";
 import { formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask } from "@/lib/masks";
 import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, currencyForProfile, defaultCurrencyForCountry, formatLocation, hasRegions, isValidCurrency, isValidRegion } from "@/lib/geo";
+import { EMPTY_SHIPPING, formatPostalCode, formatShippingLines, shippingFormFromAddress, shippingIssue, shippingPayload, type ShippingForm } from "@/lib/shipping-address";
 import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -486,6 +488,8 @@ const ROLE_OPTION_VALUES = [
 
 type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront" | "storefront-metrics";
 
+const creatorTabClass = "flex min-w-max flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border-none px-2 py-1.5 text-[10px] font-bold tracking-wide whitespace-nowrap uppercase sm:gap-1.5 sm:px-2.5 sm:py-2 sm:text-[11px]";
+
 function pathLooksLikeStorefrontMetrics(pathname: string): boolean {
   if (pathname.includes("storefront-metrics")) return true;
   if (typeof window !== "undefined" && window.location.pathname.includes("storefront-metrics")) return true;
@@ -665,6 +669,8 @@ function ProfileInner() {
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [state, setState] = useState("");
   const [cpf, setCpf] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [shipping, setShipping] = useState<ShippingForm>(EMPTY_SHIPPING);
   const [bio, setBio] = useState("");
   const [networks, setNetworks] = useState<Record<NetworkKey, NetworkForm>>(EMPTY_NETWORKS);
   const [prices, setPrices] = useState<PriceForm>(EMPTY_PRICES);
@@ -706,6 +712,8 @@ function ProfileInner() {
     setCurrency(nextCurrency);
     setState(data.state ?? "");
     setCpf(data.cpf || data.document || "");
+    setBirthDate(data.birth_date || "");
+    setShipping(shippingFormFromAddress(nextCountry, data.shipping_address));
     setBio(data.bio ?? "");
     setNetworks({
       instagram: {
@@ -1154,6 +1162,19 @@ function ProfileInner() {
       await alertWarning(tc("alerts.currencyRequiredTitle"), tc("alerts.currencyRequired"));
       return;
     }
+    if (birthDate && Number.isNaN(new Date(`${birthDate}T00:00:00`).getTime())) {
+      await alertWarning(tp("incompleteTitle"), tp("birthDateInvalid"));
+      return;
+    }
+    const addressIssue = shippingIssue(country, shipping);
+    if (addressIssue === "zip") {
+      await alertWarning(tp("incompleteTitle"), tp("shippingZipInvalid"));
+      return;
+    }
+    if (addressIssue === "incomplete") {
+      await alertWarning(tp("incompleteTitle"), tp("shippingIncomplete"));
+      return;
+    }
     try {
       const saved = await api.updateCreator(profile.id, {
         full_name: fullName.trim(),
@@ -1165,6 +1186,8 @@ function ProfileInner() {
         state: state || null,
         cpf: cpf || null,
         document: cpf || null,
+        birth_date: birthDate || null,
+        shipping_address: shippingPayload(country, shipping),
         bio,
         socials: {
           ...(profile.socials ?? {}),
@@ -1550,6 +1573,18 @@ function ProfileInner() {
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("whatsappLabel")}</span>
                   <span>{maskPII(creator.whatsapp, hideValues, tp("notInformed"))}</span>
                 </div>
+                <div>
+                  <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("birthDate")}</span>
+                  <span>{maskPII(creator.birth_date ? new Date(`${creator.birth_date}T00:00:00`).toLocaleDateString(locale) : null, hideValues, tp("notInformed"))}</span>
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("shippingTitle")}</span>
+                  {formatShippingLines(creator.shipping_address, creator.country).length ? (
+                    <span className="block whitespace-pre-line">{maskPII(formatShippingLines(creator.shipping_address, creator.country).join("\n"), hideValues, tp("notInformed"))}</span>
+                  ) : (
+                    <span>{tp("notInformed")}</span>
+                  )}
+                </div>
                 <SocialLinks socials={creator.socials} emptyLabel={tp("notInformed")} />
                 {(creator.categories ?? []).length > 0 ? (
                   <div>
@@ -1632,27 +1667,27 @@ function ProfileInner() {
             </div>
           ) : null}
           {showCreatorTabs ? (
-            <div className="mb-2 flex max-w-3xl overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
-              <button type="button" onClick={() => goTab("dashboard")} className={cn("flex min-w-[120px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "dashboard" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Home size={14} /> {tp("tabDashboard")}
+            <div className="mb-2 flex w-full overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-1">
+              <button type="button" onClick={() => goTab("dashboard")} className={cn(creatorTabClass, tab === "dashboard" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Home size={13} className="shrink-0" /> {tp("tabDashboard")}
               </button>
-              <button type="button" onClick={() => goTab("recurring")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "recurring" ? "bg-white text-purple-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Repeat size={14} /> {tp("tabRecurring")}
+              <button type="button" onClick={() => goTab("recurring")} className={cn(creatorTabClass, tab === "recurring" ? "bg-white text-purple-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Repeat size={13} className="shrink-0" /> {tp("tabRecurring")}
               </button>
-              <button type="button" onClick={() => goTab("campaigns")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "campaigns" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Megaphone size={14} /> {tp("tabCampaigns")}
+              <button type="button" onClick={() => goTab("campaigns")} className={cn(creatorTabClass, tab === "campaigns" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Megaphone size={13} className="shrink-0" /> {tp("tabCampaigns")}
               </button>
-              <button type="button" onClick={() => goTab("portfolio")} className={cn("flex min-w-[130px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "portfolio" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Video size={14} /> {tp("tabPortfolio")}
+              <button type="button" onClick={() => goTab("portfolio")} className={cn(creatorTabClass, tab === "portfolio" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Video size={13} className="shrink-0" /> {tp("tabPortfolio")}
               </button>
-              <button type="button" onClick={() => goTab("storefront")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Store size={14} /> {tp("tabStorefront")}
+              <button type="button" onClick={() => goTab("storefront")} className={cn(creatorTabClass, tab === "storefront" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Store size={13} className="shrink-0" /> {tp("tabStorefront")}
               </button>
-              <button type="button" onClick={() => goTab("storefront-metrics")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "storefront-metrics" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <BarChart3 size={14} /> {tp("tabStorefrontMetrics")}
+              <button type="button" onClick={() => goTab("storefront-metrics")} className={cn(creatorTabClass, tab === "storefront-metrics" ? "bg-white text-violet-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <BarChart3 size={13} className="shrink-0" /> {tp("tabStorefrontMetrics")}
               </button>
-              <button type="button" onClick={() => goTab("about")} className={cn("flex min-w-[110px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none px-3 py-2 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase", tab === "about" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <User size={14} /> {tp("tabAbout")}
+              <button type="button" onClick={() => goTab("about")} className={cn(creatorTabClass, tab === "about" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <User size={13} className="shrink-0" /> {tp("tabAbout")}
               </button>
             </div>
           ) : null}
@@ -1687,6 +1722,7 @@ function ProfileInner() {
                       setCountry(value);
                       setCurrency(nextCurrency);
                       setState("");
+                      setShipping((current) => ({ ...current, state: "", zip: formatPostalCode(value, current.zip) }));
                       setCpf((current) => formatTaxDocument(value, current));
                     }} />
                   </Field>
@@ -1702,6 +1738,42 @@ function ProfileInner() {
                   </Field>
                   <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
                   <Field label={tp("cpfCreator", { documents: documentsLabel })}><input className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(e) => setCpf(formatTaxDocument(country, e.target.value))} /></Field>
+                  <Field label={tp("birthDate")}>
+                    <input type="date" className={inputClass} value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthDate(e.target.value)} />
+                    <p className="text-[10px] text-slate-500">{tp("birthDateHint")}</p>
+                  </Field>
+                </div>
+              </div>
+
+              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><Package size={20} className="text-amber-600" /> {tp("shippingTitle")}</h3>
+                  <p className="mt-1 text-[12px] text-[#64748B]">{tp("shippingHint")}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label={tp("shippingZip")}>
+                    <input className={inputClass} value={shipping.zip} inputMode={country === "BR" ? "numeric" : "text"} autoComplete="postal-code" onChange={(e) => setShipping({ ...shipping, zip: formatPostalCode(country, e.target.value) })} />
+                  </Field>
+                  <Field label={tp("shippingStreet")}>
+                    <input className={inputClass} value={shipping.street} autoComplete="address-line1" onChange={(e) => setShipping({ ...shipping, street: e.target.value })} />
+                  </Field>
+                  <Field label={tp("shippingNumber")}>
+                    <input className={inputClass} value={shipping.number} onChange={(e) => setShipping({ ...shipping, number: e.target.value })} />
+                  </Field>
+                  <Field label={tp("shippingComplement")}>
+                    <input className={inputClass} value={shipping.complement} placeholder={tp("shippingComplementPh")} onChange={(e) => setShipping({ ...shipping, complement: e.target.value })} />
+                  </Field>
+                  <Field label={tp("shippingNeighborhood")}>
+                    <input className={inputClass} value={shipping.neighborhood} onChange={(e) => setShipping({ ...shipping, neighborhood: e.target.value })} />
+                  </Field>
+                  <Field label={tp("shippingCity")}>
+                    <input className={inputClass} value={shipping.city} autoComplete="address-level2" onChange={(e) => setShipping({ ...shipping, city: e.target.value })} />
+                  </Field>
+                  {hasRegions(country) ? (
+                    <Field label={tp("shippingState")}>
+                      <RegionSelect theme="light" country={country} value={shipping.state} onChange={(value) => setShipping({ ...shipping, state: value })} />
+                    </Field>
+                  ) : null}
                 </div>
               </div>
 

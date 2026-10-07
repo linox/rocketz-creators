@@ -254,6 +254,7 @@ class DomainApiTest extends TestCase
             ->assertJsonMissingPath('data.bank_details')
             ->assertJsonMissingPath('data.full_name')
             ->assertJsonMissingPath('data.birth_date')
+            ->assertJsonMissingPath('data.shipping_address')
             ->assertJsonMissingPath('data.contract_acceptance');
 
         $this->withToken($token)

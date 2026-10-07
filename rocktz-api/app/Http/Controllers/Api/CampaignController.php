@@ -322,6 +322,7 @@ class CampaignController extends Controller
             403,
             __('auth.campaign_city_restricted'),
         );
+        $this->assertCreatorEligibility($campaign, $creator);
         abort_unless(
             $campaign->matchesCreatorOrigin($creator),
             403,
@@ -532,6 +533,9 @@ class CampaignController extends Controller
             'delivery_type' => ['nullable', 'string'],
         ]);
 
+        $creator = Creator::query()->findOrFail($data['creator_id']);
+        $this->assertCreatorEligibility($campaign, $creator, true);
+
         $existing = CampaignCreator::query()
             ->where('campaign_id', $campaign->id)
             ->where('creator_id', $data['creator_id'])
@@ -593,6 +597,9 @@ class CampaignController extends Controller
             'is_direct_contract' => ['sometimes', 'boolean'],
             'is_barter' => ['sometimes', 'boolean'],
             'limit_by_city' => ['sometimes', 'boolean'],
+            'limit_by_age' => ['sometimes', 'boolean'],
+            'min_age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
+            'max_age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
             'restrict_to_landing' => ['sometimes', 'boolean'],
             'company_landing_page_id' => ['sometimes', 'nullable', 'integer'],
             'creator_group_ids' => ['sometimes', 'array'],
@@ -634,6 +641,7 @@ class CampaignController extends Controller
             $data['currency'] = $company?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         }
         $data = $this->withLocationLimit($request, $data, $creating, $company);
+        $data = $this->withAgeLimit($request, $data, $creating);
         $data = $this->withNetworkRange($request, $data, $creating);
         if ($creating && ! array_key_exists('restrict_to_landing', $data)) {
             $data['restrict_to_landing'] = false;
@@ -742,6 +750,26 @@ class CampaignController extends Controller
         abort_unless($campaign->matchesCreatorNetwork($creator), 403, __('auth.campaign_network_restricted'));
     }
 
+    private function assertCreatorEligibility(Campaign $campaign, Creator $creator, bool $forCompany = false): void
+    {
+        if ($campaign->limit_by_age) {
+            if (! $creator->birth_date) {
+                abort(403, __($forCompany ? 'auth.creator_birth_date_required' : 'auth.campaign_birth_date_required'));
+            }
+            abort_unless(
+                $campaign->matchesCreatorAge($creator),
+                403,
+                __($forCompany ? 'auth.creator_age_restricted' : 'auth.campaign_age_restricted', [
+                    'requirement' => $campaign->ageRequirementLabel(),
+                ]),
+            );
+        }
+
+        if ($campaign->is_barter && ! $creator->hasCompleteShippingAddress()) {
+            abort(403, __($forCompany ? 'auth.creator_shipping_required' : 'auth.campaign_shipping_required'));
+        }
+    }
+
     private function landingRestrictionMessage(Campaign $campaign): string
     {
         return $campaign->company_landing_page_id
@@ -784,6 +812,56 @@ class CampaignController extends Controller
         $data['limit_by_city'] = true;
         $data['city'] = trim((string) $validated['city']);
         $data['state'] = $needsRegion ? Geo::normalizeRegion($validated['state'] ?? null) : null;
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withAgeLimit(Request $request, array $data, bool $creating): array
+    {
+        $existing = $creating ? null : $request->route('campaign');
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $limited = array_key_exists('limit_by_age', $data)
+            ? (bool) $data['limit_by_age']
+            : ($creating ? false : (bool) $campaign?->limit_by_age);
+
+        if (! array_key_exists('limit_by_age', $data) && ! $creating && ! array_key_exists('min_age', $data) && ! array_key_exists('max_age', $data)) {
+            return $data;
+        }
+
+        if (! $limited) {
+            if ($creating || array_key_exists('limit_by_age', $data)) {
+                $data['limit_by_age'] = false;
+                $data['min_age'] = null;
+                $data['max_age'] = null;
+            }
+
+            return $data;
+        }
+
+        $validated = $request->validate([
+            'min_age' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'max_age' => ['nullable', 'integer', 'min:0', 'max:120'],
+        ]);
+        $min = $validated['min_age'] ?? null;
+        $max = $validated['max_age'] ?? null;
+        if ($min === null && $max === null) {
+            throw ValidationException::withMessages([
+                'min_age' => __('auth.campaign_age_required'),
+            ]);
+        }
+        if ($min !== null && $max !== null && (int) $max < (int) $min) {
+            throw ValidationException::withMessages([
+                'max_age' => __('auth.campaign_age_range_invalid'),
+            ]);
+        }
+
+        $data['limit_by_age'] = true;
+        $data['min_age'] = $min;
+        $data['max_age'] = $max;
 
         return $data;
     }
@@ -870,7 +948,8 @@ class CampaignController extends Controller
                                     ->matchingCreatorLocation($user->creator)
                                     ->matchingCreatorOrigin($user->creator)
                                     ->matchingCreatorGroups($user->creator)
-                                    ->matchingCreatorNetwork($user->creator);
+                                    ->matchingCreatorNetwork($user->creator)
+                                    ->matchingCreatorAge($user->creator);
                             });
                         } else {
                             $country = $user->creator?->countryCode() ?: Geo::DEFAULT_COUNTRY;
@@ -880,7 +959,8 @@ class CampaignController extends Controller
                                     ->matchingCreatorLocation($user->creator)
                                     ->matchingCreatorOrigin($user->creator)
                                     ->matchingCreatorGroups($user->creator)
-                                    ->matchingCreatorNetwork($user->creator);
+                                    ->matchingCreatorNetwork($user->creator)
+                                    ->matchingCreatorAge($user->creator);
                             });
                         }
                     })
@@ -911,6 +991,11 @@ class CampaignController extends Controller
             $campaign->loadMissing('company');
             abort_unless($user->creator?->canAccessCompanyCountry($campaign->company), 403, __('auth.campaign_country_restricted'));
             abort_unless($user->creator && $campaign->matchesCreatorLocation($user->creator), 403, __('auth.campaign_city_restricted'));
+            abort_unless(
+                $user->creator && $campaign->isVisibleForCreatorAge($user->creator),
+                403,
+                __('auth.campaign_age_restricted', ['requirement' => $campaign->ageRequirementLabel()]),
+            );
             abort_unless($user->creator && $campaign->matchesCreatorOrigin($user->creator), 403, $this->landingRestrictionMessage($campaign));
             if ($user->creator) {
                 $this->assertCreatorAudience($campaign, $user->creator);

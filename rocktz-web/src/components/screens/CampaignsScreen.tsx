@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Archive,
   ArrowUpRight,
+  Cake,
   Calendar,
   Camera,
   Check,
@@ -189,6 +190,11 @@ function CampaignCard({
             {campaign.limit_by_city ? (
               <span className="flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-200 uppercase backdrop-blur-md">
                 <MapPin size={10} /> {t("campaigns.cityLimited")}
+              </span>
+            ) : null}
+            {campaign.limit_by_age ? (
+              <span className="flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-violet-100 uppercase backdrop-blur-md">
+                <Cake size={10} /> {t("campaigns.ageLimited")}
               </span>
             ) : null}
             {(campaign.creator_groups?.length ?? 0) > 0 ? (

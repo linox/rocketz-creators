@@ -42,7 +42,7 @@ return [
         'creator.approved' => [
             'subject' => 'Tu registro fue aprobado en Creatorz',
             'greeting' => 'Hola, {{nome_criador}}!',
-            'body' => "Creatorz aprobó tu registro en la plataforma Creatorz by Rocketz.\n\nEsta aprobación es de Creatorz. No es una aprobación en una campaña y no la hizo una empresa socia.\n\nCon el registro activo, ya puedes entrar a la plataforma, completar tu perfil y seguir las oportunidades disponibles.",
+            'body' => "Tu registro fue aprobado en Creatorz by Rocketz.\n\nEsta aprobación es de Creatorz. No es una aprobación en una campaña y no la hizo una empresa socia.\n\nCon el registro activo, ya puedes entrar a la plataforma, completar tu perfil y seguir las oportunidades disponibles.",
             'cta' => 'Acceder a la plataforma',
         ],
         'creator.rejected' => [

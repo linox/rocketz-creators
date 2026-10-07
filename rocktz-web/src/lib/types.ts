@@ -11,6 +11,16 @@ export type Creator = {
   country?: string | null;
   currency?: string | null;
   state: string | null;
+  birth_date?: string | null;
+  shipping_address?: {
+    zip?: string | null;
+    street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+  } | null;
   bio: string | null;
   document?: string | null;
   cpf?: string | null;
@@ -208,6 +218,9 @@ export type Campaign = {
   is_direct_contract: boolean;
   is_barter: boolean;
   limit_by_city?: boolean;
+  limit_by_age?: boolean;
+  min_age?: number | null;
+  max_age?: number | null;
   restrict_to_landing?: boolean;
   state?: string | null;
   city?: string | null;
@@ -261,6 +274,16 @@ export type CampaignCreator = {
     state?: string | null;
     whatsapp?: string | null;
     pix_key?: string | null;
+    age?: number | null;
+    shipping_address?: {
+      zip?: string | null;
+      street?: string | null;
+      number?: string | null;
+      complement?: string | null;
+      neighborhood?: string | null;
+      city?: string | null;
+      state?: string | null;
+    } | null;
     categories?: string[];
     metrics?: Record<string, number>;
     pricing?: Record<string, number>;

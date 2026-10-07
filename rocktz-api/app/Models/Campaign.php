@@ -37,6 +37,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_direct_contract',
     'is_barter',
     'limit_by_city',
+    'limit_by_age',
+    'min_age',
+    'max_age',
     'restrict_to_landing',
     'min_followers',
     'max_followers',
@@ -90,6 +93,9 @@ class Campaign extends Model
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
             'limit_by_city' => 'boolean',
+            'limit_by_age' => 'boolean',
+            'min_age' => 'integer',
+            'max_age' => 'integer',
             'restrict_to_landing' => 'boolean',
             'min_followers' => 'integer',
             'max_followers' => 'integer',
@@ -209,6 +215,50 @@ class Campaign extends Model
         return $state !== '' || $city !== '';
     }
 
+    public function matchesCreatorAge(?Creator $creator): bool
+    {
+        if (! $this->limit_by_age) {
+            return true;
+        }
+        if (! $creator?->birth_date) {
+            return false;
+        }
+
+        $age = $creator->birth_date->age;
+        if ($this->min_age !== null && $age < (int) $this->min_age) {
+            return false;
+        }
+        if ($this->max_age !== null && $age > (int) $this->max_age) {
+            return false;
+        }
+
+        return $this->min_age !== null || $this->max_age !== null;
+    }
+
+    public function isVisibleForCreatorAge(?Creator $creator): bool
+    {
+        if (! $this->limit_by_age || ! $creator?->birth_date) {
+            return true;
+        }
+
+        return $this->matchesCreatorAge($creator);
+    }
+
+    public function ageRequirementLabel(): string
+    {
+        if ($this->min_age !== null && $this->max_age !== null) {
+            return __('auth.age_between', ['min' => $this->min_age, 'max' => $this->max_age]);
+        }
+        if ($this->min_age !== null) {
+            return __('auth.age_from', ['min' => $this->min_age]);
+        }
+        if ($this->max_age !== null) {
+            return __('auth.age_up_to', ['max' => $this->max_age]);
+        }
+
+        return __('auth.age_validated');
+    }
+
     public function matchesCreatorOrigin(?Creator $creator): bool
     {
         if ($this->company_landing_page_id) {
@@ -283,6 +333,29 @@ class Campaign extends Model
         });
     }
 
+    public function scopeMatchingCreatorAge($query, Creator $creator)
+    {
+        return $query->where(function ($builder) use ($creator) {
+            $builder->where('limit_by_age', false);
+            if (! $creator->birth_date) {
+                $builder->orWhere('limit_by_age', true);
+
+                return;
+            }
+
+            $age = $creator->birth_date->age;
+            $builder->orWhere(function ($limited) use ($age) {
+                $limited->where('limit_by_age', true)
+                    ->where(function ($min) use ($age) {
+                        $min->whereNull('min_age')->orWhere('min_age', '<=', $age);
+                    })
+                    ->where(function ($max) use ($age) {
+                        $max->whereNull('max_age')->orWhere('max_age', '>=', $age);
+                    });
+            });
+        });
+    }
+
     public function scopeMatchingCreatorOrigin($query, Creator $creator)
     {
         $companyIds = $creator->originCompanyIds();
@@ -344,7 +417,8 @@ class Campaign extends Model
                 $eligible->matchingCreatorLocation($creator)
                     ->matchingCreatorOrigin($creator)
                     ->matchingCreatorGroups($creator)
-                    ->matchingCreatorNetwork($creator);
+                    ->matchingCreatorNetwork($creator)
+                    ->matchingCreatorAge($creator);
             })->orWhereHas('campaignCreators', fn ($q) => $q->where('creator_id', $creator->id));
         });
     }

@@ -22,6 +22,7 @@ import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
+import { CampaignAgeFields } from "@/components/CampaignAgeFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { PostingProfileCards } from "@/components/PostingProfileCards";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
@@ -33,6 +34,7 @@ import { cn } from "@/lib/cn";
 import type { Company } from "@/lib/types";
 import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
 import { parseMoneyMask, remaskMoney } from "@/lib/masks";
+import { parseAgeLimit } from "@/lib/campaign-age";
 import { rangeFromTier } from "@/lib/network-size";
 import { uploadScriptDocument } from "@/lib/script-document";
 import { usePrivacy } from "@/lib/privacy";
@@ -129,6 +131,9 @@ export function CreateCampaignModal({
   const [hasCustomContract, setHasCustomContract] = useState(false);
   const [customContractTerms, setCustomContractTerms] = useState("");
   const [limitByCity, setLimitByCity] = useState(false);
+  const [limitByAge, setLimitByAge] = useState(false);
+  const [minAge, setMinAge] = useState("");
+  const [maxAge, setMaxAge] = useState("");
   const [restrictToLanding, setRestrictToLanding] = useState(false);
   const [landingPageId, setLandingPageId] = useState("");
   const [groupIds, setGroupIds] = useState<number[]>([]);
@@ -268,6 +273,13 @@ export function CreateCampaignModal({
         return;
       }
     }
+    const ageLimit = parseAgeLimit(limitByAge, minAge, maxAge);
+    if (!ageLimit.ok) {
+      setTab("geral");
+      const message = ageLimit.error === "range" ? t("campaigns.ageRangeInvalid") : ageLimit.error === "required" ? t("campaigns.ageRequired") : t("campaigns.ageInvalid");
+      await alertWarning(tc("alerts.incompleteTitle"), message);
+      return;
+    }
     const audience = rangeFromTier(networkTier, minFollowers, maxFollowers);
     if (audience.min != null && audience.max != null && audience.max < audience.min) {
       setTab("geral");
@@ -312,6 +324,9 @@ export function CreateCampaignModal({
         has_custom_contract: hasCustomContract,
         custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
         limit_by_city: limitByCity,
+        limit_by_age: ageLimit.limit_by_age,
+        min_age: ageLimit.min_age,
+        max_age: ageLimit.max_age,
         restrict_to_landing: restrictToLanding,
         company_landing_page_id: restrictToLanding && landingPageId ? Number(landingPageId) : null,
         creator_group_ids: groupIds,
@@ -492,6 +507,20 @@ export function CreateCampaignModal({
                   companyId={isAdmin ? (companyId ? Number(companyId) : null) : defaultCompanyId}
                   landingPageId={landingPageId}
                   onLandingPageIdChange={setLandingPageId}
+                />
+                <CampaignAgeFields
+                  enabled={limitByAge}
+                  onEnabledChange={(value) => {
+                    setLimitByAge(value);
+                    if (!value) {
+                      setMinAge("");
+                      setMaxAge("");
+                    }
+                  }}
+                  minAge={minAge}
+                  onMinAgeChange={setMinAge}
+                  maxAge={maxAge}
+                  onMaxAgeChange={setMaxAge}
                 />
                 <CampaignLocationFields
                   country={selectedCompany?.country}

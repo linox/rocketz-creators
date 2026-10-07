@@ -37,6 +37,8 @@ class CampaignCreatorResource extends JsonResource
 
                 if (in_array($request->user()?->role?->value, ['admin', 'company'], true)) {
                     $creator['pix_key'] = $this->creator->pix_key;
+                    $creator['age'] = $this->creator->age();
+                    $creator['shipping_address'] = $this->creator->shipping_address;
                     $creator['categories'] = $this->creator->categories ?? [];
                     $creator['metrics'] = $this->creator->metrics ?? [];
                     $creator['pricing'] = $this->creator->pricing ?? [];

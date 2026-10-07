@@ -42,7 +42,7 @@ return [
         'creator.approved' => [
             'subject' => 'Your account was approved on Creatorz',
             'greeting' => 'Hi, {{nome_criador}}!',
-            'body' => "Creatorz approved your account on the Creatorz by Rocketz platform.\n\nThis approval comes from Creatorz. It is not a campaign approval and it was not issued by a partner company.\n\nWith an active account, you can open the platform, complete your profile and follow the opportunities available to you.",
+            'body' => "Your account was approved on Creatorz by Rocketz.\n\nThis approval comes from Creatorz. It is not a campaign approval and it was not issued by a partner company.\n\nWith an active account, you can open the platform, complete your profile and follow the opportunities available to you.",
             'cta' => 'Open the platform',
         ],
         'creator.rejected' => [

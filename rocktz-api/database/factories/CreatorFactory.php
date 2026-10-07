@@ -34,6 +34,15 @@ class CreatorFactory extends Factory
             'currency' => 'BRL',
             'state' => fake()->randomElement(['SP', 'RJ', 'MG', 'RS', 'PR', 'BA', 'SC']),
             'birth_date' => fake()->dateTimeBetween('-40 years', '-18 years')->format('Y-m-d'),
+            'shipping_address' => [
+                'zip' => '01310100',
+                'street' => 'Avenida Paulista',
+                'number' => '1000',
+                'complement' => null,
+                'neighborhood' => 'Bela Vista',
+                'city' => 'São Paulo',
+                'state' => 'SP',
+            ],
             'pix_key' => fake()->safeEmail(),
             'bank_details' => 'Banco '.fake()->randomElement(['Nubank', 'Itaú', 'Bradesco', 'Inter']).' / agência '.fake()->numerify('####').' / conta '.fake()->numerify('#####-#'),
             'socials' => [

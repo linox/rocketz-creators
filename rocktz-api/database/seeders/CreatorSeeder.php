@@ -31,6 +31,15 @@ class CreatorSeeder extends Seeder
                 'city' => 'São Paulo',
                 'state' => 'SP',
                 'birth_date' => '1996-04-18',
+                'shipping_address' => [
+                    'zip' => '01310100',
+                    'street' => 'Avenida Paulista',
+                    'number' => '1000',
+                    'complement' => 'Conjunto 101',
+                    'neighborhood' => 'Bela Vista',
+                    'city' => 'São Paulo',
+                    'state' => 'SP',
+                ],
                 'pix_key' => DemoAccounts::CREATOR_ANA,
                 'bank_details' => 'Banco Nubank / agência 0001 / conta 12345-6',
                 'socials' => [

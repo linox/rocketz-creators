@@ -30,6 +30,7 @@ use Illuminate\Support\Str;
     'currency',
     'state',
     'birth_date',
+    'shipping_address',
     'pix_key',
     'bank_details',
     'socials',
@@ -62,6 +63,7 @@ class Creator extends Model
     {
         return [
             'birth_date' => 'date',
+            'shipping_address' => 'array',
             'socials' => 'array',
             'metrics' => 'array',
             'categories' => 'array',
@@ -290,6 +292,34 @@ class Creator extends Model
         return $this->recurringContractCreators()
             ->whereHas('recurringContract', fn (Builder $query) => $query->where('company_id', $companyId))
             ->exists();
+    }
+
+    public function age(): ?int
+    {
+        return $this->birth_date?->age;
+    }
+
+    public function hasCompleteShippingAddress(): bool
+    {
+        $address = is_array($this->shipping_address) ? $this->shipping_address : [];
+        foreach (['zip', 'street', 'number', 'neighborhood', 'city'] as $key) {
+            if (! filled($address[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        if (Geo::hasRegions($this->countryCode()) && ! filled($address['state'] ?? null)) {
+            return false;
+        }
+
+        if ($this->countryCode() === 'BR') {
+            $zip = preg_replace('/\D/', '', (string) ($address['zip'] ?? '')) ?? '';
+            if (strlen($zip) !== 8) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function countryCode(): string

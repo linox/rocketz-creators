@@ -39,6 +39,7 @@ import {
   LayoutGrid,
   LayoutTemplate,
   Lock,
+  Cake,
   MapPin,
   Megaphone,
   MessageCircle,
@@ -64,6 +65,7 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
+import { CampaignAgeFields } from "@/components/CampaignAgeFields";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
 import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
@@ -80,7 +82,9 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
+import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
+import { formatShippingLines } from "@/lib/shipping-address";
 import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
@@ -496,6 +500,9 @@ function DetailInner() {
     has_custom_contract: false,
     custom_contract_terms: "",
     limit_by_city: false,
+    limit_by_age: false,
+    min_age: "",
+    max_age: "",
     restrict_to_landing: false,
     company_landing_page_id: "",
     creator_group_ids: [] as number[],
@@ -907,6 +914,9 @@ function DetailInner() {
       has_custom_contract: Boolean(campaign.has_custom_contract),
       custom_contract_terms: campaign.custom_contract_terms || "",
       limit_by_city: Boolean(campaign.limit_by_city),
+      limit_by_age: Boolean(campaign.limit_by_age),
+      min_age: campaign.min_age != null ? String(campaign.min_age) : "",
+      max_age: campaign.max_age != null ? String(campaign.max_age) : "",
       restrict_to_landing: Boolean(campaign.restrict_to_landing || campaign.company_landing_page_id),
       company_landing_page_id: campaign.company_landing_page_id ? String(campaign.company_landing_page_id) : "",
       creator_group_ids: (campaign.creator_groups ?? []).map((group) => group.id),
@@ -958,6 +968,12 @@ function DetailInner() {
         return;
       }
     }
+    const ageLimit = parseAgeLimit(editForm.limit_by_age, editForm.min_age, editForm.max_age);
+    if (!ageLimit.ok) {
+      const message = ageLimit.error === "range" ? t("campaigns.ageRangeInvalid") : ageLimit.error === "required" ? t("campaigns.ageRequired") : t("campaigns.ageInvalid");
+      await alertWarning(tc("alerts.incompleteTitle"), message);
+      return;
+    }
     if (editForm.has_custom_contract && !editForm.custom_contract_terms.trim()) {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.customContractRequired"));
       return;
@@ -995,6 +1011,9 @@ function DetailInner() {
         has_custom_contract: editForm.has_custom_contract,
         custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
         limit_by_city: editForm.limit_by_city,
+        limit_by_age: ageLimit.limit_by_age,
+        min_age: ageLimit.min_age,
+        max_age: ageLimit.max_age,
         restrict_to_landing: editForm.restrict_to_landing,
         company_landing_page_id: editForm.restrict_to_landing && editForm.company_landing_page_id ? Number(editForm.company_landing_page_id) : null,
         creator_group_ids: editForm.creator_group_ids,
@@ -1209,6 +1228,11 @@ function DetailInner() {
                   {campaign.limit_by_city ? (
                     <span className="flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700">
                       <MapPin size={9} /> {campaignLocationLabel(locale, campaign) || t("campaigns.cityLimited")}
+                    </span>
+                  ) : null}
+                  {campaign.limit_by_age ? (
+                    <span className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
+                      <Cake size={9} /> {campaignAgeLabel(t, campaign)}
                     </span>
                   ) : null}
                   {(campaign.creator_groups?.length ?? 0) > 0 ? (
@@ -1749,7 +1773,11 @@ function DetailInner() {
                         <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
                       </div>
                       <span className="text-xs font-semibold text-slate-400">
-                        {[selectedCreator.full_name, selectedCreator.city || t("campaignDetail.brazil")].filter(Boolean).join(" • ")}
+                        {[
+                          selectedCreator.full_name,
+                          selectedCreator.city || t("campaignDetail.brazil"),
+                          campaign.limit_by_age ? (selectedCreator.age != null ? t("campaignDetail.creatorAge", { age: selectedCreator.age }) : t("campaignDetail.ageMissing")) : null,
+                        ].filter(Boolean).join(" • ")}
                       </span>
                     </div>
                   </div>
@@ -1771,6 +1799,17 @@ function DetailInner() {
                     ) : null}
                   </div>
                 </div>
+
+                {!isCreator && campaign.is_barter ? (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                    <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">{t("campaignDetail.shippingAddress")}</p>
+                    {formatShippingLines(selectedCreator.shipping_address, selectedCreator.country).length ? (
+                      <p className="mt-1 whitespace-pre-line text-sm font-semibold text-slate-800">{formatShippingLines(selectedCreator.shipping_address, selectedCreator.country).join("\n")}</p>
+                    ) : (
+                      <p className="mt-1 text-sm font-medium text-slate-500">{t("campaignDetail.shippingMissing")}</p>
+                    )}
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
@@ -2934,6 +2973,14 @@ function DetailInner() {
                   companyId={Number(editForm.company_id) || campaign.company_id}
                   landingPageId={editForm.company_landing_page_id}
                   onLandingPageIdChange={(value) => setEditForm({ ...editForm, company_landing_page_id: value })}
+                />
+                <CampaignAgeFields
+                  enabled={editForm.limit_by_age}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, limit_by_age: value, min_age: value ? editForm.min_age : "", max_age: value ? editForm.max_age : "" })}
+                  minAge={editForm.min_age}
+                  onMinAgeChange={(value) => setEditForm({ ...editForm, min_age: value })}
+                  maxAge={editForm.max_age}
+                  onMaxAgeChange={(value) => setEditForm({ ...editForm, max_age: value })}
                 />
                 <CampaignLocationFields
                   country={companies.find((company) => String(company.id) === editForm.company_id)?.country || campaign.company?.country}
