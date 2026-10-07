@@ -37,6 +37,51 @@ export function alertWarning(title: string, text?: string) {
   });
 }
 
+function escapeAlertHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+export async function alertWarningLink(options: {
+  title: string;
+  text: string;
+  href: string;
+  linkLabel: string;
+}): Promise<boolean> {
+  const href = escapeAlertHtml(options.href);
+  const result = await Swal.fire({
+    ...base(),
+    icon: "warning",
+    title: options.title,
+    html: `<p class="m-0">${escapeAlertHtml(options.text)}</p><p class="m-0 mt-3"><a href="${href}" class="font-bold text-brand-primary underline">${escapeAlertHtml(options.linkLabel)}</a></p>`,
+    showCancelButton: true,
+    confirmButtonText: options.linkLabel,
+    cancelButtonText: i18n.t("common:cancel"),
+  });
+  return result.isConfirmed;
+}
+
+export function alertLoading(title: string, text?: string) {
+  void Swal.fire({
+    ...base(),
+    title,
+    text,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    didOpen: () => {
+      Swal.showLoading();
+    },
+  });
+}
+
+export function closeAlert() {
+  Swal.close();
+}
+
 export function alertSuccess(title: string, text?: string, options?: { timerMs?: number }) {
   const timerMs = options?.timerMs;
   const timed = typeof timerMs === "number" && timerMs > 0;

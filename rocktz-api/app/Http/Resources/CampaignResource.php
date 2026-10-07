@@ -67,6 +67,12 @@ class CampaignResource extends JsonResource
             'state' => $this->state,
             'city' => $this->city,
             'barter_details' => $this->barter_details,
+            'shipping_sender' => $this->when($this->audienceVisible($request), fn () => [
+                'id' => $this->shipping_sender_id ? (int) $this->shipping_sender_id : null,
+                'name' => $this->sender_name,
+                'phone' => $this->sender_phone,
+                'address' => $this->sender_address,
+            ]),
             'has_custom_contract' => $this->requiresCustomContract(),
             'custom_contract_terms' => $this->requiresCustomContract() ? $this->custom_contract_terms : null,
             'approval_flow' => $this->approval_flow?->value,

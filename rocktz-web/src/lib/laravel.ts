@@ -52,17 +52,20 @@ function offlineApiMessage(): string {
 
 type LaravelError = {
   message?: string;
+  code?: string;
   errors?: Record<string, string[]>;
 };
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
   errors?: Record<string, string[]>;
 
-  constructor(message: string, status: number, errors?: Record<string, string[]>) {
+  constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string) {
     super(message);
     this.status = status;
     this.errors = errors;
+    this.code = code;
   }
 }
 
@@ -658,10 +661,40 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;
 
   if (!response.ok) {
-    throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors);
+    throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors, data.code);
   }
 
   return data;
+}
+
+export async function laravelDownload(path: string): Promise<{ blob: Blob; filename: string }> {
+  const headers = new Headers();
+  headers.set("Accept", "application/json");
+  headers.set("X-Requested-With", "XMLHttpRequest");
+  headers.set("Accept-Language", getAppLocale());
+  const token = getToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("X-Auth-Token", token);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${getApiUrl()}${path}`, { headers, cache: "no-store" });
+  } catch {
+    throw new ApiError(offlineApiMessage(), 0);
+  }
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as LaravelError;
+    throw new ApiError(data.message ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors, data.code);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+  const filename = decodeURIComponent(match?.[1] || match?.[2] || "download");
+
+  return { blob: await response.blob(), filename };
 }
 
 export async function fetchMe(): Promise<AuthUser> {

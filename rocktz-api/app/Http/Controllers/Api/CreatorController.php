@@ -269,6 +269,7 @@ class CreatorController extends Controller
             'state' => Geo::regionRules($request->input('country') ?: $creator->country, false),
             'birth_date' => ['sometimes', 'nullable', 'date', 'before_or_equal:today', 'after_or_equal:1900-01-01'],
             'shipping_address' => ['sometimes', 'nullable', 'array'],
+            'shipping_address.country' => ['nullable', 'string', 'size:2'],
             'shipping_address.zip' => ['nullable', 'string', 'max:20'],
             'shipping_address.street' => ['nullable', 'string', 'max:180'],
             'shipping_address.number' => ['nullable', 'string', 'max:30'],
@@ -280,6 +281,14 @@ class CreatorController extends Controller
             'document' => ['nullable', 'string', 'max:40'],
             'cpf' => ['nullable', 'string', 'max:40'],
             'pix_key' => ['nullable', 'string', 'max:255'],
+            'bank_account' => ['sometimes', 'nullable', 'array'],
+            'bank_account.holder_name' => ['nullable', 'string', 'max:160'],
+            'bank_account.bank_name' => ['nullable', 'string', 'max:120'],
+            'bank_account.agency' => ['nullable', 'string', 'max:12'],
+            'bank_account.account' => ['nullable', 'string', 'max:20'],
+            'bank_account.account_type' => ['nullable', 'string', Rule::in(['checking', 'savings'])],
+            'bank_account.pix_type' => ['nullable', 'string', Rule::in(['cpf', 'cnpj', 'email', 'phone', 'random'])],
+            'bank_account.pix_key' => ['nullable', 'string', 'max:77'],
             'bank_details' => ['nullable', 'string'],
             'socials' => ['nullable', 'array'],
             'socials.instagram' => ['nullable', 'string', 'max:255'],
@@ -322,6 +331,7 @@ class CreatorController extends Controller
         }
 
         $data = $this->normalizeShippingAddress($creator, $data);
+        $data = $this->normalizeBankAccount($data);
 
         $data = SafeHttpUrl::validateFields($data, ['photo_url']);
 
@@ -649,7 +659,18 @@ class CreatorController extends Controller
             return $data;
         }
 
-        $country = Geo::normalizeCountry($data['country'] ?? $creator->country);
+        $rawCountry = Geo::normalizeCountry($raw['country'] ?? '');
+        if ($rawCountry !== '' && ! Geo::isValidCountry($rawCountry)) {
+            throw ValidationException::withMessages([
+                'shipping_address.country' => __('validation.in', ['attribute' => 'country']),
+            ]);
+        }
+        $country = $rawCountry !== ''
+            ? $rawCountry
+            : Geo::normalizeCountry($data['country'] ?? $creator->country);
+        if (! Geo::isValidCountry($country)) {
+            $country = $creator->countryCode();
+        }
         $state = trim((string) ($raw['state'] ?? ''));
         $address = [
             'zip' => $this->normalizeShippingZip($country, $raw['zip'] ?? null),
@@ -691,9 +712,118 @@ class CreatorController extends Controller
         }
 
         $address['complement'] = $address['complement'] !== '' ? $address['complement'] : null;
+        $address['country'] = $country;
         $data['shipping_address'] = $address;
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeBankAccount(array $data): array
+    {
+        if (! array_key_exists('bank_account', $data)) {
+            return $data;
+        }
+
+        $raw = $data['bank_account'];
+        if ($raw === null) {
+            $data['bank_account'] = null;
+            $data['pix_key'] = null;
+            $data['bank_details'] = null;
+
+            return $data;
+        }
+
+        $account = [
+            'holder_name' => trim((string) ($raw['holder_name'] ?? '')),
+            'bank_name' => trim((string) ($raw['bank_name'] ?? '')),
+            'agency' => preg_replace('/\D/', '', (string) ($raw['agency'] ?? '')) ?? '',
+            'account' => preg_replace('/[^\d-]/', '', (string) ($raw['account'] ?? '')) ?? '',
+            'account_type' => (string) ($raw['account_type'] ?? ''),
+            'pix_type' => (string) ($raw['pix_type'] ?? ''),
+            'pix_key' => trim((string) ($raw['pix_key'] ?? '')),
+        ];
+
+        $bankStarted = $account['holder_name'] !== '' || $account['bank_name'] !== '' || $account['agency'] !== '' || $account['account'] !== '' || $account['account_type'] !== '';
+        $pixStarted = $account['pix_type'] !== '' || $account['pix_key'] !== '';
+        if (! $bankStarted && ! $pixStarted) {
+            $data['bank_account'] = null;
+            $data['pix_key'] = null;
+            $data['bank_details'] = null;
+
+            return $data;
+        }
+
+        $errors = [];
+        if ($bankStarted) {
+            foreach (['bank_name', 'agency', 'account'] as $key) {
+                if ($account[$key] === '') {
+                    $errors["bank_account.{$key}"] = __('bank.incomplete');
+                }
+            }
+            if (! in_array($account['account_type'], ['checking', 'savings'], true)) {
+                $errors['bank_account.account_type'] = __('bank.account_type');
+            }
+        }
+        if ($pixStarted) {
+            if (! in_array($account['pix_type'], ['cpf', 'cnpj', 'email', 'phone', 'random'], true)) {
+                $errors['bank_account.pix_type'] = __('bank.pix_type');
+            } elseif ($account['pix_key'] === '') {
+                $errors['bank_account.pix_key'] = __('bank.pix_incomplete');
+            } elseif (! $this->pixKeyMatches($account['pix_type'], $account['pix_key'])) {
+                $errors['bank_account.pix_key'] = __('bank.pix_invalid');
+            }
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $account['holder_name'] = $account['holder_name'] !== '' ? $account['holder_name'] : null;
+        $account['bank_name'] = $account['bank_name'] !== '' ? $account['bank_name'] : null;
+        $account['agency'] = $account['agency'] !== '' ? $account['agency'] : null;
+        $account['account'] = $account['account'] !== '' ? $account['account'] : null;
+        $account['account_type'] = $bankStarted ? $account['account_type'] : null;
+        $account['pix_type'] = $pixStarted ? $account['pix_type'] : null;
+        $account['pix_key'] = $pixStarted ? $this->normalizePixKey($account['pix_type'], $account['pix_key']) : null;
+        $data['bank_account'] = $account;
+        $data['pix_key'] = $account['pix_key'];
+        $details = array_values(array_filter([
+            $account['bank_name'],
+            $account['agency'] ? 'ag '.$account['agency'] : null,
+            $account['account'],
+        ]));
+        $data['bank_details'] = $details === [] ? null : implode(' / ', $details);
+
+        return $data;
+    }
+
+    private function pixKeyMatches(string $type, string $value): bool
+    {
+        $digits = preg_replace('/\D/', '', $value) ?? '';
+
+        return match ($type) {
+            'cpf' => strlen($digits) === 11,
+            'cnpj' => strlen($digits) === 14,
+            'phone' => strlen($digits) >= 10 && strlen($digits) <= 13,
+            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
+            'random' => strlen(preg_replace('/\s/', '', $value) ?? '') >= 32,
+            default => false,
+        };
+    }
+
+    private function normalizePixKey(string $type, string $value): string
+    {
+        if ($type === 'email') {
+            return strtolower(trim($value));
+        }
+        if (in_array($type, ['cpf', 'cnpj', 'phone'], true)) {
+            return preg_replace('/\D/', '', $value) ?? '';
+        }
+
+        return preg_replace('/\s/', '', $value) ?? '';
     }
 
     private function normalizeShippingZip(string $country, mixed $zip): string

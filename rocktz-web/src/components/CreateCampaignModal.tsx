@@ -315,7 +315,7 @@ export function CreateCampaignModal({
         end_date: endDate,
         delivery_date: deliveryDate || null,
         total_budget: isBarter ? 0 : budget ? parseMoneyMask(budget, currency) : null,
-        creator_cache: creatorCache ? parseMoneyMask(creatorCache, currency) : null,
+        creator_cache: isBarter ? 0 : creatorCache ? parseMoneyMask(creatorCache, currency) : null,
         agency_fee_percent: isAdmin ? feePercent ?? DEFAULT_AGENCY_FEE_PERCENT : undefined,
         image_url: imageUrl || null,
         is_secret: isSecret,

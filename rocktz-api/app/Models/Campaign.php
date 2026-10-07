@@ -46,6 +46,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'state',
     'city',
     'barter_details',
+    'shipping_sender_id',
+    'sender_name',
+    'sender_phone',
+    'sender_address',
     'has_custom_contract',
     'custom_contract_terms',
     'approval_flow',
@@ -100,6 +104,7 @@ class Campaign extends Model
             'min_followers' => 'integer',
             'max_followers' => 'integer',
             'has_custom_contract' => 'boolean',
+            'sender_address' => 'array',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
         ];
@@ -145,6 +150,11 @@ class Campaign extends Model
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);
+    }
+
+    public function shippingSender(): BelongsTo
+    {
+        return $this->belongsTo(ShippingSender::class);
     }
 
     public function isPendingAgency(): bool

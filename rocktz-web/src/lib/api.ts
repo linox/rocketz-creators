@@ -1,10 +1,12 @@
 import i18n from "@/i18n/config";
+import type { PostalPlace } from "@/lib/shipping-address";
 import type { AuthUser } from "@/lib/auth";
-import { ApiError, laravelFetch, laravelUpload, type UploadProgressHandler } from "@/lib/laravel";
+import { ApiError, laravelDownload, laravelFetch, laravelUpload, type UploadProgressHandler } from "@/lib/laravel";
 import type {
   AppNotification,
   Campaign,
   CampaignCreator,
+  ShippingSender,
   Company,
   CreatorGroup,
   CompanyLandingPage,
@@ -47,6 +49,8 @@ async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () =
 }
 
 export const api = {
+  lookupPostalCode: (country: string, code: string) =>
+    laravelFetch<Item<PostalPlace>>(`/postal-codes?${new URLSearchParams({ country, code })}`),
   dashboard: () => laravelFetch<DashboardStats>("/dashboard"),
   calendar: (query = "") => laravelFetch<List<CalendarEvent>>(`/calendar${query}`),
   nav: () => laravelFetch<{ unread: number; pending_applications: number }>("/nav"),
@@ -171,6 +175,9 @@ export const api = {
   campaign: (id: number | string) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`),
   createCampaign: (body: unknown) => laravelFetch<Item<Campaign>>("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  shippingSenders: () => laravelFetch<List<ShippingSender>>("/shipping-senders"),
+  saveCampaignSender: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}/shipping-sender`, { method: "PUT", body: JSON.stringify(body) }),
+  downloadShippingLabels: (id: number, format: "pdf" | "csv") => laravelDownload(`/campaigns/${id}/shipping-labels?format=${format}`),
   approveCampaignAgency: (id: number, body?: { agency_fee_percent?: number }) =>
     laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),

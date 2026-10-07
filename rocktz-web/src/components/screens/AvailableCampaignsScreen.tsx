@@ -31,7 +31,8 @@ import { RegionSelect } from "@/components/GeoSelectFields";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
-import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertSuccess, alertWarning, alertWarningLink } from "@/lib/alerts";
+import { hasCompleteShippingAddress } from "@/lib/shipping-address";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignLocationLabel, DEFAULT_COUNTRY, moneyCurrency } from "@/lib/geo";
@@ -39,6 +40,7 @@ import type { Campaign, CampaignCreator } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import { mediaPublicUrl } from "@/lib/media-playback";
+import { ApiError } from "@/lib/laravel";
 
 const EXTRA_NICHES = ["ugc", "fashion", "tech", "lifestyle", "food"] as const;
 type FormatFilter = "all" | "paid" | "barter";
@@ -169,7 +171,19 @@ function AvailableInner() {
     return value ? new Date(`${value}T00:00:00`).toLocaleDateString(locale) : t("available.toDefine");
   }
 
-  function openApply(campaign: Campaign) {
+  async function promptShippingAddress() {
+    if (!user.creator?.id) return;
+    const href = `/creators/${user.creator.id}?tab=about&shipping=1`;
+    const go = await alertWarningLink({
+      title: t("available.shippingRequiredTitle"),
+      text: t("available.shippingRequiredText"),
+      href,
+      linkLabel: t("available.shippingRequiredLink"),
+    });
+    if (go) router.push(href);
+  }
+
+  async function openApply(campaign: Campaign) {
     if (isCreator && !hasSignedContract) {
       void alertWarning(tp("contractRequiredTitle"), tp("contractBlockedApply")).then(() => {
         router.push(profileContractHref);
@@ -179,6 +193,18 @@ function AvailableInner() {
     if (!isAcceptingApplications(campaign)) {
       void alertWarning(t("available.applicationsClosed"), t("available.applicationsClosedHint"));
       return;
+    }
+    if (campaign.is_barter && user.creator?.id) {
+      try {
+        const profile = (await api.creator(user.creator.id)).data;
+        if (!hasCompleteShippingAddress(profile.shipping_address, profile.country)) {
+          await promptShippingAddress();
+          return;
+        }
+      } catch (err) {
+        await alertApiError(err);
+        return;
+      }
     }
     setBriefing(null);
     setApplying(campaign);
@@ -209,6 +235,10 @@ function AvailableInner() {
       setNotes("");
       load();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "shipping_required") {
+        await promptShippingAddress();
+        return;
+      }
       await alertApiError(err);
     } finally {
       setSending(false);

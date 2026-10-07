@@ -32,6 +32,7 @@ use Illuminate\Support\Str;
     'birth_date',
     'shipping_address',
     'pix_key',
+    'bank_account',
     'bank_details',
     'socials',
     'metrics',
@@ -64,6 +65,7 @@ class Creator extends Model
         return [
             'birth_date' => 'date',
             'shipping_address' => 'array',
+            'bank_account' => 'array',
             'socials' => 'array',
             'metrics' => 'array',
             'categories' => 'array',
@@ -308,11 +310,15 @@ class Creator extends Model
             }
         }
 
-        if (Geo::hasRegions($this->countryCode()) && ! filled($address['state'] ?? null)) {
+        $country = Geo::isValidCountry($address['country'] ?? null)
+            ? Geo::normalizeCountry($address['country'])
+            : $this->countryCode();
+
+        if (Geo::hasRegions($country) && ! filled($address['state'] ?? null)) {
             return false;
         }
 
-        if ($this->countryCode() === 'BR') {
+        if ($country === 'BR') {
             $zip = preg_replace('/\D/', '', (string) ($address['zip'] ?? '')) ?? '';
             if (strlen($zip) !== 8) {
                 return false;

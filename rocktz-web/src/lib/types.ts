@@ -13,6 +13,7 @@ export type Creator = {
   state: string | null;
   birth_date?: string | null;
   shipping_address?: {
+    country?: string | null;
     zip?: string | null;
     street?: string | null;
     number?: string | null;
@@ -25,6 +26,15 @@ export type Creator = {
   document?: string | null;
   cpf?: string | null;
   pix_key?: string | null;
+  bank_account?: {
+    holder_name?: string | null;
+    bank_name?: string | null;
+    agency?: string | null;
+    account?: string | null;
+    account_type?: string | null;
+    pix_type?: string | null;
+    pix_key?: string | null;
+  } | null;
   bank_details?: string | null;
   socials: Record<string, string>;
   metrics: Record<string, number>;
@@ -225,6 +235,21 @@ export type Campaign = {
   state?: string | null;
   city?: string | null;
   barter_details: string | null;
+  shipping_sender?: {
+    id: number | null;
+    name: string | null;
+    phone: string | null;
+    address: {
+      country?: string | null;
+      zip?: string | null;
+      street?: string | null;
+      number?: string | null;
+      complement?: string | null;
+      neighborhood?: string | null;
+      city?: string | null;
+      state?: string | null;
+    } | null;
+  } | null;
   has_custom_contract?: boolean;
   custom_contract_terms?: string | null;
   approval_flow: string | null;
@@ -259,6 +284,24 @@ export type PostMetricsSyncResult = {
   message?: string;
 };
 
+export type ShippingSender = {
+  id: number;
+  company_id: number | null;
+  company_name?: string | null;
+  name: string;
+  phone: string | null;
+  address: {
+    country?: string | null;
+    zip?: string | null;
+    street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+  };
+};
+
 export type CampaignCreator = {
   id: number;
   campaign_id: number;
@@ -274,8 +317,18 @@ export type CampaignCreator = {
     state?: string | null;
     whatsapp?: string | null;
     pix_key?: string | null;
+    bank_account?: {
+      holder_name?: string | null;
+      bank_name?: string | null;
+      agency?: string | null;
+      account?: string | null;
+      account_type?: string | null;
+      pix_type?: string | null;
+      pix_key?: string | null;
+    } | null;
     age?: number | null;
     shipping_address?: {
+      country?: string | null;
       zip?: string | null;
       street?: string | null;
       number?: string | null;

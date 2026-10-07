@@ -80,7 +80,7 @@ export function CampaignCreatorDates({
               />
             </label>
             <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
-              {t("campaignDetail.postDate")}
+              {t("campaignDetail.personalizedPostDate")}
               <input
                 type="date"
                 value={post}

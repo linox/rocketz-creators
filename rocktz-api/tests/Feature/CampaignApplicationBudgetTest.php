@@ -6,8 +6,11 @@ use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\CreatorContractAcceptance;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -110,6 +113,29 @@ class CampaignApplicationBudgetTest extends TestCase
         $this->withToken($token)
             ->postJson("/api/campaigns/{$campaign->id}/apply", ['notes' => 'Quero participar'])
             ->assertCreated();
+    }
+
+    public function test_barter_campaign_can_be_created_without_a_creator_cache(): void
+    {
+        $company = Company::factory()->active()->create();
+        $user = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+
+        $this->withToken($user->createToken('auth')->plainTextToken)
+            ->postJson('/api/campaigns', [
+                'name' => 'Campanha Joy',
+                'is_barter' => true,
+                'creator_cache' => null,
+                'total_budget' => 0,
+                'barter_details' => 'Envia de uma Joy xtra',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.is_barter', true)
+            ->assertJsonPath('data.creator_cache', 0)
+            ->assertJsonPath('data.total_budget', 0);
     }
 
     private function paidCampaign(float $totalBudget): Campaign

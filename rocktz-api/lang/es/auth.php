@@ -94,6 +94,7 @@ return [
     'campaign_age_required' => 'Indica la edad mínima, la máxima o ambas.',
     'campaign_age_range_invalid' => 'La edad máxima debe ser mayor o igual que la mínima.',
     'shipping_zip_invalid' => 'Indica un código postal válido.',
+    'postal_code_not_found' => 'No encontramos ese código postal.',
     'age_between' => 'de :min a :max años',
     'age_from' => 'desde :min años',
     'age_up_to' => 'hasta :max años',

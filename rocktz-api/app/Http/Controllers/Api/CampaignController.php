@@ -766,7 +766,10 @@ class CampaignController extends Controller
         }
 
         if ($campaign->is_barter && ! $creator->hasCompleteShippingAddress()) {
-            abort(403, __($forCompany ? 'auth.creator_shipping_required' : 'auth.campaign_shipping_required'));
+            abort(response()->json([
+                'message' => __($forCompany ? 'auth.creator_shipping_required' : 'auth.campaign_shipping_required'),
+                'code' => 'shipping_required',
+            ], 403));
         }
     }
 
@@ -910,6 +913,15 @@ class CampaignController extends Controller
         $isAdmin = $user?->role === UserRole::Admin;
         if (! $isAdmin) {
             unset($data['agency_fee_percent'], $data['agency_fee']);
+        }
+
+        $savingBarter = ($campaign === null && (bool) ($data['is_barter'] ?? false))
+            || (array_key_exists('is_barter', $data) && $data['is_barter']);
+        if ($savingBarter) {
+            $data['total_budget'] = 0;
+            $data['creator_cache'] = 0;
+        } elseif (array_key_exists('creator_cache', $data) && $data['creator_cache'] === null) {
+            $data['creator_cache'] = 0;
         }
 
         $shouldSplit = $campaign === null

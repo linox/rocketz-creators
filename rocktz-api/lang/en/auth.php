@@ -94,6 +94,7 @@ return [
     'campaign_age_required' => 'Enter a minimum age, a maximum age, or both.',
     'campaign_age_range_invalid' => 'The maximum age must be greater than or equal to the minimum age.',
     'shipping_zip_invalid' => 'Enter a valid postal code.',
+    'postal_code_not_found' => 'We could not find that postal code.',
     'age_between' => 'from :min to :max years',
     'age_from' => 'from :min years',
     'age_up_to' => 'up to :max years',

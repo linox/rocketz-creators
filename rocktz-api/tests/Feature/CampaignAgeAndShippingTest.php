@@ -74,7 +74,8 @@ class CampaignAgeAndShippingTest extends TestCase
         $this->withToken($creator->user->createToken('auth')->plainTextToken)
             ->postJson("/api/campaigns/{$campaign->id}/apply", ['notes' => 'Quero o kit'])
             ->assertForbidden()
-            ->assertJsonPath('message', __('auth.campaign_shipping_required'));
+            ->assertJsonPath('message', __('auth.campaign_shipping_required'))
+            ->assertJsonPath('code', 'shipping_required');
     }
 
     public function test_company_sees_shipping_address_after_barter_application(): void
@@ -145,8 +146,67 @@ class CampaignAgeAndShippingTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('data.birth_date', '1998-03-15')
+            ->assertJsonPath('data.shipping_address.country', 'BR')
             ->assertJsonPath('data.shipping_address.zip', '01310100')
             ->assertJsonPath('data.shipping_address.number', '1578');
+    }
+
+    public function test_creator_can_save_a_shipping_address_outside_brazil(): void
+    {
+        $creator = $this->applicant(['country' => 'BR', 'shipping_address' => null]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/creators/{$creator->id}", [
+                'shipping_address' => [
+                    'country' => 'US',
+                    'zip' => '90210',
+                    'street' => 'Rodeo Drive',
+                    'number' => '100',
+                    'neighborhood' => 'Beverly Hills',
+                    'city' => 'Beverly Hills',
+                    'state' => 'CA',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.shipping_address.country', 'US')
+            ->assertJsonPath('data.shipping_address.state', 'CA');
+
+        $this->assertTrue($creator->fresh()->hasCompleteShippingAddress());
+    }
+
+    public function test_creator_can_save_a_bank_account_and_pix(): void
+    {
+        $creator = $this->applicant([
+            'pix_key' => null,
+            'bank_details' => null,
+        ]);
+
+        $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/creators/{$creator->id}", [
+                'bank_account' => [
+                    'holder_name' => 'Ana Silva',
+                    'bank_name' => 'Nubank',
+                    'agency' => '0001',
+                    'account' => '12345-6',
+                    'account_type' => 'checking',
+                    'pix_type' => 'email',
+                    'pix_key' => 'Ana@Example.com',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.bank_account.bank_name', 'Nubank')
+            ->assertJsonPath('data.bank_account.account_type', 'checking')
+            ->assertJsonPath('data.bank_account.pix_key', 'ana@example.com')
+            ->assertJsonPath('data.pix_key', 'ana@example.com');
+
+        $this->assertSame('Nubank / ag 0001 / 12345-6', $creator->fresh()->bank_details);
+
+        $this->patchJson("/api/creators/{$creator->id}", [
+            'bank_account' => [
+                'bank_name' => 'Nubank',
+                'account_type' => 'checking',
+            ],
+        ])->assertStatus(422)->assertJsonValidationErrors(['bank_account.agency', 'bank_account.account']);
     }
 
     /**

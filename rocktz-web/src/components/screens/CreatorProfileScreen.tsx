@@ -40,6 +40,7 @@ import {
   Sparkles,
   Store,
   BarChart3,
+  Landmark,
   Package,
   Trash2,
   User,
@@ -75,7 +76,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
 import { creatorTermAudit } from "@/lib/creator-contract-document";
 import { api } from "@/lib/api";
-import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertLoading, alertSuccess, alertWarning, closeAlert } from "@/lib/alerts";
 import { ApiError } from "@/lib/laravel";
 import { cn } from "@/lib/cn";
 import {
@@ -91,7 +92,8 @@ import {
 } from "@/lib/content-delivery-status";
 import { formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwai, instagramHandle, parseMoneyMask, moneyToMask, remaskMoney, formatIntegerMask, parseIntegerMask, integerToMask } from "@/lib/masks";
 import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, currencyForProfile, defaultCurrencyForCountry, formatLocation, hasRegions, isValidCurrency, isValidRegion } from "@/lib/geo";
-import { EMPTY_SHIPPING, formatPostalCode, formatShippingLines, shippingFormFromAddress, shippingIssue, shippingPayload, type ShippingForm } from "@/lib/shipping-address";
+import { EMPTY_SHIPPING, formatPostalCode, formatShippingLines, postalCodeReady, shippingCountryCode, shippingFormFromAddress, shippingIssue, shippingPayload, type ShippingForm } from "@/lib/shipping-address";
+import { BANK_ACCOUNT_TYPES, EMPTY_BANK, PIX_TYPES, bankFormFromAccount, bankIssue, bankPayload, formatBankLines, formatPixKey, type BankForm } from "@/lib/bank-account";
 import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -671,6 +673,15 @@ function ProfileInner() {
   const [cpf, setCpf] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [shipping, setShipping] = useState<ShippingForm>(EMPTY_SHIPPING);
+  const [bank, setBank] = useState<BankForm>(EMPTY_BANK);
+  const bankDirty = useRef(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [lookingUpZip, setLookingUpZip] = useState(false);
+  const zipLookupTimer = useRef<number | null>(null);
+  const zipLookupSeq = useRef(0);
+  const zipLookupKey = useRef("");
+  const zipLookupFlight = useRef("");
+  const latestShippingZip = useRef(shipping.zip);
   const [bio, setBio] = useState("");
   const [networks, setNetworks] = useState<Record<NetworkKey, NetworkForm>>(EMPTY_NETWORKS);
   const [prices, setPrices] = useState<PriceForm>(EMPTY_PRICES);
@@ -681,6 +692,7 @@ function ProfileInner() {
   const [photoUrl, setPhotoUrl] = useState("");
   const [syncingNetwork, setSyncingNetwork] = useState<NetworkKey | "all" | null>(null);
   const priceCurrency = currencyForProfile(currency, country);
+  const shippingCountry = shippingCountryCode(country, shipping);
   const documentsLabel = taxDocumentsLabel(country, tc("orConjunction"), tc("taxIdFallback"));
 
   const isAdmin = user.role === "admin";
@@ -714,6 +726,8 @@ function ProfileInner() {
     setCpf(data.cpf || data.document || "");
     setBirthDate(data.birth_date || "");
     setShipping(shippingFormFromAddress(nextCountry, data.shipping_address));
+    bankDirty.current = false;
+    setBank(bankFormFromAccount(data.bank_account, data.pix_key));
     setBio(data.bio ?? "");
     setNetworks({
       instagram: {
@@ -886,6 +900,15 @@ function ProfileInner() {
     setContractOpen(true);
   }, [shouldOpenContract, creator, isAdmin, user.creator?.id]);
 
+  const shouldScrollShipping = searchParams.get("shipping") === "1";
+  useEffect(() => {
+    if (!shouldScrollShipping || tab !== "about" || !creator) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("creator-shipping")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [shouldScrollShipping, tab, creator]);
+
   async function reloadMyCampaigns(options?: { silent?: boolean }) {
     if (!options?.silent) setLoadingCampaigns(true);
     try {
@@ -944,6 +967,14 @@ function ProfileInner() {
 
     return () => window.clearInterval(timer);
   }, [tab, id]);
+
+  useEffect(() => {
+    latestShippingZip.current = shipping.zip;
+  }, [shipping.zip]);
+
+  useEffect(() => () => {
+    if (zipLookupTimer.current) window.clearTimeout(zipLookupTimer.current);
+  }, []);
 
   function openSubmission(rowId: number) {
     setExpandedSubmissionId(rowId);
@@ -1144,8 +1175,59 @@ function ProfileInner() {
     return ta("available.toDefine");
   }
 
+  function scheduleZipLookup(nextCountry: string, zip: string) {
+    if (zipLookupTimer.current) window.clearTimeout(zipLookupTimer.current);
+    if (!postalCodeReady(nextCountry, zip, "auto")) return;
+    zipLookupTimer.current = window.setTimeout(() => {
+      void runZipLookup(nextCountry, zip);
+    }, nextCountry === "BR" ? 450 : 700);
+  }
+
+  async function runZipLookup(nextCountry: string, zip: string) {
+    if (!postalCodeReady(nextCountry, zip)) return;
+    const key = `${nextCountry}|${zip.trim()}`;
+    if (zipLookupKey.current === key || zipLookupFlight.current === key) return;
+    zipLookupFlight.current = key;
+    const seq = ++zipLookupSeq.current;
+    setLookingUpZip(true);
+    try {
+      const found = (await api.lookupPostalCode(nextCountry, zip.trim())).data;
+      if (seq !== zipLookupSeq.current) return;
+      zipLookupKey.current = key;
+      const placeCountry = found.country || nextCountry;
+      setShipping((current) => {
+        const countryChanged = placeCountry !== current.country;
+        return {
+          ...current,
+          country: placeCountry,
+          zip: formatPostalCode(placeCountry, found.zip || current.zip),
+          street: found.street || (countryChanged ? "" : current.street),
+          neighborhood: found.neighborhood || (countryChanged ? "" : current.neighborhood),
+          city: found.city || (countryChanged ? "" : current.city),
+          state: found.state || (countryChanged ? "" : current.state),
+        };
+      });
+    } catch (err) {
+      if (seq !== zipLookupSeq.current) return;
+      if (err instanceof ApiError && err.status === 404) {
+        await alertWarning(tp("shippingZipNotFoundTitle"), tp("shippingZipNotFound"));
+        return;
+      }
+      await alertApiError(err);
+    } finally {
+      if (zipLookupFlight.current === key) zipLookupFlight.current = "";
+      if (seq === zipLookupSeq.current) setLookingUpZip(false);
+    }
+  }
+
+  function patchBank(next: Partial<BankForm>) {
+    bankDirty.current = true;
+    setBank((current) => ({ ...current, ...next }));
+  }
+
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
+    if (savingProfile) return;
     if (!fullName.trim() || !artisticName.trim()) {
       await alertWarning(tp("incompleteTitle"), tp("incompleteProfile"));
       return;
@@ -1175,6 +1257,19 @@ function ProfileInner() {
       await alertWarning(tp("incompleteTitle"), tp("shippingIncomplete"));
       return;
     }
+    if (bankDirty.current) {
+      const paymentIssue = bankIssue(bank);
+      if (paymentIssue === "bank") {
+        await alertWarning(tp("incompleteTitle"), tp("bankIncomplete"));
+        return;
+      }
+      if (paymentIssue === "pix") {
+        await alertWarning(tp("incompleteTitle"), tp("bankPixInvalid"));
+        return;
+      }
+    }
+    setSavingProfile(true);
+    alertLoading(tp("savingProfileTitle"), tp("savingProfileBody"));
     try {
       const saved = await api.updateCreator(profile.id, {
         full_name: fullName.trim(),
@@ -1188,6 +1283,7 @@ function ProfileInner() {
         document: cpf || null,
         birth_date: birthDate || null,
         shipping_address: shippingPayload(country, shipping),
+        ...(bankDirty.current ? { bank_account: bankPayload(bank) } : {}),
         bio,
         socials: {
           ...(profile.socials ?? {}),
@@ -1243,12 +1339,16 @@ function ProfileInner() {
           avatar_url: photoUrl.trim() || null,
         });
       }
+      closeAlert();
       await alertSuccess(tp("updated"));
       if (showCreatorTabs) goTab("about");
       else setEditing(false);
       load();
     } catch (err) {
+      closeAlert();
       await alertApiError(err);
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -1580,9 +1680,17 @@ function ProfileInner() {
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("shippingTitle")}</span>
                   {formatShippingLines(creator.shipping_address, creator.country).length ? (
-                    <span className="block whitespace-pre-line">{maskPII(formatShippingLines(creator.shipping_address, creator.country).join("\n"), hideValues, tp("notInformed"))}</span>
+                    <span className="block whitespace-pre-line">{maskPII(formatShippingLines(creator.shipping_address, creator.country, locale).join("\n"), hideValues, tp("notInformed"))}</span>
                   ) : (
                     <span>{tp("notInformed")}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("bankTitle")}</span>
+                  {formatBankLines(creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).length ? (
+                    <span className="block whitespace-pre-line">{maskPII(formatBankLines(creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).join("\n"), hideValues, tp("notInformed"))}</span>
+                  ) : (
+                    <span>{maskPII(creator.pix_key, hideValues, tp("notInformed"))}</span>
                   )}
                 </div>
                 <SocialLinks socials={creator.socials} emptyLabel={tp("notInformed")} />
@@ -1722,7 +1830,6 @@ function ProfileInner() {
                       setCountry(value);
                       setCurrency(nextCurrency);
                       setState("");
-                      setShipping((current) => ({ ...current, state: "", zip: formatPostalCode(value, current.zip) }));
                       setCpf((current) => formatTaxDocument(value, current));
                     }} />
                   </Field>
@@ -1745,14 +1852,51 @@ function ProfileInner() {
                 </div>
               </div>
 
-              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+              <div id="creator-shipping" className="scroll-mt-24 rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
                 <div className="mb-5">
                   <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><Package size={20} className="text-amber-600" /> {tp("shippingTitle")}</h3>
                   <p className="mt-1 text-[12px] text-[#64748B]">{tp("shippingHint")}</p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label={tp("shippingCountry")}>
+                    <CountrySelect
+                      theme="light"
+                      value={shippingCountry}
+                      onChange={(value) => {
+                        const zip = formatPostalCode(value, shipping.zip);
+                        zipLookupKey.current = "";
+                        latestShippingZip.current = zip;
+                        setShipping((current) => ({
+                          ...current,
+                          country: value,
+                          state: "",
+                          street: "",
+                          neighborhood: "",
+                          city: "",
+                          zip,
+                        }));
+                      }}
+                    />
+                  </Field>
                   <Field label={tp("shippingZip")}>
-                    <input className={inputClass} value={shipping.zip} inputMode={country === "BR" ? "numeric" : "text"} autoComplete="postal-code" onChange={(e) => setShipping({ ...shipping, zip: formatPostalCode(country, e.target.value) })} />
+                    <input
+                      className={inputClass}
+                      value={shipping.zip}
+                      inputMode={shippingCountry === "BR" ? "numeric" : "text"}
+                      autoComplete="postal-code"
+                      onChange={(e) => {
+                        const zip = formatPostalCode(shippingCountry, e.target.value);
+                        latestShippingZip.current = zip;
+                        zipLookupKey.current = "";
+                        setShipping({ ...shipping, zip });
+                        scheduleZipLookup(shippingCountry, zip);
+                      }}
+                      onBlur={() => {
+                        if (zipLookupTimer.current) window.clearTimeout(zipLookupTimer.current);
+                        void runZipLookup(shippingCountry, latestShippingZip.current);
+                      }}
+                    />
+                    {lookingUpZip ? <p className="text-[10px] text-slate-500">{tp("shippingLookingUp")}</p> : null}
                   </Field>
                   <Field label={tp("shippingStreet")}>
                     <input className={inputClass} value={shipping.street} autoComplete="address-line1" onChange={(e) => setShipping({ ...shipping, street: e.target.value })} />
@@ -1769,11 +1913,70 @@ function ProfileInner() {
                   <Field label={tp("shippingCity")}>
                     <input className={inputClass} value={shipping.city} autoComplete="address-level2" onChange={(e) => setShipping({ ...shipping, city: e.target.value })} />
                   </Field>
-                  {hasRegions(country) ? (
+                  {hasRegions(shippingCountry) ? (
                     <Field label={tp("shippingState")}>
-                      <RegionSelect theme="light" country={country} value={shipping.state} onChange={(value) => setShipping({ ...shipping, state: value })} />
+                      <RegionSelect theme="light" country={shippingCountry} value={shipping.state} onChange={(value) => setShipping({ ...shipping, state: value })} />
                     </Field>
                   ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-[#0F172A]"><Landmark size={20} className="text-emerald-600" /> {tp("bankTitle")}</h3>
+                  <p className="mt-1 text-[12px] text-[#64748B]">{tp("bankHint")}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label={tp("bankHolder")}>
+                    <input className={inputClass} value={bank.holderName} autoComplete="name" onChange={(e) => patchBank({ holderName: e.target.value })} />
+                  </Field>
+                  <Field label={tp("bankName")}>
+                    <input className={inputClass} value={bank.bankName} onChange={(e) => patchBank({ bankName: e.target.value })} />
+                  </Field>
+                  <Field label={tp("bankAgency")}>
+                    <input className={inputClass} inputMode="numeric" value={bank.agency} onChange={(e) => patchBank({ agency: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+                  </Field>
+                  <Field label={tp("bankAccount")}>
+                    <input className={inputClass} value={bank.account} placeholder={tp("bankAccountPh")} onChange={(e) => patchBank({ account: e.target.value.replace(/[^\d-]/g, "").slice(0, 20) })} />
+                  </Field>
+                  <Field label={tp("bankType")}>
+                    <Select2Field
+                      theme="light"
+                      searchable={false}
+                      value={bank.accountType}
+                      placeholder={tp("bankOptional")}
+                      options={[
+                        { value: "", label: tp("bankOptional") },
+                        ...BANK_ACCOUNT_TYPES.map((value) => ({ value, label: tp(value === "checking" ? "bankChecking" : "bankSavings") })),
+                      ]}
+                      onChange={(value) => patchBank({ accountType: value })}
+                    />
+                  </Field>
+                  <Field label={tp("pixType")}>
+                    <Select2Field
+                      theme="light"
+                      searchable={false}
+                      value={bank.pixType}
+                      placeholder={tp("bankOptional")}
+                      options={[
+                        { value: "", label: tp("bankOptional") },
+                        ...PIX_TYPES.map((value) => ({
+                          value,
+                          label: tp(value === "cpf" ? "pixCpf" : value === "cnpj" ? "pixCnpj" : value === "email" ? "pixEmail" : value === "phone" ? "pixPhone" : "pixRandom"),
+                        })),
+                      ]}
+                      onChange={(value) => patchBank({ pixType: value, pixKey: formatPixKey(value, bank.pixKey) })}
+                    />
+                  </Field>
+                  <Field label={tp("pixKey")} className="md:col-span-2">
+                    <input
+                      className={inputClass}
+                      value={bank.pixKey}
+                      inputMode={bank.pixType === "email" ? "email" : bank.pixType === "random" ? "text" : "numeric"}
+                      autoComplete={bank.pixType === "email" ? "email" : "off"}
+                      onChange={(e) => patchBank({ pixKey: formatPixKey(bank.pixType, e.target.value) })}
+                    />
+                  </Field>
                 </div>
               </div>
 
@@ -1905,7 +2108,10 @@ function ProfileInner() {
                   >
                     {tc("cancel")}
                   </button>
-                  <button className="rounded-lg bg-brand-primary px-6 py-2 text-sm font-bold text-white">{tp("saveProfile")}</button>
+                  <button disabled={savingProfile} className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-primary px-6 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70">
+                    {savingProfile ? <Loader2 size={16} className="animate-spin" /> : null}
+                    {savingProfile ? tp("savingProfile") : tp("saveProfile")}
+                  </button>
                 </div>
               </div>
             </form>
@@ -2224,10 +2430,6 @@ function ProfileInner() {
           ) : (
             <>
               {!showCreatorTabs && !showCompanyTabs ? <CreatorPortfolioPanel creator={creator} canUpload={canUpload} onChanged={load} /> : null}
-
-              {agencyView ? (
-                <CreatorRecurringEmptyOrList myContracts={myContracts} currency={payCurrency} />
-              ) : null}
             </>
           )}
         </div>
@@ -2266,46 +2468,6 @@ function ProfileInner() {
 }
 
 const inputClass = "h-11 w-full rounded-lg border border-[#E2E8F0] px-4 text-sm outline-none focus:border-brand-primary";
-
-function CreatorRecurringEmptyOrList({ myContracts, currency }: { myContracts: RecurringContract[]; currency: string }) {
-  const { t: tp } = useTranslation("profile");
-  const { formatCurrency } = usePrivacy();
-
-  if (myContracts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-slate-200/80 bg-white p-8 text-center shadow-sm">
-        <div className="rounded-full bg-purple-50 p-3.5 text-purple-600"><Repeat size={24} /></div>
-        <h4 className="m-0 text-base font-bold text-slate-800">{tp("noRecurringTitle")}</h4>
-        <p className="m-0 max-w-md text-xs leading-relaxed text-slate-500">{tp("noRecurringHint")}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {myContracts.map((contract) => {
-        const row = contract.creators?.[0];
-        const fee = row?.monthly_cache ?? row?.monthly_fee ?? contract.monthly_fee;
-        return (
-          <Link key={contract.id} href={`/recurring/${contract.id}`} className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-purple-300">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <UserAvatar src={contract.company?.logo_url} name={contract.company?.name ?? contract.title} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
-                <div className="min-w-0">
-                  <p className="m-0 truncate text-sm font-bold text-[#0F172A]">{contract.company?.name ?? contract.title}</p>
-                  <p className="m-0 truncate text-xs text-slate-500">{contract.title}</p>
-                </div>
-              </div>
-              {fee != null ? (
-                <span className="text-sm font-extrabold text-brand-primary">{formatCurrency(Number(fee) || 0, currency)}</span>
-              ) : null}
-            </div>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
 
 function deliveryActionLabel(kind: CreatorDeliveryActionKind, tp: (key: string) => string) {
   if (kind === "send_script") return tp("sendScriptForReview");

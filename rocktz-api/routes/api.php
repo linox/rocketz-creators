@@ -20,8 +20,10 @@ use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\NavController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
+use App\Http\Controllers\Api\PostalCodeController;
 use App\Http\Controllers\Api\RecurringContractController;
 use App\Http\Controllers\Api\ResendWebhookController;
+use App\Http\Controllers\Api\ShippingLabelController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -72,6 +74,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::get('dashboard', DashboardController::class);
     Route::get('calendar', CalendarController::class);
     Route::get('nav', NavController::class);
+    Route::get('postal-codes', PostalCodeController::class)->middleware('throttle:60,1');
     Route::post('device-tokens', [DeviceTokenController::class, 'store']);
     Route::delete('device-tokens', [DeviceTokenController::class, 'destroy']);
     Route::post('landings/{slug}/claim', [CompanyLandingController::class, 'claim']);
@@ -132,6 +135,9 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::post('creators', [CreatorController::class, 'store']);
         Route::post('campaigns', [CampaignController::class, 'store']);
         Route::patch('campaigns/{campaign}', [CampaignController::class, 'update']);
+        Route::get('shipping-senders', [ShippingLabelController::class, 'index']);
+        Route::put('campaigns/{campaign}/shipping-sender', [ShippingLabelController::class, 'update']);
+        Route::get('campaigns/{campaign}/shipping-labels', [ShippingLabelController::class, 'download']);
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
         Route::patch('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'update']);
         Route::post('recurring-contracts/{recurringContract}/creators', [RecurringContractController::class, 'attachCreator']);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { formatBankLines } from "@/lib/bank-account";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
@@ -66,6 +67,7 @@ import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignMo
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
 import { CampaignLandingFields } from "@/components/CampaignLandingFields";
 import { CampaignAgeFields } from "@/components/CampaignAgeFields";
+import { CampaignShippingPanel } from "@/components/CampaignShippingPanel";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
 import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
@@ -433,6 +435,7 @@ function DetailInner() {
   const router = useRouter();
   const { t, i18n } = useTranslation("app");
   const { t: tc } = useTranslation("common");
+  const { t: tp } = useTranslation("profile");
   const { formatCurrency, formatNumber } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const pathname = usePathname();
@@ -1181,8 +1184,8 @@ function DetailInner() {
   );
 
   return (
-    <div className="flex flex-col gap-6 pb-24">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+    <div className="flex w-full min-w-0 flex-col gap-6 pb-24">
+      <div className="flex w-full min-w-0 flex-col gap-4 border-b border-slate-200 pb-4">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="flex items-start gap-3.5">
             <Link href="/campaign-deliveries" title={t("campaignDetail.backTitle")} className="mt-0.5 shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-xs transition-all hover:bg-slate-50">
@@ -1484,18 +1487,22 @@ function DetailInner() {
           </div>
         ) : null}
 
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pt-3">
+        {canManage && campaign.is_barter ? (
+          <CampaignShippingPanel campaign={campaign} isAgency={isAdmin} onSaved={setCampaign} />
+        ) : null}
+
+        <div className="flex w-full min-w-0 flex-wrap items-end border-b border-slate-200 pt-3">
           {detailTabs.map(([key, Icon, label, badge, badgeClass]) => (
             <button
               key={key}
               type="button"
               onClick={() => setActiveTab(key)}
               className={cn(
-                "-mb-[2px] flex cursor-pointer items-center gap-2 border-b-2 px-5 pb-3 text-xs font-extrabold whitespace-nowrap transition-all",
+                "-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 px-3 pb-3 text-xs font-extrabold whitespace-nowrap transition-all",
                 tab === key ? "rounded-t-xl border-brand-primary bg-indigo-50/70 text-brand-primary" : "rounded-t-xl border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800",
               )}
             >
-              <Icon size={16} />
+              <Icon size={16} className="shrink-0" />
               {label}
               {badge ? <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-black", badgeClass)}>{badge}</span> : null}
             </button>
@@ -1803,8 +1810,8 @@ function DetailInner() {
                 {!isCreator && campaign.is_barter ? (
                   <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
                     <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">{t("campaignDetail.shippingAddress")}</p>
-                    {formatShippingLines(selectedCreator.shipping_address, selectedCreator.country).length ? (
-                      <p className="mt-1 whitespace-pre-line text-sm font-semibold text-slate-800">{formatShippingLines(selectedCreator.shipping_address, selectedCreator.country).join("\n")}</p>
+                    {formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).length ? (
+                      <p className="mt-1 whitespace-pre-line text-sm font-semibold text-slate-800">{formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).join("\n")}</p>
                     ) : (
                       <p className="mt-1 text-sm font-medium text-slate-500">{t("campaignDetail.shippingMissing")}</p>
                     )}
@@ -2584,6 +2591,9 @@ function DetailInner() {
                             {row.creator?.pix_key ? (
                               <p className="truncate text-[10px] font-semibold text-slate-500">{t("campaignDetail.pixKey")}: {row.creator.pix_key}</p>
                             ) : null}
+                            {row.creator?.bank_account?.bank_name ? (
+                              <p className="truncate text-[10px] font-semibold text-slate-500">{formatBankLines(row.creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).filter((line) => line !== row.creator?.pix_key).join(" · ")}</p>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -3055,7 +3065,7 @@ function DetailInner() {
                     <span className="mt-1 block text-[10px] font-medium normal-case tracking-normal text-slate-500">{t("campaignDetail.personalizedDeliveryHint")}</span>
                   </label>
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
-                    {t("campaignDetail.postDate")}
+                    {t("campaignDetail.personalizedPostDate")}
                     <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold normal-case tracking-normal text-slate-800" value={creatorEdit.post_date} onChange={(event) => setCreatorEdit({ ...creatorEdit, post_date: event.target.value })} />
                   </label>
                 </div>
@@ -3139,6 +3149,11 @@ function DetailInner() {
               ) : (
                 <p className="text-xs font-semibold text-amber-700">{t("campaignDetail.noPix")}</p>
               )}
+              {payModal.row.creator?.bank_account?.bank_name ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold whitespace-pre-line text-slate-600">
+                  {formatBankLines(payModal.row.creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).filter((line) => line !== payModal.row.creator?.pix_key).join("\n")}
+                </p>
+              ) : null}
               <form
                 noValidate
                 className="flex flex-col gap-4"
