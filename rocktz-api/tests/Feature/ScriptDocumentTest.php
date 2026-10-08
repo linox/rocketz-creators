@@ -9,7 +9,9 @@ use App\Enums\ContentType;
 use App\Enums\StageApprovalStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\Company;
 use App\Models\ContentPlanningItem;
+use App\Models\Creator;
 use App\Models\RecurringContract;
 use App\Models\User;
 use App\Support\MediaKind;
@@ -62,12 +64,69 @@ class ScriptDocumentTest extends TestCase
             ->patchJson("/api/campaigns/{$campaign->id}", [
                 'briefing' => [
                     'product' => 'Sérum',
+                    'key_message' => 'Pele luminosa em 7 dias',
+                    'must_have' => 'Mostrar o antes e depois',
+                    'donts' => 'Não citar concorrentes',
+                    'cta' => 'Compre agora',
+                    'coupon' => 'GLOW10',
+                    'hashtags' => '#serum #glow',
+                    'link' => 'https://example.com/produto',
                     'script_file_url' => 'https://example.com/downloads/document-roteiro.pdf',
                     'script_file_name' => 'roteiro.pdf',
                 ],
             ])
             ->assertOk()
+            ->assertJsonPath('data.briefing.product', 'Sérum')
+            ->assertJsonPath('data.briefing.key_message', 'Pele luminosa em 7 dias')
+            ->assertJsonPath('data.briefing.must_have', 'Mostrar o antes e depois')
+            ->assertJsonPath('data.briefing.donts', 'Não citar concorrentes')
+            ->assertJsonPath('data.briefing.cta', 'Compre agora')
+            ->assertJsonPath('data.briefing.coupon', 'GLOW10')
+            ->assertJsonPath('data.briefing.hashtags', '#serum #glow')
+            ->assertJsonPath('data.briefing.link', 'https://example.com/produto')
             ->assertJsonPath('data.briefing.script_file_name', 'roteiro.pdf');
+
+        $this->assertDatabaseHas('campaign_briefings', [
+            'campaign_id' => $campaign->id,
+            'product' => 'Sérum',
+            'coupon' => 'GLOW10',
+            'link' => 'https://example.com/produto',
+        ]);
+    }
+
+    public function test_creating_a_campaign_persists_briefing_fields(): void
+    {
+        $company = Company::factory()->active()->create();
+        $admin = User::factory()->admin()->create();
+
+        $created = $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/campaigns', [
+                'name' => 'Campanha com briefing',
+                'company_id' => $company->id,
+                'is_barter' => true,
+                'briefing' => [
+                    'product' => 'Sérum Aurora',
+                    'key_message' => 'Resultado em uma semana',
+                    'must_have' => 'Citar o cupom',
+                    'donts' => 'Sem filtro pesado',
+                    'cta' => 'Use o cupom',
+                    'coupon' => 'AURORA',
+                    'hashtags' => '#aurora',
+                    'link' => 'https://example.com/aurora',
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.briefing.product', 'Sérum Aurora')
+            ->assertJsonPath('data.briefing.key_message', 'Resultado em uma semana')
+            ->assertJsonPath('data.briefing.coupon', 'AURORA');
+
+        $this->assertDatabaseHas('campaign_briefings', [
+            'campaign_id' => $created->json('data.id'),
+            'product' => 'Sérum Aurora',
+            'key_message' => 'Resultado em uma semana',
+            'coupon' => 'AURORA',
+            'link' => 'https://example.com/aurora',
+        ]);
     }
 
     public function test_creator_can_submit_campaign_script_file(): void
@@ -76,7 +135,7 @@ class ScriptDocumentTest extends TestCase
             'status' => CampaignStatus::Production,
             'approval_flow' => ApprovalFlowType::ScriptAndVideo,
         ]);
-        $creator = \App\Models\Creator::factory()->active()->create();
+        $creator = Creator::factory()->active()->create();
         $row = CampaignCreator::factory()->create([
             'campaign_id' => $campaign->id,
             'creator_id' => $creator->id,
