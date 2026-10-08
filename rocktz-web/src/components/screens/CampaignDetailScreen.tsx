@@ -1022,7 +1022,7 @@ function DetailInner() {
         objective: editForm.objective,
         approval_flow: editForm.approval_flow,
         posting_profile: editForm.posting_profile,
-        total_budget: editForm.is_barter ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : null,
+        total_budget: editForm.is_barter || !editForm.total_budget ? 0 : parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)),
         ...(hideCreatorValues ? {} : { creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null }),
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,

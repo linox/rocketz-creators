@@ -115,6 +115,30 @@ class CampaignApplicationBudgetTest extends TestCase
             ->assertCreated();
     }
 
+    public function test_paid_campaign_without_budget_stores_zero(): void
+    {
+        $company = Company::factory()->active()->create();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/campaigns', [
+                'name' => 'Campanha sem orçamento',
+                'company_id' => $company->id,
+                'is_barter' => false,
+                'total_budget' => null,
+                'creator_cache' => 500,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.total_budget', 0)
+            ->assertJsonPath('data.agency_fee', 0)
+            ->assertJsonPath('data.creators_budget', 0);
+
+        $this->assertDatabaseHas('campaigns', [
+            'name' => 'Campanha sem orçamento',
+            'total_budget' => 0,
+        ]);
+    }
+
     public function test_barter_campaign_can_be_created_without_a_creator_cache(): void
     {
         $company = Company::factory()->active()->create();

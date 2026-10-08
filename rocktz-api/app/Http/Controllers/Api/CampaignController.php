@@ -1017,6 +1017,9 @@ class CampaignController extends Controller
         $budget = array_key_exists('total_budget', $data)
             ? (float) ($data['total_budget'] ?? 0)
             : (float) ($campaign?->total_budget ?? 0);
+        if ($campaign === null || array_key_exists('total_budget', $data)) {
+            $data['total_budget'] = $budget;
+        }
 
         return array_merge($data, Campaign::feeSplit($budget, $percent));
     }
