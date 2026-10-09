@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\ContentType;
 use App\Enums\UserRole;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
@@ -61,6 +62,19 @@ class RecurringContractResource extends JsonResource
                 'notes' => $row->notes,
             ])),
             'items' => $this->whenLoaded('contentPlanningItems', fn () => ContentPlanningItemResource::collection($this->contentPlanningItems)),
+            'excluded_demands' => $this->whenLoaded('excludedPlanningItems', function () {
+                return $this->excludedPlanningItems
+                    ->groupBy(fn ($item) => $item->creator_id.'|'.$item->month.'|'.($item->content_type instanceof ContentType ? $item->content_type->value : $item->content_type))
+                    ->map(fn ($group) => [
+                        'creator_id' => (int) $group->first()->creator_id,
+                        'month' => $group->first()->month,
+                        'content_type' => $group->first()->content_type instanceof ContentType
+                            ? $group->first()->content_type->value
+                            : $group->first()->content_type,
+                        'count' => $group->count(),
+                    ])
+                    ->values();
+            }),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

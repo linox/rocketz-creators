@@ -318,6 +318,7 @@ class RecurringContractController extends Controller
                 'recurringContractCreators.creator',
                 'contentPlanningItems.creator',
                 'contentPlanningItems.company',
+                'excludedPlanningItems' => $this->excludedPlanningConstraint(),
             ])),
         ]);
     }
@@ -623,6 +624,7 @@ class RecurringContractController extends Controller
             ];
             if ($withItems) {
                 $with['contentPlanningItems'] = fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']);
+                $with['excludedPlanningItems'] = $this->excludedPlanningConstraint($creatorId);
             }
             $query->with($with);
 
@@ -633,8 +635,22 @@ class RecurringContractController extends Controller
         if ($withItems) {
             $with[] = 'contentPlanningItems.creator';
             $with[] = 'contentPlanningItems.company';
+            $with['excludedPlanningItems'] = $this->excludedPlanningConstraint();
         }
         $query->with($with);
+    }
+
+    /**
+     * @return \Closure(\Illuminate\Database\Eloquent\Relations\Relation): void
+     */
+    private function excludedPlanningConstraint(?int $creatorId = null): \Closure
+    {
+        return function ($query) use ($creatorId) {
+            $query->select(['id', 'recurring_contract_id', 'creator_id', 'month', 'content_type']);
+            if ($creatorId) {
+                $query->where('creator_id', $creatorId);
+            }
+        };
     }
 
     private function wantsInclude(Request $request, string $key): bool
@@ -652,12 +668,19 @@ class RecurringContractController extends Controller
                 'company',
                 'recurringContractCreators' => fn ($q) => $q->where('creator_id', $creatorId)->with('creator'),
                 'contentPlanningItems' => fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']),
+                'excludedPlanningItems' => $this->excludedPlanningConstraint($creatorId),
             ]);
 
             return;
         }
 
-        $contract->load(['company', 'recurringContractCreators.creator', 'contentPlanningItems.creator', 'contentPlanningItems.company']);
+        $contract->load([
+            'company',
+            'recurringContractCreators.creator',
+            'contentPlanningItems.creator',
+            'contentPlanningItems.company',
+            'excludedPlanningItems' => $this->excludedPlanningConstraint(),
+        ]);
     }
 
     private function isLiveContentType(mixed $type): bool
@@ -693,7 +716,7 @@ class RecurringContractController extends Controller
                 continue;
             }
 
-            $existing = ContentPlanningItem::query()
+            $existing = ContentPlanningItem::withTrashed()
                 ->where('recurring_contract_id', $contract->id)
                 ->where('creator_id', $row->creator_id)
                 ->where('month', $month)

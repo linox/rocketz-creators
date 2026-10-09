@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import {
   Building2,
   Calendar,
@@ -923,6 +924,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
               {(contract.creators || []).filter((row) => creatorFilter === "all" || String(row.creator_id) === creatorFilter).map((row) => {
                 const items = contentItems.filter((item) => item.recurring_contract_id === contract.id && item.creator_id === row.creator_id && itemInMonth(item, selectedMonth));
                 const quota = creatorQuota(row.monthly_deliverables);
+                const { expected } = monthDemandExpectation(quota, items.length, excludedDemandCount(contract.excluded_demands, row.creator_id, selectedMonth));
                 const published = items.filter((item) => item.status === "published").length;
                 return (
                   <div key={row.id} className="space-y-4 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-5">
@@ -936,7 +938,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <span className="block text-xs font-extrabold text-slate-800">{t("recurring.registered", { done: items.length, total: quota })}</span>
+                          <span className="block text-xs font-extrabold text-slate-800">{t("recurring.registered", { done: items.length, total: expected })}</span>
                           <span className="block text-[10px] font-bold text-emerald-600">{t("recurring.publishedCount", { count: published })}</span>
                         </div>
                         {canManage ? (

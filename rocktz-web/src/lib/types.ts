@@ -440,6 +440,14 @@ export type RecurringContract = {
     end_date?: string | null;
   }[];
   items?: PlanningItem[];
+  excluded_demands?: ExcludedDemand[];
+};
+
+export type ExcludedDemand = {
+  creator_id: number;
+  month: string;
+  content_type: string;
+  count: number;
 };
 
 export type PlanningItem = {

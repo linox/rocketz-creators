@@ -61,6 +61,11 @@ class RecurringContract extends Model
         return $this->hasMany(ContentPlanningItem::class);
     }
 
+    public function excludedPlanningItems(): HasMany
+    {
+        return $this->hasMany(ContentPlanningItem::class)->onlyTrashed();
+    }
+
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);

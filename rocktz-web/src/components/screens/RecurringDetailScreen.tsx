@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
   AlertTriangle,
@@ -546,14 +547,15 @@ function DetailInner() {
 
   function summary(row: ContractCreator) {
     const creatorItems = items.filter((item) => item.creator_id === row.creator_id && itemInMonth(item, selectedMonth));
-    const quota = quotaTotal(row.monthly_deliverables);
+    const contracted = quotaTotal(row.monthly_deliverables);
+    const excluded = excludedDemandCount(contract?.excluded_demands, row.creator_id, selectedMonth);
+    const { ungenerated: ungeneratedCount, expected: quota } = monthDemandExpectation(contracted, creatorItems.length, excluded);
     const completedCount = creatorItems.filter((item) => isDone(item.status)).length;
     const statusCategory: QuotaCategory = quota === 0 ? "no_demand" : completedCount >= quota ? "completed" : "owing";
     const pendingItems = creatorItems.filter(itemNeedsApproval);
     const pendingApprovalCount = pendingItems.length;
     const newVersionCount = pendingItems.filter(isMaterialNewVersion).length;
     const awaitingBriefingCount = creatorItems.filter(isAwaitingBriefing).length;
-    const ungeneratedCount = Math.max(0, quota - creatorItems.length);
     const missingPautasCount = awaitingBriefingCount + ungeneratedCount;
     const updateKind: UpdateKind = newVersionCount > 0 ? "new_version" : pendingApprovalCount > 0 ? "pending_approval" : null;
     const ribbon = creatorRibbonKind(updateKind, statusCategory, missingPautasCount);
@@ -596,7 +598,7 @@ function DetailInner() {
       if (stats.missingPautasCount > 0) missing_pautas += 1;
     });
     return { all: allocated.length, owing, completed, no_demand, pending_approval, missing_pautas };
-  }, [allocated, items, selectedMonth]);
+  }, [allocated, items, selectedMonth, contract?.excluded_demands]);
 
   const segments = [...new Set(allocated.flatMap((row) => profile(row).categories).filter(Boolean))].sort((a, b) => a.localeCompare(b, locale));
   const locationOptions = [...new Map(
@@ -1482,10 +1484,12 @@ function DetailInner() {
                               const generated = typeItems.length;
                               const done = typeItems.filter((item) => isDone(item.status) || (isLivePauta(item.content_type) && Boolean(item.published_url))).length;
                               const awaiting = typeItems.filter(isAwaitingBriefing).length;
+                              const excludedType = excludedDemandCount(contract?.excluded_demands, row.creator_id, selectedMonth, pill.keys);
+                              const { ungenerated: missingSlotCount, expected: typeExpected } = monthDemandExpectation(pill.count, generated, excludedType);
                               const style = TYPE_STYLE[pill.type] || TYPE_STYLE.other;
                               const Icon = style.icon;
-                              const complete = done >= pill.count;
-                              const missingSlots = generated < pill.count;
+                              const complete = typeExpected > 0 && done >= typeExpected;
+                              const missingSlots = missingSlotCount > 0;
                               return (
                                 <span
                                   key={pill.type}
@@ -1505,7 +1509,9 @@ function DetailInner() {
                                 >
                                   <Icon size={12} />
                                   <span>{t(`recurring.shortFormats.${pill.type}`, { defaultValue: pill.type })}</span>
-                                  <span className="tabular-nums opacity-80">{t("recurringDetail.quotaProgress", { done: generated, total: pill.count })}</span>
+                                  {typeExpected > 0 ? (
+                                    <span className="tabular-nums opacity-80">{t("recurringDetail.quotaProgress", { done: generated, total: typeExpected })}</span>
+                                  ) : null}
                                   {complete ? <CheckCircle2 size={11} /> : null}
                                 </span>
                               );

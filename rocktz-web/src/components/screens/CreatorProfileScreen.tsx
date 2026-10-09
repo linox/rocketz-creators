@@ -55,6 +55,7 @@ import {
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { formatMonthLabel, futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -282,6 +283,9 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
 
     if (items.length === 0) {
       if (contract.status !== "active") continue;
+      const quota = quotaTotal(creatorRow?.monthly_deliverables ?? {});
+      const excluded = excludedDemandCount(contract.excluded_demands, creatorId, currentYearMonth());
+      if (quota > 0 && excluded >= quota) continue;
       rows.push({
         key: `contract-${contract.id}`,
         contract,
@@ -2374,6 +2378,7 @@ function ProfileInner() {
                 </h3>
                 <ActiveRecurringWorksTable
                   month={demandMonthActive}
+                  creatorId={profile.id}
                   rows={recurringWorkRows}
                   expandedKey={expandedRecurringKey}
                   openRow={openRecurringWork}
@@ -2413,6 +2418,7 @@ function ProfileInner() {
               />
               <ActiveRecurringWorksTable
                 month={recurringMonthActive}
+                creatorId={profile.id}
                 rows={recurringWorkRows}
                 expandedKey={expandedRecurringKey}
                 openRow={openRecurringWork}
@@ -2779,6 +2785,7 @@ function RecurringBriefingModal({
 
 function ActiveRecurringWorksTable({
   month,
+  creatorId,
   rows,
   expandedKey,
   openRow,
@@ -2791,6 +2798,7 @@ function ActiveRecurringWorksTable({
   tp,
 }: {
   month: string;
+  creatorId: number;
   rows: RecurringWorkRow[];
   expandedKey: string | null;
   openRow: (key: string) => void;
@@ -2844,6 +2852,9 @@ function ActiveRecurringWorksTable({
         const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
         const monthItems = list.filter((work) => work.item && recurringDemandMonth(work, currentYearMonth()) === month);
+        const excluded = excludedDemandCount(sample.contract.excluded_demands, creatorId, month);
+        const { expected } = monthDemandExpectation(quotaTotal(sample.deliverables), monthItems.length, excluded);
+        if (monthItems.length === 0 && expected === 0) return null;
         if (monthItems.length === 0 && (!isCurrentMonth || sample.contract.status !== "active")) return null;
         const monthRows = monthItems.filter((work) => {
           if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
@@ -2859,12 +2870,12 @@ function ActiveRecurringWorksTable({
           deliverables: sample.deliverables,
           monthRows,
           pendingRows,
-          monthTotal: quotaTotal(sample.deliverables) || monthItems.length,
+          monthTotal: expected,
         };
       })
       .filter((section): section is NonNullable<typeof section> => Boolean(section))
       .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
-  }, [rows, companyFilter, statusFilter, month, isCurrentMonth, tp]);
+  }, [rows, companyFilter, statusFilter, month, isCurrentMonth, creatorId, tp]);
 
   const monthCount = sections.reduce((sum, section) => sum + section.monthRows.length, 0);
   const openWork = useMemo(

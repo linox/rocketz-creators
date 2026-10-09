@@ -24,6 +24,7 @@ use App\Services\PermissionService;
 use Database\Seeders\DemoAccounts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class DomainApiTest extends TestCase
@@ -1826,5 +1827,78 @@ class DomainApiTest extends TestCase
         $this->withToken($token)
             ->postJson("/api/campaigns/{$sp->id}/apply", ['notes' => 'Quero participar'])
             ->assertCreated();
+    }
+
+    public function test_deleted_recurring_demand_is_hidden_and_not_regenerated(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->active()->create();
+        $contract = RecurringContract::factory()->active()->create();
+        $month = now()->format('Y-m');
+
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $contract->id,
+            'creator_id' => $creator->id,
+            'monthly_deliverables' => ['reels' => 2],
+        ]);
+
+        ContentPlanningItem::factory()->published()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $contract->company_id,
+            'creator_id' => $creator->id,
+            'month' => $month,
+            'content_type' => 'reel',
+            'title' => 'Reel que fica',
+            'published_url' => 'https://instagram.com/p/reel-que-fica',
+        ]);
+        $removed = ContentPlanningItem::factory()->planned()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $contract->company_id,
+            'creator_id' => $creator->id,
+            'month' => $month,
+            'content_type' => 'reel',
+            'title' => 'Reel excluido',
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->deleteJson("/api/content-planning-items/{$removed->id}")
+            ->assertOk();
+
+        $this->assertSoftDeleted('content_planning_items', ['id' => $removed->id]);
+
+        $adminView = $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->getJson("/api/recurring-contracts/{$contract->id}")
+            ->assertOk()
+            ->json('data');
+
+        $titles = array_column($adminView['items'], 'title');
+        $this->assertContains('Reel que fica', $titles);
+        $this->assertNotContains('Reel excluido', $titles);
+        $this->assertSame(1, collect($adminView['excluded_demands'])->where('creator_id', $creator->id)->where('month', $month)->sum('count'));
+
+        $creatorView = $this->withToken($creator->user->createToken('auth')->plainTextToken)
+            ->getJson('/api/recurring-contracts?include=items')
+            ->assertOk()
+            ->json('data');
+        $own = collect($creatorView)->firstWhere('id', $contract->id);
+        $this->assertNotNull($own);
+        $this->assertNotContains('Reel excluido', array_column($own['items'], 'title'));
+        $this->assertSame(1, collect($own['excluded_demands'])->where('month', $month)->sum('count'));
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->postJson("/api/recurring-contracts/{$contract->id}/generate-month-demands", [
+                'creator_id' => $creator->id,
+                'month' => $month,
+            ])
+            ->assertOk()
+            ->assertJsonPath('created', 0);
+
+        $this->assertSame(1, ContentPlanningItem::query()
+            ->where('recurring_contract_id', $contract->id)
+            ->where('creator_id', $creator->id)
+            ->where('month', $month)
+            ->count());
     }
 }
