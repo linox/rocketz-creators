@@ -64,15 +64,15 @@ return [
             'cta' => 'Track application',
         ],
         'campaign.application_approved' => [
-            'subject' => 'You were approved for {{nome_campanha}}!',
+            'subject' => 'You were approved for {{nome_campanha}}',
             'greeting' => 'Hi, {{nome_criador}}!',
-            'body' => 'You were approved for {{nome_campanha}}. Open the platform to see next steps and the first delivery details.',
+            'body' => 'You were approved for the campaign {{nome_campanha}}. Open the platform to see the next steps. In a few days, you will receive the briefing with the production guidance and the final date.',
             'cta' => 'Open campaign',
         ],
         'campaign.application_rejected' => [
             'subject' => 'Update on {{nome_campanha}}',
             'greeting' => 'Hi, {{nome_criador}}!',
-            'body' => "Casting for {{nome_campanha}} is complete and your application did not move forward this time. This decision is only for this campaign.\n\nKeep an eye on other opportunities on Creatorz.",
+            'body' => "Casting for {{nome_campanha}} is complete, and this time your application did not move forward. This decision applies only to this campaign. You can still join new opportunities.\n\nKeep following Creatorz.",
             'cta' => 'See other opportunities',
         ],
         'demand.assigned' => [

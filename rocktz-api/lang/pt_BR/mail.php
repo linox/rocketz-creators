@@ -64,15 +64,15 @@ return [
             'cta' => 'Acompanhar inscrição',
         ],
         'campaign.application_approved' => [
-            'subject' => 'Você foi aprovado para a campanha {{nome_campanha}}!',
+            'subject' => 'Você foi aprovado para a campanha {{nome_campanha}}',
             'greeting' => 'Olá, {{nome_criador}}!',
-            'body' => 'Você foi aprovado para a campanha {{nome_campanha}}. Acesse a plataforma para ver os próximos passos e as informações iniciais da entrega.',
+            'body' => 'Você foi aprovado para a campanha {{nome_campanha}}. Acesse a plataforma para ver os próximos passos. Em alguns dias, você vai receber o briefing com as orientações para produzir o conteúdo e a data final.',
             'cta' => 'Acessar campanha',
         ],
         'campaign.application_rejected' => [
             'subject' => 'Atualização sobre a campanha {{nome_campanha}}',
             'greeting' => 'Olá, {{nome_criador}}!',
-            'body' => "A seleção da campanha {{nome_campanha}} foi concluída e, desta vez, sua candidatura não avançou. Essa decisão vale só para esta campanha e não representa uma avaliação definitiva do seu trabalho.\n\nContinue acompanhando outras oportunidades no Creatorz.",
+            'body' => "A seleção da campanha {{nome_campanha}} foi concluída e, desta vez, sua candidatura não avançou. Essa decisão vale apenas para esta campanha. Você ainda pode participar de novas oportunidades.\n\nContinue acompanhando a Creatorz.",
             'cta' => 'Ver outras oportunidades',
         ],
         'demand.assigned' => [

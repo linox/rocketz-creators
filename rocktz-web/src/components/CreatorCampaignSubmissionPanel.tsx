@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Campaign, CampaignCreator } from "@/lib/types";
+import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
 import { PostingProfileNotice } from "@/components/PostingProfileCards";
 import { isBrandPosting } from "@/lib/posting-profile";
@@ -307,6 +308,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         canEdit={false}
         locale={i18n.language}
       />
+      <CampaignAdditionalBriefing value={row.additional_briefing || null} canEdit={false} />
       {briefingOpen ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">

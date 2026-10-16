@@ -420,6 +420,7 @@ class CampaignController extends Controller
             'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
             'delivery_date' => ['nullable', 'date'],
             'post_date' => ['nullable', 'date'],
+            'additional_briefing' => ['nullable', 'string', 'max:5000'],
             'script' => ['nullable', 'string'],
             'script_file_url' => ['nullable', 'string', 'max:2048'],
             'script_file_name' => ['nullable', 'string', 'max:255'],
@@ -470,6 +471,17 @@ class CampaignController extends Controller
             $data['payment_date'] = now()->toDateString();
         }
 
+        if (array_key_exists('additional_briefing', $data)) {
+            $effectiveStatus = $nextStatus ?? $campaignCreator->application_status?->value;
+            if ($effectiveStatus !== $approvedStatus) {
+                throw ValidationException::withMessages([
+                    'additional_briefing' => __('auth.additional_briefing_requires_allocation'),
+                ]);
+            }
+            $data['additional_briefing'] = trim((string) ($data['additional_briefing'] ?? '')) ?: null;
+        }
+
+        $previousBriefing = trim((string) ($campaignCreator->additional_briefing ?? ''));
         $wasApproved = $campaignCreator->application_status === ApplicationStatus::Approved;
         $becomingApproved = $nextStatus === $approvedStatus && ! $wasApproved;
         $leavingApproved = $wasApproved && $nextStatus !== null && $nextStatus !== $approvedStatus;
@@ -545,6 +557,7 @@ class CampaignController extends Controller
 
         $campaignCreator->loadMissing(['creator.user', 'campaign', 'content']);
         $this->notifyParticipationChange($campaignCreator, $data);
+        $this->notifyAdditionalBriefing($campaignCreator, $data, $previousBriefing);
 
         return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
     }
@@ -1252,6 +1265,29 @@ class CampaignController extends Controller
     /**
      * @param  array<string, mixed>  $data
      */
+    private function notifyAdditionalBriefing(CampaignCreator $campaignCreator, array $data, string $previousBriefing): void
+    {
+        if (! array_key_exists('additional_briefing', $data)) {
+            return;
+        }
+
+        $next = trim((string) ($data['additional_briefing'] ?? ''));
+        if ($next === '' || $next === $previousBriefing) {
+            return;
+        }
+
+        $this->notifications->notifyCreator((int) $campaignCreator->creator_id, [
+            'campaign_id' => (int) $campaignCreator->campaign_id,
+            'title' => __('auth.additional_briefing_title'),
+            'message' => __('auth.additional_briefing', ['name' => $campaignCreator->campaign?->name ?? '']),
+            'type' => NotificationType::General,
+            'link' => '/creators/'.$campaignCreator->creator_id.'?tab=campaigns',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function notifyParticipationChange(CampaignCreator $campaignCreator, array $data): void
     {
         $creatorId = $campaignCreator->creator_id;
@@ -1271,12 +1307,17 @@ class CampaignController extends Controller
 
         if (in_array($application, [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], true)) {
             $approved = $application === ApplicationStatus::Approved->value;
+            $decisionMessage = $approved
+                ? __('auth.application_approved', ['name' => $campaignName])
+                : __('auth.application_rejected', ['name' => $campaignName]);
+            $reason = trim((string) ($data['rejection_reason'] ?? ''));
+            if (! $approved && $reason !== '') {
+                $decisionMessage .= "\n\n".$reason;
+            }
             $this->notifications->notifyCreator($creatorId, [
                 'campaign_id' => $campaignId,
                 'title' => $approved ? __('auth.application_approved_title') : __('auth.application_rejected_title'),
-                'message' => $approved
-                    ? __('auth.application_approved')
-                    : (($data['rejection_reason'] ?? '') ?: __('auth.application_rejected')),
+                'message' => $decisionMessage,
                 'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
                 'link' => $creatorLink,
             ]);

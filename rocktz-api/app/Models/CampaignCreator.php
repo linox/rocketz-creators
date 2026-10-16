@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'payment_status',
     'payment_date',
     'notes',
+    'additional_briefing',
     'application_status',
     'rejection_reason',
     'revision_details',

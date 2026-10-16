@@ -65,6 +65,7 @@ class CampaignCreatorResource extends JsonResource
             'payment_status' => $this->payment_status?->value,
             'payment_date' => $this->payment_date?->toDateString(),
             'notes' => $this->notes,
+            'additional_briefing' => $this->additional_briefing,
             'application_status' => $this->application_status?->value,
             'rejection_reason' => $this->rejection_reason,
             'revision_details' => $this->revision_details,

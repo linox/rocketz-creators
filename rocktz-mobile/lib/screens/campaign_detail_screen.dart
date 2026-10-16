@@ -54,6 +54,18 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
     return apps.first as Map<String, dynamic>;
   }
 
+  String? get _allocatedBriefing {
+    final own = _own;
+    if (own == null || own['application_status'] != 'approved') {
+      return null;
+    }
+    final text = (own['additional_briefing'] as String?)?.trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+    return text;
+  }
+
   Future<void> _load() async {
     setState(() {
       loading = true;
@@ -197,6 +209,22 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                   ],
                 ),
               ),
+            if (_allocatedBriefing != null) ...[
+              const SizedBox(height: 12),
+              SoftCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t('additionalBriefing'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Text(
+                      _allocatedBriefing!,
+                      style: GoogleFonts.nunito(fontWeight: FontWeight.w600, height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             SoftCard(
               child: Column(

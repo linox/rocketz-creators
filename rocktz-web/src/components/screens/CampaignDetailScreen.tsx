@@ -70,6 +70,7 @@ import { CampaignAgeFields } from "@/components/CampaignAgeFields";
 import { CampaignApprovedLimitFields, parseApprovedLimit } from "@/components/CampaignApprovedLimitFields";
 import { CampaignShippingPanel } from "@/components/CampaignShippingPanel";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
+import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
 import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
@@ -1142,6 +1143,16 @@ function DetailInner() {
     }
   }
 
+  async function saveAdditionalBriefing(rowId: number, text: string | null) {
+    try {
+      await api.updateParticipation(rowId, { additional_briefing: text });
+      await load();
+      await alertSuccess(t("campaignDetail.additionalBriefingSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   async function requestRevision(row: CampaignCreator) {
     const note = (feedback[row.id] ?? "").trim();
     if (!note) {
@@ -1659,6 +1670,9 @@ function DetailInner() {
                             <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
                           ) : null}
                           <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          {row.additional_briefing?.trim() ? (
+                            <span className="mt-1 max-w-full truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
+                          ) : null}
                           {deliveryWhen.date ? (
                             <span className="mt-1 max-w-full truncate text-[9px] font-bold text-slate-500">
                               {new Date(`${deliveryWhen.date}T00:00:00`).toLocaleDateString(locale)}
@@ -1714,6 +1728,9 @@ function DetailInner() {
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
                             <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                            {row.additional_briefing?.trim() ? (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(event) => {
@@ -1908,6 +1925,13 @@ function DetailInner() {
                     onSave={(dates) => saveCreatorDates(selected.id, dates)}
                   />
                 ) : null}
+
+                <CampaignAdditionalBriefing
+                  key={`pauta-${selected.id}`}
+                  value={selected.additional_briefing || null}
+                  canEdit={canManage}
+                  onSave={(text) => saveAdditionalBriefing(selected.id, text)}
+                />
 
                 {hasSubmittedMaterial(selected) ? (
                   <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -2421,14 +2445,21 @@ function DetailInner() {
           </div>
           <PostingProfileNotice profile={campaign.posting_profile} audience={isCreator ? "creator" : "team"} />
           {isCreator && applications[0] ? (
-            <CampaignCreatorDates
-              key={`briefing-${applications[0].id}`}
-              generalDate={campaign.delivery_date || null}
-              deliveryDate={applications[0].delivery_date}
-              postDate={applications[0].post_date || null}
-              canEdit={false}
-              locale={locale}
-            />
+            <>
+              <CampaignCreatorDates
+                key={`briefing-${applications[0].id}`}
+                generalDate={campaign.delivery_date || null}
+                deliveryDate={applications[0].delivery_date}
+                postDate={applications[0].post_date || null}
+                canEdit={false}
+                locale={locale}
+              />
+              <CampaignAdditionalBriefing
+                key={`briefing-pauta-${applications[0].id}`}
+                value={applications[0].additional_briefing || null}
+                canEdit={false}
+              />
+            </>
           ) : (
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
               <div>
