@@ -308,7 +308,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         canEdit={false}
         locale={i18n.language}
       />
-      <CampaignAdditionalBriefing value={row.additional_briefing || null} canEdit={false} />
+      <CampaignAdditionalBriefing value={row.additional_briefing || null} canEdit={false} companyName={campaign.company?.name} />
       {briefingOpen ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">

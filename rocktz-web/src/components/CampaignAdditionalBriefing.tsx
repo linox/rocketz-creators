@@ -7,14 +7,16 @@ import { useTranslation } from "react-i18next";
 type Props = {
   value: string | null;
   canEdit: boolean;
+  companyName?: string | null;
   onSave?: (text: string | null) => Promise<void>;
 };
 
-export function CampaignAdditionalBriefing({ value, canEdit, onSave }: Props) {
+export function CampaignAdditionalBriefing({ value, canEdit, companyName, onSave }: Props) {
   const { t } = useTranslation("app");
   const [draft, setDraft] = useState(value || "");
   const [saving, setSaving] = useState(false);
   const text = (value || "").trim();
+  const company = companyName?.trim() || "";
 
   if (!canEdit && !text) return null;
 
@@ -33,8 +35,17 @@ export function CampaignAdditionalBriefing({ value, canEdit, onSave }: Props) {
       <div className="flex items-start gap-2">
         <ScrollText size={16} className="mt-0.5 shrink-0 text-amber-700" />
         <div>
-          <p className="m-0 text-xs font-black text-slate-900">{t("campaignDetail.additionalBriefingTitle")}</p>
-          <p className="m-0 mt-0.5 text-[11px] leading-relaxed text-slate-500">{t("campaignDetail.additionalBriefingHint")}</p>
+          <p className="m-0 text-xs font-black text-slate-900">{t(canEdit ? "campaignDetail.additionalBriefingTitle" : "campaignDetail.additionalBriefingCreatorTitle")}</p>
+          <p className="m-0 mt-0.5 text-[11px] leading-relaxed text-slate-500">
+            {t(
+              canEdit
+                ? "campaignDetail.additionalBriefingHint"
+                : company
+                  ? "campaignDetail.additionalBriefingCreatorHint"
+                  : "campaignDetail.additionalBriefingCreatorHintFallback",
+              { company },
+            )}
+          </p>
         </div>
       </div>
       {canEdit ? (

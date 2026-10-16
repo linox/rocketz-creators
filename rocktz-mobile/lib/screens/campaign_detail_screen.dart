@@ -66,6 +66,15 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
     return text;
   }
 
+  String _creatorBriefingHint(String Function(String key) t) {
+    final company = campaign?['company'];
+    final name = company is Map ? (company['name'] as String?)?.trim() : null;
+    if (name != null && name.isNotEmpty) {
+      return t('additionalBriefingHint').replaceAll('{{company}}', name);
+    }
+    return t('additionalBriefingHintFallback');
+  }
+
   Future<void> _load() async {
     setState(() {
       loading = true;
@@ -216,6 +225,11 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(t('additionalBriefing'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text(
+                      _creatorBriefingHint(t),
+                      style: GoogleFonts.nunito(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13, height: 1.35),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       _allocatedBriefing!,

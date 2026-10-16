@@ -1930,6 +1930,7 @@ function DetailInner() {
                   key={`pauta-${selected.id}`}
                   value={selected.additional_briefing || null}
                   canEdit={canManage}
+                  companyName={campaign.company?.name}
                   onSave={(text) => saveAdditionalBriefing(selected.id, text)}
                 />
 
@@ -2458,6 +2459,7 @@ function DetailInner() {
                 key={`briefing-pauta-${applications[0].id}`}
                 value={applications[0].additional_briefing || null}
                 canEdit={false}
+                companyName={campaign.company?.name}
               />
             </>
           ) : (
