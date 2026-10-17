@@ -31,6 +31,7 @@ class ProcessMailRemindersCommand extends Command
 
         ContentPlanningItem::query()
             ->with(['creator.user', 'recurringContract.company'])
+            ->visibleToCreator()
             ->whereNotNull('planned_date')
             ->whereNotIn('status', [
                 ContentPlanningStatus::Approved,
@@ -155,6 +156,7 @@ class ProcessMailRemindersCommand extends Command
 
         ContentPlanningItem::query()
             ->with(['creator.user', 'recurringContract', 'company.companyUsers.user'])
+            ->visibleToCreator()
             ->whereNotNull('post_date')
             ->whereNotIn('status', [
                 ContentPlanningStatus::Published,

@@ -1,3 +1,4 @@
+import { calendarDateKey, effectivePlanningDueDate, isDateBeforeToday, isoToday } from "@/lib/delivery-date";
 import { namedPautaTitle } from "@/lib/pauta-briefing";
 import type { Campaign, CampaignCreator, PlanningItem, RecurringContract } from "@/lib/types";
 
@@ -98,10 +99,11 @@ export type InboxFolder =
   | "revision_requested"
   | "new_version"
   | "approved"
+  | "on_track"
   | "overdue"
   | "archived";
 
-export type InboxQuickFilter = "all" | "pending" | "today" | "week";
+export type InboxQuickFilter = "all" | "pending" | "on_track" | "today" | "week";
 export type InboxSourceFilter = "all" | "campaign" | "recurring";
 export type InboxViewMode = "inbox" | "table";
 
@@ -177,16 +179,10 @@ function submissionAt(...candidates: Array<string | null | undefined>): string {
   return "1970-01-01T00:00:00.000Z";
 }
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function isPastDate(value?: string | null) {
-  if (!value) return false;
-  const d = new Date(value.includes("T") ? value : `${value}T23:59:59`);
-  return d.getTime() < startOfToday().getTime();
+function submittedAfterDeadline(submittedAt?: string | null, deadline?: string | null) {
+  const submitted = calendarDateKey(submittedAt);
+  const due = calendarDateKey(deadline);
+  return Boolean(submitted && due && submitted > due);
 }
 
 function creatorLabel(row: { artistic_name?: string | null; full_name?: string | null } | null | undefined) {
@@ -265,15 +261,18 @@ function stageStatus(
   status: string | null | undefined,
   viewedAt: string | null,
   deadline?: string | null,
-  opts?: { resubmission?: boolean },
+  opts?: { resubmission?: boolean; submittedAt?: string | null; month?: string | null },
 ): DeliveryStatus {
-  if (status === "approved") return "approved";
+  if (status === "approved" || status === "published") return "approved";
   if (status === "revision") return "revision_requested";
-  if (status === "submitted") {
-    if (isPastDate(deadline)) return "overdue";
+  const submitted = status === "submitted" || status === "sent" || status === "review";
+  if (submitted) {
+    if (submittedAfterDeadline(opts?.submittedAt, deadline)) return "overdue";
     if (opts?.resubmission) return viewedAt ? "new_version" : "unread";
     return viewedAt ? "pending_approval" : "unread";
   }
+  if (isDateBeforeToday(deadline)) return "overdue";
+  if (!deadline && opts?.month && opts.month < isoToday().slice(0, 7)) return "overdue";
   return viewedAt ? "pending_approval" : "unread";
 }
 
@@ -297,7 +296,10 @@ function buildCampaignStageItem(
   const resubmission = isScript
     ? ((row.content?.script_version ?? 0) > 1 || Boolean(row.script_feedback?.trim()))
     : ((row.content?.video_version ?? 0) > 1 || Boolean(row.video_feedback?.trim()));
-  const status = stageStatus(stageStatusValue, null, row.delivery_date || campaign.delivery_date, { resubmission });
+  const status = stageStatus(stageStatusValue, null, row.delivery_date || campaign.delivery_date, {
+    resubmission,
+    submittedAt: createdAt.startsWith("1970") ? null : createdAt,
+  });
   const contentType: DeliveryContentType = isScript ? "script" : mapCampaignContentType(row);
   const scriptFileUrl = row.content?.script_file_url || null;
   const scriptFileName = row.content?.script_file_name || fileNameFromUrl(scriptFileUrl);
@@ -483,11 +485,12 @@ function buildPlanningStageItem(
   const resubmission = isScript
     ? ((item.script_version ?? 0) > 1 || Boolean(item.script_feedback?.trim()))
     : ((item.video_version ?? 0) > 1 || Boolean((item.video_feedback || item.feedback_note)?.trim()));
+  const dueDate = effectivePlanningDueDate(item);
   const status = stageStatus(
     stageStatusValue ?? (item.status === "review" ? "submitted" : item.status),
     null,
-    item.planned_date,
-    { resubmission },
+    dueDate,
+    { resubmission, submittedAt: createdAt.startsWith("1970") ? null : createdAt, month: item.month },
   );
   const scriptFileUrl = item.script_file_url || null;
   const scriptFileName = item.script_file_name || fileNameFromUrl(scriptFileUrl);
@@ -566,7 +569,7 @@ function buildPlanningStageItem(
     status,
     createdAt,
     viewedAt: null,
-    approvalDeadline: item.planned_date,
+    approvalDeadline: dueDate,
     publicationDate: item.post_date ?? item.planned_date,
     responsibleUserName: "Rocketz",
     currentVersion,
@@ -677,6 +680,17 @@ export function isUnread(item: DeliveryInboxItem) {
   return !item.viewedAt || item.status === "unread";
 }
 
+/** Still inside the delivery date and nothing was sent yet. */
+export function isOnSchedule(item: DeliveryInboxItem) {
+  if (item.archived || item.status === "approved" || item.status === "overdue" || item.status === "revision_requested") return false;
+  if (item.status === "pending_approval" || item.status === "new_version") return false;
+  const hasMaterial = item.versions.some((version) => Boolean(
+    version.fileUrl || version.scriptText?.trim() || version.linkUrl || version.captionText?.trim(),
+  ));
+  if (hasMaterial) return false;
+  return !isDateBeforeToday(item.approvalDeadline || item.publicationDate);
+}
+
 /** Opened (or overdue) and still waiting for approve/revision. */
 export function needsAction(item: DeliveryInboxItem) {
   if (item.archived) return false;
@@ -686,10 +700,11 @@ export function needsAction(item: DeliveryInboxItem) {
 export function matchesFolder(item: DeliveryInboxItem, folder: InboxFolder) {
   if (folder === "all") return !item.archived;
   if (folder === "archived") return Boolean(item.archived) || item.status === "archived";
-  if (folder === "unread") return !item.archived && isUnread(item);
+  if (folder === "unread") return !item.archived && !isOnSchedule(item) && isUnread(item);
+  if (folder === "on_track") return !item.archived && isOnSchedule(item);
   if (folder === "overdue") return !item.archived && item.status === "overdue";
   if (folder === "pending_approval") {
-    return !item.archived && (item.status === "pending_approval" || item.status === "new_version" || item.status === "unread");
+    return !item.archived && !isOnSchedule(item) && (item.status === "pending_approval" || item.status === "new_version" || item.status === "unread");
   }
   return !item.archived && item.status === folder;
 }

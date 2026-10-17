@@ -50,7 +50,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { getCalendarDays, localDateStr, planningDateEvents } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
-import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
+import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingSummary } from "@/lib/pauta-briefing";
 import { usePrivacy } from "@/lib/privacy";
 import { formatMoneyGroups, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask, remaskMoney } from "@/lib/masks";
@@ -305,13 +305,15 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
 
   const contentItems = useMemo<PlanningItem[]>(() => {
     return contracts.flatMap((contract) =>
-      (contract.items || []).map((item) => ({
-        ...item,
-        company_id: item.company_id ?? contract.company_id,
-        company: item.company ?? (contract.company ? { id: contract.company.id, name: contract.company.name } : null),
-      })),
+      (contract.items || [])
+        .filter((item) => !isCreator || !itemIsAwaitingPauta(item))
+        .map((item) => ({
+          ...item,
+          company_id: item.company_id ?? contract.company_id,
+          company: item.company ?? (contract.company ? { id: contract.company.id, name: contract.company.name } : null),
+        })),
     );
-  }, [contracts]);
+  }, [contracts, isCreator]);
 
   const knownCreators = useMemo(() => {
     const map = new Map<number, { id: number; artistic_name: string; full_name?: string | null; photo_url: string | null }>();

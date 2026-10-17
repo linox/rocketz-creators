@@ -382,7 +382,7 @@ class RecurringContractController extends Controller
             'status' => $data['status'] ?? ContentPlanningStatus::Planned,
         ]);
 
-        if (! $recurringContract->isPendingAgency()) {
+        if (! $recurringContract->isPendingAgency() && $item->isVisibleToCreator()) {
             $this->notifyPautaReady($item, $recurringContract);
         }
 
@@ -442,7 +442,7 @@ class RecurringContractController extends Controller
         if (! $actorIsCreator && $contentPlanningItem->recurringContract) {
             $this->publishIfActorCan($request, $contentPlanningItem->recurringContract);
         }
-        $hadBriefing = $this->itemHasBriefing($contentPlanningItem);
+        $wasVisibleToCreator = $contentPlanningItem->isVisibleToCreator();
         if ($actorIsCreator) {
             abort_unless($contentPlanningItem->creator_id === $request->user()->creator?->id, 403, __('auth.forbidden'));
             $data = $this->restrictCreatorPlanningPayload($data, $contentPlanningItem);
@@ -566,8 +566,11 @@ class RecurringContractController extends Controller
         $this->notifyPlanningItemChange($contentPlanningItem, $data);
 
         if (
-            isset($data['planned_date'])
-            || NotificationService::is($data['status'] ?? null, ContentPlanningStatus::Rejected)
+            $contentPlanningItem->isVisibleToCreator()
+            && (
+                isset($data['planned_date'])
+                || NotificationService::is($data['status'] ?? null, ContentPlanningStatus::Rejected)
+            )
         ) {
             $this->mail->demandUpdated(
                 $contentPlanningItem,
@@ -577,8 +580,8 @@ class RecurringContractController extends Controller
 
         if (
             ! $actorIsCreator
-            && ! $hadBriefing
-            && $this->itemHasBriefing($contentPlanningItem)
+            && ! $wasVisibleToCreator
+            && $contentPlanningItem->isVisibleToCreator()
             && $contentPlanningItem->recurringContract
         ) {
             $this->notifyPautaReady($contentPlanningItem, $contentPlanningItem->recurringContract);
@@ -623,7 +626,7 @@ class RecurringContractController extends Controller
                 'recurringContractCreators' => fn ($q) => $q->where('creator_id', $creatorId)->with('creator'),
             ];
             if ($withItems) {
-                $with['contentPlanningItems'] = fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']);
+                $with['contentPlanningItems'] = fn ($q) => $q->where('creator_id', $creatorId)->visibleToCreator()->with(['creator', 'company']);
                 $with['excludedPlanningItems'] = $this->excludedPlanningConstraint($creatorId);
             }
             $query->with($with);
@@ -667,7 +670,7 @@ class RecurringContractController extends Controller
             $contract->load([
                 'company',
                 'recurringContractCreators' => fn ($q) => $q->where('creator_id', $creatorId)->with('creator'),
-                'contentPlanningItems' => fn ($q) => $q->where('creator_id', $creatorId)->with(['creator', 'company']),
+                'contentPlanningItems' => fn ($q) => $q->where('creator_id', $creatorId)->visibleToCreator()->with(['creator', 'company']),
                 'excludedPlanningItems' => $this->excludedPlanningConstraint($creatorId),
             ]);
 

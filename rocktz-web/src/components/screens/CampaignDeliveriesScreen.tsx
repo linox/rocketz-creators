@@ -41,6 +41,7 @@ import {
   dateGroupKey,
   formatInboxTime,
   formatInboxPeriod,
+  isOnSchedule,
   isUnread,
   needsAction,
   matchesFolder,
@@ -76,8 +77,14 @@ function readAgencyCompany(userId: number): string {
   }
 }
 
-function statusTone(status: DeliveryStatus) {
+function inboxStatusKey(item: DeliveryInboxItem) {
+  return isOnSchedule(item) ? "on_track" : item.status;
+}
+
+function statusTone(status: DeliveryStatus | "on_track") {
   switch (status) {
+    case "on_track":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
     case "pending_approval":
     case "new_version":
     case "unread":
@@ -337,8 +344,9 @@ function DeliveriesInboxInner() {
       .filter((item) => {
         const created = new Date(item.createdAt);
         if (quick === "pending") {
-          return ["pending_approval", "new_version", "unread", "revision_requested", "overdue"].includes(item.status);
+          return !isOnSchedule(item) && ["pending_approval", "new_version", "unread", "revision_requested", "overdue"].includes(item.status);
         }
+        if (quick === "on_track") return isOnSchedule(item);
         if (quick === "today") return created >= startToday;
         if (quick === "week") return created >= weekAgo;
         return true;
@@ -624,8 +632,8 @@ function DeliveriesInboxInner() {
   };
 
   const visibleCompanies = companiesExpanded ? companies : companies.slice(0, 4);
-  const extraFiltersActive = sourceFilter !== "all" || sourceId !== null || quick !== "all";
-  const activeExtraCount = [sourceFilter !== "all", sourceId !== null, quick !== "all"].filter(Boolean).length;
+  const extraFiltersActive = sourceId !== null;
+  const activeExtraCount = sourceId !== null ? 1 : 0;
   const companyOptions = [
     { value: ALL_COMPANIES, label: t("deliveries.inbox.allCompanies") },
     ...agencyCompanies.map((company) => ({ value: String(company.id), label: company.name })),
@@ -690,6 +698,7 @@ function DeliveriesInboxInner() {
             {([
               ["all", t("deliveries.inbox.quickAll")],
               ["pending", t("deliveries.inbox.quickPending")],
+              ["on_track", t("deliveries.inbox.quickOnTrack")],
               ["today", t("deliveries.inbox.quickToday")],
               ["week", t("deliveries.inbox.quickWeek")],
             ] as const).map(([key, label]) => (
@@ -728,6 +737,22 @@ function DeliveriesInboxInner() {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-1 text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("deliveries.inbox.type")}</span>
+          {([
+            ["all", t("deliveries.inbox.typeAll")],
+            ["campaign", t("deliveries.inbox.typeCampaign")],
+            ["recurring", t("deliveries.inbox.typeRecurring")],
+          ] as const).map(([key, label]) => (
+            <Chip
+              key={key}
+              label={label}
+              active={sourceFilter === key}
+              onClick={() => { setSourceFilter(key); setSourceId(null); }}
+            />
+          ))}
+        </div>
+
         <div className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {([
             ["all", summary.all, t("deliveries.inbox.statAll")],
@@ -735,6 +760,7 @@ function DeliveriesInboxInner() {
             ["revision_requested", summary.revision, t("deliveries.inbox.statRevision")],
             ["unread", summary.unread, t("deliveries.inbox.statUnread")],
             ["overdue", summary.overdue, t("deliveries.inbox.statOverdue")],
+            ["on_track", countByFolder(companyScoped, "on_track"), t("deliveries.inbox.quickOnTrack")],
             ["approved", countByFolder(companyScoped, "approved"), t("deliveries.inbox.folder.approved")],
             ["archived", countByFolder(companyScoped, "archived"), t("deliveries.inbox.folder.archived")],
           ] as const).map(([key, count, label]) => (
@@ -755,22 +781,6 @@ function DeliveriesInboxInner() {
 
         {filtersOpen ? (
           <div className="space-y-1.5 border-t border-slate-100 pt-1.5">
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("deliveries.inbox.type")}</span>
-              {([
-                ["all", t("deliveries.inbox.typeAll")],
-                ["campaign", t("deliveries.inbox.typeCampaign")],
-                ["recurring", t("deliveries.inbox.typeRecurring")],
-              ] as const).map(([key, label]) => (
-                <Chip
-                  key={key}
-                  label={label}
-                  active={sourceFilter === key}
-                  onClick={() => { setSourceFilter(key); setSourceId(null); }}
-                />
-              ))}
-            </div>
-
             <div className="flex flex-wrap items-center gap-1">
               <span className="mr-1 text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("deliveries.inbox.companies")}</span>
               <Chip
@@ -994,7 +1004,7 @@ function InboxRow({
   onToggle: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const unread = isUnread(item);
+  const unread = isUnread(item) && !isOnSchedule(item);
   const actionNeeded = needsAction(item);
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
@@ -1042,8 +1052,8 @@ function InboxRow({
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
           {stage ? <span className="font-bold text-indigo-700">{stage}</span> : null}
           <span className="font-semibold text-slate-500">V{item.currentVersion}</span>
-          <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(item.status))}>
-            {t(`deliveries.inbox.status.${item.status}`)}
+          <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
+            {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
           </span>
         </div>
       </div>
@@ -1142,8 +1152,8 @@ function ReadingPane({
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                 {formatName} · V{item.currentVersion}
               </span>
-              <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", statusTone(item.status))}>
-                {t(`deliveries.inbox.status.${item.status}`)}
+              <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
+                {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
               </span>
             </div>
           </div>
@@ -1489,8 +1499,8 @@ function TableView({
               <td className="px-3 py-2 whitespace-nowrap">{new Date(item.createdAt).toLocaleString(locale)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"}</td>
               <td className="px-3 py-2">
-                <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", statusTone(item.status))}>
-                  {t(`deliveries.inbox.status.${item.status}`)}
+                <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
+                  {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
                 </span>
               </td>
               <td className="px-3 py-2">{item.responsibleUserName}</td>

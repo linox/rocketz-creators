@@ -55,7 +55,7 @@ import {
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { formatMonthLabel, futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
-import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
+import { effectiveCampaignDeliveryDate, effectivePlanningDueDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { useOptionalUploadManager } from "@/contexts/UploadManagerContext";
@@ -82,7 +82,6 @@ import { alertApiError, alertConfirm, alertLoading, alertSuccess, alertWarning, 
 import { ApiError } from "@/lib/laravel";
 import { cn } from "@/lib/cn";
 import {
-  CONTENT_DELIVERY_STATES,
   campaignCreatorDeliveryState,
   creatorNextDeliveryAction,
   deliveryStatusRank,
@@ -137,6 +136,38 @@ const QUOTA_PILLS: { keys: string[]; labelKey: string }[] = [
 function currentYearMonth() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type WorkPace = "on_track" | "owing" | "review" | "revision" | "done" | "awaiting";
+
+function deliveryPace(state: ContentDeliveryState, due?: string | null, month?: string | null): Exclude<WorkPace, "awaiting"> {
+  if (state === "published" || state === "approved") return "done";
+  if (isRevisionDelivery(state)) return "revision";
+  if (state === "scriptReview" || state === "videoReview" || state === "sent") return "review";
+  if (isDateBeforeToday(due) || (!due && Boolean(month) && month! < currentYearMonth())) return "owing";
+  return "on_track";
+}
+
+function recurringRowPace(work: RecurringWorkRow): WorkPace {
+  if (!work.item || itemIsAwaitingPauta(work.item)) return "awaiting";
+  return deliveryPace(work.deliveryStatus, effectivePlanningDueDate(work.item), work.item.month);
+}
+
+function campaignRowPace(campaign: Campaign, row: { delivery_date?: string | null }, state: ContentDeliveryState) {
+  const due = effectiveCampaignDeliveryDate(row, campaign).date || campaign.end_date;
+  return deliveryPace(state, due);
+}
+
+function paceFilterOptions(tp: (key: string) => string, includeAwaiting: boolean) {
+  return [
+    { value: "all", label: tp("filterAllStatuses") },
+    { value: "on_track", label: tp("filterOnTrack") },
+    { value: "owing", label: tp("filterOwing") },
+    { value: "review", label: tp("filterInReview") },
+    { value: "revision", label: tp("filterNeedsRevision") },
+    { value: "done", label: tp("filterDone") },
+    ...(includeAwaiting ? [{ value: "awaiting", label: tp("filterAwaitingPauta") }] : []),
+  ];
 }
 
 function campaignDemandMonth(
@@ -278,24 +309,10 @@ function buildRecurringWorkRows(contracts: RecurringContract[], creatorId: numbe
     const creatorRow = contract.creators?.find((row) => row.creator_id === creatorId);
     const fee = creatorRow?.monthly_cache ?? creatorRow?.monthly_fee ?? null;
     const items = (contract.items ?? [])
-      .filter((item) => item.creator_id === creatorId)
+      .filter((item) => item.creator_id === creatorId && !itemIsAwaitingPauta(item))
       .sort((a, b) => deliveryStatusRank(planningItemDeliveryState(a)) - deliveryStatusRank(planningItemDeliveryState(b)));
 
-    if (items.length === 0) {
-      if (contract.status !== "active") continue;
-      const quota = quotaTotal(creatorRow?.monthly_deliverables ?? {});
-      const excluded = excludedDemandCount(contract.excluded_demands, creatorId, currentYearMonth());
-      if (quota > 0 && excluded >= quota) continue;
-      rows.push({
-        key: `contract-${contract.id}`,
-        contract,
-        item: null,
-        fee,
-        deliverables: creatorRow?.monthly_deliverables ?? {},
-        deliveryStatus: "waiting",
-      });
-      continue;
-    }
+    if (items.length === 0) continue;
 
     for (const item of items) {
       rows.push({
@@ -423,6 +440,7 @@ function RecurringCompanyHeader({
   feeLabel,
   quotaItems,
   pendingCount,
+  overdueCount,
   quotaCount,
   tp,
   ta,
@@ -433,6 +451,7 @@ function RecurringCompanyHeader({
   feeLabel: string;
   quotaItems: { labelKey: string; count: number }[];
   pendingCount: number;
+  overdueCount: number;
   quotaCount: number;
   tp: (key: string, options?: Record<string, unknown>) => string;
   ta: (key: string, options?: Record<string, unknown>) => string;
@@ -469,9 +488,13 @@ function RecurringCompanyHeader({
           )) : (
             <span className="text-[11px] font-semibold text-slate-400">{tp("noMonthlyQuota")}</span>
           )}
-          {quotaCount > 0 || pendingCount > 0 ? (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-800">
-              {tp("monthQuotaProgress", { pending: pendingCount, total: quotaCount || pendingCount })}
+          {overdueCount > 0 ? (
+            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-extrabold text-rose-700">
+              {tp("monthOverdue", { count: overdueCount })}
+            </span>
+          ) : pendingCount > 0 ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700">
+              {tp("monthOnTrack")}
             </span>
           ) : null}
         </div>
@@ -2785,7 +2808,6 @@ function RecurringBriefingModal({
 
 function ActiveRecurringWorksTable({
   month,
-  creatorId,
   rows,
   expandedKey,
   openRow,
@@ -2814,7 +2836,6 @@ function ActiveRecurringWorksTable({
   const { i18n } = useTranslation();
   const hideCreatorValues = userHidesCreatorValues(useAuth());
   const locale = intlLocale(normalizeLocale(i18n.language));
-  const isCurrentMonth = month === currentYearMonth();
   const monthLabel = formatMonthLabel(month, locale);
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -2832,10 +2853,7 @@ function ActiveRecurringWorksTable({
     ];
   }, [rows, tp]);
 
-  const statusOptions = useMemo(() => [
-    { value: "all", label: tp("filterAllStatuses") },
-    ...CONTENT_DELIVERY_STATES.map((state) => ({ value: state, label: deliveryLabel(state) })),
-  ], [tp, deliveryLabel]);
+  const statusOptions = useMemo(() => paceFilterOptions(tp, false), [tp]);
 
   const sections = useMemo(() => {
     const byContract = new Map<number, RecurringWorkRow[]>();
@@ -2852,15 +2870,10 @@ function ActiveRecurringWorksTable({
         const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
         const monthItems = list.filter((work) => work.item && recurringDemandMonth(work, currentYearMonth()) === month);
-        const excluded = excludedDemandCount(sample.contract.excluded_demands, creatorId, month);
-        const { expected } = monthDemandExpectation(quotaTotal(sample.deliverables), monthItems.length, excluded);
-        if (monthItems.length === 0 && expected === 0) return null;
-        if (monthItems.length === 0 && (!isCurrentMonth || sample.contract.status !== "active")) return null;
-        const monthRows = monthItems.filter((work) => {
-          if (statusFilter !== "all" && work.deliveryStatus !== statusFilter) return false;
-          return true;
-        });
-        const pendingRows = monthRows.filter((work) => work.deliveryStatus !== "published");
+        if (monthItems.length === 0) return null;
+        const monthRows = monthItems.filter((work) => statusFilter === "all" || recurringRowPace(work) === statusFilter);
+        const pendingRows = monthItems.filter((work) => recurringRowPace(work) !== "done");
+        const overdueRows = monthItems.filter((work) => recurringRowPace(work) === "owing");
         return {
           key: `contract-${sample.contract.id}`,
           contract: sample.contract,
@@ -2870,12 +2883,13 @@ function ActiveRecurringWorksTable({
           deliverables: sample.deliverables,
           monthRows,
           pendingRows,
-          monthTotal: expected,
+          overdueCount: overdueRows.length,
+          monthTotal: monthItems.length,
         };
       })
       .filter((section): section is NonNullable<typeof section> => Boolean(section))
       .sort((a, b) => a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }));
-  }, [rows, companyFilter, statusFilter, month, isCurrentMonth, creatorId, tp]);
+  }, [rows, companyFilter, statusFilter, month, tp]);
 
   const monthCount = sections.reduce((sum, section) => sum + section.monthRows.length, 0);
   const openWork = useMemo(
@@ -2930,6 +2944,7 @@ function ActiveRecurringWorksTable({
               feeLabel={hideCreatorValues ? HIDDEN_CREATOR_VALUE : section.fee != null ? formatCurrency(Number(section.fee) || 0) : "—"}
               quotaItems={quotaEntries(section.deliverables)}
               pendingCount={section.pendingRows.length}
+              overdueCount={section.overdueCount}
               quotaCount={section.monthTotal}
               tp={tp}
               ta={ta}
@@ -3216,14 +3231,11 @@ function ActiveCampaignsTable({
     ];
   }, [rows, tp]);
 
-  const statusOptions = useMemo(() => [
-    { value: "all", label: tp("filterAllStatuses") },
-    ...CONTENT_DELIVERY_STATES.map((state) => ({ value: state, label: deliveryLabel(state) })),
-  ], [tp, deliveryLabel]);
+  const statusOptions = useMemo(() => paceFilterOptions(tp, false), [tp]);
 
   const filteredRows = useMemo(() => rows.filter((item) => {
     if (companyFilter !== "all" && item.companyId !== companyFilter) return false;
-    if (statusFilter !== "all" && item.deliveryStatus !== statusFilter) return false;
+    if (statusFilter !== "all" && campaignRowPace(item.campaign, item.row, item.deliveryStatus) !== statusFilter) return false;
     return true;
   }), [rows, companyFilter, statusFilter]);
 

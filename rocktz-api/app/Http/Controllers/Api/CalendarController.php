@@ -150,7 +150,7 @@ class CalendarController extends Controller
             });
 
         if ($user->role === UserRole::Creator) {
-            $query->where('creator_id', $user->creator?->id ?: 0);
+            $query->where('creator_id', $user->creator?->id ?: 0)->visibleToCreator();
         } elseif ($user->role === UserRole::Company) {
             $query->where('company_id', $user->actingCompanyId());
         }

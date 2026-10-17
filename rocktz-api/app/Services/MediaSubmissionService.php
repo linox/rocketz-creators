@@ -52,6 +52,7 @@ class MediaSubmissionService
 
         $item = ContentPlanningItem::query()->findOrFail($id);
         abort_unless($user->role === UserRole::Creator && (int) $user->creator?->id === (int) $item->creator_id, 403);
+        abort_unless($item->isVisibleToCreator(), 422, __('auth.pauta_awaiting_briefing'));
         abort_if($item->pending_upload_id !== null, 422, __('auth.upload_already_in_progress'));
         $item->update(['pending_upload_id' => $uploadId, 'upload_progress' => 0]);
     }
@@ -223,6 +224,7 @@ class MediaSubmissionService
     {
         [$item, $data] = DB::transaction(function () use ($id, $payload) {
             $item = ContentPlanningItem::query()->with(['creator.user', 'recurringContract'])->findOrFail($id);
+            abort_unless($item->isVisibleToCreator(), 422, __('auth.pauta_awaiting_briefing'));
             $mediaUrl = (string) ($payload['media_url'] ?? $payload['video_url'] ?? '');
 
             $data = array_intersect_key($payload, array_flip([

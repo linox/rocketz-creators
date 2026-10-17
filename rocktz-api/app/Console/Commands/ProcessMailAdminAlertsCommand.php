@@ -44,6 +44,7 @@ class ProcessMailAdminAlertsCommand extends Command
         }
 
         $overdue = ContentPlanningItem::query()
+            ->visibleToCreator()
             ->whereNotNull('planned_date')
             ->whereDate('planned_date', '<', now()->toDateString())
             ->whereNotIn('status', [

@@ -96,7 +96,7 @@ import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
-import { effectiveCampaignDeliveryDate } from "@/lib/delivery-date";
+import { effectiveCampaignDeliveryDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
 import type { Campaign, CampaignCreator, Company, Creator, CreatorGroup, RevisionHistoryEntry } from "@/lib/types";
 import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
@@ -107,7 +107,8 @@ import { mediaPublicUrl } from "@/lib/media-playback";
 
 const STATUSES = ["briefing", "selection", "approval", "production", "published", "finished"] as const;
 type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro" | "metricas";
-type CreatorFilter = "all" | "attention" | "owing" | "delivered" | "no_demand";
+type CreatorFilter = "all" | "attention" | "owing" | "on_track" | "delivered" | "no_demand";
+type CreatorPace = "owing" | "on_track" | "delivered" | "no_demand";
 type AppFilter = "all" | "pending" | "approved" | "rejected";
 type CreatorLayout = "split" | "grid";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
@@ -326,18 +327,25 @@ function isDeliveredCreator(row: CampaignCreator) {
   return !hasNoDemand(row) && (row.delivery_status === "approved" || row.delivery_status === "published");
 }
 
-function creatorCardTag(row: CampaignCreator, filter: CreatorFilter): Exclude<CreatorFilter, "all"> | null {
+function creatorPace(row: CampaignCreator, campaign: Campaign): CreatorPace {
+  if (hasNoDemand(row)) return "no_demand";
+  if (isDeliveredCreator(row)) return "delivered";
+  const { date } = effectiveCampaignDeliveryDate(row, campaign);
+  return isDateBeforeToday(date) ? "owing" : "on_track";
+}
+
+function creatorCardTag(row: CampaignCreator, filter: CreatorFilter, pace: CreatorPace): Exclude<CreatorFilter, "all"> | null {
   if (filter === "attention") return needsAgencyAttention(row) ? "attention" : null;
-  if (filter === "owing") return "owing";
-  if (filter === "delivered") return "delivered";
-  if (filter === "no_demand") return "no_demand";
+  if (filter === "owing" || filter === "on_track" || filter === "delivered" || filter === "no_demand") return pace === filter ? filter : null;
   if (needsAgencyAttention(row)) return "attention";
+  if (pace === "owing") return "owing";
   return null;
 }
 
 const CREATOR_TAG_PILL: Record<Exclude<CreatorFilter, "all">, string> = {
   attention: "border-amber-200 bg-amber-100 text-amber-900",
   owing: "border-rose-200 bg-rose-100 text-rose-800",
+  on_track: "border-emerald-200 bg-emerald-100 text-emerald-800",
   delivered: "border-emerald-200 bg-emerald-100 text-emerald-800",
   no_demand: "border-slate-200 bg-slate-100 text-slate-600",
 };
@@ -345,6 +353,7 @@ const CREATOR_TAG_PILL: Record<Exclude<CreatorFilter, "all">, string> = {
 const CREATOR_TAG_CARD: Record<Exclude<CreatorFilter, "all">, string> = {
   attention: "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200/70",
   owing: "border-rose-200/80 bg-rose-50/15",
+  on_track: "border-emerald-200/80 bg-emerald-50/20",
   delivered: "border-emerald-200/80 bg-emerald-50/15",
   no_demand: "border-slate-200 bg-slate-50/50",
 };
@@ -352,6 +361,7 @@ const CREATOR_TAG_CARD: Record<Exclude<CreatorFilter, "all">, string> = {
 const CREATOR_TAG_DOT: Record<Exclude<CreatorFilter, "all">, string> = {
   attention: "bg-amber-500",
   owing: "bg-rose-500",
+  on_track: "bg-emerald-500",
   delivered: "bg-emerald-500",
   no_demand: "bg-slate-400",
 };
@@ -680,34 +690,43 @@ function DetailInner() {
   const statusCounts = useMemo(() => {
     let attention = 0;
     let owing = 0;
+    let onTrack = 0;
     let delivered = 0;
     let noDemand = 0;
     displayCreators.forEach((row) => {
       if (needsAgencyAttention(row)) attention += 1;
-      if (hasNoDemand(row)) noDemand += 1;
-      else if (isDeliveredCreator(row)) delivered += 1;
-      else owing += 1;
+      if (!campaign) return;
+      const pace = creatorPace(row, campaign);
+      if (pace === "no_demand") noDemand += 1;
+      else if (pace === "delivered") delivered += 1;
+      else if (pace === "owing") owing += 1;
+      else onTrack += 1;
     });
-    return { all: displayCreators.length, attention, owing, delivered, no_demand: noDemand };
-  }, [displayCreators]);
+    return { all: displayCreators.length, attention, owing, on_track: onTrack, delivered, no_demand: noDemand };
+  }, [displayCreators, campaign]);
 
   const filteredCreators = useMemo(() => {
     const term = creatorSearch.trim().toLowerCase();
     const rank = (row: CampaignCreator) => {
       if (needsAgencyAttention(row)) return 0;
-      if (hasNoDemand(row)) return 3;
-      if (isDeliveredCreator(row)) return 2;
-      return 1;
+      if (!campaign) return 4;
+      const pace = creatorPace(row, campaign);
+      if (pace === "owing") return 1;
+      if (pace === "on_track") return 2;
+      if (pace === "delivered") return 3;
+      return 4;
     };
     return displayCreators
       .filter((row) => {
         const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.delivery_type ?? ""}`.toLowerCase();
         if (term && !name.includes(term)) return false;
-        const none = hasNoDemand(row);
+        if (!campaign) return creatorFilter === "all";
+        const pace = creatorPace(row, campaign);
         if (creatorFilter === "attention") return needsAgencyAttention(row);
-        if (creatorFilter === "no_demand") return none;
-        if (creatorFilter === "delivered") return isDeliveredCreator(row);
-        if (creatorFilter === "owing") return !none && !isDeliveredCreator(row);
+        if (creatorFilter === "no_demand") return pace === "no_demand";
+        if (creatorFilter === "delivered") return pace === "delivered";
+        if (creatorFilter === "owing") return pace === "owing";
+        if (creatorFilter === "on_track") return pace === "on_track";
         return true;
       })
       .sort((a, b) => {
@@ -717,7 +736,7 @@ function DetailInner() {
         const nameB = b.creator?.artistic_name || b.creator?.full_name || "";
         return nameA.localeCompare(nameB, locale, { sensitivity: "base" });
       });
-  }, [displayCreators, creatorSearch, creatorFilter, locale]);
+  }, [displayCreators, creatorSearch, creatorFilter, locale, campaign]);
 
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
@@ -1610,6 +1629,7 @@ function DetailInner() {
                     ["all", t("campaignDetail.filterAll"), statusCounts.all, "bg-slate-900 text-white border-slate-900", "bg-white text-slate-600 border-slate-200", false],
                     ["attention", t("campaignDetail.filterAttention"), statusCounts.attention, "bg-amber-500 text-white border-amber-500", "bg-white text-amber-800 border-amber-200", true],
                     ["owing", t("campaignDetail.filterOwing"), statusCounts.owing, "bg-rose-600 text-white border-rose-600", "bg-white text-rose-700 border-rose-200", true],
+                    ["on_track", t("campaignDetail.filterOnTrack"), statusCounts.on_track, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200", true],
                     ["delivered", t("campaignDetail.filterDelivered"), statusCounts.delivered, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200", true],
                     ["no_demand", t("campaignDetail.filterNoDemand"), statusCounts.no_demand, "bg-slate-700 text-white border-slate-700", "bg-white text-slate-500 border-slate-200", false],
                   ] as const
@@ -1646,18 +1666,21 @@ function DetailInner() {
                     const followers = networkSize(row.creator?.metrics);
                     const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.delivery");
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
-                    const cardTag = creatorCardTag(row, creatorFilter);
+                    const pace = creatorPace(row, campaign);
+                    const cardTag = creatorCardTag(row, creatorFilter, pace);
                     const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
                     const deliveryWhen = effectiveCampaignDeliveryDate(row, campaign);
                     const tagLabel = cardTag === "attention"
                       ? t("campaignDetail.attentionBadge")
                       : cardTag === "owing"
                         ? t("campaignDetail.filterOwing")
-                        : cardTag === "delivered"
-                          ? t("campaignDetail.filterDelivered")
-                          : cardTag === "no_demand"
-                            ? t("campaignDetail.filterNoDemand")
-                            : null;
+                        : cardTag === "on_track"
+                          ? t("campaignDetail.filterOnTrack")
+                          : cardTag === "delivered"
+                            ? t("campaignDetail.filterDelivered")
+                            : cardTag === "no_demand"
+                              ? t("campaignDetail.filterNoDemand")
+                              : null;
 
                     if (creatorLayout === "grid") {
                       return (
@@ -1667,10 +1690,10 @@ function DetailInner() {
                             "group relative flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
                             cardTag
                               ? CREATOR_TAG_CARD[cardTag]
-                              : deliveryState === "waiting" || deliveryState === "scriptRevision" || deliveryState === "videoRevision" || deliveryState === "revision"
-                                ? "border-rose-200/80"
-                                : deliveryState === "published" || deliveryState === "approved"
-                                  ? "border-emerald-200/80"
+                              : pace === "on_track" || deliveryState === "published" || deliveryState === "approved"
+                                ? "border-emerald-200/80"
+                                : pace === "owing" || deliveryState === "scriptRevision" || deliveryState === "videoRevision" || deliveryState === "revision"
+                                  ? "border-rose-200/80"
                                   : "border-slate-200",
                           )}
                         >

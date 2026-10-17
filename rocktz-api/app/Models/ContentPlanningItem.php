@@ -9,6 +9,7 @@ use App\Enums\ContentType;
 use App\Enums\StageApprovalStatus;
 use Database\Factories\ContentPlanningItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -103,5 +104,63 @@ class ContentPlanningItem extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(Creator::class);
+    }
+
+    /** Briefing text, structured fields, or a script file from the brand. */
+    public function hasDefinedPauta(): bool
+    {
+        if (trim((string) $this->briefing) !== '' || trim((string) $this->briefing_note) !== '') {
+            return true;
+        }
+
+        if (filled($this->pauta_script_file_url)) {
+            return true;
+        }
+
+        $fields = is_array($this->briefing_fields) ? $this->briefing_fields : [];
+        foreach (['product', 'key_message', 'must_have', 'donts', 'cta', 'hashtags'] as $key) {
+            if (trim((string) ($fields[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Generated monthly slots stay hidden until the brief exists.
+     * A demand already in production stays visible.
+     */
+    public function isVisibleToCreator(): bool
+    {
+        if ($this->status !== ContentPlanningStatus::Planned) {
+            return true;
+        }
+
+        return $this->hasDefinedPauta();
+    }
+
+    /**
+     * @param  Builder<ContentPlanningItem>  $query
+     * @return Builder<ContentPlanningItem>
+     */
+    public function scopeVisibleToCreator(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query) {
+            $query->where('status', '!=', ContentPlanningStatus::Planned->value)
+                ->orWhere(function (Builder $query) {
+                    $query->whereRaw("trim(coalesce(briefing, '')) != ''")
+                        ->orWhereRaw("trim(coalesce(briefing_note, '')) != ''")
+                        ->orWhereRaw("trim(coalesce(pauta_script_file_url, '')) != ''")
+                        ->orWhere(function (Builder $query) {
+                            foreach (['product', 'key_message', 'must_have', 'donts', 'cta', 'hashtags'] as $key) {
+                                $query->orWhereRaw(
+                                    "trim(coalesce(json_extract(briefing_fields, ?), '')) != ''",
+                                    ['$.'.$key],
+                                );
+                            }
+                        });
+                });
+        });
     }
 }

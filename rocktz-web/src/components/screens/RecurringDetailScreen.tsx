@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { isoToday, planningItemIsOverdue } from "@/lib/delivery-date";
 import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
@@ -79,10 +80,10 @@ import { numericIdFromBrowser } from "@/lib/route-id";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 type ContractCreator = NonNullable<RecurringContract["creators"]>[number];
-type QuotaCategory = "owing" | "completed" | "no_demand";
+type QuotaCategory = "owing" | "on_track" | "completed" | "no_demand";
 type StatusFilter = "all" | "pending_approval" | "missing_pautas" | QuotaCategory;
 type UpdateKind = "new_version" | "pending_approval" | null;
-type RibbonKind = "new_version" | "pending_approval" | "missing_pautas" | "owing" | "completed";
+type RibbonKind = "new_version" | "pending_approval" | "missing_pautas" | "owing" | "on_track" | "completed";
 type ViewTab = "creators" | "calendar" | "metrics";
 type CreatorLayout = "split" | "grid";
 type PautaViewSection = "briefing" | "script" | "references" | "video";
@@ -294,6 +295,12 @@ function isDone(status: string) {
   return status === "published" || status === "approved";
 }
 
+/** Late after a real delivery date, or after the month closes. The 1st is only the month anchor. */
+function itemIsOverdue(item: PlanningItem, month: string, today = isoToday()) {
+  if (isDone(item.status) || isAwaitingBriefing(item)) return false;
+  return planningItemIsOverdue(item, month, today);
+}
+
 function needsScriptApproval(item: PlanningItem) {
   if (item.approval_flow === "video_only") return false;
   const hasScript = Boolean(item.script?.trim() || item.script_file_url);
@@ -368,6 +375,7 @@ function ribbonForFilter(stats: { ribbon: RibbonKind | null; updateKind: UpdateK
   }
   if (statusFilter === "missing_pautas") return "missing_pautas";
   if (statusFilter === "owing") return "owing";
+  if (statusFilter === "on_track") return "on_track";
   if (statusFilter === "completed") return "completed";
   if (statusFilter === "no_demand") return null;
   return stats.ribbon;
@@ -393,6 +401,7 @@ const RIBBON_STYLE: Record<RibbonKind, { bar: string; Icon: LucideIcon; dot: str
   pending_approval: { bar: "bg-violet-600", Icon: Sparkles, dot: "bg-violet-600" },
   missing_pautas: { bar: "bg-orange-500", Icon: FileText, dot: "bg-orange-500" },
   owing: { bar: "bg-rose-500", Icon: AlertTriangle, dot: "bg-rose-500" },
+  on_track: { bar: "bg-emerald-600", Icon: Check, dot: "bg-emerald-500" },
   completed: { bar: "bg-emerald-600", Icon: Check, dot: "bg-emerald-500" },
 };
 
@@ -401,6 +410,7 @@ const CARD_TONE: Record<RibbonKind, string> = {
   pending_approval: "border-violet-200/80 bg-violet-50/10",
   missing_pautas: "border-orange-200/80 bg-orange-50/10",
   owing: "border-rose-200/80 bg-rose-50/10",
+  on_track: "border-emerald-200/80 bg-emerald-50/20",
   completed: "border-emerald-200/80",
 };
 
@@ -524,7 +534,11 @@ function DetailInner() {
     }
   }
 
-  const items = (contract?.items ?? []).filter((item) => !isCreator || !ownCreatorId || item.creator_id === ownCreatorId);
+  const items = (contract?.items ?? []).filter((item) => {
+    if (!isCreator) return true;
+    if (ownCreatorId && item.creator_id !== ownCreatorId) return false;
+    return !itemIsAwaitingPauta(item);
+  });
   const upcomingMonths = futureMonthCounts(items.map((item) => planningDemandMonth(item)));
   const currentMonthCount = items.filter((item) => itemInMonth(item, currentMonth())).length;
   const selectedMonthCount = items.filter((item) => itemInMonth(item, selectedMonth)).length;
@@ -549,9 +563,18 @@ function DetailInner() {
     const creatorItems = items.filter((item) => item.creator_id === row.creator_id && itemInMonth(item, selectedMonth));
     const contracted = quotaTotal(row.monthly_deliverables);
     const excluded = excludedDemandCount(contract?.excluded_demands, row.creator_id, selectedMonth);
-    const { ungenerated: ungeneratedCount, expected: quota } = monthDemandExpectation(contracted, creatorItems.length, excluded);
+    const { ungenerated: ungeneratedCount, expected: quota } = isCreator
+      ? { ungenerated: 0, expected: creatorItems.length }
+      : monthDemandExpectation(contracted, creatorItems.length, excluded);
     const completedCount = creatorItems.filter((item) => isDone(item.status)).length;
-    const statusCategory: QuotaCategory = quota === 0 ? "no_demand" : completedCount >= quota ? "completed" : "owing";
+    const overdueCount = creatorItems.filter((item) => itemIsOverdue(item, selectedMonth)).length;
+    const statusCategory: QuotaCategory = quota === 0
+      ? "no_demand"
+      : completedCount >= quota
+        ? "completed"
+        : overdueCount > 0
+          ? "owing"
+          : "on_track";
     const pendingItems = creatorItems.filter(itemNeedsApproval);
     const pendingApprovalCount = pendingItems.length;
     const newVersionCount = pendingItems.filter(isMaterialNewVersion).length;
@@ -562,7 +585,8 @@ function DetailInner() {
     return {
       quota,
       completedCount,
-      missingToComplete: Math.max(0, quota - completedCount),
+      overdueCount,
+      missingToComplete: overdueCount,
       statusCategory,
       pendingApprovalCount,
       newVersionCount,
@@ -579,12 +603,14 @@ function DetailInner() {
     if (kind === "pending_approval") return t(short ? "recurringDetail.newMaterialRibbonShort" : "recurringDetail.newMaterialRibbon");
     if (kind === "missing_pautas") return t(short ? "recurringDetail.missingPautasRibbonShort" : "recurringDetail.missingPautasRibbon");
     if (kind === "owing") return t("recurringDetail.owingRibbon");
+    if (kind === "on_track") return t("recurringDetail.filterOnTrack");
     if (kind === "completed") return t("recurringDetail.doneRibbon");
     return t("recurringDetail.filterNone");
   }
 
   const statusCounts = useMemo(() => {
     let owing = 0;
+    let on_track = 0;
     let completed = 0;
     let no_demand = 0;
     let pending_approval = 0;
@@ -592,12 +618,13 @@ function DetailInner() {
     allocated.forEach((row) => {
       const stats = summary(row);
       if (stats.statusCategory === "owing") owing += 1;
+      else if (stats.statusCategory === "on_track") on_track += 1;
       else if (stats.statusCategory === "completed") completed += 1;
       else no_demand += 1;
       if (stats.pendingApprovalCount > 0) pending_approval += 1;
       if (stats.missingPautasCount > 0) missing_pautas += 1;
     });
-    return { all: allocated.length, owing, completed, no_demand, pending_approval, missing_pautas };
+    return { all: allocated.length, owing, on_track, completed, no_demand, pending_approval, missing_pautas };
   }, [allocated, items, selectedMonth, contract?.excluded_demands]);
 
   const segments = [...new Set(allocated.flatMap((row) => profile(row).categories).filter(Boolean))].sort((a, b) => a.localeCompare(b, locale));
@@ -644,8 +671,9 @@ function DetailInner() {
           if (stats.pendingApprovalCount > 0) return 1;
           if (stats.missingPautasCount > 0) return 2;
           if (stats.statusCategory === "owing") return 3;
-          if (stats.statusCategory === "completed") return 4;
-          return 5;
+          if (stats.statusCategory === "on_track") return 4;
+          if (stats.statusCategory === "completed") return 5;
+          return 6;
         };
         const byTag = rank(a) - rank(b);
         if (byTag !== 0) return byTag;
@@ -1253,6 +1281,7 @@ function DetailInner() {
                     ["pending_approval", t("recurringDetail.filterPendingApproval"), statusCounts.pending_approval, "bg-violet-700 text-white border-violet-700", "bg-white text-violet-700 border-violet-200"],
                     ["missing_pautas", t("recurringDetail.filterMissingPautas"), statusCounts.missing_pautas, "bg-orange-600 text-white border-orange-600", "bg-white text-orange-700 border-orange-200"],
                     ["owing", t("recurringDetail.filterOwing"), statusCounts.owing, "bg-rose-600 text-white border-rose-600", "bg-white text-rose-700 border-rose-200"],
+                    ["on_track", t("recurringDetail.filterOnTrack"), statusCounts.on_track, "bg-emerald-600 text-white border-emerald-600", "bg-white text-emerald-700 border-emerald-200"],
                     ["completed", t("recurringDetail.filterDone"), statusCounts.completed, "bg-emerald-700 text-white border-emerald-700", "bg-white text-emerald-700 border-emerald-200"],
                     ["no_demand", t("recurringDetail.filterNone"), statusCounts.no_demand, "bg-slate-700 text-white border-slate-700", "bg-white text-slate-600 border-slate-200"],
                   ] as const).map(([key, label, count, active, idle]) => (
@@ -1260,6 +1289,7 @@ function DetailInner() {
                       {key === "pending_approval" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-500" /> : null}
                       {key === "missing_pautas" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-500" /> : null}
                       {key === "owing" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" /> : null}
+                      {key === "on_track" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
                       {key === "completed" ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
                       <span>{label}</span>
                       <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-black", statusFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600")}>{count}</span>
@@ -1328,7 +1358,7 @@ function DetailInner() {
                         {categories[0] ? (
                           <span className={cn("mt-1 max-w-full truncate rounded-md border px-1.5 py-0.5 text-[8px] font-extrabold", segmentFilter !== "all" ? "border-indigo-300 bg-indigo-100 text-indigo-800" : "border-indigo-100 bg-indigo-50 text-indigo-700")}>{categories[0]}</span>
                         ) : null}
-                        {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && (stats.updateKind || stats.missingPautasCount > 0) ? (
+                        {statusFilter !== "owing" && statusFilter !== "on_track" && statusFilter !== "completed" && statusFilter !== "no_demand" && (stats.updateKind || stats.missingPautasCount > 0) ? (
                           <div className="mt-1.5 flex max-w-full flex-wrap items-center justify-center gap-1">
                             {stats.updateKind ? (
                               <span className={cn(
@@ -1352,7 +1382,7 @@ function DetailInner() {
                             "mt-1.5 rounded-full px-2 py-0.5 text-[9px] font-extrabold",
                             stats.statusCategory === "owing"
                               ? "bg-rose-50 text-rose-600"
-                              : stats.statusCategory === "completed"
+                              : stats.statusCategory === "on_track" || stats.statusCategory === "completed"
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-slate-100 text-slate-500",
                           )}
@@ -1360,8 +1390,10 @@ function DetailInner() {
                           {stats.quota === 0
                             ? t("recurringDetail.filterNone")
                             : stats.statusCategory === "owing"
-                              ? t("recurringDetail.missing", { missing: stats.missingToComplete, done: stats.completedCount, total: stats.quota })
-                              : t("recurringDetail.doneCount", { done: stats.completedCount, total: stats.quota })}
+                              ? t("recurringDetail.missing", { missing: stats.overdueCount, done: stats.completedCount, total: stats.quota })
+                              : stats.statusCategory === "on_track"
+                                ? t("recurringDetail.onTrackProgress", { done: stats.completedCount, total: stats.quota })
+                                : t("recurringDetail.doneCount", { done: stats.completedCount, total: stats.quota })}
                         </span>
                         )}
                         <button
@@ -1410,7 +1442,7 @@ function DetailInner() {
                             <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.deliveriesMonth", { month: selectedMonth })}</span>
                             <div className="mt-0.5 flex items-center justify-between gap-1.5">
                               <div className="flex min-w-0 flex-wrap items-center gap-1">
-                                {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.updateKind ? (
+                                {statusFilter !== "owing" && statusFilter !== "on_track" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.updateKind ? (
                                   <span className={cn(
                                     "truncate rounded-md border px-2 py-0.5 text-[10px] font-extrabold",
                                     stats.updateKind === "new_version" ? "border-amber-200 bg-amber-100/80 text-amber-800" : "border-violet-200 bg-violet-100/80 text-violet-700",
@@ -1420,13 +1452,16 @@ function DetailInner() {
                                       : t("recurringDetail.pendingApprovalCount", { count: stats.pendingApprovalCount })}
                                   </span>
                                 ) : null}
-                                {statusFilter !== "owing" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.missingPautasCount > 0 ? (
+                                {statusFilter !== "owing" && statusFilter !== "on_track" && statusFilter !== "completed" && statusFilter !== "no_demand" && stats.missingPautasCount > 0 ? (
                                   <span className="truncate rounded-md border border-orange-200 bg-orange-100/80 px-2 py-0.5 text-[10px] font-extrabold text-orange-700">
                                     {t("recurringDetail.missingPautasCount", { count: stats.missingPautasCount })}
                                   </span>
                                 ) : null}
                                 {(statusFilter === "owing" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "owing" ? (
-                                  <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missing", { missing: stats.missingToComplete, done: stats.completedCount, total: stats.quota })}</span>
+                                  <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missing", { missing: stats.overdueCount, done: stats.completedCount, total: stats.quota })}</span>
+                                ) : null}
+                                {(statusFilter === "on_track" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "on_track" ? (
+                                  <span className="truncate rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700">{t("recurringDetail.onTrackProgress", { done: stats.completedCount, total: stats.quota })}</span>
                                 ) : null}
                                 {(statusFilter === "completed" || (!stats.updateKind && stats.missingPautasCount === 0)) && stats.statusCategory === "completed" ? (
                                   <span className="truncate rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700">{t("recurringDetail.doneCount", { done: stats.completedCount, total: stats.quota })}</span>
@@ -1435,7 +1470,7 @@ function DetailInner() {
                                   <span className="truncate rounded-md border border-slate-300/60 bg-slate-200/70 px-2 py-0.5 text-[10px] font-bold text-slate-500">{t(stats.completedCount === 1 ? "recurringDetail.deliveredCount" : "recurringDetail.deliveredCountMany", { count: stats.completedCount })}</span>
                                 ) : null}
                                 {statusFilter === "all" && stats.updateKind && stats.statusCategory === "owing" && stats.missingPautasCount === 0 ? (
-                                  <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missingShort", { count: stats.missingToComplete })}</span>
+                                  <span className="truncate rounded-md border border-rose-200 bg-rose-100/80 px-2 py-0.5 text-[10px] font-extrabold text-rose-600">{t("recurringDetail.missingShort", { count: stats.overdueCount })}</span>
                                 ) : null}
                               </div>
                               {canManage ? (
@@ -1663,9 +1698,11 @@ function DetailInner() {
                     <p className="max-w-sm text-[11px] leading-relaxed text-slate-400">
                       {completedPautas > 0
                         ? t("recurringDetail.emptyAllDone", { count: completedPautas })
-                        : selectedSummary.quota > 0
-                          ? t("recurringDetail.emptyGenerateHint", { count: selectedSummary.quota, month: selectedMonth })
-                          : t("recurringDetail.emptyPendingHint")}
+                        : isCreator
+                          ? t("recurringDetail.emptyAwaitingPautaCreator")
+                          : selectedSummary.quota > 0
+                            ? t("recurringDetail.emptyGenerateHint", { count: selectedSummary.quota, month: selectedMonth })
+                            : t("recurringDetail.emptyPendingHint")}
                     </p>
                     {canManage ? (
                       <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
