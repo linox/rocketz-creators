@@ -18,6 +18,7 @@ import type { Campaign, CampaignCreator, PostMetrics } from "@/lib/types";
 
 export type PostMetricsRow = {
   id: number;
+  syncId?: number;
   creator?: { artistic_name?: string | null; full_name?: string | null; photo_url?: string | null } | null;
   published_link: string | null;
   metrics?: PostMetrics | null;
@@ -644,11 +645,11 @@ export function PostMetricsPanel({
                         <button
                           type="button"
                           disabled={!link || syncing !== null}
-                          onClick={() => onRefresh(row.id)}
+                          onClick={() => onRefresh(row.syncId ?? row.id)}
                           title={t("campaignDetail.metricsRefreshRow")}
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black tracking-wider text-slate-600 uppercase hover:bg-slate-50 disabled:opacity-40"
                         >
-                          <RefreshCw size={12} className={cn(syncing === row.id && "animate-spin")} />
+                          <RefreshCw size={12} className={cn(syncing === (row.syncId ?? row.id) && "animate-spin")} />
                           {t("campaignDetail.metricsRefreshRow")}
                         </button>
                       </td>
@@ -669,22 +670,46 @@ export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onC
   const hideCreatorValues = userHidesCreatorValues(useAuth());
   const [syncing, setSyncing] = useState<"all" | number | null>(null);
 
-  const mapped = useMemo<PostMetricsRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.id,
-        creator: row.creator,
-        published_link: row.content?.published_link ?? null,
-        metrics: row.content?.metrics,
-        cost: hideCreatorValues || campaign.is_barter || campaign.is_direct_contract ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0,
-        costKey: row.creator_id || row.id,
-        videoDownloadUrl:
-          row.video_status === "approved"
-            ? row.content?.video_download_url || row.content?.video_url || null
-            : null,
-      })),
-    [campaign.creator_cache, campaign.is_barter, campaign.is_direct_contract, hideCreatorValues, rows],
-  );
+  const mapped = useMemo<PostMetricsRow[]>(() => {
+    const cost = (row: CampaignCreator) => (
+      hideCreatorValues || campaign.is_barter || campaign.is_direct_contract ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0
+    );
+    return rows.flatMap((row) => {
+      const publishedDemands = (row.demands ?? []).filter((demand) => demand.content?.published_link?.trim());
+      if (!publishedDemands.length) {
+        return [{
+          id: row.id,
+          creator: row.creator,
+          published_link: row.content?.published_link ?? null,
+          metrics: row.content?.metrics,
+          cost: cost(row),
+          costKey: row.creator_id || row.id,
+          videoDownloadUrl:
+            row.video_status === "approved"
+              ? row.content?.video_download_url || row.content?.video_url || null
+              : null,
+        }];
+      }
+
+      return publishedDemands.map((demand) => {
+        const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
+        return {
+          id: demand.id,
+          syncId: row.id,
+          creator: row.creator,
+          subtitle: t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total }),
+          published_link: demand.content?.published_link ?? null,
+          metrics: demand.content?.metrics,
+          cost: cost(row),
+          costKey: row.creator_id || row.id,
+          videoDownloadUrl:
+            demand.video_status === "approved"
+              ? demand.content?.video_download_url || demand.content?.video_url || null
+              : null,
+        };
+      });
+    });
+  }, [campaign.creator_cache, campaign.is_barter, campaign.is_direct_contract, hideCreatorValues, rows, t]);
 
   async function refresh(campaignCreatorId?: number) {
     if (!mapped.some((row) => row.published_link?.trim())) {

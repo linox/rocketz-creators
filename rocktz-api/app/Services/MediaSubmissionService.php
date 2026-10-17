@@ -8,6 +8,7 @@ use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
+use App\Models\CampaignDemand;
 use App\Models\ContentPlanningItem;
 use App\Models\User;
 use App\Support\SubmissionVersioning;
@@ -18,6 +19,7 @@ class MediaSubmissionService
     public function __construct(
         private readonly NotificationService $notifications,
         private readonly Mail\MailNotifier $mail,
+        private readonly CampaignDemandSync $demands,
     ) {}
 
     /**
@@ -32,6 +34,16 @@ class MediaSubmissionService
         if ($type === 'campaign_creator') {
             $row = CampaignCreator::query()->with('campaign')->findOrFail($id);
             abort_unless($user->role === UserRole::Creator && (int) $user->creator?->id === (int) $row->creator_id, 403);
+            $demandId = (int) ($submission['payload']['demand_id'] ?? 0);
+            if ($demandId > 0) {
+                $demand = CampaignDemand::query()
+                    ->where('campaign_creator_id', $row->id)
+                    ->findOrFail($demandId);
+                abort_if($demand->pending_upload_id !== null, 422, __('auth.upload_already_in_progress'));
+                $demand->update(['pending_upload_id' => $uploadId, 'upload_progress' => 0]);
+
+                return;
+            }
             abort_if($row->pending_upload_id !== null, 422, __('auth.upload_already_in_progress'));
             $row->update(['pending_upload_id' => $uploadId, 'upload_progress' => 0]);
 
@@ -52,6 +64,10 @@ class MediaSubmissionService
             ->where('pending_upload_id', $uploadId)
             ->update(['upload_progress' => $progress]);
 
+        CampaignDemand::query()
+            ->where('pending_upload_id', $uploadId)
+            ->update(['upload_progress' => $progress]);
+
         ContentPlanningItem::query()
             ->where('pending_upload_id', $uploadId)
             ->update(['upload_progress' => $progress]);
@@ -60,6 +76,10 @@ class MediaSubmissionService
     public function clearPending(string $uploadId): void
     {
         CampaignCreator::query()
+            ->where('pending_upload_id', $uploadId)
+            ->update(['pending_upload_id' => null, 'upload_progress' => null]);
+
+        CampaignDemand::query()
             ->where('pending_upload_id', $uploadId)
             ->update(['pending_upload_id' => null, 'upload_progress' => null]);
 
@@ -80,6 +100,10 @@ class MediaSubmissionService
             ->where('creator_id', $creatorId)
             ->where('pending_upload_id', $uploadId)
             ->exists()
+            || CampaignDemand::query()
+                ->where('pending_upload_id', $uploadId)
+                ->whereHas('campaignCreator', fn ($query) => $query->where('creator_id', $creatorId))
+                ->exists()
             || ContentPlanningItem::query()
                 ->where('creator_id', $creatorId)
                 ->where('pending_upload_id', $uploadId)
@@ -100,6 +124,12 @@ class MediaSubmissionService
         $payload['video_file_size'] = $media['size'];
 
         if ($type === 'campaign_creator') {
+            $demandId = (int) ($payload['demand_id'] ?? 0);
+            if ($demandId > 0) {
+                $this->applyCampaignDemand($id, $demandId, $payload);
+
+                return;
+            }
             $this->applyCampaignCreator($id, $payload);
 
             return;
@@ -108,6 +138,31 @@ class MediaSubmissionService
         if ($type === 'content_planning_item') {
             $this->applyPlanningItem($id, $payload);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function applyCampaignDemand(int $participationId, int $demandId, array $payload): void
+    {
+        [$row, $rowFields] = DB::transaction(function () use ($participationId, $demandId, $payload) {
+            $row = CampaignCreator::query()->with(['campaign', 'creator.user'])->findOrFail($participationId);
+            $demand = CampaignDemand::query()
+                ->where('campaign_creator_id', $row->id)
+                ->findOrFail($demandId);
+
+            $this->demands->fillSubmission($demand, array_merge($payload, [
+                'pending_upload_id' => null,
+                'upload_progress' => null,
+            ]));
+
+            $row->unsetRelation('demands');
+            $row->load(['campaign', 'creator.user', 'demands']);
+
+            return [$row, $payload];
+        });
+
+        $this->notifyCampaignVideoSubmitted($row, $rowFields);
     }
 
     /**

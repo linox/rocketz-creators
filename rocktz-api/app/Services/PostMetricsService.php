@@ -6,6 +6,7 @@ use App\Exceptions\SocialMetricsException;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
+use App\Models\CampaignDemand;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\RecurringContract;
@@ -34,33 +35,56 @@ class PostMetricsService
      */
     public function sync(Campaign $campaign, ?int $campaignCreatorId = null, bool $force = false): array
     {
-        $campaign->loadMissing(['campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->loadMissing(['campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
 
-        $rows = $campaign->campaignCreators->filter(function (CampaignCreator $row) use ($campaignCreatorId) {
+        $targets = [];
+        foreach ($campaign->campaignCreators as $row) {
             if ($campaignCreatorId && (int) $row->id !== $campaignCreatorId) {
-                return false;
+                continue;
             }
 
-            return filled($row->content?->published_link);
-        })->values();
+            if ($row->demands->isNotEmpty()) {
+                foreach ($row->demands as $demand) {
+                    if (! filled($demand->published_link)) {
+                        continue;
+                    }
+                    $targets[] = [
+                        'key' => $demand->id,
+                        'creator' => $row->creator,
+                        'model' => $demand,
+                        'link' => (string) $demand->published_link,
+                    ];
+                }
 
-        if ($campaignCreatorId && $rows->isEmpty()) {
+                continue;
+            }
+
+            if (filled($row->content?->published_link)) {
+                $targets[] = [
+                    'key' => $row->id,
+                    'creator' => $row->creator,
+                    'model' => $row->content,
+                    'link' => (string) $row->content->published_link,
+                ];
+            }
+        }
+
+        if ($campaignCreatorId && $targets === []) {
             throw new SocialMetricsException(__('auth.post_metrics_link_required'));
         }
 
-        if ($rows->isEmpty()) {
+        if ($targets === []) {
             throw new SocialMetricsException(__('auth.post_metrics_none'));
         }
 
         $results = [];
         $synced = 0;
 
-        foreach ($rows as $row) {
-            $link = (string) $row->content->published_link;
-            $parsed = PostLink::parse($link);
+        foreach ($targets as $target) {
+            $parsed = PostLink::parse($target['link']);
 
             if ($parsed === null) {
-                $results[$row->id] = [
+                $results[$target['key']] = [
                     'ok' => false,
                     'message' => __('auth.post_metrics_unsupported'),
                 ];
@@ -69,13 +93,13 @@ class PostMetricsService
             }
 
             try {
-                $snapshot = $this->snapshotFor($parsed, $this->followersFromCreator($row->creator, $parsed->network), $force);
-                $this->persist($row->content, $snapshot);
-                $results[$row->id] = $snapshot->toSyncResult();
+                $snapshot = $this->snapshotFor($parsed, $this->followersFromCreator($target['creator'], $parsed->network), $force);
+                $this->persist($target['model'], $snapshot);
+                $results[$target['key']] = $snapshot->toSyncResult();
                 $synced++;
                 $this->pauseBetweenFetches(! $snapshot->cached);
             } catch (SocialMetricsException $e) {
-                $results[$row->id] = [
+                $results[$target['key']] = [
                     'ok' => false,
                     'message' => $e->getMessage(),
                 ];
@@ -1068,7 +1092,7 @@ class PostMetricsService
         return null;
     }
 
-    private function persist(CampaignCreatorContent|ContentPlanningItem $model, PostSnapshot $snapshot): void
+    private function persist(CampaignCreatorContent|CampaignDemand|ContentPlanningItem $model, PostSnapshot $snapshot): void
     {
         $metrics = is_array($model->metrics) ? $model->metrics : [];
         foreach ($snapshot->toMetrics() as $key => $value) {

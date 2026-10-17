@@ -193,6 +193,7 @@ export type MediaUploadState = {
 export type SubmissionUploadMeta = {
   type: "campaign_creator" | "content_planning_item";
   id: number;
+  clientSubjectId?: number;
   payload: Record<string, unknown>;
   label: string;
 };
@@ -242,7 +243,7 @@ export async function initMediaUpload(
       filename,
       size: file.size,
       mime_type: file.type || "",
-      ...(submission ? { submission } : {}),
+      ...(submission ? { submission: { type: submission.type, id: submission.id, payload: submission.payload } } : {}),
     }),
     signal,
   });

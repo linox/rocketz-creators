@@ -157,7 +157,8 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
     submission: SubmissionUploadMeta,
     onProgress?: UploadProgressHandler,
   ) => {
-    const tempKey = `${submission.type}:${submission.id}`;
+    const subjectId = submission.clientSubjectId ?? submission.id;
+    const tempKey = `${submission.type}:${subjectId}`;
     if (runningRef.current.has(tempKey)) return;
 
     runningRef.current.add(tempKey);
@@ -175,11 +176,11 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         }
 
         persist((current) => [
-          ...current.filter((task) => !(task.subjectType === submission.type && task.subjectId === submission.id)),
+          ...current.filter((task) => !(task.subjectType === submission.type && task.subjectId === subjectId)),
           {
             uploadId,
             subjectType: submission.type,
-            subjectId: submission.id,
+            subjectId,
             label: submission.label,
             progress: 0,
             phase: "uploading",

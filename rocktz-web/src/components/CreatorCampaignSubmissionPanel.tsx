@@ -13,6 +13,7 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
+import { projectDemand } from "@/lib/campaign-demands";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
@@ -33,9 +34,76 @@ type Props = {
   onClose: () => void;
   onSubmitted: () => void;
   showBriefingToggle?: boolean;
+  demandId?: number;
+  embedded?: boolean;
+  stayOpen?: boolean;
+  briefingOnly?: boolean;
+  demandsOnly?: boolean;
 };
 
-export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmitted, showBriefingToggle = true }: Props) {
+export function CreatorCampaignSubmissionPanel(props: Props) {
+  if ((props.row.demands?.length ?? 0) > 0 && props.demandId == null && !props.briefingOnly) {
+    return <CreatorCampaignDemandList {...props} />;
+  }
+
+  return <CreatorCampaignSubmissionForm {...props} />;
+}
+
+function CreatorCampaignDemandList({ campaign, row, onClose, onSubmitted, showBriefingToggle = true, demandsOnly = false }: Props) {
+  const { t } = useTranslation("app");
+  const { t: tp } = useTranslation("profile");
+
+  return (
+    <div className="flex flex-col">
+      {demandsOnly ? null : (
+      <CreatorCampaignSubmissionForm
+        campaign={campaign}
+        row={row}
+        onClose={onClose}
+        onSubmitted={onSubmitted}
+        showBriefingToggle={showBriefingToggle}
+        briefingOnly
+      />
+      )}
+      <div className={demandsOnly ? "flex flex-col gap-4" : "flex flex-col gap-4 px-5 pb-6 sm:px-6"}>
+        <h5 className="m-0 text-xs font-black tracking-wider text-slate-900 uppercase">{tp("demandListTitle")}</h5>
+        {(row.demands ?? []).map((demand) => {
+          const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
+          return (
+            <section key={demand.id} className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h6 className="m-0 text-xs font-black tracking-wide text-slate-900 uppercase">
+                  {t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total })}
+                </h6>
+              </div>
+              {demand.pauta?.trim() ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+                  <p className="m-0 text-[10px] font-black tracking-wider text-amber-800 uppercase">{tp("demandPautaTitle")}</p>
+                  <p className="m-0 mt-1 whitespace-pre-wrap text-xs leading-relaxed font-medium text-slate-800">{demand.pauta}</p>
+                </div>
+              ) : (
+                <p className="m-0 text-[11px] font-medium text-slate-400">{tp("demandPautaEmpty")}</p>
+              )}
+              <CreatorCampaignSubmissionForm
+                key={`${demand.id}-${demand.script_status}-${demand.video_status}-${demand.delivery_status}-${demand.content?.video_url ?? ""}-${demand.content?.script ?? ""}`}
+                campaign={campaign}
+                row={projectDemand(row, demand)}
+                demandId={demand.id}
+                embedded
+                stayOpen
+                onClose={onClose}
+                onSubmitted={onSubmitted}
+                showBriefingToggle={false}
+              />
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, showBriefingToggle = true, demandId, embedded = false, stayOpen = false, briefingOnly = false }: Props) {
   const { t: tp, i18n } = useTranslation("profile");
   const uploadManager = useOptionalUploadManager();
 
@@ -94,11 +162,23 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const hashtags = briefingText(campaign, "hashtags") || tp("noHashtags");
   const coupon = briefingText(campaign, "coupon") || tp("noneItem");
   const supportLink = briefingText(campaign, "link");
+  const uploadSubjectId = demandId ?? row.id;
   const remoteUploadProgress = mergeUploadProgress(
     row.upload_progress,
-    uploadManager?.getSubjectProgress("campaign_creator", row.id),
+    uploadManager?.getSubjectProgress("campaign_creator", uploadSubjectId),
   );
-  const isBackgroundUploading = Boolean(row.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("campaign_creator", row.id));
+  const isBackgroundUploading = Boolean(row.pending_upload_id) || Boolean(uploadManager?.isSubjectUploading("campaign_creator", uploadSubjectId));
+
+  function stamp(body: Record<string, unknown>) {
+    return demandId == null ? body : { demand_id: demandId, ...body };
+  }
+
+  function finish(title: string) {
+    setVideoFile(null);
+    onSubmitted();
+    if (!stayOpen) onClose();
+    void alertSuccess(title, undefined, { timerMs: 2000 });
+  }
 
   function buildVideoSubmissionPayload(): Record<string, unknown> {
     const payload: Record<string, unknown> = {
@@ -109,7 +189,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
       payload.published_link = publishedUrl.trim();
       payload.delivery_status = "published";
     }
-    return payload;
+    return stamp(payload);
   }
 
   async function submitMaterial() {
@@ -162,14 +242,15 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             {
               type: "campaign_creator",
               id: row.id,
-              label: campaign.name,
+              clientSubjectId: uploadSubjectId,
+              label: demandId == null ? campaign.name : `${campaign.name} #${demandId}`,
               payload: buildVideoSubmissionPayload(),
             },
             setUploadProgress,
           );
           setVideoFile(null);
           onSubmitted();
-          onClose();
+          if (!stayOpen) onClose();
           void alertSuccess(tp("uploadStarted"), tp("uploadStartedHint"), { timerMs: 2000 });
           return;
         }
@@ -182,15 +263,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           video_url: externalVideoUrl,
           video_file_size: 0,
         };
-        await api.updateParticipation(row.id, body);
+        await api.updateParticipation(row.id, stamp(body));
         setDownloadUrl("");
-        onSubmitted();
-        onClose();
-        void alertSuccess(
-          hasRevision ? tp("newVersionSent") : tp("materialSent"),
-          undefined,
-          { timerMs: 2000 },
-        );
+        finish(hasRevision ? tp("newVersionSent") : tp("materialSent"));
         return;
       }
 
@@ -247,11 +322,8 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
         }
       }
 
-      await api.updateParticipation(row.id, body);
-      setVideoFile(null);
-      onSubmitted();
-      onClose();
-      void alertSuccess(
+      await api.updateParticipation(row.id, stamp(body));
+      finish(
         linkStage
           ? (isPublished ? tp("publishedLinkUpdated") : tp("publishedLinkSent"))
           : hasRevision
@@ -259,8 +331,6 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
             : canSubmitScript && stagedFlow
               ? tp("scriptSentWaiting")
               : tp("materialSent"),
-        undefined,
-        { timerMs: 2000 },
       );
     } catch (err) {
       await alertApiError(err);
@@ -271,7 +341,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   }
 
   async function cancelVideoUpload() {
-    await uploadManager?.cancelSubjectUpload("campaign_creator", row.id, row.pending_upload_id);
+    await uploadManager?.cancelSubjectUpload("campaign_creator", uploadSubjectId, row.pending_upload_id);
     setSubmitting(false);
     setUploadProgress(0);
   }
@@ -299,7 +369,9 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
   const displayProgress = remoteUploadProgress ?? uploadProgress;
 
   return (
-    <div className="flex flex-col gap-5 border-l-4 border-l-brand-primary bg-indigo-50/20 p-5 sm:p-6">
+    <div className={embedded ? "flex flex-col gap-4" : "flex flex-col gap-5 border-l-4 border-l-brand-primary bg-indigo-50/20 p-5 sm:p-6"}>
+      {embedded ? null : (
+      <>
       <PostingProfileNotice profile={campaign.posting_profile} audience="creator" />
       <CampaignCreatorDates
         generalDate={campaign.delivery_date || null}
@@ -388,7 +460,10 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           </div>
         </div>
       ) : null}
+      </>
+      )}
 
+      {briefingOnly ? null : (
       <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
         <h5 className="flex items-center gap-2 border-b border-slate-100 pb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
           {linkStage ? <Link2 size={15} className="text-emerald-600" /> : <Send size={15} className="text-brand-primary" />}
@@ -636,6 +711,7 @@ export function CreatorCampaignSubmissionPanel({ campaign, row, onClose, onSubmi
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

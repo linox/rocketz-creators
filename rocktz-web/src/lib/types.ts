@@ -386,6 +386,24 @@ export type CampaignCreator = {
     story_prints?: unknown[];
     metrics?: PostMetrics;
   } | null;
+  demands?: CampaignDemand[];
+};
+
+export type CampaignDemand = {
+  id: number;
+  content_type: string;
+  position: number;
+  total: number;
+  pauta?: string | null;
+  delivery_status: string | null;
+  script_status: string | null;
+  video_status: string | null;
+  script_feedback?: string | null;
+  video_feedback?: string | null;
+  revision_details?: string | null;
+  pending_upload_id?: string | null;
+  upload_progress?: number | null;
+  content?: CampaignCreator["content"];
 };
 
 export type SubmissionVersionEntry = {

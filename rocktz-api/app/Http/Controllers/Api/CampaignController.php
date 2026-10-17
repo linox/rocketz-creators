@@ -20,10 +20,12 @@ use App\Jobs\SyncCampaignPostMetricsJob;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
+use App\Models\CampaignDemand;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\Creator;
 use App\Models\CreatorGroup;
+use App\Services\CampaignDemandSync;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorPrivacy;
@@ -44,6 +46,7 @@ class CampaignController extends Controller
     public function __construct(
         private readonly NotificationService $notifications,
         private readonly MailNotifier $mail,
+        private readonly CampaignDemandSync $demands,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -64,7 +67,7 @@ class CampaignController extends Controller
                 'campaignCreators' => function ($q) use ($includeContent, $creatorId) {
                     $q->where('creator_id', $creatorId);
                     if ($includeContent) {
-                        $q->with('content');
+                        $q->with(['content', 'demands']);
                     }
                 },
             ]);
@@ -73,7 +76,7 @@ class CampaignController extends Controller
                 'campaignCreators' => function ($q) use ($includeContent) {
                     $q->with('creator');
                     if ($includeContent) {
-                        $q->with('content');
+                        $q->with(['content', 'demands']);
                     }
                 },
             ]);
@@ -87,7 +90,13 @@ class CampaignController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-        return response()->json(['data' => CampaignResource::collection($query->latest()->get())]);
+        $campaigns = $query->latest()->get();
+        if ($includeContent) {
+            $this->demands->syncCampaigns($campaigns);
+            $campaigns->load(['campaignCreators.content', 'campaignCreators.demands']);
+        }
+
+        return response()->json(['data' => CampaignResource::collection($campaigns)]);
     }
 
     public function available(Request $request): JsonResponse
@@ -122,7 +131,9 @@ class CampaignController extends Controller
     public function show(Request $request, Campaign $campaign): JsonResponse
     {
         $this->assertCanView($request, $campaign);
-        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->load(['deliverable', 'campaignCreators']);
+        $this->demands->syncCampaign($campaign);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
         $campaign->loadCount([
             'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
             'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
@@ -186,7 +197,7 @@ class CampaignController extends Controller
             return response()->json(['status' => $status], 202);
         }
 
-        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
         $campaign->loadCount([
             'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
             'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
@@ -256,6 +267,9 @@ class CampaignController extends Controller
             }
             if (is_array($deliverables)) {
                 $campaign->deliverable()->updateOrCreate(['campaign_id' => $campaign->id], $deliverables);
+                $campaign->unsetRelation('deliverable');
+                $campaign->unsetRelation('campaignCreators');
+                $this->demands->syncCampaign($campaign);
             }
             if ($hasGroups) {
                 $this->syncCreatorGroups($campaign, is_array($groupIds) ? $groupIds : []);
@@ -421,6 +435,8 @@ class CampaignController extends Controller
             'delivery_date' => ['nullable', 'date'],
             'post_date' => ['nullable', 'date'],
             'additional_briefing' => ['nullable', 'string', 'max:5000'],
+            'demand_id' => ['nullable', 'integer'],
+            'pauta' => ['nullable', 'string', 'max:5000'],
             'script' => ['nullable', 'string'],
             'script_file_url' => ['nullable', 'string', 'max:2048'],
             'script_file_name' => ['nullable', 'string', 'max:255'],
@@ -440,6 +456,41 @@ class CampaignController extends Controller
 
         $contentFields = array_intersect_key($data, array_flip(['script', 'script_file_url', 'script_file_name', 'video_url', 'video_file_size', 'image_url', 'published_link']));
         unset($data['script'], $data['script_file_url'], $data['script_file_name'], $data['video_url'], $data['video_file_size'], $data['image_url'], $data['published_link']);
+
+        $this->demands->syncCreator($campaignCreator);
+        $demandId = isset($data['demand_id']) ? (int) $data['demand_id'] : 0;
+        unset($data['demand_id']);
+        $demand = null;
+        if ($demandId > 0) {
+            $demand = CampaignDemand::query()
+                ->where('campaign_creator_id', $campaignCreator->id)
+                ->findOrFail($demandId);
+        }
+
+        $touchesSubmission = $contentFields !== []
+            || array_key_exists('pauta', $data)
+            || array_key_exists('script_status', $data)
+            || array_key_exists('video_status', $data)
+            || array_key_exists('delivery_status', $data)
+            || array_key_exists('script_feedback', $data)
+            || array_key_exists('video_feedback', $data)
+            || array_key_exists('revision_details', $data);
+        if ($campaignCreator->demands()->exists() && $touchesSubmission && ! $demand) {
+            throw ValidationException::withMessages([
+                'demand_id' => __('auth.campaign_demand_required'),
+            ]);
+        }
+
+        $demandAttributes = $contentFields;
+        $previousPauta = trim((string) ($demand?->pauta ?? ''));
+        if ($demand) {
+            foreach (['pauta', 'script_status', 'video_status', 'delivery_status', 'script_feedback', 'video_feedback', 'revision_details'] as $key) {
+                if (array_key_exists($key, $data)) {
+                    $demandAttributes[$key] = $data[$key];
+                    unset($data[$key]);
+                }
+            }
+        }
 
         $approvedStatus = ApplicationStatus::Approved->value;
         $nextStatus = isset($data['application_status'])
@@ -462,7 +513,7 @@ class CampaignController extends Controller
             abort_unless(in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true), 403);
         }
         if (in_array($nextPaymentValue, [PaymentStatus::Paid->value, PaymentStatus::Scheduled->value], true)
-            && ! $this->contentReadyForPayment($campaignCreator, $data)) {
+            && ! $this->contentReadyForPayment($campaignCreator, $demand ? $demandAttributes : $data, $demand)) {
             throw ValidationException::withMessages([
                 'payment_status' => __('auth.payment_requires_approved_content'),
             ]);
@@ -500,7 +551,13 @@ class CampaignController extends Controller
             }
         });
 
-        if ($contentFields) {
+        if ($becomingApproved) {
+            $this->demands->syncCreator($campaignCreator->fresh());
+        }
+
+        if ($demand) {
+            $this->demands->fillSubmission($demand, $demandAttributes);
+        } elseif ($contentFields) {
             CampaignCreatorContent::query()->updateOrCreate(
                 ['campaign_creator_id' => $campaignCreator->id],
                 $contentFields,
@@ -508,9 +565,10 @@ class CampaignController extends Controller
         }
 
         $campaignCreator->unsetRelation('content');
-        $campaignCreator->load('content');
+        $campaignCreator->unsetRelation('demands');
+        $campaignCreator->load(['content', 'demands']);
 
-        if (Schema::hasColumn('campaign_creator_contents', 'revision_history')) {
+        if (! $demand && Schema::hasColumn('campaign_creator_contents', 'revision_history')) {
             if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Revision)) {
                 $content = $campaignCreator->content
                     ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
@@ -534,7 +592,7 @@ class CampaignController extends Controller
             }
         }
 
-        if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
+        if (! $demand && NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Submitted)) {
             $content = $campaignCreator->content
                 ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
             SubmissionVersioning::append($content, 'script', [
@@ -544,7 +602,7 @@ class CampaignController extends Controller
             ]);
         }
 
-        if (NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Submitted)) {
+        if (! $demand && NotificationService::is($data['video_status'] ?? null, StageApprovalStatus::Submitted)) {
             $content = $campaignCreator->content
                 ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
             if ($content->video_url) {
@@ -555,11 +613,13 @@ class CampaignController extends Controller
             }
         }
 
-        $campaignCreator->loadMissing(['creator.user', 'campaign', 'content']);
-        $this->notifyParticipationChange($campaignCreator, $data);
+        $campaignCreator->loadMissing(['creator.user', 'campaign', 'content', 'demands']);
+        $notifyData = $demand ? array_merge($data, $demandAttributes) : $data;
+        $this->notifyParticipationChange($campaignCreator, $notifyData);
         $this->notifyAdditionalBriefing($campaignCreator, $data, $previousBriefing);
+        $this->notifyDemandPauta($campaignCreator, $demand, $demandAttributes, $previousPauta);
 
-        return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign']))]);
+        return response()->json(['data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign', 'demands']))]);
     }
 
     public function destroyParticipation(Request $request, CampaignCreator $campaignCreator): JsonResponse
@@ -624,6 +684,7 @@ class CampaignController extends Controller
             }
             $created->setRelation('campaign', $locked);
             $shouldNotify = ! $alreadyApproved;
+            $this->demands->syncCreator($created->fresh());
 
             return $created;
         });
@@ -643,7 +704,7 @@ class CampaignController extends Controller
             }
         }
 
-        return response()->json(['data' => new CampaignCreatorResource($row->load('creator'))], 201);
+        return response()->json(['data' => new CampaignCreatorResource($row->load(['creator', 'demands']))], 201);
     }
 
     /**
@@ -1154,6 +1215,7 @@ class CampaignController extends Controller
     private function restrictCreatorParticipationPayload(array $data, CampaignCreator $campaignCreator): array
     {
         $allowed = [
+            'demand_id',
             'script',
             'script_file_url',
             'script_file_name',
@@ -1280,6 +1342,32 @@ class CampaignController extends Controller
             'campaign_id' => (int) $campaignCreator->campaign_id,
             'title' => __('auth.additional_briefing_title'),
             'message' => __('auth.additional_briefing', ['name' => $campaignCreator->campaign?->name ?? '']),
+            'type' => NotificationType::General,
+            'link' => '/creators/'.$campaignCreator->creator_id.'?tab=campaigns',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function notifyDemandPauta(CampaignCreator $campaignCreator, ?CampaignDemand $demand, array $attributes, string $previousPauta): void
+    {
+        if (! $demand || ! array_key_exists('pauta', $attributes)) {
+            return;
+        }
+
+        $next = trim((string) ($attributes['pauta'] ?? ''));
+        if ($next === '' || $next === $previousPauta) {
+            return;
+        }
+
+        $this->notifications->notifyCreator((int) $campaignCreator->creator_id, [
+            'campaign_id' => (int) $campaignCreator->campaign_id,
+            'title' => __('auth.campaign_demand_pauta_title'),
+            'message' => __('auth.campaign_demand_pauta', [
+                'name' => $campaignCreator->campaign?->name ?? '',
+                'demand' => $demand->label(),
+            ]),
             'type' => NotificationType::General,
             'link' => '/creators/'.$campaignCreator->creator_id.'?tab=campaigns',
         ]);
@@ -1470,8 +1558,24 @@ class CampaignController extends Controller
     /**
      * @param  array<string, mixed>  $data
      */
-    private function contentReadyForPayment(CampaignCreator $row, array $data): bool
+    private function contentReadyForPayment(CampaignCreator $row, array $data, ?CampaignDemand $demand = null): bool
     {
+        $row->loadMissing('demands');
+        if ($row->demands->isNotEmpty()) {
+            if ($demand) {
+                $match = $row->demands->firstWhere('id', $demand->id);
+                if ($match) {
+                    foreach (['delivery_status', 'script_status', 'video_status'] as $key) {
+                        if (array_key_exists($key, $data)) {
+                            $match->setAttribute($key, $data[$key]);
+                        }
+                    }
+                }
+            }
+
+            return $this->demands->contentReady($row);
+        }
+
         $delivery = $data['delivery_status'] ?? $row->delivery_status;
         $deliveryValue = $delivery instanceof DeliveryStatus ? $delivery->value : (string) ($delivery ?? '');
         if (in_array($deliveryValue, [DeliveryStatus::Approved->value, DeliveryStatus::Published->value], true)) {

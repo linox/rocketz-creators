@@ -3129,7 +3129,9 @@ function CampaignBriefingModal({
 }) {
   const { t: tc, i18n } = useTranslation("common");
   const uploadManager = useOptionalUploadManager();
-  const lockBackdrop = Boolean(row.pending_upload_id) || uploadManager?.isSubjectUploading("campaign_creator", row.id);
+  const lockBackdrop = Boolean(row.pending_upload_id)
+    || Boolean(row.demands?.some((demand) => demand.pending_upload_id || uploadManager?.isSubjectUploading("campaign_creator", demand.id)))
+    || uploadManager?.isSubjectUploading("campaign_creator", row.id);
 
   return (
     <AppModal onClose={onClose} lockBackdrop={lockBackdrop} zIndexClassName="z-[110]" panelClassName="max-w-3xl">

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\CampaignDemand;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
 use Illuminate\Http\Request;
@@ -80,22 +81,50 @@ class CampaignCreatorResource extends JsonResource
             'signature_status' => $this->signature_status?->value,
             'contract_url' => $this->contract_url,
             'custom_contract_accepted_at' => $this->custom_contract_accepted_at?->toIso8601String(),
-            'content' => $this->whenLoaded('content', fn () => $this->content ? [
-                'script' => $this->content->script,
-                'script_file_url' => MediaUrl::publicAbsolute($this->content->script_file_url),
-                'script_file_name' => $this->content->script_file_name,
-                'video_url' => MediaUrl::publicAbsolute($this->content->video_url),
-                'video_file_size' => (int) ($this->content->video_file_size ?? 0),
-                'video_download_url' => MediaUrl::downloadFromPublicUrl($this->content->video_url),
-                'image_url' => MediaUrl::publicAbsolute($this->content->image_url),
-                'published_link' => $this->content->published_link,
-                'script_version' => (int) ($this->content->script_version ?? 0),
-                'video_version' => (int) ($this->content->video_version ?? 0),
-                'submission_versions' => $this->content->submission_versions ?? [],
-                'revision_history' => $this->content->revision_history ?? [],
-                'story_prints' => $this->content->story_prints ?? [],
-                'metrics' => $this->content->metrics ?? [],
-            ] : null),
+            'content' => $this->whenLoaded('content', fn () => $this->content ? $this->contentPayload($this->content) : null),
+            'demands' => $this->whenLoaded('demands', function () {
+                $totals = $this->demands->countBy('content_type');
+
+                return $this->demands->map(fn (CampaignDemand $demand) => [
+                    'id' => $demand->id,
+                    'content_type' => $demand->content_type,
+                    'position' => (int) $demand->position,
+                    'total' => (int) ($totals[$demand->content_type] ?? 1),
+                    'pauta' => $demand->pauta,
+                    'delivery_status' => $demand->delivery_status?->value,
+                    'script_status' => $demand->script_status?->value,
+                    'video_status' => $demand->video_status?->value,
+                    'script_feedback' => $demand->script_feedback,
+                    'video_feedback' => $demand->video_feedback,
+                    'revision_details' => $demand->revision_details,
+                    'pending_upload_id' => $demand->pending_upload_id,
+                    'upload_progress' => $demand->upload_progress !== null ? (int) $demand->upload_progress : null,
+                    'content' => $this->contentPayload($demand),
+                ])->values();
+            }),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function contentPayload(object $content): array
+    {
+        return [
+            'script' => $content->script,
+            'script_file_url' => MediaUrl::publicAbsolute($content->script_file_url),
+            'script_file_name' => $content->script_file_name,
+            'video_url' => MediaUrl::publicAbsolute($content->video_url),
+            'video_file_size' => (int) ($content->video_file_size ?? 0),
+            'video_download_url' => MediaUrl::downloadFromPublicUrl($content->video_url),
+            'image_url' => MediaUrl::publicAbsolute($content->image_url),
+            'published_link' => $content->published_link,
+            'script_version' => (int) ($content->script_version ?? 0),
+            'video_version' => (int) ($content->video_version ?? 0),
+            'submission_versions' => $content->submission_versions ?? [],
+            'revision_history' => $content->revision_history ?? [],
+            'story_prints' => $content->story_prints ?? [],
+            'metrics' => $content->metrics ?? [],
         ];
     }
 }

@@ -71,6 +71,8 @@ import { CampaignApprovedLimitFields, parseApprovedLimit } from "@/components/Ca
 import { CampaignShippingPanel } from "@/components/CampaignShippingPanel";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
 import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
+import { CampaignDemandsPanel } from "@/components/CampaignDemandsPanel";
+import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
 import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
@@ -87,6 +89,7 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
+import { demandProgress } from "@/lib/campaign-demands";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
 import { formatShippingLines } from "@/lib/shipping-address";
 import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
@@ -1122,8 +1125,12 @@ function DetailInner() {
         delivery_type: creatorEdit.delivery_type,
         delivery_date: creatorEdit.delivery_date || null,
         post_date: creatorEdit.post_date || null,
-        video_url: creatorEdit.video_url || null,
-        published_link: creatorEdit.published_link || null,
+        ...(editing.demands?.length
+          ? {}
+          : {
+              video_url: creatorEdit.video_url || null,
+              published_link: creatorEdit.published_link || null,
+            }),
       });
       setEditing(null);
       await load();
@@ -1148,6 +1155,16 @@ function DetailInner() {
       await api.updateParticipation(rowId, { additional_briefing: text });
       await load();
       await alertSuccess(t("campaignDetail.additionalBriefingSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
+  async function saveDemandPauta(rowId: number, demandId: number, text: string | null) {
+    try {
+      await api.updateParticipation(rowId, { demand_id: demandId, pauta: text });
+      await load();
+      await alertSuccess(t("campaignDetail.demandPautaSaved"));
     } catch (err) {
       await alertApiError(err);
     }
@@ -1673,6 +1690,9 @@ function DetailInner() {
                           {row.additional_briefing?.trim() ? (
                             <span className="mt-1 max-w-full truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
                           ) : null}
+                          {demandProgress(row) ? (
+                            <span className="mt-1 max-w-full truncate rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[8px] font-extrabold text-slate-600">{t("campaignDetail.demandProgress", demandProgress(row)!)}</span>
+                          ) : null}
                           {deliveryWhen.date ? (
                             <span className="mt-1 max-w-full truncate text-[9px] font-bold text-slate-500">
                               {new Date(`${deliveryWhen.date}T00:00:00`).toLocaleDateString(locale)}
@@ -1730,6 +1750,9 @@ function DetailInner() {
                             <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
                             {row.additional_briefing?.trim() ? (
                               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
+                            ) : null}
+                            {demandProgress(row) ? (
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-extrabold text-slate-600">{t("campaignDetail.demandProgress", demandProgress(row)!)}</span>
                             ) : null}
                             <button
                               type="button"
@@ -1934,7 +1957,20 @@ function DetailInner() {
                   onSave={(text) => saveAdditionalBriefing(selected.id, text)}
                 />
 
-                {hasSubmittedMaterial(selected) ? (
+                {selected.demands?.length ? (
+                  <CampaignDemandsPanel
+                    row={selected}
+                    flow={campaign.approval_flow}
+                    canManage={canManage}
+                    updating={updatingId === selected.id}
+                    onSavePauta={(demandId, text) => saveDemandPauta(selected.id, demandId, text)}
+                    onUpdate={async (demandId, body) => {
+                      await patch(selected, { demand_id: demandId, ...body });
+                    }}
+                  />
+                ) : null}
+
+                {!selected.demands?.length && hasSubmittedMaterial(selected) ? (
                   <div className="flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
                     {(selected.content?.script?.trim() || selected.content?.script_file_url?.trim() || selected.content?.video_url?.trim() || selected.content?.image_url?.trim() || selected.content?.published_link?.trim()) ? (
                       <div className="flex flex-col gap-3">
@@ -2461,6 +2497,16 @@ function DetailInner() {
                 canEdit={false}
                 companyName={campaign.company?.name}
               />
+              {applications[0].application_status === "approved" && applications[0].demands?.length ? (
+                <CreatorCampaignSubmissionPanel
+                  campaign={campaign}
+                  row={applications[0]}
+                  onClose={() => undefined}
+                  onSubmitted={() => void load()}
+                  showBriefingToggle={false}
+                  demandsOnly
+                />
+              ) : null}
             </>
           ) : (
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
@@ -3165,8 +3211,12 @@ function DetailInner() {
                     <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold normal-case tracking-normal text-slate-800" value={creatorEdit.post_date} onChange={(event) => setCreatorEdit({ ...creatorEdit, post_date: event.target.value })} />
                   </label>
                 </div>
-                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.mediaTitle")} value={creatorEdit.video_url} onChange={(event) => setCreatorEdit({ ...creatorEdit, video_url: event.target.value })} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.publishedPost")} value={creatorEdit.published_link} onChange={(event) => setCreatorEdit({ ...creatorEdit, published_link: event.target.value })} />
+                {editing.demands?.length ? null : (
+                  <>
+                    <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.mediaTitle")} value={creatorEdit.video_url} onChange={(event) => setCreatorEdit({ ...creatorEdit, video_url: event.target.value })} />
+                    <input className="rounded-xl border border-slate-200 px-3 py-2 text-xs" placeholder={t("campaignDetail.publishedPost")} value={creatorEdit.published_link} onChange={(event) => setCreatorEdit({ ...creatorEdit, published_link: event.target.value })} />
+                  </>
+                )}
                 <div className="flex justify-end gap-3 pt-2">
                   <button type="button" onClick={() => setEditing(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600">{tc("cancel")}</button>
                   <button className="rounded-xl bg-brand-primary px-5 py-2 text-xs font-extrabold text-white">{t("campaignDetail.saveChanges")}</button>

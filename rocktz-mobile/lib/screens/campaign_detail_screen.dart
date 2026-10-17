@@ -31,12 +31,20 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
   final script = TextEditingController();
   final published = TextEditingController();
   final notes = TextEditingController();
+  final demandScripts = <int, TextEditingController>{};
+  final demandLinks = <int, TextEditingController>{};
 
   @override
   void dispose() {
     script.dispose();
     published.dispose();
     notes.dispose();
+    for (final controller in demandScripts.values) {
+      controller.dispose();
+    }
+    for (final controller in demandLinks.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -92,6 +100,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
         script.text = content['script'] as String? ?? '';
         published.text = content['published_link'] as String? ?? '';
       }
+      _bindDemands();
     } on ApiException catch (e) {
       error = e.message;
     } finally {
@@ -140,7 +149,43 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
     }
   }
 
-  Future<void> _pickVideo() async {
+  List<Map<String, dynamic>> get _demands {
+    final raw = _own?['demands'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  void _bindDemands() {
+    for (final demand in _demands) {
+      final id = demand['id'];
+      if (id is! int) continue;
+      final content = demand['content'];
+      final scriptText = content is Map ? (content['script'] as String? ?? '') : '';
+      final linkText = content is Map ? (content['published_link'] as String? ?? '') : '';
+      demandScripts.putIfAbsent(id, () => TextEditingController(text: scriptText));
+      demandLinks.putIfAbsent(id, () => TextEditingController(text: linkText));
+    }
+  }
+
+  String _demandTitle(Map<String, dynamic> demand, String Function(String key) t) {
+    final type = demand['content_type'] as String? ?? '';
+    final formatKey = switch (type) {
+      'reels' => 'fmtReels',
+      'stories' => 'fmtStories',
+      'tiktok' => 'fmtTiktok',
+      'ugc' => 'fmtUgc',
+      'posts' => 'fmtPosts',
+      'youtube' => 'fmtYoutube',
+      _ => '',
+    };
+    final format = formatKey.isEmpty ? type : t(formatKey);
+    return t('demandTitle')
+        .replaceAll('{{format}}', format)
+        .replaceAll('{{n}}', '${demand['position'] ?? ''}')
+        .replaceAll('{{total}}', '${demand['total'] ?? ''}');
+  }
+
+  Future<void> _pickVideo({int? demandId}) async {
     final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (picked == null || !mounted) {
       return;
@@ -161,7 +206,11 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
         submission: SubmissionUpload(
           type: 'campaign_creator',
           id: ownId,
-          payload: {'video_status': 'submitted', 'delivery_status': 'sent'},
+          payload: {
+            'video_status': 'submitted',
+            'delivery_status': 'sent',
+            if (demandId != null) 'demand_id': demandId,
+          },
         ),
         onProgress: (percent) => setState(() => uploadPercent = percent),
       );
@@ -275,6 +324,40 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                       label: '${_own!['application_status'] ?? ''} · ${_own!['payment_status'] ?? ''}',
                     ),
                     const SizedBox(height: 16),
+                    if (_demands.isNotEmpty) ...[
+                      Text(t('demandList'), style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 16)),
+                      const SizedBox(height: 12),
+                      for (final demand in _demands) ...[
+                        _DemandFields(
+                          title: _demandTitle(demand, t),
+                          pauta: (demand['pauta'] as String?)?.trim(),
+                          pautaLabel: t('demandPauta'),
+                          emptyPauta: t('demandPautaEmpty'),
+                          script: demandScripts[demand['id'] as int] ?? script,
+                          published: demandLinks[demand['id'] as int] ?? published,
+                          scriptLabel: t('script'),
+                          videoLabel: t('submitVideo'),
+                          linkLabel: t('publishedLink'),
+                          submitScriptLabel: t('submitScript'),
+                          submitLinkLabel: t('submitLink'),
+                          busy: busy,
+                          uploadPercent: uploadPercent,
+                          onScript: () => _patch({
+                            'demand_id': demand['id'],
+                            'script': (demandScripts[demand['id'] as int] ?? script).text,
+                            'script_status': 'submitted',
+                            'delivery_status': 'sent',
+                          }),
+                          onVideo: () => _pickVideo(demandId: demand['id'] as int),
+                          onLink: () => _patch({
+                            'demand_id': demand['id'],
+                            'published_link': (demandLinks[demand['id'] as int] ?? published).text.trim(),
+                            'delivery_status': 'published',
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ] else ...[
                     TextField(controller: script, maxLines: 4, decoration: softField(t('script'))),
                     const SizedBox(height: 12),
                     DarkPillButton(
@@ -290,7 +373,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    DarkPillButton(label: t('submitVideo'), busy: busy, onPressed: _pickVideo),
+                    DarkPillButton(label: t('submitVideo'), busy: busy, onPressed: () => _pickVideo()),
                     const SizedBox(height: 12),
                     TextField(controller: published, decoration: softField(t('publishedLink'))),
                     const SizedBox(height: 12),
@@ -302,11 +385,92 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                         'delivery_status': 'published',
                       }),
                     ),
+                    ],
                   ],
                 ],
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DemandFields extends StatelessWidget {
+  const _DemandFields({
+    required this.title,
+    required this.pauta,
+    required this.pautaLabel,
+    required this.emptyPauta,
+    required this.script,
+    required this.published,
+    required this.scriptLabel,
+    required this.videoLabel,
+    required this.linkLabel,
+    required this.submitScriptLabel,
+    required this.submitLinkLabel,
+    required this.busy,
+    required this.uploadPercent,
+    required this.onScript,
+    required this.onVideo,
+    required this.onLink,
+  });
+
+  final String title;
+  final String? pauta;
+  final String pautaLabel;
+  final String emptyPauta;
+  final TextEditingController script;
+  final TextEditingController published;
+  final String scriptLabel;
+  final String videoLabel;
+  final String linkLabel;
+  final String submitScriptLabel;
+  final String submitLinkLabel;
+  final bool busy;
+  final int uploadPercent;
+  final VoidCallback onScript;
+  final VoidCallback onVideo;
+  final VoidCallback onLink;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 14)),
+          const SizedBox(height: 6),
+          Text(pautaLabel, style: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 12, color: const Color(0xFFB45309))),
+          const SizedBox(height: 4),
+          Text(
+            (pauta == null || pauta!.isEmpty) ? emptyPauta : pauta!,
+            style: GoogleFonts.nunito(fontWeight: FontWeight.w600, fontSize: 13, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          TextField(controller: script, maxLines: 4, decoration: softField(scriptLabel)),
+          const SizedBox(height: 12),
+          DarkPillButton(label: submitScriptLabel, busy: busy, onPressed: onScript),
+          if (busy && uploadPercent > 0) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(value: uploadPercent / 100, minHeight: 8),
+            ),
+          ],
+          const SizedBox(height: 12),
+          DarkPillButton(label: videoLabel, busy: busy, onPressed: onVideo),
+          const SizedBox(height: 12),
+          TextField(controller: published, decoration: softField(linkLabel)),
+          const SizedBox(height: 12),
+          DarkPillButton(label: submitLinkLabel, busy: busy, onPressed: onLink),
         ],
       ),
     );
