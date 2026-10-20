@@ -59,6 +59,7 @@ import {
   UsersRound,
   Video,
   X,
+  Youtube,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
@@ -391,6 +392,79 @@ function whatsappLink(phone: string | null | undefined, message: string) {
   if (!digits) return null;
   const withCountry = digits.startsWith("55") ? digits : `55${digits}`;
   return `https://wa.me/${withCountry}?text=${encodeURIComponent(message)}`;
+}
+
+const CASTING_NETWORKS = [
+  { key: "instagram" as const, labelKey: "creators.networkInstagram", icon: Instagram, chip: "border-pink-200 bg-pink-50 text-pink-700 hover:border-pink-300 hover:bg-pink-100" },
+  { key: "tiktok" as const, labelKey: "creators.networkTiktok", icon: Clapperboard, chip: "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-400 hover:bg-slate-100" },
+  { key: "youtube" as const, labelKey: "creators.networkYoutube", icon: Youtube, chip: "border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100" },
+  { key: "kwai" as const, labelKey: "creators.networkKwai", icon: Sparkles, chip: "border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-300 hover:bg-orange-100" },
+];
+
+function socialProfileHref(network: (typeof CASTING_NETWORKS)[number]["key"], handle: string) {
+  const raw = handle.trim();
+  if (!raw) return undefined;
+  if (/^https?:\/\//i.test(raw)) return safeHttpUrl(raw);
+  const id = raw.replace(/^@+/, "").split(/[/?#]/)[0]?.trim() ?? "";
+  if (!id) return undefined;
+  if (network === "instagram") return safeHttpUrl(`https://www.instagram.com/${id}/`);
+  if (network === "tiktok") return safeHttpUrl(`https://www.tiktok.com/@${id}`);
+  if (network === "youtube") {
+    const channel = /^UC[A-Za-z0-9_-]{20,}$/.test(id);
+    return safeHttpUrl(channel ? `https://www.youtube.com/channel/${id}` : `https://www.youtube.com/@${id}`);
+  }
+  return safeHttpUrl(`https://www.kwai.com/@${id}`);
+}
+
+function displayHandle(handle: string) {
+  const raw = handle.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const path = new URL(raw).pathname.replace(/^\/+|\/+$/g, "");
+      const id = (path.split("/").filter(Boolean).pop() ?? "").replace(/^@/, "");
+      return id ? `@${id}` : raw;
+    } catch {
+      return raw;
+    }
+  }
+  const id = raw.replace(/^@+/, "").split(/[/?#]/)[0] ?? "";
+  return id ? `@${id}` : raw;
+}
+
+function CastingSocialLinks({ socials }: { socials?: Record<string, string> | null }) {
+  const { t } = useTranslation("app");
+  const items = CASTING_NETWORKS.flatMap((network) => {
+    const handle = String(socials?.[network.key] ?? "").trim();
+    if (!handle) return [];
+    const href = socialProfileHref(network.key, handle);
+    if (!href) return [];
+    return [{ ...network, href, display: displayHandle(handle) }];
+  });
+  if (!items.length) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const network = t(item.labelKey);
+        return (
+          <a
+            key={item.key}
+            href={item.href}
+            target="_blank"
+            rel="noreferrer"
+            title={t("creators.openNetwork", { network })}
+            className={cn("inline-flex max-w-[220px] items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-bold transition", item.chip)}
+          >
+            <Icon size={12} className="shrink-0" />
+            <span className="truncate">{item.display}</span>
+            <ExternalLink size={10} className="shrink-0 opacity-60" />
+          </a>
+        );
+      })}
+    </div>
+  );
 }
 
 function CoverPicker({ value, onChange, label }: { value: string; onChange: (url: string) => void; label: string }) {
@@ -2391,6 +2465,7 @@ function DetailInner() {
                           {row.creator?.full_name && location ? <span className="text-slate-300">•</span> : null}
                           {location ? <span>{location}</span> : null}
                         </div>
+                        <CastingSocialLinks socials={row.creator?.socials} />
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           {niches.slice(0, 3).map((niche) => (
                             <span key={niche} className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
