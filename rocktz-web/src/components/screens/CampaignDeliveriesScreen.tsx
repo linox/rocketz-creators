@@ -42,6 +42,7 @@ import {
   formatInboxTime,
   formatInboxPeriod,
   isOnSchedule,
+  isPlaceholderSubmissionTime,
   isUnread,
   needsAction,
   matchesFolder,
@@ -1089,11 +1090,13 @@ function InboxRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <span className={cn("truncate text-[12px] text-slate-800", unread || actionNeeded ? "font-black" : "font-bold")}>{item.creatorName}</span>
-          <span className="shrink-0 text-[10px] font-semibold text-slate-400">
-            {dateGroupKey(item.createdAt) === "today" || dateGroupKey(item.createdAt) === "yesterday"
-              ? `${dateGroupKey(item.createdAt) === "today" ? t("deliveries.inbox.todayShort") : t("deliveries.inbox.yesterdayShort")} ${formatInboxTime(item.createdAt, locale)}`
-              : formatInboxTime(item.createdAt, locale)}
-          </span>
+          {isPlaceholderSubmissionTime(item.createdAt) ? null : (
+            <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+              {dateGroupKey(item.createdAt) === "today" || dateGroupKey(item.createdAt) === "yesterday"
+                ? `${dateGroupKey(item.createdAt) === "today" ? t("deliveries.inbox.todayShort") : t("deliveries.inbox.yesterdayShort")} ${formatInboxTime(item.createdAt, locale)}`
+                : formatInboxTime(item.createdAt, locale)}
+            </span>
+          )}
         </div>
         <p className="m-0 truncate text-[10px] text-slate-500">
           {item.companyName}{origin ? "" : ` · ${item.sourceName}`}
@@ -1193,9 +1196,11 @@ function ReadingPane({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <UserAvatar src={item.creatorPhoto} name={item.creatorName} size="custom" shape="circle" className="h-7 w-7" textClassName="text-[10px]" />
               <span className="text-xs font-bold text-slate-800">{item.creatorName}</span>
-              <span className="text-[11px] text-slate-400">
-                {t("deliveries.inbox.sentAt", { date: new Date(item.createdAt).toLocaleString(locale) })}
-              </span>
+              {isPlaceholderSubmissionTime(item.createdAt) ? null : (
+                <span className="text-[11px] text-slate-400">
+                  {t("deliveries.inbox.sentAt", { date: new Date(item.createdAt).toLocaleString(locale) })}
+                </span>
+              )}
               {stage ? (
                 <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">
                   {stage}
@@ -1426,7 +1431,7 @@ function ReadingPane({
                   V{v.versionNumber}
                   {v.versionNumber === item.currentVersion ? <span className="ml-2 text-[10px] font-extrabold text-indigo-600 uppercase">{t("deliveries.inbox.current")}</span> : null}
                 </span>
-                <span className="text-[10px] text-slate-400">{new Date(v.createdAt).toLocaleString(locale)}</span>
+                <span className="text-[10px] text-slate-400">{isPlaceholderSubmissionTime(v.createdAt) ? "—" : new Date(v.createdAt).toLocaleString(locale)}</span>
               </button>
             ))}
           </div>
@@ -1439,7 +1444,9 @@ function ReadingPane({
               <div key={act.id}>
                 <p className="m-0 text-xs font-bold text-slate-800">{act.userName}</p>
                 <p className="m-0 text-[11px] text-slate-500">{act.message}</p>
-                <p className="m-0 text-[10px] text-slate-400">{new Date(act.createdAt).toLocaleString(locale)}</p>
+                {isPlaceholderSubmissionTime(act.createdAt) ? null : (
+                  <p className="m-0 text-[10px] text-slate-400">{new Date(act.createdAt).toLocaleString(locale)}</p>
+                )}
               </div>
             ))}
           </div>
@@ -1469,7 +1476,7 @@ function ReadingPane({
               <Detail label={t("deliveries.inbox.detailCreator")} value={item.creatorName} />
               <Detail label={t("deliveries.inbox.detailType")} value={item.sourceType === "campaign" ? t("deliveries.inbox.typeCampaign") : t("deliveries.inbox.typeRecurring")} />
               <Detail label={t("deliveries.inbox.detailFormat")} value={String(inboxFormatLabel(item, t))} />
-              <Detail label={t("deliveries.inbox.detailSent")} value={new Date(item.createdAt).toLocaleString(locale)} />
+              <Detail label={t("deliveries.inbox.detailSent")} value={isPlaceholderSubmissionTime(item.createdAt) ? "—" : new Date(item.createdAt).toLocaleString(locale)} />
               <Detail label={t("deliveries.inbox.detailDeadline")} value={item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"} />
               <Detail label={t("deliveries.inbox.detailPublish")} value={item.publicationDate ? new Date(item.publicationDate).toLocaleDateString(locale) : "—"} />
               <Detail label={t("deliveries.inbox.detailOwner")} value={item.responsibleUserName} />
@@ -1548,7 +1555,7 @@ function TableView({
               <td className="px-3 py-2">{item.companyName}</td>
               <td className="px-3 py-2">{campaignOrigin(item, t) ?? item.sourceName}</td>
               <td className="px-3 py-2">{inboxFormatLabel(item, t)}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{new Date(item.createdAt).toLocaleString(locale)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{isPlaceholderSubmissionTime(item.createdAt) ? "—" : new Date(item.createdAt).toLocaleString(locale)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"}</td>
               <td className="px-3 py-2">
                 <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>

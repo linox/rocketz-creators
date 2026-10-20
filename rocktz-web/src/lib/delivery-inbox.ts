@@ -184,6 +184,13 @@ function submissionAt(...candidates: Array<string | null | undefined>): string {
   return "1970-01-01T00:00:00.000Z";
 }
 
+/** Epoch fallback used when nothing was actually submitted. Local TZ renders it as 31/12/1969. */
+export function isPlaceholderSubmissionTime(iso?: string | null) {
+  if (!iso) return true;
+  const time = +new Date(iso);
+  return !Number.isFinite(time) || time < Date.UTC(1971, 0, 1);
+}
+
 function submittedAfterDeadline(submittedAt?: string | null, deadline?: string | null) {
   const submitted = calendarDateKey(submittedAt);
   const due = calendarDateKey(deadline);
