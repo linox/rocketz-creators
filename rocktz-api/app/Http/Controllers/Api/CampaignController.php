@@ -34,6 +34,7 @@ use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
 use App\Support\SafeHttpUrl;
 use App\Support\SubmissionVersioning;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -92,7 +93,10 @@ class CampaignController extends Controller
 
         $campaigns = $query->latest()->get();
         if ($includeContent) {
-            $participations = $campaigns->flatMap(fn (Campaign $campaign) => $campaign->campaignCreators);
+            // flatMap devolve Support\Collection; load/loadMissing só existem na coleção Eloquent.
+            $participations = new EloquentCollection(
+                $campaigns->flatMap(fn (Campaign $campaign) => $campaign->campaignCreators)->all(),
+            );
             $participations->loadMissing('creator');
             $this->demands->syncCampaigns($campaigns);
             $participations->load(['content', 'demands']);
