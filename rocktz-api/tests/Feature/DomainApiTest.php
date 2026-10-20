@@ -132,6 +132,8 @@ class DomainApiTest extends TestCase
             $application = $withContent['applications'][0] ?? null;
             if (is_array($application)) {
                 $this->assertArrayHasKey('content', $application);
+                $this->assertArrayHasKey('creator', $application);
+                $this->assertNotSame('', (string) ($application['creator']['artistic_name'] ?? ''));
             }
         }
 

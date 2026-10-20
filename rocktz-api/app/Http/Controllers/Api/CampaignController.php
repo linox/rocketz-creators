@@ -93,7 +93,7 @@ class CampaignController extends Controller
         $campaigns = $query->latest()->get();
         if ($includeContent) {
             $this->demands->syncCampaigns($campaigns);
-            $campaigns->load(['campaignCreators.content', 'campaignCreators.demands']);
+            $campaigns->load(['campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
         }
 
         return response()->json(['data' => CampaignResource::collection($campaigns)]);

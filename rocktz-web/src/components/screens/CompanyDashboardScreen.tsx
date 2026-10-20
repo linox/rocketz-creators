@@ -58,6 +58,7 @@ type PendingApproval = {
   demandId?: number;
   planningId?: number;
   href: string;
+  origin?: string | null;
   demandStatus: string;
   approvalStatus: string;
   script?: string | null;
@@ -255,7 +256,8 @@ function CompanyDashboardInner() {
           videoUrl: source.content?.video_url ?? null,
           videoFileSize: source.content?.video_file_size ?? null,
         };
-        const piece = subject.label ? `${campaign.name} · ${subject.label}` : campaign.name;
+        const piece = subject.label || campaign.name;
+        const origin = t("deliveries.inbox.fromCampaign", { name: campaign.name });
         if (source.script_status === "submitted" || source.script_status === "revision"
           || (source.delivery_status === "sent" && (source.content?.script || source.content?.script_file_url) && !source.content?.video_url && source.script_status !== "approved")) {
           items.push({
@@ -268,6 +270,7 @@ function CompanyDashboardInner() {
             participationId: row.id,
             demandId: subject.demandId,
             href: "/campaign-deliveries",
+            origin,
             demandStatus: source.delivery_status || campaign.status,
             approvalStatus: source.script_status || "submitted",
             ...material,
@@ -286,6 +289,7 @@ function CompanyDashboardInner() {
             participationId: row.id,
             demandId: subject.demandId,
             href: "/campaign-deliveries",
+            origin,
             demandStatus: source.delivery_status || campaign.status,
             approvalStatus: source.video_status || source.delivery_status || "submitted",
             ...material,
@@ -762,6 +766,7 @@ function CompanyDashboardInner() {
                         {item.stage === "script" ? t("companyDash.overview.stageScript") : item.stage === "video" ? t("companyDash.overview.stageVideo") : t("companyDash.overview.stageRecurring")}
                       </span>
                       <h4 className="m-0 truncate text-xs font-bold text-slate-900">{item.title}</h4>
+                      {item.origin ? <p className="m-0 truncate text-[10px] font-extrabold text-indigo-700">{item.origin}</p> : null}
                       <div className="flex min-w-0 items-center gap-2">
                         <UserAvatar src={item.creatorPhoto} name={item.creatorName} size="custom" shape="circle" className="h-6 w-6 shrink-0 border border-slate-200" textClassName="text-[10px]" />
                         <span className="truncate text-xs font-semibold text-slate-700">@{item.creatorName}</span>

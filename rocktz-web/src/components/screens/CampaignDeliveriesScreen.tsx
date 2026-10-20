@@ -985,6 +985,11 @@ function inboxFormatLabel(item: DeliveryInboxItem, t: (key: string, opts?: Recor
   return item.formatLabel;
 }
 
+function campaignOrigin(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
+  if (item.sourceType !== "campaign" || !item.demandId || !item.sourceName) return null;
+  return t("deliveries.inbox.fromCampaign", { name: item.sourceName });
+}
+
 function inboxHeading(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
   if (item.demandPosition) {
     const label = String(inboxFormatLabel(item, t));
@@ -1030,6 +1035,7 @@ function InboxRow({
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
+  const origin = campaignOrigin(item, t);
   return (
     <div
       className={cn(
@@ -1066,9 +1072,10 @@ function InboxRow({
           </span>
         </div>
         <p className="m-0 truncate text-[10px] text-slate-500">
-          {item.companyName} · {item.sourceName}
+          {item.companyName}{origin ? "" : ` · ${item.sourceName}`}
           {period ? ` · ${period}` : ""}
         </p>
+        {origin ? <p className="m-0 truncate text-[10px] font-extrabold text-indigo-700">{origin}</p> : null}
         <p className={cn("m-0 truncate text-[13px] text-slate-900", unread || actionNeeded ? "font-extrabold" : "font-semibold")}>{heading}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
           {stage ? <span className="font-bold text-indigo-700">{stage}</span> : null}
@@ -1142,6 +1149,7 @@ function ReadingPane({
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
   const formatName = inboxFormatLabel(item, t);
+  const origin = campaignOrigin(item, t);
 
   return (
     <>
@@ -1153,9 +1161,10 @@ function ReadingPane({
           </button>
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-[11px] font-semibold text-slate-400">
-              {item.companyName} / {item.sourceName}
+              {item.companyName}{origin ? "" : ` / ${item.sourceName}`}
               {period ? ` · ${period}` : ""}
             </p>
+            {origin ? <p className="m-0 mt-1 truncate text-[11px] font-extrabold text-indigo-700">{origin}</p> : null}
             <h2 className="m-0 mt-0.5 text-lg font-black text-slate-900">{heading}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <UserAvatar src={item.creatorPhoto} name={item.creatorName} size="custom" shape="circle" className="h-7 w-7" textClassName="text-[10px]" />
@@ -1513,7 +1522,7 @@ function TableView({
               </td>
               <td className="px-3 py-2">{item.creatorName}</td>
               <td className="px-3 py-2">{item.companyName}</td>
-              <td className="px-3 py-2">{item.sourceName}</td>
+              <td className="px-3 py-2">{campaignOrigin(item, t) ?? item.sourceName}</td>
               <td className="px-3 py-2">{inboxFormatLabel(item, t)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{new Date(item.createdAt).toLocaleString(locale)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"}</td>

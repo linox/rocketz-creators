@@ -1215,6 +1215,7 @@
       "typeAll": "All",
       "typeCampaign": "One-off campaigns",
       "typeRecurring": "Recurring work",
+      "fromCampaign": "Campaign · {{name}}",
       "companies": "Companies",
       "selectCompany": "Company",
       "companyPh": "Select the company",
