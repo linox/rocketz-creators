@@ -3,13 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\ApplicationStatus;
-use App\Enums\CompanyStatus;
 use App\Enums\ContentPlanningStatus;
 use App\Enums\ContentType;
 use App\Enums\DeliveryStatus;
 use App\Enums\PostingProfile;
 use App\Enums\StageApprovalStatus;
 use App\Models\Campaign;
+use App\Models\CampaignBriefing;
 use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\Company;
@@ -344,6 +344,141 @@ class AuthorizationHardeningTest extends TestCase
 
         $this->assertNull($item->fresh()->script);
         $this->assertSame(StageApprovalStatus::Pending, $item->fresh()->script_status);
+    }
+
+    public function test_company_cannot_read_another_companys_campaign_marketplace(): void
+    {
+        $owner = Company::factory()->active()->create();
+        $intruder = Company::factory()->active()->create();
+        $intruderUser = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $intruderUser->id,
+            'company_id' => $intruder->id,
+        ]);
+        $campaign = Campaign::factory()->create([
+            'company_id' => $owner->id,
+            'name' => 'Campanha confidencial',
+            'is_secret' => false,
+            'total_budget' => 18000,
+            'custom_contract_terms' => 'Cláusula exclusiva da marca',
+            'barter_details' => 'Kit ainda não anunciado',
+        ]);
+        CampaignBriefing::factory()->create([
+            'campaign_id' => $campaign->id,
+            'coupon' => 'SEGREDO40',
+            'script_file_url' => 'https://api.test/downloads/documents/roteiro-secreto.pdf',
+        ]);
+        $creator = Creator::factory()->active()->create([
+            'pix_key' => 'criador@sigilo.test',
+            'shipping_address' => ['street' => 'Rua Sigilosa', 'number' => '9', 'city' => 'São Paulo', 'state' => 'SP', 'zip' => '01310100'],
+        ]);
+        CampaignCreator::factory()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'amount' => 4200,
+            'notes' => 'Cachê combinado em off',
+            'application_status' => ApplicationStatus::Pending,
+        ]);
+
+        $this->withToken($intruderUser->createToken('auth')->plainTextToken)
+            ->getJson('/api/campaigns/available')
+            ->assertForbidden();
+
+        $this->withToken($intruderUser->createToken('auth')->plainTextToken)
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertForbidden();
+
+        $ownList = $this->withToken($intruderUser->createToken('auth')->plainTextToken)
+            ->getJson('/api/campaigns')
+            ->assertOk()
+            ->json('data');
+        $this->assertFalse(collect($ownList)->contains(fn ($row) => (int) $row['id'] === $campaign->id));
+    }
+
+    public function test_company_sees_payout_data_only_after_creator_is_approved(): void
+    {
+        $company = Company::factory()->active()->create();
+        $user = User::factory()->company()->create();
+        CompanyUser::factory()->active()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+        $campaign = Campaign::factory()->create(['company_id' => $company->id]);
+        $creator = Creator::factory()->active()->create([
+            'pix_key' => 'pagamento@criador.test',
+            'bank_account' => [
+                'bank_name' => 'Nubank',
+                'agency' => '0001',
+                'account' => '12345-6',
+                'account_type' => 'checking',
+            ],
+            'shipping_address' => [
+                'street' => 'Rua do Envio',
+                'number' => '40',
+                'city' => 'São Paulo',
+                'state' => 'SP',
+                'zip' => '01310100',
+            ],
+        ]);
+        $pending = CampaignCreator::factory()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'application_status' => ApplicationStatus::Pending,
+        ]);
+
+        $token = $user->createToken('auth')->plainTextToken;
+        $before = collect($this->withToken($token)
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertOk()
+            ->json('data.applications'))
+            ->firstWhere('id', $pending->id);
+
+        $this->assertArrayNotHasKey('pix_key', $before['creator']);
+        $this->assertArrayNotHasKey('bank_account', $before['creator']);
+        $this->assertArrayNotHasKey('shipping_address', $before['creator']);
+        $this->assertSame('Nubank', $creator->fresh()->bank_account['bank_name']);
+
+        $pending->update(['application_status' => ApplicationStatus::Approved]);
+
+        $after = collect($this->withToken($token)
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertOk()
+            ->json('data.applications'))
+            ->firstWhere('id', $pending->id);
+
+        $this->assertSame('pagamento@criador.test', $after['creator']['pix_key']);
+        $this->assertSame('Nubank', $after['creator']['bank_account']['bank_name']);
+        $this->assertSame('Rua do Envio', $after['creator']['shipping_address']['street']);
+    }
+
+    public function test_creator_marketplace_hides_other_creators_applications(): void
+    {
+        $campaign = Campaign::factory()->create([
+            'is_secret' => false,
+            'is_barter' => true,
+            'limit_by_city' => false,
+            'limit_by_age' => false,
+        ]);
+        $insider = Creator::factory()->active()->create();
+        CampaignCreator::factory()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $insider->id,
+            'amount' => 5100,
+            'notes' => 'Nota privada de outro criador',
+            'application_status' => ApplicationStatus::Approved,
+        ]);
+        $outsider = Creator::factory()->active()->create();
+
+        $available = $this->withToken($outsider->user->createToken('auth')->plainTextToken)
+            ->getJson('/api/campaigns/available')
+            ->assertOk()
+            ->json('data');
+        $row = collect($available)->firstWhere('id', $campaign->id);
+
+        $this->assertNotNull($row);
+        $this->assertNull($row['total_budget']);
+        $this->assertSame([], $row['applications']);
+        $this->assertFalse(collect($row['applications'])->contains(fn ($application) => (int) $application['creator_id'] === $insider->id));
     }
 
     public function test_webhook_with_secret_rejects_unsigned_payload(): void

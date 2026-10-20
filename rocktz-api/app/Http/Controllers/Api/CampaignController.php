@@ -108,6 +108,7 @@ class CampaignController extends Controller
     public function available(Request $request): JsonResponse
     {
         $user = $request->user();
+        abort_if($user->role === UserRole::Company, 403, __('auth.forbidden'));
         abort_if(
             $user->role === UserRole::Creator && $user->creator?->status !== CreatorStatus::Active,
             403,
@@ -121,10 +122,6 @@ class CampaignController extends Controller
 
         if ($user->role !== UserRole::Admin) {
             $query->where('is_secret', false);
-        }
-
-        if ($user->role === UserRole::Company) {
-            $query->whereNotIn('company_id', $user->companyIds() ?: [0]);
         }
 
         if ($user->role === UserRole::Creator && $user->creator) {

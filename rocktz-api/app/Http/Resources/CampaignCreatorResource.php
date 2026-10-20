@@ -2,6 +2,8 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\UserRole;
 use App\Models\CampaignDemand;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
@@ -38,15 +40,18 @@ class CampaignCreatorResource extends JsonResource
                     $creator['whatsapp'] = $this->creator->whatsapp;
                 }
 
-                if (in_array($request->user()?->role?->value, ['admin', 'company'], true)) {
-                    $creator['pix_key'] = $this->creator->pix_key;
-                    $creator['bank_account'] = $this->creator->bank_account;
+                $role = $request->user()?->role;
+                if (in_array($role, [UserRole::Admin, UserRole::Company], true)) {
                     $creator['age'] = $this->creator->age();
-                    $creator['shipping_address'] = $this->creator->shipping_address;
                     $creator['categories'] = $this->creator->categories ?? [];
                     $creator['metrics'] = $this->creator->metrics ?? [];
                     $creator['pricing'] = $hideCreatorValues ? [] : ($this->creator->pricing ?? []);
                     $creator['socials'] = $this->creator->socials ?? [];
+                    if ($role === UserRole::Admin || $this->application_status === ApplicationStatus::Approved) {
+                        $creator['pix_key'] = $this->creator->pix_key;
+                        $creator['bank_account'] = $this->creator->bank_account;
+                        $creator['shipping_address'] = $this->creator->shipping_address;
+                    }
                 }
 
                 return $creator;

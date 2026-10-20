@@ -100,13 +100,18 @@ function AvailableInner() {
   }
 
   useEffect(() => {
+    if (user.role === "company") {
+      router.replace("/company-dashboard");
+      setLoading(false);
+      return;
+    }
     if (!campaignsUnlocked) {
       setItems([]);
       setLoading(false);
       return;
     }
     load();
-  }, [campaignsUnlocked]);
+  }, [campaignsUnlocked, router, user.role]);
 
   const myApps = useMemo(() => {
     const map: Record<number, CampaignCreator> = {};

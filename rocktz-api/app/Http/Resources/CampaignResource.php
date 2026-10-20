@@ -15,8 +15,12 @@ class CampaignResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $isCreator = $request->user()?->role === UserRole::Creator;
-        $hideCreatorValues = CreatorPrivacy::hidesCreatorValues($request->user());
+        $viewer = $request->user();
+        $isCreator = $viewer?->role === UserRole::Creator;
+        $foreignCompany = $viewer?->role === UserRole::Company
+            && ! $viewer->belongsToCompany((int) $this->company_id);
+        $hideCreatorValues = CreatorPrivacy::hidesCreatorValues($viewer);
+        $hideCommercial = $isCreator || $foreignCompany;
 
         return [
             'id' => $this->id,
@@ -35,11 +39,11 @@ class CampaignResource extends JsonResource
             'start_date' => $this->start_date?->toDateString(),
             'end_date' => $this->end_date?->toDateString(),
             'delivery_date' => $this->delivery_date?->toDateString(),
-            'total_budget' => $isCreator ? null : ($this->total_budget !== null ? (float) $this->total_budget : null),
-            'agency_fee' => $isCreator ? null : ($this->agency_fee !== null ? (float) $this->agency_fee : null),
-            'agency_fee_percent' => $isCreator ? null : ($this->agency_fee_percent !== null ? (float) $this->agency_fee_percent : null),
-            'creators_budget' => $isCreator || $hideCreatorValues ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
-            'creator_cache' => $hideCreatorValues ? null : ($this->creator_cache !== null ? (float) $this->creator_cache : null),
+            'total_budget' => $hideCommercial ? null : ($this->total_budget !== null ? (float) $this->total_budget : null),
+            'agency_fee' => $hideCommercial ? null : ($this->agency_fee !== null ? (float) $this->agency_fee : null),
+            'agency_fee_percent' => $hideCommercial ? null : ($this->agency_fee_percent !== null ? (float) $this->agency_fee_percent : null),
+            'creators_budget' => $hideCommercial || $hideCreatorValues ? null : ($this->creators_budget !== null ? (float) $this->creators_budget : null),
+            'creator_cache' => $foreignCompany || $hideCreatorValues ? null : ($this->creator_cache !== null ? (float) $this->creator_cache : null),
             'currency' => $this->currency ?: $this->company?->currency,
             'status' => $this->status?->value,
             'image_url' => MediaUrl::publicAbsolute($this->image_url),
@@ -51,7 +55,7 @@ class CampaignResource extends JsonResource
             'min_age' => $this->min_age !== null ? (int) $this->min_age : null,
             'max_age' => $this->max_age !== null ? (int) $this->max_age : null,
             'max_approved_creators' => $this->max_approved_creators !== null ? (int) $this->max_approved_creators : null,
-            'approved_creators_count' => $this->when(! $isCreator, fn () => $this->approvedCreatorsCount()),
+            'approved_creators_count' => $this->when(! $isCreator && ! $foreignCompany, fn () => $this->approvedCreatorsCount()),
             'restrict_to_landing' => (bool) $this->restrict_to_landing,
             'company_landing_page_id' => $this->company_landing_page_id ? (int) $this->company_landing_page_id : null,
             'min_followers' => $this->audienceVisible($request) && $this->min_followers !== null ? (int) $this->min_followers : null,
@@ -70,7 +74,7 @@ class CampaignResource extends JsonResource
             ] : null),
             'state' => $this->state,
             'city' => $this->city,
-            'barter_details' => $this->barter_details,
+            'barter_details' => $foreignCompany ? null : $this->barter_details,
             'shipping_sender' => $this->when($this->audienceVisible($request), fn () => [
                 'id' => $this->shipping_sender_id ? (int) $this->shipping_sender_id : null,
                 'name' => $this->sender_name,
@@ -78,11 +82,11 @@ class CampaignResource extends JsonResource
                 'address' => $this->sender_address,
             ]),
             'has_custom_contract' => $this->requiresCustomContract(),
-            'custom_contract_terms' => $this->requiresCustomContract() ? $this->custom_contract_terms : null,
-            'application_question' => $this->application_question ? trim((string) $this->application_question) : null,
+            'custom_contract_terms' => $foreignCompany || ! $this->requiresCustomContract() ? null : $this->custom_contract_terms,
+            'application_question' => $foreignCompany ? null : ($this->application_question ? trim((string) $this->application_question) : null),
             'approval_flow' => $this->approval_flow?->value,
             'posting_profile' => $this->posting_profile?->value ?? 'creator',
-            'briefing' => $this->whenLoaded('briefing', fn () => $this->briefing ? [
+            'briefing' => $this->when($this->relationLoaded('briefing') && ! $foreignCompany, fn () => $this->briefing ? [
                 'product' => $this->briefing->product,
                 'key_message' => $this->briefing->key_message,
                 'must_have' => $this->briefing->must_have,
@@ -95,7 +99,7 @@ class CampaignResource extends JsonResource
                 'script_file_url' => MediaUrl::publicAbsolute($this->briefing->script_file_url),
                 'script_file_name' => $this->briefing->script_file_name,
             ] : null),
-            'deliverables' => $this->whenLoaded('deliverable', fn () => $this->deliverable ? [
+            'deliverables' => $this->when($this->relationLoaded('deliverable') && ! $foreignCompany, fn () => $this->deliverable ? [
                 'summary' => $this->deliverable->summary,
                 'reels' => $this->deliverable->reels,
                 'stories' => $this->deliverable->stories,
@@ -106,7 +110,11 @@ class CampaignResource extends JsonResource
                 'deadline_days' => $this->deliverable->deadline_days,
                 'guidelines' => $this->deliverable->guidelines,
             ] : null),
-            'applications' => $this->whenLoaded('campaignCreators', function () use ($request, $isCreator) {
+            'applications' => $this->whenLoaded('campaignCreators', function () use ($request, $isCreator, $foreignCompany) {
+                if ($foreignCompany) {
+                    return [];
+                }
+
                 $rows = $this->campaignCreators;
                 if ($isCreator) {
                     $ownId = $request->user()?->creator?->id;
