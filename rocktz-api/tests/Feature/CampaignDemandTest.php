@@ -160,6 +160,53 @@ class CampaignDemandTest extends TestCase
             ->assertJsonPath('data.applications.0.demands.1.content.script', null);
     }
 
+    public function test_inbox_approval_updates_only_the_chosen_demand(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $demands = $row->demands()->orderBy('id')->get();
+        $demands[0]->update([
+            'script_status' => 'submitted',
+            'delivery_status' => 'sent',
+            'script_submitted_at' => now(),
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demands[0]->id,
+                'script_status' => 'approved',
+                'script_feedback' => '',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.script_status', 'approved')
+            ->assertJsonPath('data.demands.1.script_status', 'pending')
+            ->assertJsonPath('data.script_status', 'pending');
+
+        $this->flushHeaders();
+        auth()->forgetGuards();
+
+        $demands[0]->update([
+            'video_status' => 'submitted',
+            'delivery_status' => 'sent',
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demands[0]->id,
+                'delivery_status' => 'approved',
+                'video_status' => 'approved',
+                'script_status' => 'approved',
+                'revision_details' => '',
+                'script_feedback' => '',
+                'video_feedback' => '',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.video_status', 'approved')
+            ->assertJsonPath('data.demands.0.delivery_status', 'approved')
+            ->assertJsonPath('data.demands.1.delivery_status', 'pending')
+            ->assertJsonPath('data.delivery_status', 'pending');
+    }
+
     private function approvedWithReels(int $reels): CampaignCreator
     {
         $row = CampaignCreator::factory()->approved()->create();

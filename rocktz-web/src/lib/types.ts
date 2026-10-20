@@ -401,6 +401,8 @@ export type CampaignDemand = {
   script_feedback?: string | null;
   video_feedback?: string | null;
   revision_details?: string | null;
+  script_submitted_at?: string | null;
+  video_submitted_at?: string | null;
   pending_upload_id?: string | null;
   upload_progress?: number | null;
   content?: CampaignCreator["content"];

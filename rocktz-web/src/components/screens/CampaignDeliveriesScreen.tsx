@@ -194,6 +194,10 @@ function DeliveriesInboxInner() {
 
   const actorName = "Rocketz";
 
+  function participationPayload(item: DeliveryInboxItem, body: Record<string, unknown>) {
+    return item.demandId ? { demand_id: item.demandId, ...body } : body;
+  }
+
   async function approveOnApi(item: DeliveryInboxItem, publishedLink?: string) {
     const link = publishedLink?.trim();
     if (item.planningItemId) {
@@ -224,7 +228,7 @@ function DeliveriesInboxInner() {
     }
     if (!item.participationId) return;
     if (link) {
-      await api.updateParticipation(item.participationId, {
+      await api.updateParticipation(item.participationId, participationPayload(item, {
         published_link: link,
         delivery_status: "published",
         video_status: "approved",
@@ -232,21 +236,21 @@ function DeliveriesInboxInner() {
         revision_details: "",
         script_feedback: "",
         video_feedback: "",
-      });
+      }));
       return;
     }
     if (item.approvalStage === "script") {
-      await api.updateParticipation(item.participationId, { script_status: "approved", script_feedback: "" });
+      await api.updateParticipation(item.participationId, participationPayload(item, { script_status: "approved", script_feedback: "" }));
       return;
     }
-    await api.updateParticipation(item.participationId, {
+    await api.updateParticipation(item.participationId, participationPayload(item, {
       delivery_status: "approved",
       video_status: "approved",
       script_status: "approved",
       revision_details: "",
       script_feedback: "",
       video_feedback: "",
-    });
+    }));
   }
 
   async function reviseOnApi(item: DeliveryInboxItem, note: string) {
@@ -274,19 +278,19 @@ function DeliveriesInboxInner() {
     }
     if (!item.participationId) return;
     if (item.approvalStage === "script") {
-      await api.updateParticipation(item.participationId, {
+      await api.updateParticipation(item.participationId, participationPayload(item, {
         script_status: "revision",
         script_feedback: note,
         revision_details: note,
-      });
+      }));
       return;
     }
-    await api.updateParticipation(item.participationId, {
+    await api.updateParticipation(item.participationId, participationPayload(item, {
       delivery_status: "revision",
       video_status: "revision",
       revision_details: note,
       video_feedback: note,
-    });
+    }));
   }
 
   const companies = useMemo(() => {
@@ -969,7 +973,24 @@ function Chip({
   );
 }
 
+function inboxFormatLabel(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
+  if (item.demandPosition && item.formatKey) {
+    return t("campaignDetail.demandTitle", {
+      format: t(`campaignDetail.${item.formatKey}`, { defaultValue: item.formatLabel }),
+      n: item.demandPosition,
+      total: item.demandTotal ?? item.demandPosition,
+    });
+  }
+  if (item.formatKey) return String(t(`recurring.shortFormats.${item.formatKey}`, { defaultValue: item.formatLabel }));
+  return item.formatLabel;
+}
+
 function inboxHeading(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
+  if (item.demandPosition) {
+    const label = String(inboxFormatLabel(item, t));
+    const pauta = item.title.trim();
+    return pauta ? `${label} — ${pauta}` : label;
+  }
   const named = item.title.trim();
   if (named) return named;
   const key = item.formatKey || item.formatLabel;
@@ -1120,9 +1141,7 @@ function ReadingPane({
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
-  const formatName = item.formatKey
-    ? t(`recurring.shortFormats.${item.formatKey}`, { defaultValue: item.formatLabel })
-    : item.formatLabel;
+  const formatName = inboxFormatLabel(item, t);
 
   return (
     <>
@@ -1416,7 +1435,7 @@ function ReadingPane({
               <Detail label={t("deliveries.inbox.detailSource")} value={item.sourceName} />
               <Detail label={t("deliveries.inbox.detailCreator")} value={item.creatorName} />
               <Detail label={t("deliveries.inbox.detailType")} value={item.sourceType === "campaign" ? t("deliveries.inbox.typeCampaign") : t("deliveries.inbox.typeRecurring")} />
-              <Detail label={t("deliveries.inbox.detailFormat")} value={item.formatKey ? String(t(`recurring.shortFormats.${item.formatKey}`, { defaultValue: item.formatLabel })) : item.formatLabel} />
+              <Detail label={t("deliveries.inbox.detailFormat")} value={String(inboxFormatLabel(item, t))} />
               <Detail label={t("deliveries.inbox.detailSent")} value={new Date(item.createdAt).toLocaleString(locale)} />
               <Detail label={t("deliveries.inbox.detailDeadline")} value={item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"} />
               <Detail label={t("deliveries.inbox.detailPublish")} value={item.publicationDate ? new Date(item.publicationDate).toLocaleDateString(locale) : "—"} />
@@ -1495,7 +1514,7 @@ function TableView({
               <td className="px-3 py-2">{item.creatorName}</td>
               <td className="px-3 py-2">{item.companyName}</td>
               <td className="px-3 py-2">{item.sourceName}</td>
-              <td className="px-3 py-2">{item.formatLabel}</td>
+              <td className="px-3 py-2">{inboxFormatLabel(item, t)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{new Date(item.createdAt).toLocaleString(locale)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"}</td>
               <td className="px-3 py-2">

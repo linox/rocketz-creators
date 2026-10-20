@@ -11,6 +11,8 @@ export function projectDemand(row: CampaignCreator, demand: CampaignDemand): Cam
     revision_details: demand.revision_details ?? null,
     pending_upload_id: demand.pending_upload_id ?? null,
     upload_progress: demand.upload_progress ?? null,
+    script_submitted_at: demand.script_submitted_at ?? null,
+    video_submitted_at: demand.video_submitted_at ?? null,
     content: demand.content ?? null,
     demands: undefined,
   };

@@ -37,6 +37,7 @@ import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { formatLocation, moneyCurrency } from "@/lib/geo";
+import { projectDemand } from "@/lib/campaign-demands";
 import { companyLandingPath } from "@/lib/landing-origin";
 import { usePrivacy } from "@/lib/privacy";
 import type { Campaign, Company, CompanyLandingPage, Creator, PlanningItem, RecurringContract } from "@/lib/types";
@@ -54,6 +55,7 @@ type PendingApproval = {
   creatorName: string;
   creatorPhoto?: string | null;
   participationId?: number;
+  demandId?: number;
   planningId?: number;
   href: string;
   demandStatus: string;
@@ -232,45 +234,63 @@ function CompanyDashboardInner() {
     for (const { campaign, row } of allApplications) {
       const name = row.creator?.artistic_name || row.creator?.full_name || "—";
       const staged = (campaign.approval_flow || "script_and_video") === "script_and_video";
-      const material = {
-        script: row.content?.script ?? null,
-        scriptFileUrl: row.content?.script_file_url ?? null,
-        scriptFileName: row.content?.script_file_name ?? null,
-        videoUrl: row.content?.video_url ?? null,
-        videoFileSize: row.content?.video_file_size ?? null,
-      };
-      if (row.script_status === "submitted" || row.script_status === "revision"
-        || (row.delivery_status === "sent" && (row.content?.script || row.content?.script_file_url) && !row.content?.video_url && row.script_status !== "approved")) {
-        items.push({
-          key: `script-${row.id}`,
-          source: "campaign",
-          stage: "script",
-          title: t("companyDash.overview.scriptTitle", { name: campaign.name }),
-          creatorName: name,
-          creatorPhoto: row.creator?.photo_url,
-          participationId: row.id,
-          href: `/campaigns/${campaign.id}?tab=entregas`,
-          demandStatus: row.delivery_status || campaign.status,
-          approvalStatus: row.script_status || "submitted",
-          ...material,
-        });
-      }
-      const scriptReady = staged ? row.script_status === "approved" : true;
-      if (scriptReady && (row.video_status === "submitted" || row.video_status === "revision"
-        || (row.delivery_status === "sent" && row.content?.video_url && row.video_status !== "approved"))) {
-        items.push({
-          key: `video-${row.id}`,
-          source: "campaign",
-          stage: "video",
-          title: t("companyDash.overview.videoTitle", { name: campaign.name }),
-          creatorName: name,
-          creatorPhoto: row.creator?.photo_url,
-          participationId: row.id,
-          href: `/campaigns/${campaign.id}?tab=entregas`,
-          demandStatus: row.delivery_status || campaign.status,
-          approvalStatus: row.video_status || row.delivery_status || "submitted",
-          ...material,
-        });
+      const subjects = row.demands?.length
+        ? row.demands.map((demand) => ({
+            row: projectDemand(row, demand),
+            demandId: demand.id,
+            label: t("campaignDetail.demandTitle", {
+              format: t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type }),
+              n: demand.position,
+              total: demand.total,
+            }),
+          }))
+        : [{ row, demandId: undefined as number | undefined, label: "" }];
+
+      for (const subject of subjects) {
+        const source = subject.row;
+        const material = {
+          script: source.content?.script ?? null,
+          scriptFileUrl: source.content?.script_file_url ?? null,
+          scriptFileName: source.content?.script_file_name ?? null,
+          videoUrl: source.content?.video_url ?? null,
+          videoFileSize: source.content?.video_file_size ?? null,
+        };
+        const piece = subject.label ? `${campaign.name} · ${subject.label}` : campaign.name;
+        if (source.script_status === "submitted" || source.script_status === "revision"
+          || (source.delivery_status === "sent" && (source.content?.script || source.content?.script_file_url) && !source.content?.video_url && source.script_status !== "approved")) {
+          items.push({
+            key: subject.demandId ? `script-${row.id}-${subject.demandId}` : `script-${row.id}`,
+            source: "campaign",
+            stage: "script",
+            title: t("companyDash.overview.scriptTitle", { name: piece }),
+            creatorName: name,
+            creatorPhoto: row.creator?.photo_url,
+            participationId: row.id,
+            demandId: subject.demandId,
+            href: "/campaign-deliveries",
+            demandStatus: source.delivery_status || campaign.status,
+            approvalStatus: source.script_status || "submitted",
+            ...material,
+          });
+        }
+        const scriptReady = staged ? source.script_status === "approved" : true;
+        if (scriptReady && (source.video_status === "submitted" || source.video_status === "revision"
+          || (source.delivery_status === "sent" && source.content?.video_url && source.video_status !== "approved"))) {
+          items.push({
+            key: subject.demandId ? `video-${row.id}-${subject.demandId}` : `video-${row.id}`,
+            source: "campaign",
+            stage: "video",
+            title: t("companyDash.overview.videoTitle", { name: piece }),
+            creatorName: name,
+            creatorPhoto: row.creator?.photo_url,
+            participationId: row.id,
+            demandId: subject.demandId,
+            href: "/campaign-deliveries",
+            demandStatus: source.delivery_status || campaign.status,
+            approvalStatus: source.video_status || source.delivery_status || "submitted",
+            ...material,
+          });
+        }
       }
     }
 
@@ -394,10 +414,12 @@ function CompanyDashboardInner() {
   async function approvePending(item: PendingApproval) {
     try {
       if (item.participationId) {
+        const demand = item.demandId ? { demand_id: item.demandId } : {};
         if (item.stage === "script") {
-          await api.updateParticipation(item.participationId, { script_status: "approved", script_feedback: "" });
+          await api.updateParticipation(item.participationId, { ...demand, script_status: "approved", script_feedback: "" });
         } else {
           await api.updateParticipation(item.participationId, {
+            ...demand,
             video_status: "approved",
             delivery_status: "approved",
             video_feedback: "",

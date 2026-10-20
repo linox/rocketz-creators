@@ -97,6 +97,8 @@ class CampaignCreatorResource extends JsonResource
                     'script_feedback' => $demand->script_feedback,
                     'video_feedback' => $demand->video_feedback,
                     'revision_details' => $demand->revision_details,
+                    'script_submitted_at' => $demand->script_submitted_at?->toIso8601String(),
+                    'video_submitted_at' => $demand->video_submitted_at?->toIso8601String(),
                     'pending_upload_id' => $demand->pending_upload_id,
                     'upload_progress' => $demand->upload_progress !== null ? (int) $demand->upload_progress : null,
                     'content' => $this->contentPayload($demand),

@@ -1,6 +1,7 @@
+import { projectDemand } from "@/lib/campaign-demands";
 import { calendarDateKey, effectivePlanningDueDate, isDateBeforeToday, isoToday } from "@/lib/delivery-date";
 import { namedPautaTitle } from "@/lib/pauta-briefing";
-import type { Campaign, CampaignCreator, PlanningItem, RecurringContract } from "@/lib/types";
+import type { Campaign, CampaignCreator, CampaignDemand, PlanningItem, RecurringContract } from "@/lib/types";
 
 export type DeliverySourceType = "campaign" | "recurring";
 export type DeliveryContentType =
@@ -81,6 +82,10 @@ export type DeliveryInboxItem = {
   revisions: DeliveryRevision[];
   archived?: boolean;
   participationId?: number | null;
+  /** Campaign demand approved from this inbox row. */
+  demandId?: number | null;
+  demandPosition?: number | null;
+  demandTotal?: number | null;
   planningItemId?: number | null;
   approvalStage?: DeliveryApprovalStage;
   /** 1 = script, 2 = video when staged approval flow */
@@ -276,16 +281,25 @@ function stageStatus(
   return viewedAt ? "pending_approval" : "unread";
 }
 
+type CampaignInboxDemand = {
+  id: number;
+  contentType: string;
+  position: number;
+  total: number;
+  pauta?: string | null;
+};
+
 function buildCampaignStageItem(
   campaign: Campaign,
   row: CampaignCreator,
   stage: "script" | "video",
   opts: { part: 1 | 2; total: 1 | 2 },
+  demand?: CampaignInboxDemand,
 ): DeliveryInboxItem {
-  const id = `campaign-${row.id}-${stage}`;
+  const id = demand ? `campaign-${row.id}-d${demand.id}-${stage}` : `campaign-${row.id}-${stage}`;
   const creatorName = creatorLabel(row.creator);
   const companyName = campaign.company?.name ?? "—";
-  const formatLabel = row.delivery_type?.trim() || "UGC";
+  const formatLabel = demand?.contentType || row.delivery_type?.trim() || "UGC";
   const isScript = stage === "script";
   const stageStatusValue = isScript ? row.script_status : row.video_status;
   const createdAt = submissionAt(
@@ -368,9 +382,9 @@ function buildCampaignStageItem(
 
   return {
     id,
-    title: campaign.name,
+    title: demand ? (demand.pauta?.trim() || "") : campaign.name,
     formatLabel,
-    formatKey: formatLabel.toLowerCase() || null,
+    formatKey: (demand?.contentType || formatLabel).toLowerCase() || null,
     creatorId: String(row.creator_id),
     creatorName,
     creatorPhoto: row.creator?.photo_url,
@@ -391,6 +405,9 @@ function buildCampaignStageItem(
     activity,
     revisions,
     participationId: row.id,
+    demandId: demand?.id ?? null,
+    demandPosition: demand?.position ?? null,
+    demandTotal: demand?.total ?? null,
     planningItemId: null,
     approvalStage: stage,
     stagePart: opts.part,
@@ -399,9 +416,31 @@ function buildCampaignStageItem(
   };
 }
 
+function campaignDemandIdentity(demand: CampaignDemand): CampaignInboxDemand {
+  return {
+    id: demand.id,
+    contentType: demand.content_type,
+    position: demand.position,
+    total: demand.total,
+    pauta: demand.pauta,
+  };
+}
+
 function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxItem[] {
   if (row.application_status && row.application_status !== "approved") return [];
 
+  if (row.demands?.length) {
+    return row.demands.flatMap((demand) => fromCampaignSubmission(
+      campaign,
+      { ...projectDemand(row, demand), delivery_type: demand.content_type },
+      campaignDemandIdentity(demand),
+    ));
+  }
+
+  return fromCampaignSubmission(campaign, row);
+}
+
+function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand?: CampaignInboxDemand): DeliveryInboxItem[] {
   const flow = campaignFlow(campaign);
   const items: DeliveryInboxItem[] = [];
   const staged = flow === "script_and_video";
@@ -411,7 +450,7 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   if (staged || scriptOnly) {
     const hasScriptMaterial = Boolean(row.content?.script?.trim() || row.content?.script_file_url);
     if (row.script_status === "submitted" || row.script_status === "revision" || (hasScriptMaterial && row.script_status !== "approved")) {
-      items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }));
+      items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }, demand));
     }
   }
 
@@ -423,14 +462,14 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
 
   if ((staged && scriptReady) || videoOnly || flow === "live_link" || (!staged && !scriptOnly)) {
     if (row.video_status === "submitted" || row.video_status === "revision" || (row.delivery_status === "sent" && row.content?.video_url && row.video_status !== "approved")) {
-      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
+      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
     } else if (
       row.video_status !== "approved"
       && row.delivery_status !== "approved"
       && row.delivery_status !== "published"
     ) {
       // Aguardando vídeo: aparece na inbox para concluir com link da publicação
-      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
+      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
     }
   }
 
@@ -443,9 +482,9 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
 
   if (fullyApproved && items.length === 0) {
     const doneStage = scriptOnly ? "script" : "video";
-    const done = buildCampaignStageItem(campaign, row, doneStage, { part: staged ? 2 : 1, total: staged ? 2 : 1 });
+    const done = buildCampaignStageItem(campaign, row, doneStage, { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand);
     done.status = "approved";
-    done.id = `campaign-${row.id}-done`;
+    done.id = demand ? `campaign-${row.id}-d${demand.id}-done` : `campaign-${row.id}-done`;
     items.push(done);
   }
 
