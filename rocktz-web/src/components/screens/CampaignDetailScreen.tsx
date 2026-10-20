@@ -71,6 +71,7 @@ import { CampaignAgeFields } from "@/components/CampaignAgeFields";
 import { CampaignApprovedLimitFields, parseApprovedLimit } from "@/components/CampaignApprovedLimitFields";
 import { CampaignShippingPanel } from "@/components/CampaignShippingPanel";
 import { CampaignLocationFields } from "@/components/CampaignLocationFields";
+import { RegionSelect } from "@/components/GeoSelectFields";
 import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
 import { CampaignDemandsPanel } from "@/components/CampaignDemandsPanel";
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
@@ -91,7 +92,7 @@ import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
 import { demandProgress } from "@/lib/campaign-demands";
-import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency } from "@/lib/geo";
+import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatShippingLines } from "@/lib/shipping-address";
 import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
@@ -551,6 +552,7 @@ function DetailInner() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [appFilter, setAppFilter] = useState<AppFilter>("all");
   const [appSearch, setAppSearch] = useState("");
+  const [appRegions, setAppRegions] = useState<string[]>([]);
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
   const [rejectModal, setRejectModal] = useState<{ row: CampaignCreator | null; reason: string }>({ row: null, reason: "" });
   const [feedback, setFeedback] = useState<Record<number, string>>({});
@@ -709,8 +711,6 @@ function DetailInner() {
   );
   const pendingApps = applications.filter((row) => row.application_status === "pending");
   const pendingAppCount = Math.max(pendingApps.length, campaign?.pending_applications ?? 0);
-  const approvedApps = applications.filter((row) => row.application_status === "approved");
-  const rejectedApps = applications.filter((row) => row.application_status === "rejected");
   const financeSummary = useMemo(() => {
     if (!campaign) return { total: 0, ready: 0, scheduled: 0, paid: 0, readyRows: [] as CampaignCreator[] };
     let total = 0;
@@ -812,16 +812,44 @@ function DetailInner() {
       });
   }, [displayCreators, creatorSearch, creatorFilter, locale, campaign]);
 
+  const appRegionCountry = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of applications) {
+      const country = normalizeCountry(row.creator?.country) || normalizeCountry(campaign?.company?.country) || DEFAULT_COUNTRY;
+      if (!hasRegions(country)) continue;
+      counts.set(country, (counts.get(country) ?? 0) + 1);
+    }
+    let best = normalizeCountry(campaign?.company?.country) || DEFAULT_COUNTRY;
+    if (!hasRegions(best)) best = DEFAULT_COUNTRY;
+    let bestCount = counts.get(best) ?? 0;
+    for (const [country, count] of counts) {
+      if (count > bestCount) {
+        best = country;
+        bestCount = count;
+      }
+    }
+    return hasRegions(best) ? best : DEFAULT_COUNTRY;
+  }, [applications, campaign]);
+
+  const regionApps = useMemo(() => {
+    if (appRegions.length === 0) return applications;
+    return applications.filter((row) => {
+      if (!appRegions.includes(normalizeRegion(row.creator?.state))) return false;
+      const country = normalizeCountry(row.creator?.country);
+      return !country || country === appRegionCountry;
+    });
+  }, [applications, appRegions, appRegionCountry]);
+
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
-    return applications.filter((row) => {
+    return regionApps.filter((row) => {
       if (appFilter !== "all" && row.application_status !== appFilter) return false;
       if (!term) return true;
       const niches = (row.creator?.categories ?? []).join(" ");
       const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
       return blob.includes(term);
     });
-  }, [applications, appFilter, appSearch]);
+  }, [regionApps, appFilter, appSearch]);
 
   const totalBudget = Number(campaign?.total_budget) || 0;
   const castingCost = campaign
@@ -2350,12 +2378,23 @@ function DetailInner() {
                   <Users size={18} className="text-brand-primary" /> {t("campaignDetail.appsTitle")}
                 </h3>
                 <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-xs font-black text-brand-primary">
-                  {applications.length === 1 ? t("campaignDetail.appsCount", { count: applications.length }) : t("campaignDetail.appsCountMany", { count: applications.length })}
+                  {regionApps.length === 1 ? t("campaignDetail.appsCount", { count: regionApps.length }) : t("campaignDetail.appsCountMany", { count: regionApps.length })}
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">{t("campaignDetail.appsHint")}</p>
             </div>
             <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <RegionSelect
+                multiple
+                theme="light"
+                country={appRegionCountry}
+                value={appRegions}
+                onChange={setAppRegions}
+                emptyLabel={t("campaignDetail.allRegions")}
+                placeholder={t("campaignDetail.regionPh")}
+                className="w-full sm:w-64"
+                triggerClassName="h-9 rounded-xl border-slate-200 bg-slate-50 px-3 text-xs font-medium"
+              />
               <div className="relative">
                 <Search size={14} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
                 <input value={appSearch} onChange={(event) => setAppSearch(event.target.value)} placeholder={t("campaignDetail.searchApps")} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-3.5 pl-9 text-xs font-medium focus:border-brand-primary focus:bg-white focus:outline-none sm:w-60" />
@@ -2375,22 +2414,22 @@ function DetailInner() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <button type="button" onClick={() => setAppFilter("all")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "all" ? "border-brand-primary bg-indigo-50/80 ring-2 ring-brand-primary/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.appsTotal")}</div>
-              <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{applications.length}</div>
+              <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{regionApps.length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("pending")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "pending" ? "border-amber-400 bg-amber-50/80 ring-2 ring-amber-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="flex items-center justify-between text-[10px] font-black tracking-wider text-amber-600 uppercase">
                 <span>{t("campaignDetail.appsPending")}</span>
-                {pendingApps.length > 0 ? <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" /> : null}
+                {regionApps.some((row) => row.application_status === "pending") ? <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" /> : null}
               </div>
-              <div className="mt-1 text-xl font-black text-amber-700 sm:text-2xl">{pendingApps.length}</div>
+              <div className="mt-1 text-xl font-black text-amber-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "pending").length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("approved")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "approved" ? "border-emerald-400 bg-emerald-50/80 ring-2 ring-emerald-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-emerald-600 uppercase">{t("campaignDetail.appsApproved")}</div>
-              <div className="mt-1 text-xl font-black text-emerald-700 sm:text-2xl">{approvedApps.length}</div>
+              <div className="mt-1 text-xl font-black text-emerald-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "approved").length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("rejected")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "rejected" ? "border-rose-400 bg-rose-50/80 ring-2 ring-rose-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-rose-600 uppercase">{t("campaignDetail.appsRejected")}</div>
-              <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{rejectedApps.length}</div>
+              <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "rejected").length}</div>
             </button>
           </div>
           {filteredApps.length === 0 ? (
@@ -2405,11 +2444,11 @@ function DetailInner() {
                       : t("campaignDetail.emptyAll")}
               </h4>
               <p className="max-w-md text-xs text-slate-500">
-                {appSearch ? t("campaignDetail.emptySearch", { query: appSearch }) : t("campaignDetail.emptyHint")}
+                {appSearch.trim() || appRegions.length > 0 ? t("campaignDetail.emptyFilters") : t("campaignDetail.emptyHint")}
               </p>
-              {appSearch ? (
-                <button type="button" onClick={() => setAppSearch("")} className="cursor-pointer rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
-                  {t("campaignDetail.clearSearch")}
+              {appSearch.trim() || appRegions.length > 0 ? (
+                <button type="button" onClick={() => { setAppSearch(""); setAppRegions([]); }} className="cursor-pointer rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
+                  {t("campaignDetail.clearFilters")}
                 </button>
               ) : null}
             </div>
