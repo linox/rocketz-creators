@@ -33,10 +33,12 @@ class MediaUrlTest extends TestCase
             'https://api.creatorz.digital/stream/avatars/banner.jpg',
             MediaUrl::publicAbsolute('https://media.creatorz.digital/avatars/banner.jpg'),
         );
-        $this->assertSame(
-            'https://api.creatorz.digital/downloads/documents/document-roteiro.pdf',
-            MediaUrl::publicAbsolute('http://localhost:8000/downloads/documents/document-roteiro.pdf'),
+        $document = MediaUrl::publicAbsolute('http://localhost:8000/downloads/documents/document-roteiro.pdf');
+        $this->assertStringStartsWith(
+            'https://api.creatorz.digital/downloads/documents/document-roteiro.pdf?',
+            $document,
         );
+        $this->assertStringContainsString('signature=', (string) $document);
         $this->assertSame(
             'https://cdn.example.com/banner.jpg',
             MediaUrl::publicAbsolute('https://cdn.example.com/banner.jpg'),

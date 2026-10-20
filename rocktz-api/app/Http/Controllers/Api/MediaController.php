@@ -313,6 +313,11 @@ class MediaController extends Controller
         return response()->json(['message' => __('auth.upload_cancelled')]);
     }
 
+    public function downloadDocument(string $filename): StreamedResponse|RedirectResponse
+    {
+        return $this->download('documents', $filename);
+    }
+
     public function download(string $folder, string $filename): StreamedResponse|RedirectResponse
     {
         abort_unless(in_array($folder, ['portfolio', 'avatars', 'documents'], true), 404);

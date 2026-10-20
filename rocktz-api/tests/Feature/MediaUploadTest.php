@@ -9,6 +9,7 @@ use App\Models\CampaignCreator;
 use App\Models\Creator;
 use App\Models\User;
 use App\Services\R2MultipartUploader;
+use App\Support\MediaUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -143,6 +144,9 @@ class MediaUploadTest extends TestCase
         Storage::disk('uploads')->put('documents/document-roteiro.pdf', '%PDF-1.4');
 
         $this->get('/downloads/documents/document-roteiro.pdf')
+            ->assertForbidden();
+
+        $this->get(MediaUrl::download('documents/document-roteiro.pdf'))
             ->assertOk();
     }
 

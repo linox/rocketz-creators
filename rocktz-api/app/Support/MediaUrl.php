@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Throwable;
 
 class MediaUrl
@@ -14,6 +15,18 @@ class MediaUrl
 
     public static function download(string $path): string
     {
+        $path = ltrim($path, '/');
+        if (preg_match('#^documents/([A-Za-z0-9._-]+)$#', $path, $matches) === 1) {
+            $relative = URL::temporarySignedRoute(
+                'media.documents.download',
+                now()->addHours(max(1, (int) config('media.r2_presign_hours', 6))),
+                ['filename' => $matches[1]],
+                false,
+            );
+
+            return rtrim((string) config('app.url'), '/').$relative;
+        }
+
         return self::appPath('downloads', $path);
     }
 
