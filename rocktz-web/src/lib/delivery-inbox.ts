@@ -432,7 +432,12 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   if (row.demands?.length) {
     return row.demands.flatMap((demand) => fromCampaignSubmission(
       campaign,
-      { ...projectDemand(row, demand), delivery_type: demand.content_type },
+      {
+        ...projectDemand(row, demand),
+        creator: row.creator,
+        creator_id: row.creator_id,
+        delivery_type: demand.content_type,
+      },
       campaignDemandIdentity(demand),
     ));
   }

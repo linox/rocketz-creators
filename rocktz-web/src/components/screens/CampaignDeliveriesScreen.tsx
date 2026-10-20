@@ -635,6 +635,15 @@ function DeliveriesInboxInner() {
     overdue: countByFolder(companyScoped, "overdue"),
   };
 
+  const pendingBySource = useMemo(() => {
+    const waiting = companyScoped.filter((item) => matchesFolder(item, "pending_approval"));
+    return {
+      all: waiting.length,
+      campaign: waiting.filter((item) => item.sourceType === "campaign").length,
+      recurring: waiting.filter((item) => item.sourceType === "recurring").length,
+    };
+  }, [companyScoped]);
+
   const visibleCompanies = companiesExpanded ? companies : companies.slice(0, 4);
   const extraFiltersActive = sourceId !== null;
   const activeExtraCount = sourceId !== null ? 1 : 0;
@@ -751,6 +760,8 @@ function DeliveriesInboxInner() {
             <Chip
               key={key}
               label={label}
+              count={pendingBySource[key]}
+              notify
               active={sourceFilter === key}
               onClick={() => { setSourceFilter(key); setSourceId(null); }}
             />
@@ -950,25 +961,38 @@ function DeliveriesInboxInner() {
 function Chip({
   label,
   count,
+  notify = false,
   active,
   onClick,
 }: {
   label: string;
   count?: number;
+  notify?: boolean;
   active?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation("app");
+  const showCount = typeof count === "number" && (notify ? count > 0 : true);
   return (
     <button
       type="button"
       onClick={onClick}
+      title={notify && count ? t("deliveries.inbox.pendingNotify", { count }) : undefined}
       className={cn(
         "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap transition",
         active ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-white",
       )}
     >
       <span className="truncate">{label}</span>
-      {typeof count === "number" ? <span className="shrink-0 text-[10px] font-bold text-slate-400">{count}</span> : null}
+      {showCount ? (
+        <span className={cn(
+          "shrink-0 font-black",
+          notify ? "rounded-full bg-amber-500 px-1.5 text-[9px] text-white" : "text-[10px] text-slate-400",
+        )}
+        >
+          {count}
+        </span>
+      ) : null}
     </button>
   );
 }

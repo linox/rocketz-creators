@@ -1216,6 +1216,7 @@
       "typeCampaign": "Campanhas pontuais",
       "typeRecurring": "Trabalhos recorrentes",
       "fromCampaign": "Campanha · {{name}}",
+      "pendingNotify": "{{count}} aguardando aprovação",
       "companies": "Empresas",
       "selectCompany": "Empresa",
       "companyPh": "Selecione a empresa",

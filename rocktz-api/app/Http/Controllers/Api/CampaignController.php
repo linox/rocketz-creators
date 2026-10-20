@@ -65,7 +65,7 @@ class CampaignController extends Controller
             $query->with([
                 'briefing',
                 'campaignCreators' => function ($q) use ($includeContent, $creatorId) {
-                    $q->where('creator_id', $creatorId);
+                    $q->where('creator_id', $creatorId)->with('creator');
                     if ($includeContent) {
                         $q->with(['content', 'demands']);
                     }
@@ -92,8 +92,10 @@ class CampaignController extends Controller
 
         $campaigns = $query->latest()->get();
         if ($includeContent) {
+            $participations = $campaigns->flatMap(fn (Campaign $campaign) => $campaign->campaignCreators);
+            $participations->loadMissing('creator');
             $this->demands->syncCampaigns($campaigns);
-            $campaigns->load(['campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
+            $participations->load(['content', 'demands']);
         }
 
         return response()->json(['data' => CampaignResource::collection($campaigns)]);

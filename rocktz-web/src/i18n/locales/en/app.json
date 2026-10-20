@@ -1216,6 +1216,7 @@
       "typeCampaign": "One-off campaigns",
       "typeRecurring": "Recurring work",
       "fromCampaign": "Campaign · {{name}}",
+      "pendingNotify": "{{count}} awaiting approval",
       "companies": "Companies",
       "selectCompany": "Company",
       "companyPh": "Select the company",
