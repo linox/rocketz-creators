@@ -354,6 +354,7 @@ export type CampaignCreator = {
   payment_status?: string | null;
   payment_date?: string | null;
   application_status: string | null;
+  favorited?: boolean;
   notes: string | null;
   additional_briefing?: string | null;
   rejection_reason: string | null;

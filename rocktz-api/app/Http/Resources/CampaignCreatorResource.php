@@ -73,6 +73,10 @@ class CampaignCreatorResource extends JsonResource
             'notes' => $this->notes,
             'additional_briefing' => $this->additional_briefing,
             'application_status' => $this->application_status?->value,
+            'favorited' => $this->when(
+                in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true),
+                (bool) $this->favorited,
+            ),
             'rejection_reason' => $this->rejection_reason,
             'revision_details' => $this->revision_details,
             'script_status' => $this->script_status?->value,

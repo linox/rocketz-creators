@@ -423,6 +423,7 @@ class CampaignController extends Controller
     {
         $data = $request->validate([
             'application_status' => ['nullable', Rule::enum(ApplicationStatus::class)],
+            'favorited' => ['sometimes', 'boolean'],
             'delivery_status' => ['nullable', Rule::enum(DeliveryStatus::class)],
             'script_status' => ['nullable', Rule::enum(StageApprovalStatus::class)],
             'video_status' => ['nullable', Rule::enum(StageApprovalStatus::class)],

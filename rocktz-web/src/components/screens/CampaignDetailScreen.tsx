@@ -32,6 +32,7 @@ import {
   Eye,
   FileText,
   Gift,
+  Heart,
   Handshake,
   History,
   Image as ImageIcon,
@@ -553,6 +554,7 @@ function DetailInner() {
   const [appFilter, setAppFilter] = useState<AppFilter>("all");
   const [appSearch, setAppSearch] = useState("");
   const [appRegions, setAppRegions] = useState<string[]>([]);
+  const [appFavoritesOnly, setAppFavoritesOnly] = useState(false);
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
   const [rejectModal, setRejectModal] = useState<{ row: CampaignCreator | null; reason: string }>({ row: null, reason: "" });
   const [feedback, setFeedback] = useState<Record<number, string>>({});
@@ -840,16 +842,21 @@ function DetailInner() {
     });
   }, [applications, appRegions, appRegionCountry]);
 
+  const reviewApps = useMemo(
+    () => (appFavoritesOnly ? regionApps.filter((row) => row.favorited) : regionApps),
+    [regionApps, appFavoritesOnly],
+  );
+
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
-    return regionApps.filter((row) => {
+    return reviewApps.filter((row) => {
       if (appFilter !== "all" && row.application_status !== appFilter) return false;
       if (!term) return true;
       const niches = (row.creator?.categories ?? []).join(" ");
       const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
       return blob.includes(term);
     });
-  }, [regionApps, appFilter, appSearch]);
+  }, [reviewApps, appFilter, appSearch]);
 
   const totalBudget = Number(campaign?.total_budget) || 0;
   const castingCost = campaign
@@ -2378,12 +2385,23 @@ function DetailInner() {
                   <Users size={18} className="text-brand-primary" /> {t("campaignDetail.appsTitle")}
                 </h3>
                 <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-xs font-black text-brand-primary">
-                  {regionApps.length === 1 ? t("campaignDetail.appsCount", { count: regionApps.length }) : t("campaignDetail.appsCountMany", { count: regionApps.length })}
+                  {reviewApps.length === 1 ? t("campaignDetail.appsCount", { count: reviewApps.length }) : t("campaignDetail.appsCountMany", { count: reviewApps.length })}
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">{t("campaignDetail.appsHint")}</p>
             </div>
             <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => setAppFavoritesOnly((current) => !current)}
+                className={cn(
+                  "flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition",
+                  appFavoritesOnly ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-rose-200 hover:text-rose-700",
+                )}
+              >
+                <Heart size={13} className={appFavoritesOnly ? "fill-current" : ""} />
+                {t("campaignDetail.favoritesFilter", { count: regionApps.filter((row) => row.favorited).length })}
+              </button>
               <RegionSelect
                 multiple
                 theme="light"
@@ -2414,22 +2432,22 @@ function DetailInner() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <button type="button" onClick={() => setAppFilter("all")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "all" ? "border-brand-primary bg-indigo-50/80 ring-2 ring-brand-primary/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.appsTotal")}</div>
-              <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{regionApps.length}</div>
+              <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{reviewApps.length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("pending")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "pending" ? "border-amber-400 bg-amber-50/80 ring-2 ring-amber-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="flex items-center justify-between text-[10px] font-black tracking-wider text-amber-600 uppercase">
                 <span>{t("campaignDetail.appsPending")}</span>
-                {regionApps.some((row) => row.application_status === "pending") ? <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" /> : null}
+                {reviewApps.some((row) => row.application_status === "pending") ? <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" /> : null}
               </div>
-              <div className="mt-1 text-xl font-black text-amber-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "pending").length}</div>
+              <div className="mt-1 text-xl font-black text-amber-700 sm:text-2xl">{reviewApps.filter((row) => row.application_status === "pending").length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("approved")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "approved" ? "border-emerald-400 bg-emerald-50/80 ring-2 ring-emerald-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-emerald-600 uppercase">{t("campaignDetail.appsApproved")}</div>
-              <div className="mt-1 text-xl font-black text-emerald-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "approved").length}</div>
+              <div className="mt-1 text-xl font-black text-emerald-700 sm:text-2xl">{reviewApps.filter((row) => row.application_status === "approved").length}</div>
             </button>
             <button type="button" onClick={() => setAppFilter("rejected")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "rejected" ? "border-rose-400 bg-rose-50/80 ring-2 ring-rose-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-rose-600 uppercase">{t("campaignDetail.appsRejected")}</div>
-              <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{regionApps.filter((row) => row.application_status === "rejected").length}</div>
+              <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{reviewApps.filter((row) => row.application_status === "rejected").length}</div>
             </button>
           </div>
           {filteredApps.length === 0 ? (
@@ -2444,10 +2462,10 @@ function DetailInner() {
                       : t("campaignDetail.emptyAll")}
               </h4>
               <p className="max-w-md text-xs text-slate-500">
-                {appSearch.trim() || appRegions.length > 0 ? t("campaignDetail.emptyFilters") : t("campaignDetail.emptyHint")}
+                {appSearch.trim() || appRegions.length > 0 || appFavoritesOnly ? t("campaignDetail.emptyFilters") : t("campaignDetail.emptyHint")}
               </p>
-              {appSearch.trim() || appRegions.length > 0 ? (
-                <button type="button" onClick={() => { setAppSearch(""); setAppRegions([]); }} className="cursor-pointer rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
+              {appSearch.trim() || appRegions.length > 0 || appFavoritesOnly ? (
+                <button type="button" onClick={() => { setAppSearch(""); setAppRegions([]); setAppFavoritesOnly(false); }} className="cursor-pointer rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
                   {t("campaignDetail.clearFilters")}
                 </button>
               ) : null}
@@ -2498,6 +2516,11 @@ function DetailInner() {
                             {isPending ? <Clock size={11} /> : isAppApproved ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
                             {isPending ? t("campaignDetail.pendingApproval") : isAppApproved ? t("campaignDetail.approvedCasting") : t("campaignDetail.rejectedApp")}
                           </span>
+                          {row.favorited ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black tracking-wider text-rose-700 uppercase">
+                              <Heart size={11} className="fill-current" /> {t("campaignDetail.favorited")}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
                           {row.creator?.full_name ? <span>{row.creator.full_name}</span> : null}
@@ -2552,6 +2575,21 @@ function DetailInner() {
                       </div>
                       )}
                       <div className="flex flex-wrap items-center gap-2">
+                        {canManage ? (
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            title={row.favorited ? t("campaignDetail.unfavorite") : t("campaignDetail.favorite")}
+                            onClick={() => void patch(row, { favorited: !row.favorited })}
+                            className={cn(
+                              "flex cursor-pointer items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold transition disabled:opacity-50",
+                              row.favorited ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:text-rose-700",
+                            )}
+                          >
+                            <Heart size={13} className={row.favorited ? "fill-current" : ""} />
+                            <span className="hidden sm:inline">{row.favorited ? t("campaignDetail.favorited") : t("campaignDetail.favorite")}</span>
+                          </button>
+                        ) : null}
                         {isAdmin && waUrl ? (
                           <a href={waUrl} target="_blank" rel="noreferrer" title={t("campaignDetail.whatsappTitle")} className="flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
                             <MessageCircle size={15} />
