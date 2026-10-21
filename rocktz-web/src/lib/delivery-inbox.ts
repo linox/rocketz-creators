@@ -167,8 +167,8 @@ function applyLocalMeta(items: DeliveryInboxItem[]): DeliveryInboxItem[] {
       status = "archived";
     } else if (!viewedAt && (status === "pending_approval" || status === "new_version" || status === "unread")) {
       status = "unread";
-    } else if (viewedAt && status === "unread") {
-      status = item.status === "new_version" ? "new_version" : "pending_approval";
+    } else if (viewedAt && status === "unread" && inboxHasMaterial(item)) {
+      status = "pending_approval";
     }
     return { ...item, viewedAt, archived: isArchived, status };
   });
@@ -731,20 +731,39 @@ export function isUnread(item: DeliveryInboxItem) {
   return !item.viewedAt || item.status === "unread";
 }
 
+/** Creator actually sent a file, script, caption or link. The demand brief is not material. */
+export function inboxHasMaterial(item: Pick<DeliveryInboxItem, "versions">) {
+  return item.versions.some((version) => Boolean(
+    version.fileUrl
+    || version.scriptText?.trim()
+    || version.linkUrl
+    || version.captionText?.trim()
+    || version.imageUrls?.length,
+  ));
+}
+
+/**
+ * Opening a demand that is still waiting for the creator must not look like an approval.
+ * Only a real submission moves from "nova" to "aguardando aprovação".
+ */
+export function statusAfterView(item: DeliveryInboxItem): DeliveryStatus {
+  if (item.status !== "unread" || !inboxHasMaterial(item)) return item.status;
+  return "pending_approval";
+}
+
 /** Still inside the delivery date and nothing was sent yet. */
 export function isOnSchedule(item: DeliveryInboxItem) {
   if (item.archived || item.status === "approved" || item.status === "overdue" || item.status === "revision_requested") return false;
-  if (item.status === "pending_approval" || item.status === "new_version") return false;
-  const hasMaterial = item.versions.some((version) => Boolean(
-    version.fileUrl || version.scriptText?.trim() || version.linkUrl || version.captionText?.trim(),
-  ));
-  if (hasMaterial) return false;
-  return !isDateBeforeToday(item.approvalDeadline || item.publicationDate);
+  if (!inboxHasMaterial(item)) {
+    return !isDateBeforeToday(item.approvalDeadline || item.publicationDate);
+  }
+  return false;
 }
 
 /** Opened (or overdue) and still waiting for approve/revision. */
 export function needsAction(item: DeliveryInboxItem) {
   if (item.archived) return false;
+  if (!inboxHasMaterial(item)) return item.status === "overdue";
   return ["pending_approval", "new_version", "overdue"].includes(item.status);
 }
 

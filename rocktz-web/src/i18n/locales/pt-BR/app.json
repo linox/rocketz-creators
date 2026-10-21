@@ -1239,6 +1239,7 @@
       "todayShort": "Hoje",
       "yesterdayShort": "Ontem",
       "group": {
+        "waiting": "Aguardando envio",
         "today": "Hoje",
         "yesterday": "Ontem",
         "week": "Esta semana",
@@ -1288,6 +1289,7 @@
       "publishedLinkRequiredTitle": "Link obrigatório",
       "publishedLinkRequiredText": "Informe o link da publicação para concluir.",
       "publishedLinkInvalid": "Informe um link válido começando com http:// ou https://",
+      "submissionEmptyTitle": "A criadora ainda não enviou o conteúdo",
       "awaitingVideoHint": "Ainda sem vídeo enviado para aprovação. Você pode concluir colando o link da publicação acima.",
       "approveConfirmTitle": "Aprovar entrega?",
       "approveConfirmText": "A versão atual será marcada como aprovada.",

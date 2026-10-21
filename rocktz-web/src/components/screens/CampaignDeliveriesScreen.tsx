@@ -41,6 +41,7 @@ import {
   dateGroupKey,
   formatInboxTime,
   formatInboxPeriod,
+  inboxHasMaterial,
   isOnSchedule,
   isPlaceholderSubmissionTime,
   isUnread,
@@ -48,6 +49,7 @@ import {
   matchesFolder,
   persistDeliveryArchived,
   persistDeliveryViewed,
+  statusAfterView,
   type DeliveryInboxItem,
   type DeliveryStatus,
   type DeliveryVersion,
@@ -401,7 +403,7 @@ function DeliveriesInboxInner() {
       patchItem(item.id, (row) => ({
         ...row,
         viewedAt: now,
-        status: row.status === "unread" ? "pending_approval" : row.status,
+        status: statusAfterView(row),
         activity: [
           ...row.activity,
           {
@@ -558,7 +560,7 @@ function DeliveriesInboxInner() {
       return {
         ...item,
         viewedAt: item.viewedAt ?? now,
-        status: item.status === "unread" ? "pending_approval" : item.status,
+        status: statusAfterView(item),
       };
     }));
     setSelectedIds([]);
@@ -574,17 +576,22 @@ function DeliveriesInboxInner() {
   }
 
   async function bulkApprove() {
+    const targets = items.filter((item) => selectedIds.includes(item.id) && inboxHasMaterial(item));
+    if (!targets.length) {
+      await alertWarning(t("deliveries.inbox.submissionEmptyTitle"), t("deliveries.inbox.awaitingVideoHint"));
+      return;
+    }
     if (!(await alertConfirm(t("deliveries.inbox.approveConfirmTitle"), t("deliveries.inbox.bulkApproveText"), t("deliveries.inbox.approve")))) return;
     if (busy) return;
     setBusy(true);
     const now = new Date().toISOString();
-    const targets = items.filter((item) => selectedIds.includes(item.id));
+    const targetIds = new Set(targets.map((item) => item.id));
     try {
       for (const item of targets) {
         await approveOnApi(item);
       }
       setItems((prev) => prev.map((item) => (
-        selectedIds.includes(item.id)
+        targetIds.has(item.id)
           ? {
               ...item,
               status: "approved",
@@ -613,13 +620,19 @@ function DeliveriesInboxInner() {
   }
 
   const grouped = useMemo(() => {
-    const groups: Record<"today" | "yesterday" | "week" | "older", DeliveryInboxItem[]> = {
+    const groups: Record<"waiting" | "today" | "yesterday" | "week" | "older", DeliveryInboxItem[]> = {
+      waiting: [],
       today: [],
       yesterday: [],
       week: [],
       older: [],
     };
-    for (const item of filtered) groups[dateGroupKey(item.createdAt)].push(item);
+    for (const item of filtered) {
+      const group = isPlaceholderSubmissionTime(item.createdAt) && !inboxHasMaterial(item)
+        ? "waiting"
+        : dateGroupKey(item.createdAt);
+      groups[group].push(item);
+    }
     return groups;
   }, [filtered]);
 
@@ -890,7 +903,7 @@ function DeliveriesInboxInner() {
                   <p className="m-0 text-xs text-slate-400">{t("deliveries.inbox.emptyHint")}</p>
                 </div>
               ) : (
-                (["today", "yesterday", "week", "older"] as const).map((group) => (
+                (["waiting", "today", "yesterday", "week", "older"] as const).map((group) => (
                   grouped[group].length ? (
                     <div key={group}>
                       <div className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase backdrop-blur">
@@ -1106,7 +1119,7 @@ function InboxRow({
         <p className={cn("m-0 truncate text-[13px] text-slate-900", unread || actionNeeded ? "font-extrabold" : "font-semibold")}>{heading}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
           {stage ? <span className="font-bold text-indigo-700">{stage}</span> : null}
-          <span className="font-semibold text-slate-500">V{item.currentVersion}</span>
+          {inboxHasMaterial(item) ? <span className="font-semibold text-slate-500">V{item.currentVersion}</span> : null}
           <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
             {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
           </span>
@@ -1171,7 +1184,8 @@ function ReadingPane({
   const driveHref = isGoogleDriveUrl(version.fileUrl) ? safeHttpUrl(version.fileUrl) : undefined;
   const isScriptDoc = item.contentType === "script" || item.contentType === "caption";
   const canWatchVideo = Boolean(version.fileUrl) && !driveHref && !isScriptDoc && (item.contentType === "video" || item.contentType === "story");
-  const awaitingVideoWithoutFile = item.approvalStage === "video" && !version.fileUrl && !version.linkUrl;
+  const hasMaterial = inboxHasMaterial(item);
+  const awaitingVideoWithoutFile = !hasMaterial;
   const heading = inboxHeading(item, t);
   const stage = inboxStageLabel(item, t);
   const period = formatInboxPeriod(item.period, locale);
@@ -1207,7 +1221,7 @@ function ReadingPane({
                 </span>
               ) : null}
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                {formatName} · V{item.currentVersion}
+                {hasMaterial ? `${formatName} · V${item.currentVersion}` : formatName}
               </span>
               <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
                 {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
@@ -1217,14 +1231,16 @@ function ReadingPane({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {item.status !== "approved" ? (
+          {hasMaterial && item.status !== "approved" ? (
             <button type="button" onClick={onApprove} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md hover:bg-emerald-700">
               <Check size={14} /> {item.approvalStage === "script" ? t("deliveries.inbox.approveScript") : t("deliveries.inbox.approve")}
             </button>
           ) : null}
-          <button type="button" onClick={onToggleRevision} className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-extrabold text-purple-700 hover:bg-purple-100">
-            <MessageSquare size={14} /> {t("deliveries.inbox.requestRevision")}
-          </button>
+          {hasMaterial ? (
+            <button type="button" onClick={onToggleRevision} className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-extrabold text-purple-700 hover:bg-purple-100">
+              <MessageSquare size={14} /> {t("deliveries.inbox.requestRevision")}
+            </button>
+          ) : null}
           <button type="button" onClick={() => document.getElementById("delivery-comment")?.focus()} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">
             <MessageSquare size={14} /> {t("deliveries.inbox.comment")}
           </button>
@@ -1234,6 +1250,13 @@ function ReadingPane({
             </button>
           ) : null}
         </div>
+
+        {awaitingVideoWithoutFile ? (
+          <div className="mt-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/80 px-4 py-3">
+            <p className="m-0 text-[11px] font-extrabold tracking-wider text-amber-900 uppercase">{t("deliveries.inbox.submissionEmptyTitle")}</p>
+            <p className="m-0 mt-1 text-[12px] font-medium leading-relaxed text-amber-900">{t("deliveries.inbox.awaitingVideoHint")}</p>
+          </div>
+        ) : null}
 
         {item.status !== "approved" ? (
           <div className="mt-3 flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
@@ -1301,11 +1324,8 @@ function ReadingPane({
             <p className="m-0 mt-2 text-[11px] font-medium text-slate-500">{t("deliveries.inbox.changeHistoryEmpty")}</p>
           )}
         </div>
-        {awaitingVideoWithoutFile ? (
-          <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-3 text-[12px] font-medium text-amber-900">
-            {t("deliveries.inbox.awaitingVideoHint")}
-          </div>
-        ) : null}
+        {awaitingVideoWithoutFile ? null : (
+        <>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           {canWatchVideo && version.fileUrl ? (
             <button
@@ -1436,6 +1456,8 @@ function ReadingPane({
             ))}
           </div>
         </div>
+        </>
+        )}
 
         <div>
           <h3 className="m-0 text-xs font-extrabold tracking-wider text-slate-500 uppercase">{t("deliveries.inbox.activity")}</h3>

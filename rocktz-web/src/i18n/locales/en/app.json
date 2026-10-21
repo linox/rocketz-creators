@@ -1239,6 +1239,7 @@
       "todayShort": "Today",
       "yesterdayShort": "Yesterday",
       "group": {
+        "waiting": "Waiting for submission",
         "today": "Today",
         "yesterday": "Yesterday",
         "week": "This week",
@@ -1288,6 +1289,7 @@
       "publishedLinkRequiredTitle": "Link required",
       "publishedLinkRequiredText": "Enter the publication link to complete.",
       "publishedLinkInvalid": "Enter a valid link starting with http:// or https://",
+      "submissionEmptyTitle": "The creator has not submitted content yet",
       "awaitingVideoHint": "No video submitted for approval yet. You can complete by pasting the publication link above.",
       "approveConfirmTitle": "Approve delivery?",
       "approveConfirmText": "The current version will be marked as approved.",
