@@ -10,7 +10,7 @@ import { userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { moneyCurrency } from "@/lib/geo";
-import type { PlanningItem, PostMetricsSyncProgress, PostMetricsSyncResult, RecurringContract } from "@/lib/types";
+import type { PlanningItem, PostMetricsSyncItemStatus, PostMetricsSyncResult, RecurringContract } from "@/lib/types";
 
 type Props = {
   contract: RecurringContract;
@@ -30,36 +30,22 @@ function networkHint(contentType: string): string {
   return "";
 }
 
-function statusFromJob(
-  job: { status?: string; message?: string; progress?: PostMetricsSyncProgress | null; sync?: Record<string, PostMetricsSyncResult> },
-  scopeLabel: string,
-): PostMetricsSyncStatusView {
-  const progressItems = job.progress?.items ?? [];
-  const syncItems = Object.entries(job.sync ?? {}).map(([id, row]) => ({
-    id: Number(id),
-    status: (row.ok ? "done" : "failed") as "done" | "failed",
-    message: row.message ?? null,
-  }));
-  const items = progressItems.length > 0 ? progressItems : syncItems;
-  const failed = items.filter((item) => item.status === "failed").length;
-  const phase: PostMetricsSyncStatusView["phase"] =
-    job.status === "failed"
-      ? "failed"
-      : job.status === "done"
-        ? failed > 0
-          ? "partial"
-          : "done"
-        : job.status === "queued"
-          ? "queued"
-          : "running";
+function syncEntry(sync: Record<string, PostMetricsSyncResult> | undefined, id: number): PostMetricsSyncResult | undefined {
+  if (!sync) return undefined;
+  return sync[id] ?? sync[String(id)];
+}
 
+function patchSyncItem(
+  status: PostMetricsSyncStatusView,
+  id: number,
+  itemStatus: PostMetricsSyncItemStatus,
+  message?: string | null,
+): PostMetricsSyncStatusView {
+  const items = status.items.map((item) => (item.id === id ? { ...item, status: itemStatus, message: message ?? null } : item));
   return {
-    phase,
-    scopeLabel,
-    total: job.progress?.total ?? items.length,
-    processed: job.progress?.processed ?? items.filter((item) => item.status === "done" || item.status === "failed").length,
-    message: job.message ?? items.find((item) => item.message)?.message ?? null,
+    ...status,
     items,
+    processed: items.filter((item) => item.status === "done" || item.status === "failed").length,
   };
 }
 
@@ -120,63 +106,72 @@ export function RecurringMetricsPanel({ contract, items, month, onMonthChange, l
     }
 
     const targets = rows.filter((row) => row.published_link?.trim() && (itemId == null || row.id === itemId));
-    setSyncStatus({
-      phase: "queued",
+    let status: PostMetricsSyncStatusView = {
+      phase: "running",
       scopeLabel: monthLabel,
       total: targets.length,
       processed: 0,
       items: targets.map((row) => ({ id: row.id, status: "pending" })),
-    });
+    };
+    setSyncStatus(status);
     setSyncing(itemId ?? "all");
+    const failures: string[] = [];
+    let aborted: unknown = null;
+
     try {
-      const response = await api.syncRecurringPostMetrics(
-        contract.id,
-        {
-          month,
-          content_planning_item_id: itemId,
-        },
-        (job) =>
-          setSyncStatus((current) => {
-            const next = statusFromJob(job, monthLabel);
-            if (next.items.length === 0 && current?.items.length) {
-              return { ...current, phase: next.phase, message: next.message ?? current.message };
-            }
-            return next;
-          }),
-      );
-      setSyncStatus(statusFromJob(response, monthLabel));
-      if (!response.data) {
-        return;
-      }
-      onContract(response.data);
-      const failed = Object.values(response.sync ?? {}).filter((row) => !row.ok);
-      if (failed.length > 0) {
-        await alertWarning(
-          t("campaignDetail.metricsPartialTitle"),
-          failed[0]?.message || t("campaignDetail.metricsPartialHint", { count: failed.length }),
-        );
-      } else {
-        await alertSuccess(t("campaignDetail.metricsUpdated"));
-      }
-    } catch (err) {
-      const payload = err instanceof ApiError ? (err.payload as { progress?: PostMetricsSyncProgress | null; message?: string } | undefined) : undefined;
-      setSyncStatus((current) => {
-        const next = statusFromJob(
-          {
-            status: "failed",
-            message: err instanceof ApiError ? err.message : undefined,
-            progress: payload?.progress,
-          },
-          monthLabel,
-        );
-        if (next.items.length === 0 && current?.items.length) {
-          return { ...current, phase: "failed", message: next.message ?? current.message };
+      for (const target of targets) {
+        status = patchSyncItem(status, target.id, "running");
+        setSyncStatus(status);
+
+        try {
+          const response = await api.syncRecurringPostMetrics(contract.id, {
+            month,
+            content_planning_item_id: target.id,
+          });
+          if (response.data) onContract(response.data);
+          const entry = syncEntry(response.sync, target.id);
+          if (entry && !entry.ok) {
+            const message = entry.message || t("campaignDetail.metricsPartialHint", { count: 1 });
+            failures.push(message);
+            status = patchSyncItem(status, target.id, "failed", message);
+          } else {
+            status = patchSyncItem(status, target.id, "done");
+          }
+        } catch (err) {
+          const message = err instanceof ApiError ? err.message : t("campaignDetail.metricsSyncFailed");
+          failures.push(message);
+          status = patchSyncItem(status, target.id, "failed", message);
+          const stop = !(err instanceof ApiError) || (err.status !== 422 && err.status !== 408);
+          if (stop) {
+            aborted = err;
+            break;
+          }
         }
-        return next;
-      });
-      await alertApiError(err);
+
+        setSyncStatus(status);
+      }
     } finally {
       setSyncing(null);
+    }
+
+    const failedCount = status.items.filter((item) => item.status === "failed").length;
+    const doneCount = status.items.filter((item) => item.status === "done").length;
+    status = {
+      ...status,
+      phase: doneCount === 0 ? "failed" : failedCount > 0 ? "partial" : "done",
+      message: failures.find(Boolean) ?? null,
+    };
+    setSyncStatus(status);
+
+    if (aborted) {
+      await alertApiError(aborted);
+    } else if (failedCount > 0) {
+      await alertWarning(
+        t("campaignDetail.metricsPartialTitle"),
+        failures.find(Boolean) || t("campaignDetail.metricsPartialHint", { count: failedCount }),
+      );
+    } else {
+      await alertSuccess(t("campaignDetail.metricsUpdated"));
     }
   }
 
