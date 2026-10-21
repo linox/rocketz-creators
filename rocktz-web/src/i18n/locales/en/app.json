@@ -1807,6 +1807,7 @@
     "editDelivery": "Edit Delivery",
     "editDetails": "Edit Details",
     "portfolio": "Portfolio",
+    "openProfile": "Open profile of {{name}}",
     "deliveryFormat": "Delivery Format",
     "contentStatus": "Content Status",
     "scriptTitle": "Script / Core Idea",

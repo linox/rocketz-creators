@@ -208,6 +208,7 @@ jobs:
             **/bin/ffprobe
 
       - name: Baixar ffmpeg estático
+        continue-on-error: true
         run: |
           chmod +x scripts/fetch-ffmpeg.sh
           ./scripts/fetch-ffmpeg.sh

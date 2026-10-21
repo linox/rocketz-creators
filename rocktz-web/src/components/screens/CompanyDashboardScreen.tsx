@@ -149,6 +149,11 @@ function CompanyDashboardInner() {
       .finally(() => setLoading(false));
   }, [companyId, isAdmin]);
 
+  useEffect(() => {
+    if (loading) return;
+    if (recurring.length === 0 && tab === "recurring") setTab("overview");
+  }, [loading, recurring.length, tab]);
+
   function selectCompany(id: string) {
     router.replace(`/company-dashboard?companyId=${id}`);
   }
@@ -650,7 +655,7 @@ function CompanyDashboardInner() {
             ["recurring", Repeat, t("companyDash.tabs.recurring", { count: activeRecurring.length }), "text-purple-600"],
             ["favorites", Heart, t("companyDash.tabs.favorites"), "text-indigo-600"],
             ["groups", UsersRound, t("companyDash.tabs.groups", { count: groupCount }), "text-indigo-600"],
-          ] as const).map(([key, Icon, label, activeColor]) => (
+          ] as const).filter(([key]) => key !== "recurring" || recurring.length > 0).map(([key, Icon, label, activeColor]) => (
             <button
               key={key}
               type="button"
@@ -854,6 +859,7 @@ function CompanyDashboardInner() {
                 </div>
               </div>
             ) : null}
+            <div className={recurring.length > 0 ? undefined : "lg:col-span-2"}>
             <SectionCard
               icon={<Megaphone size={18} className="shrink-0 text-indigo-600" />}
               title={t("companyDash.overview.activeCampaignsTitle", { count: activeCampaigns.length })}
@@ -895,7 +901,9 @@ function CompanyDashboardInner() {
                 </div>
               )}
             </SectionCard>
+            </div>
 
+            {recurring.length > 0 ? (
             <SectionCard
               icon={<Repeat size={18} className="shrink-0 text-purple-600" />}
               title={t("companyDash.overview.activeRecurringTitle", { count: activeRecurring.length })}
@@ -920,6 +928,7 @@ function CompanyDashboardInner() {
                 </div>
               )}
             </SectionCard>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -950,7 +959,7 @@ function CompanyDashboardInner() {
         </div>
       ) : null}
 
-      {tab === "recurring" ? (
+      {tab === "recurring" && recurring.length > 0 ? (
         <div className="min-w-0 space-y-3">
           {user.role === "company" || isAdmin ? (
             <div className="flex justify-end">

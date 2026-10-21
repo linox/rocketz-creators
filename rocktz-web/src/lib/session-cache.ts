@@ -7,6 +7,7 @@ const NAV_TTL_MS = 30_000;
 export type NavBadges = {
   unread: number;
   pending_applications: number;
+  has_recurring?: boolean;
 };
 
 let memoryUser: AuthUser | null = null;

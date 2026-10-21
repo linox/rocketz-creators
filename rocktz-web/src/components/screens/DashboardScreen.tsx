@@ -33,6 +33,9 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
   const revenue = stats.revenue ?? [];
   const emptyChart = !revenue.length || revenue.every((row) => !row.value);
   const pendingAgency = (stats.pending_agency_campaigns ?? 0) + (stats.pending_agency_recurring ?? 0);
+  const hasRecurringWork = (stats.running_recurring ?? 0) > 0
+    || (stats.pending_agency_recurring ?? 0) > 0
+    || (stats.recurring_preview?.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -103,7 +106,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
         <KpiCard label={t("dash.kpiCompanies")} value={formatNumber(stats.total_companies ?? 0)} />
         <KpiCard label={t("dash.kpiContent")} value={formatNumber(stats.managed_content ?? 0)} />
         <KpiCard label={t("dash.kpiCampaigns")} value={stats.running_campaigns ?? 0} />
-        <KpiCard label={t("dash.kpiRecurring")} value={stats.running_recurring ?? 0} />
+        {hasRecurringWork ? <KpiCard label={t("dash.kpiRecurring")} value={stats.running_recurring ?? 0} /> : null}
         <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_managed_value ?? stats.total_campaign_value)} />
       </div>
 
@@ -221,7 +224,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm">
+        <div className={hasRecurringWork ? "overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm" : "overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm lg:col-span-2"}>
           <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
             <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#0F172A]">
               <Megaphone size={16} className="text-brand-primary" /> {t("dash.campaignsList")}
@@ -249,6 +252,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
           </div>
         </div>
 
+        {hasRecurringWork ? (
         <div className="overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
             <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#0F172A]">
@@ -276,6 +280,7 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
             ) : null}
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

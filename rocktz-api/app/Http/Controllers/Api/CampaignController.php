@@ -453,6 +453,14 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing('campaign');
         abort_unless($campaignCreator->campaign, 404);
         $data = $this->authorizeParticipationUpdate($request, $campaignCreator, $data);
+        if (array_keys($data) === ['favorited']) {
+            abort_unless(in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true), 403);
+            $campaignCreator->forceFill(['favorited' => (bool) $data['favorited']])->save();
+
+            return response()->json([
+                'data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign', 'demands'])),
+            ]);
+        }
         if (CreatorPrivacy::hidesCreatorValues($request->user())) {
             unset($data['amount']);
         }

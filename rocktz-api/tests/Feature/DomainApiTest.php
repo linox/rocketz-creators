@@ -53,7 +53,30 @@ class DomainApiTest extends TestCase
         $this->withToken($token)->getJson('/api/recurring-contracts')->assertOk();
         $this->withToken($token)->getJson('/api/admin-users')->assertOk();
         $this->withToken($token)->getJson('/api/nav')->assertOk()
-            ->assertJsonStructure(['unread', 'pending_applications']);
+            ->assertJsonStructure(['unread', 'pending_applications', 'has_recurring'])
+            ->assertJsonPath('has_recurring', true);
+    }
+
+    public function test_nav_has_recurring_follows_the_signed_in_user(): void
+    {
+        $this->seed();
+
+        $ana = User::query()->where('email', DemoAccounts::CREATOR_ANA)->firstOrFail();
+        $bruno = User::query()->where('email', DemoAccounts::CREATOR_BRUNO)->firstOrFail();
+        $aurora = User::query()->where('email', DemoAccounts::COMPANY_AURORA)->firstOrFail();
+        $lumen = User::query()->where('email', DemoAccounts::COMPANY_LUMEN)->firstOrFail();
+
+        $this->actingAs($ana, 'sanctum')->getJson('/api/nav')->assertOk()
+            ->assertJsonPath('has_recurring', true);
+
+        $this->actingAs($bruno, 'sanctum')->getJson('/api/nav')->assertOk()
+            ->assertJsonPath('has_recurring', false);
+
+        $this->actingAs($aurora, 'sanctum')->getJson('/api/nav')->assertOk()
+            ->assertJsonPath('has_recurring', true);
+
+        $this->actingAs($lumen, 'sanctum')->getJson('/api/nav')->assertOk()
+            ->assertJsonPath('has_recurring', false);
     }
 
     public function test_admin_dashboard_includes_campaign_and_recurring_stats(): void

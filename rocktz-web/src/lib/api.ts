@@ -53,7 +53,7 @@ export const api = {
     laravelFetch<Item<PostalPlace>>(`/postal-codes?${new URLSearchParams({ country, code })}`),
   dashboard: () => laravelFetch<DashboardStats>("/dashboard"),
   calendar: (query = "") => laravelFetch<List<CalendarEvent>>(`/calendar${query}`),
-  nav: () => laravelFetch<{ unread: number; pending_applications: number }>("/nav"),
+  nav: () => laravelFetch<{ unread: number; pending_applications: number; has_recurring: boolean }>("/nav"),
   creators: (query = "") => laravelFetch<List<Creator>>(`/creators${query}`),
   creator: (id: number | string) => laravelFetch<Item<Creator>>(`/creators/${id}`),
   createCreator: (body: unknown) => laravelFetch<CreatorWrite>("/creators", { method: "POST", body: JSON.stringify(body) }),

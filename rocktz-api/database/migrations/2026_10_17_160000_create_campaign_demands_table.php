@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('campaign_demands')) {
+            $this->ensureSlotIndex();
+
+            return;
+        }
+
         Schema::create('campaign_demands', function (Blueprint $table) {
             $table->id();
             $table->foreignId('campaign_creator_id')->constrained()->cascadeOnDelete();
@@ -39,7 +45,20 @@ return new class extends Migration
             $table->unsignedTinyInteger('upload_progress')->nullable();
             $table->timestamps();
 
-            $table->unique(['campaign_creator_id', 'content_type', 'position']);
+            $table->unique(['campaign_creator_id', 'content_type', 'position'], 'campaign_demands_slot_unique');
+        });
+    }
+
+    private function ensureSlotIndex(): void
+    {
+        foreach (Schema::getIndexes('campaign_demands') as $index) {
+            if (($index['columns'] ?? []) === ['campaign_creator_id', 'content_type', 'position']) {
+                return;
+            }
+        }
+
+        Schema::table('campaign_demands', function (Blueprint $table) {
+            $table->unique(['campaign_creator_id', 'content_type', 'position'], 'campaign_demands_slot_unique');
         });
     }
 

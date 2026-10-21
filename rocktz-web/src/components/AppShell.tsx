@@ -135,6 +135,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [pendingCampaigns, setPendingCampaigns] = useState(0);
+  const [hasRecurring, setHasRecurring] = useState<boolean | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const [companyPublicLandingSlug, setCompanyPublicLandingSlug] = useState<string | null>(null);
@@ -154,16 +155,17 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   useEffect(() => {
     let cancelled = false;
 
-    function apply(badges: { unread: number; pending_applications: number }) {
+    function apply(badges: { unread: number; pending_applications: number; has_recurring?: boolean }) {
       setUnread(badges.unread);
       setPendingCampaigns(user.role === "admin" ? badges.pending_applications : 0);
+      if (typeof badges.has_recurring === "boolean") setHasRecurring(badges.has_recurring);
     }
 
     const cached = peekNavBadges();
     if (cached) apply(cached);
 
-    async function loadBadges() {
-      if (isNavCacheFresh() && peekNavBadges()) return;
+    async function loadBadges(force = false) {
+      if (!force && isNavCacheFresh() && peekNavBadges()) return;
       try {
         const badges = await api.nav();
         if (cancelled) return;
@@ -174,7 +176,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
       }
     }
 
-    void loadBadges();
+    void loadBadges(true);
     const timer = window.setInterval(() => {
       void loadBadges();
     }, 60_000);
@@ -249,6 +251,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const isCreatorProfileActive = onCreatorProfile && creatorTab === "about";
   const isCreatorShippingActive = onCreatorProfile && creatorTab === "shipping";
   const isCreatorBankActive = onCreatorProfile && creatorTab === "bank";
+  const showRecurringNav = user.role === "admin" || hasRecurring === true;
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
   const isJoinActive = isActive("/join");
@@ -258,20 +261,20 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         { href: "/dashboard", label: t("dashboard"), icon: LayoutDashboard, active: isActive("/dashboard") || path === "/" },
         { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
         { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
-        { href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") },
+        ...(showRecurringNav ? [{ href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") }] : []),
       ]
     : user.role === "company"
       ? [
           { href: "/company-dashboard", label: t("tabHome"), icon: Home, active: isActive("/company-dashboard") },
           { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
           { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
-          { href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") },
+          ...(showRecurringNav ? [{ href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") }] : []),
         ]
       : [
           { href: home, label: t("tabHome"), icon: Home, active: isCreatorHomeActive || isActive("/creator-dashboard") },
           { href: "/available-campaigns", label: t("tabAvailable"), icon: Sparkles, active: isAvailableCampaignsActive },
           { href: creatorProfileBase ? `${creatorProfileBase}?tab=campaigns` : "/campaigns", label: t("campaigns"), icon: Megaphone, active: isCreatorCampaignsActive },
-          { href: creatorProfileBase ? `${creatorProfileBase}?tab=recurring` : "/recurring", label: t("tabRecurring"), icon: Repeat, active: isCreatorRecurringActive },
+          ...(showRecurringNav ? [{ href: creatorProfileBase ? `${creatorProfileBase}?tab=recurring` : "/recurring", label: t("tabRecurring"), icon: Repeat, active: isCreatorRecurringActive }] : []),
         ];
   const moreActive = !primaryNav.some((item) => item.active) && !isCreatorShippingActive && !isCreatorBankActive;
 
@@ -299,7 +302,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/companies" label={t("companies")} icon={Building2} active={isActive("/companies")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} badge={pendingCampaigns} onClick={close} />
-                <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
+                {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
@@ -331,7 +334,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
                 <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
-                <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
+                {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
@@ -353,11 +356,12 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href={home} label={t("home")} icon={Home} active={isCreatorHomeActive || isActive("/creator-dashboard")} onClick={close} />
                 <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=campaigns`} label={t("myCampaigns")} icon={Megaphone} active={isCreatorCampaignsActive} onClick={close} /> : null}
-                {creatorProfileBase ? (
+                {showRecurringNav && creatorProfileBase ? (
                   <SidebarItem href={`${creatorProfileBase}?tab=recurring`} label={t("recurring")} icon={Repeat} active={isCreatorRecurringActive} onClick={close} />
-                ) : (
+                ) : null}
+                {showRecurringNav && !creatorProfileBase ? (
                   <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
-                )}
+                ) : null}
                 <SidebarItem href="/calendar" label={t("calendar")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
@@ -499,7 +503,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         aria-label={t("tabMore")}
       >
-        <div className="grid h-[3.75rem] grid-cols-5">
+        <div className="grid h-[3.75rem]" style={{ gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))` }}>
           {primaryNav.map((item) => {
             const Icon = item.icon;
             return (

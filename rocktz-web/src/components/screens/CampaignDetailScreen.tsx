@@ -1812,8 +1812,19 @@ function DetailInner() {
                               {tagLabel}
                             </span>
                           ) : null}
-                          <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="circle" className="mb-2 h-12 w-12 shrink-0 border border-slate-200" textClassName="text-xs font-bold" />
-                          <h4 className="w-full truncate px-0.5 text-[11px] font-bold text-slate-900" title={name}>{name}</h4>
+                          <Link
+                            href={`/creators/${row.creator_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={t("campaignDetail.openProfile", { name })}
+                            className="flex w-full flex-col items-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                          >
+                            <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="circle" className="mb-2 h-12 w-12 shrink-0 border border-slate-200" textClassName="text-xs font-bold" />
+                            <h4 className="flex w-full min-w-0 items-center justify-center gap-1 px-0.5 text-[11px] font-bold text-brand-primary underline-offset-2 hover:underline" title={name}>
+                              <span className="truncate">{name}</span>
+                              <ExternalLink size={10} className="shrink-0" aria-hidden="true" />
+                            </h4>
+                          </Link>
                           {handle ? <p className="mt-0.5 w-full truncate px-0.5 text-[9px] text-slate-400">{handle}</p> : null}
                           {followers > 0 ? (
                             <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
@@ -1871,13 +1882,23 @@ function DetailInner() {
                           </span>
                         ) : null}
                         <div className="flex items-center justify-between">
-                          <div className="flex min-w-0 items-center gap-2.5">
+                          <Link
+                            href={`/creators/${row.creator_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={t("campaignDetail.openProfile", { name: row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.creatorFallback") })}
+                            className="flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                          >
                             <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
-                            <div className="min-w-0">
-                              <span className="block truncate text-xs font-black text-slate-800">@{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}</span>
+                            <div className="min-w-0 text-left">
+                              <span className="flex items-center gap-1 truncate text-xs font-black text-brand-primary underline-offset-2 hover:underline">
+                                <span className="truncate">@{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}</span>
+                                <ExternalLink size={11} className="shrink-0" aria-hidden="true" />
+                              </span>
                               {row.creator?.full_name ? <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator.full_name}</span> : null}
                             </div>
-                          </div>
+                          </Link>
                           <div className="flex shrink-0 items-center gap-1">
                             <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
                             {row.additional_briefing?.trim() ? (
@@ -1995,8 +2016,8 @@ function DetailInner() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/creators/${selected.creator_id}`} target="_blank" className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
-                      {t("campaignDetail.portfolio")} <ExternalLink size={12} />
+                    <Link href={`/creators/${selected.creator_id}`} target="_blank" rel="noopener noreferrer" aria-label={t("campaignDetail.openProfile", { name: selectedCreator.artistic_name || selectedCreator.full_name })} className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200">
+                      {t("campaignDetail.portfolio")} <ExternalLink size={12} aria-hidden="true" />
                     </Link>
                     {canManage ? (
                       <button

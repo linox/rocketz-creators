@@ -51,6 +51,7 @@ import {
   Youtube,
   RefreshCw,
   Loader2,
+  Wallet,
 } from "lucide-react";
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
@@ -516,7 +517,9 @@ const ROLE_OPTION_VALUES = [
   { value: "admin", labelKey: "roleAdministrator" as const },
 ];
 
-type ProfileTab = "dashboard" | "recurring" | "campaigns" | "portfolio" | "about" | "storefront" | "storefront-metrics" | "shipping" | "bank";
+type ProfileTab = "dashboard" | "recurring" | "campaigns" | "earnings" | "portfolio" | "about" | "storefront" | "storefront-metrics" | "shipping" | "bank";
+
+type EarningsKind = "paid" | "receivable" | "progress" | "recurring";
 
 const creatorTabClass = "flex min-w-max flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border-none px-2 py-1.5 text-[10px] font-bold tracking-wide whitespace-nowrap uppercase sm:gap-1.5 sm:px-2.5 sm:py-2 sm:text-[11px]";
 
@@ -529,7 +532,7 @@ function pathLooksLikeStorefrontMetrics(pathname: string): boolean {
 function resolveProfileTab(value: string | null, creatorSelf: boolean, pathLooksLikeMetrics: boolean, companyViewer = false): ProfileTab {
   if (pathLooksLikeMetrics) return "storefront-metrics";
   if ((value === "shipping" || value === "bank") && companyViewer) return "about";
-  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics" || value === "shipping" || value === "bank") {
+  if (value === "dashboard" || value === "recurring" || value === "campaigns" || value === "earnings" || value === "portfolio" || value === "about" || value === "storefront" || value === "storefront-metrics" || value === "shipping" || value === "bank") {
     return value;
   }
   if (creatorSelf) return "dashboard";
@@ -670,9 +673,11 @@ function ProfileInner() {
   const [campaignId, setCampaignId] = useState("");
   const [adding, setAdding] = useState(false);
   const [recurring, setRecurring] = useState<RecurringContract[]>([]);
+  const [recurringReady, setRecurringReady] = useState(false);
   const [myCampaignItems, setMyCampaignItems] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [campaignSubTab, setCampaignSubTab] = useState<"active" | "applications">("active");
+  const [earningsFilter, setEarningsFilter] = useState<"all" | EarningsKind>("all");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<number | null>(null);
   const [expandedRecurringKey, setExpandedRecurringKey] = useState<string | null>(null);
   const [demandMonth, setDemandMonth] = useState(currentYearMonth);
@@ -909,13 +914,39 @@ function ProfileInner() {
       api.campaigns("?include=content").then((res) => setCampaigns(res.data)).catch(() => undefined);
     }
     if (isAdmin || isCreatorSelf) {
-      api.recurring("?include=items").then((res) => setRecurring(res.data)).catch(() => undefined);
+      let cancelled = false;
+      setRecurringReady(false);
+      api.recurring("?include=items")
+        .then((res) => {
+          if (!cancelled) setRecurring(res.data);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!cancelled) setRecurringReady(true);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
+    setRecurringReady(true);
   }, [isAdmin, isCreatorSelf]);
 
   useEffect(() => {
+    if (!recurringReady || !creator || agencyView) return;
+    if (!(isAdmin || user.creator?.id === creator.id)) return;
+    if (tab !== "recurring") return;
+    const hasWork = recurring.some((contract) => contract.status !== "pending_agency" && contractIncludesCreator(contract, creator.id));
+    if (hasWork) return;
+    const params = new URLSearchParams();
+    params.set("tab", "dashboard");
+    if (fromLandingReview) params.set("from", "landing");
+    if (landingSignupId) params.set("signup", String(landingSignupId));
+    router.replace(`/creators/${creator.id}?${params.toString()}`, { scroll: false });
+  }, [recurringReady, creator, agencyView, isAdmin, user.creator?.id, tab, recurring, fromLandingReview, landingSignupId, router]);
+
+  useEffect(() => {
     if (!isCreatorSelf || !id) return;
-    if (tab !== "campaigns" && tab !== "dashboard") return;
+    if (tab !== "campaigns" && tab !== "dashboard" && tab !== "earnings") return;
     setLoadingCampaigns(true);
     api.campaigns("?include=content")
       .then((res) => setMyCampaignItems(res.data))
@@ -1061,6 +1092,7 @@ function ProfileInner() {
     rejected: tp("statusChipRejected"),
   });
   const myWorkContracts = recurring.filter((contract) => contract.status !== "pending_agency" && contractIncludesCreator(contract, profile.id));
+  const hasRecurringWorks = myWorkContracts.length > 0;
   const myContracts = myWorkContracts.filter((contract) => contract.status === "active");
   const recurringWorkRows = buildRecurringWorkRows(myWorkContracts, profile.id);
   const canEdit = isAdmin || user.creator?.id === profile.id;
@@ -1107,6 +1139,7 @@ function ProfileInner() {
     : demandCurrentMonth;
   const campaignsForDemandMonth = approvedCampaigns.filter((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonthActive);
   const recurringForDemandMonth = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonthActive);
+  const showRecurringOnDashboard = hasRecurringWorks && (demandMonthActive === demandCurrentMonth || recurringForDemandMonth.length > 0);
   const campaignMonthCounts = tallyMonths(approvedCampaigns.map((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth)), demandCurrentMonth);
   const recurringMonthCounts = tallyMonths(recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)), demandCurrentMonth);
   const demandMix = (month: string) => {
@@ -1205,6 +1238,37 @@ function ProfileInner() {
     if (amount > 0) return formatPay(amount);
     return ta("available.toDefine");
   }
+
+  const earningsLines = [
+    ...approvedCampaigns.map((item) => {
+      const kind: EarningsKind = item.row.payment_status === "paid"
+        ? "paid"
+        : item.row.delivery_status === "approved"
+          ? "receivable"
+          : "progress";
+      return {
+        id: `campaign-${item.row.id}`,
+        kind,
+        title: item.campaign.name,
+        company: item.campaign.company?.name || "",
+        date: item.row.payment_date || item.row.delivery_date || item.campaign.end_date || item.campaign.start_date || null,
+        amountLabel: creatorFeeText(item.campaign, item.row),
+      };
+    }),
+    ...myContracts.map((contract) => {
+      const row = contract.creators?.find((item) => item.creator_id === profile.id);
+      const amount = Number(row?.monthly_cache ?? row?.monthly_fee ?? 0);
+      return {
+        id: `recurring-${contract.id}`,
+        kind: "recurring" as const,
+        title: contract.title,
+        company: contract.company?.name || "",
+        date: contract.start_date,
+        amountLabel: hideCreatorValues ? HIDDEN_CREATOR_VALUE : amount > 0 ? formatPay(amount) : ta("available.toDefine"),
+      };
+    }),
+  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const visibleEarnings = earningsFilter === "all" ? earningsLines : earningsLines.filter((line) => line.kind === earningsFilter);
 
   function scheduleZipLookup(nextCountry: string, zip: string) {
     if (zipLookupTimer.current) window.clearTimeout(zipLookupTimer.current);
@@ -1894,11 +1958,16 @@ function ProfileInner() {
               <button type="button" onClick={() => goTab("dashboard")} className={cn(creatorTabClass, tab === "dashboard" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Home size={13} className="shrink-0" /> {tp("tabDashboard")}
               </button>
-              <button type="button" onClick={() => goTab("recurring")} className={cn(creatorTabClass, tab === "recurring" ? "bg-white text-purple-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
-                <Repeat size={13} className="shrink-0" /> {tp("tabRecurring")}
-              </button>
+              {hasRecurringWorks ? (
+                <button type="button" onClick={() => goTab("recurring")} className={cn(creatorTabClass, tab === "recurring" ? "bg-white text-purple-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                  <Repeat size={13} className="shrink-0" /> {tp("tabRecurring")}
+                </button>
+              ) : null}
               <button type="button" onClick={() => goTab("campaigns")} className={cn(creatorTabClass, tab === "campaigns" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Megaphone size={13} className="shrink-0" /> {tp("tabCampaigns")}
+              </button>
+              <button type="button" onClick={() => goTab("earnings")} className={cn(creatorTabClass, tab === "earnings" ? "bg-white text-emerald-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
+                <Wallet size={13} className="shrink-0" /> {tp("tabEarnings")}
               </button>
               <button type="button" onClick={() => goTab("portfolio")} className={cn(creatorTabClass, tab === "portfolio" ? "bg-white text-indigo-600 shadow-sm" : "text-[#64748B] hover:text-[#0F172A]")}>
                 <Video size={13} className="shrink-0" /> {tp("tabPortfolio")}
@@ -2275,26 +2344,13 @@ function ProfileInner() {
             </form>
           ) : showCreatorTabs && tab === "dashboard" ? (
             <div className="flex flex-col gap-8">
-              <div className="flex flex-col items-start justify-between gap-6 rounded-[24px] border border-white/5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-8 text-white shadow-xl md:flex-row md:items-center">
-                <div className="flex flex-col">
-                  <span className="w-fit rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-extrabold tracking-widest text-indigo-300 uppercase">{tp("panelTitle")}</span>
-                  <h2 className="mt-3 text-2xl font-bold">{tp("helloCreator", { name: creator.artistic_name || creator.full_name })}</h2>
-                  <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-300">{tp("panelHint")}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-6 rounded-2xl border border-white/10 bg-white/5 p-4 font-medium backdrop-blur-sm">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("monthlyEarnings")}</span>
-                    <span className="mt-1 text-xl font-black text-emerald-400">{payCreator(monthlyEarnings)}</span>
-                  </div>
-                  <div className="h-10 w-px bg-white/10" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold tracking-wider text-indigo-200 uppercase">{tp("paidLabel")}</span>
-                    <span className="mt-1 text-sm font-bold text-slate-200">{payCreator(totalReceived)}</span>
-                  </div>
-                </div>
+              <div className="rounded-[24px] border border-white/5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-8 text-white shadow-xl">
+                <span className="w-fit rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-extrabold tracking-widest text-indigo-300 uppercase">{tp("panelTitle")}</span>
+                <h2 className="mt-3 text-2xl font-bold">{tp("helloCreator", { name: creator.artistic_name || creator.full_name })}</h2>
+                <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-300">{tp("panelHint")}</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <button type="button" onClick={() => goTab("shipping")} className="flex items-center gap-3 rounded-[16px] border border-amber-200 bg-white p-4 text-left shadow-sm hover:border-amber-300">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Package size={20} /></span>
                   <span className="min-w-0">
@@ -2307,6 +2363,13 @@ function ProfileInner() {
                   <span className="min-w-0">
                     <span className="block text-sm font-bold text-[#0F172A]">{tp("bankTitle")}</span>
                     <span className="mt-0.5 block text-xs text-[#64748B]">{tp("bankOpenHint")}</span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => goTab("earnings")} className="flex items-center gap-3 rounded-[16px] border border-violet-200 bg-white p-4 text-left shadow-sm hover:border-violet-300">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600"><Wallet size={20} /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0F172A]">{tp("earningsTitle")}</span>
+                    <span className="mt-0.5 block text-xs text-[#64748B]">{tp("earningsOpenHint")}</span>
                   </span>
                 </button>
               </div>
@@ -2326,31 +2389,6 @@ function ProfileInner() {
                   currentDetail={currentDemandDetail}
                   demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
                 />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 font-medium sm:grid-cols-3">
-                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
-                  <div>
-                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("monthlyEarnings")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-purple-700">{payCreator(monthlyEarnings)}</h3>
-                    <p className="mt-1 mb-0 text-[11px] font-medium text-slate-500">{tp("monthlyEarningsHint")}</p>
-                  </div>
-                  <div className="rounded-xl bg-purple-50 p-3 text-purple-600"><Repeat size={18} /></div>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
-                  <div>
-                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("receivedPaid")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{payCreator(totalReceived)}</h3>
-                  </div>
-                  <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><CheckCircle2 size={18} /></div>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
-                  <div>
-                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("toReceiveApproved")}</span>
-                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{payCreator(totalToReceive)}</h3>
-                  </div>
-                  <div className="rounded-xl bg-indigo-50 p-3 text-brand-primary"><DollarSign size={18} /></div>
-                </div>
               </div>
 
               {loadingCampaigns ? (
@@ -2394,7 +2432,7 @@ function ProfileInner() {
                 </div>
               )}
 
-              {demandMonthActive !== demandCurrentMonth && recurringForDemandMonth.length === 0 ? null : (
+              {showRecurringOnDashboard ? (
               <div className="flex flex-col gap-4 border-t border-slate-100 pt-6">
                 <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
                   <Repeat size={16} className="text-purple-600" /> {tp("recurringInMonth", { month: demandMonthLabel, count: recurringForDemandMonth.length })}
@@ -2414,9 +2452,113 @@ function ProfileInner() {
                   tp={tp as (key: string, options?: Record<string, unknown>) => string}
                 />
               </div>
+              ) : null}
+            </div>
+          ) : showCreatorTabs && tab === "earnings" ? (
+            <div className="flex flex-col gap-6">
+              <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+                <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600"><Wallet size={20} /></div>
+                <div>
+                  <h3 className="m-0 text-lg font-bold text-slate-900">{tp("earningsTitle")}</h3>
+                  <p className="m-0 text-xs text-slate-500">{tp("earningsHint")}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 font-medium sm:grid-cols-3">
+                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+                  <div>
+                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("monthlyEarnings")}</span>
+                    <h3 className="mt-1 text-xl font-bold text-purple-700">{payCreator(monthlyEarnings)}</h3>
+                    <p className="mt-1 mb-0 text-[11px] font-medium text-slate-500">{tp("monthlyEarningsHint")}</p>
+                  </div>
+                  <div className="rounded-xl bg-purple-50 p-3 text-purple-600"><Repeat size={18} /></div>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+                  <div>
+                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("receivedPaid")}</span>
+                    <h3 className="mt-1 text-xl font-bold text-emerald-600">{payCreator(totalReceived)}</h3>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><CheckCircle2 size={18} /></div>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+                  <div>
+                    <span className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("toReceiveApproved")}</span>
+                    <h3 className="mt-1 text-xl font-bold text-brand-primary">{payCreator(totalToReceive)}</h3>
+                  </div>
+                  <div className="rounded-xl bg-indigo-50 p-3 text-brand-primary"><DollarSign size={18} /></div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <h3 className="m-0 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">{tp("earningsStatement")}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ["all", "earningsFilterAll"],
+                    ["paid", "earningsFilterPaid"],
+                    ["receivable", "earningsFilterReceivable"],
+                    ["progress", "earningsFilterProgress"],
+                    ["recurring", "earningsFilterRecurring"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setEarningsFilter(value)}
+                      className={cn("cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold", earningsFilter === value ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+                    >
+                      {tp(label)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loadingCampaigns ? (
+                <div className="flex items-center justify-center rounded-[16px] border border-[#E2E8F0] bg-white p-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
+                </div>
+              ) : visibleEarnings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
+                  <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Wallet size={24} /></div>
+                  <h4 className="text-sm font-bold text-slate-800">{tp("earningsEmpty")}</h4>
+                  {earningsFilter === "all" ? <p className="max-w-sm text-xs leading-relaxed text-[#64748B]">{tp("earningsEmptyAll")}</p> : null}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm">
+                  {visibleEarnings.map((line) => {
+                    const meta = [line.company, line.date ? fmtDate(line.date) : ""].filter(Boolean).join(" · ");
+                    const statusLabel = line.kind === "paid"
+                      ? tp("earningsStatusPaid")
+                      : line.kind === "receivable"
+                        ? tp("earningsStatusReceivable")
+                        : line.kind === "progress"
+                          ? tp("earningsStatusProgress")
+                          : tp("earningsStatusMonthly");
+                    const statusClass = line.kind === "paid"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : line.kind === "receivable"
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                        : line.kind === "progress"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-purple-200 bg-purple-50 text-purple-700";
+                    return (
+                      <div key={line.id} className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-4 last:border-b-0 sm:px-5">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-bold text-slate-900">{line.title}</span>
+                            <span className={cn("inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase", statusClass)}>{statusLabel}</span>
+                          </div>
+                          <p className="mt-1 mb-0 truncate text-xs text-slate-500">
+                            {line.kind === "recurring" ? tp("earningsKindRecurring") : tp("earningsKindCampaign")}
+                            {meta ? ` · ${meta}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-sm font-black text-slate-900">{line.amountLabel}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          ) : showCreatorTabs && tab === "recurring" ? (
+          ) : showCreatorTabs && tab === "recurring" && hasRecurringWorks ? (
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">

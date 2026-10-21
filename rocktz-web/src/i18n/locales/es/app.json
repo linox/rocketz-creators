@@ -1807,6 +1807,7 @@
     "editDelivery": "Editar Entrega",
     "editDetails": "Editar Detalles",
     "portfolio": "Portafolio",
+    "openProfile": "Abrir perfil de {{name}}",
     "deliveryFormat": "Formato de Entrega",
     "contentStatus": "Estado del Contenido",
     "scriptTitle": "Guion / Idea Central",
