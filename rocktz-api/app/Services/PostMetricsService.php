@@ -117,9 +117,10 @@ class PostMetricsService
     }
 
     /**
+     * @param  callable(array{total: int, processed: int, current_id: int|null, items: list<array{id: int, status: string, message: string|null}>}): void|null  $onProgress
      * @return array<int, array<string, mixed>>
      */
-    public function syncPlanning(RecurringContract $contract, ?string $month = null, ?int $itemId = null, bool $force = false): array
+    public function syncPlanning(RecurringContract $contract, ?string $month = null, ?int $itemId = null, bool $force = false, ?callable $onProgress = null): array
     {
         $contract->loadMissing(['contentPlanningItems.creator']);
 
@@ -143,18 +144,55 @@ class PostMetricsService
             throw new SocialMetricsException(__('auth.post_metrics_none'));
         }
 
+        $states = [];
+        foreach ($rows as $item) {
+            $states[$item->id] = [
+                'id' => (int) $item->id,
+                'status' => 'pending',
+                'message' => null,
+            ];
+        }
+
+        $processed = 0;
+        $currentId = null;
+        $report = function () use (&$states, &$processed, &$currentId, $onProgress, $rows): void {
+            if ($onProgress === null) {
+                return;
+            }
+
+            $onProgress([
+                'total' => $rows->count(),
+                'processed' => $processed,
+                'current_id' => $currentId,
+                'items' => array_values($states),
+            ]);
+        };
+
+        $report();
+
         $results = [];
         $synced = 0;
 
         foreach ($rows as $item) {
+            $currentId = (int) $item->id;
+            $states[$item->id]['status'] = 'running';
+            $states[$item->id]['message'] = null;
+            $report();
+
             $link = (string) $item->published_url;
             $parsed = PostLink::parse($link);
 
             if ($parsed === null) {
+                $message = __('auth.post_metrics_unsupported');
                 $results[$item->id] = [
                     'ok' => false,
-                    'message' => __('auth.post_metrics_unsupported'),
+                    'message' => $message,
                 ];
+                $states[$item->id]['status'] = 'failed';
+                $states[$item->id]['message'] = $message;
+                $currentId = null;
+                $processed++;
+                $report();
 
                 continue;
             }
@@ -163,13 +201,22 @@ class PostMetricsService
                 $snapshot = $this->snapshotFor($parsed, $this->followersFromCreator($item->creator, $parsed->network), $force);
                 $this->persist($item, $snapshot);
                 $results[$item->id] = $snapshot->toSyncResult();
+                $states[$item->id]['status'] = 'done';
                 $synced++;
+                $currentId = null;
+                $processed++;
+                $report();
                 $this->pauseBetweenFetches(! $snapshot->cached);
             } catch (SocialMetricsException $e) {
                 $results[$item->id] = [
                     'ok' => false,
                     'message' => $e->getMessage(),
                 ];
+                $states[$item->id]['status'] = 'failed';
+                $states[$item->id]['message'] = $e->getMessage();
+                $currentId = null;
+                $processed++;
+                $report();
             }
         }
 

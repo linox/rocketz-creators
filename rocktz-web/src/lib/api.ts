@@ -21,6 +21,7 @@ import type {
   DashboardStats,
   MetricsJobStatus,
   PlanningItem,
+  PostMetricsSyncProgress,
   PostMetricsSyncResult,
   RecurringContract,
   SocialSyncResult,
@@ -30,13 +31,14 @@ type List<T> = { data: T[] };
 type Item<T> = { data: T };
 type CreatorWrite = Item<Creator> & { social_sync?: "queued" };
 
-type Queued<T> = T & { status?: MetricsJobStatus; message?: string };
+type Queued<T> = T & { status?: MetricsJobStatus; message?: string; progress?: PostMetricsSyncProgress | null };
 
 const QUEUE_POLL_MS = 2000;
 const QUEUE_TIMEOUT_MS = 120_000;
 
-async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () => Promise<T>): Promise<T> {
+async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () => Promise<T>, onTick?: (state: T) => void): Promise<T> {
   let current = started;
+  onTick?.(current);
   const began = Date.now();
   while (current.status === "queued" || current.status === "running") {
     if (Date.now() - began > QUEUE_TIMEOUT_MS) {
@@ -44,6 +46,7 @@ async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () =
     }
     await new Promise((resolve) => setTimeout(resolve, QUEUE_POLL_MS));
     current = await poll();
+    onTick?.(current);
   }
   return current;
 }
@@ -195,9 +198,13 @@ export const api = {
     const query = body?.campaign_creator_id ? `?campaign_creator_id=${body.campaign_creator_id}` : "";
     return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`));
   },
-  syncRecurringPostMetrics: async (id: number, body?: { month?: string; content_planning_item_id?: number }) => {
+  syncRecurringPostMetrics: async (
+    id: number,
+    body?: { month?: string; content_planning_item_id?: number },
+    onTick?: (state: Item<RecurringContract> & { sync?: Record<string, PostMetricsSyncResult>; status?: MetricsJobStatus; progress?: PostMetricsSyncProgress | null; message?: string }) => void,
+  ) => {
     const path = `/recurring-contracts/${id}/post-metrics-sync`;
-    const started = await laravelFetch<Item<RecurringContract> & { sync?: Record<string, PostMetricsSyncResult>; status?: MetricsJobStatus }>(path, {
+    const started = await laravelFetch<Item<RecurringContract> & { sync?: Record<string, PostMetricsSyncResult>; status?: MetricsJobStatus; progress?: PostMetricsSyncProgress | null; message?: string }>(path, {
       method: "POST",
       body: JSON.stringify({ force: true, ...body }),
     });
@@ -205,7 +212,7 @@ export const api = {
     if (body?.month) params.set("month", body.month);
     if (body?.content_planning_item_id) params.set("content_planning_item_id", String(body.content_planning_item_id));
     const query = params.toString() ? `?${params.toString()}` : "";
-    return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`));
+    return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`), onTick);
   },
 
   recurring: (query = "") => laravelFetch<List<RecurringContract>>(`/recurring-contracts${query}`),

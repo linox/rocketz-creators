@@ -122,16 +122,21 @@ class RecurringContractController extends Controller
     {
         $state = MetricsSyncStatus::get($key) ?? ['status' => MetricsSyncStatus::QUEUED];
         $status = (string) ($state['status'] ?? MetricsSyncStatus::QUEUED);
+        $progress = is_array($state['progress'] ?? null) ? ['progress' => $state['progress']] : [];
 
         if ($status === MetricsSyncStatus::FAILED) {
             return response()->json([
                 'status' => $status,
                 'message' => $state['message'] ?? __('auth.post_metrics_unavailable'),
+                ...$progress,
             ], 422);
         }
 
         if ($status !== MetricsSyncStatus::DONE) {
-            return response()->json(['status' => $status], 202);
+            return response()->json([
+                'status' => $status,
+                ...$progress,
+            ], 202);
         }
 
         $this->loadVisibleRelations(request(), $contract);
@@ -140,6 +145,7 @@ class RecurringContractController extends Controller
             'status' => $status,
             'data' => new RecurringContractResource($contract),
             'sync' => $state['sync'] ?? [],
+            ...$progress,
         ]);
     }
 

@@ -472,7 +472,12 @@ HTML, 200),
             ->assertJsonPath('status', 'done')
             ->assertJsonPath("sync.{$item->id}.ok", true)
             ->assertJsonPath("sync.{$item->id}.likes", 260)
-            ->assertJsonMissingPath("sync.{$other->id}");
+            ->assertJsonMissingPath("sync.{$other->id}")
+            ->assertJsonPath('progress.total', 1)
+            ->assertJsonPath('progress.processed', 1)
+            ->assertJsonPath('progress.items.0.id', $item->id)
+            ->assertJsonPath('progress.items.0.status', 'done')
+            ->assertJsonMissingPath('progress.items.1');
 
         $this->assertSame(260, $item->fresh()->metrics['likes']);
         $this->assertArrayNotHasKey('likes', $other->fresh()->metrics ?? []);

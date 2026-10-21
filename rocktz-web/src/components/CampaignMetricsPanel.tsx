@@ -14,7 +14,7 @@ import { moneyCurrency } from "@/lib/geo";
 import { mediaDownloadUrl } from "@/lib/media-playback";
 import { usePrivacy } from "@/lib/privacy";
 import { safeHttpUrl } from "@/lib/safe-http-url";
-import type { Campaign, CampaignCreator, PostMetrics } from "@/lib/types";
+import type { Campaign, CampaignCreator, PostMetrics, PostMetricsSyncItemStatus } from "@/lib/types";
 
 export type PostMetricsRow = {
   id: number;
@@ -29,6 +29,15 @@ export type PostMetricsRow = {
   costKey?: string | number | null;
 };
 
+export type PostMetricsSyncStatusView = {
+  phase: "queued" | "running" | "done" | "partial" | "failed";
+  scopeLabel?: string;
+  total: number;
+  processed: number;
+  message?: string | null;
+  items: Array<{ id: number; status: PostMetricsSyncItemStatus; message?: string | null }>;
+};
+
 type PanelProps = {
   rows: PostMetricsRow[];
   locale: string;
@@ -39,6 +48,7 @@ type PanelProps = {
   emptyLabel?: string;
   emptyHint?: string;
   currency?: string | null;
+  syncStatus?: PostMetricsSyncStatusView | null;
 };
 
 type CampaignProps = {
@@ -175,6 +185,76 @@ function videoHref(url?: string | null): string | undefined {
   return safeHttpUrl(mediaDownloadUrl(raw));
 }
 
+function syncRowLabel(status: PostMetricsSyncItemStatus, t: (key: string) => string): string {
+  if (status === "running") return t("campaignDetail.metricsSyncRowRunning");
+  if (status === "done") return t("campaignDetail.metricsSyncRowDone");
+  if (status === "failed") return t("campaignDetail.metricsSyncRowFailed");
+  return t("campaignDetail.metricsSyncRowPending");
+}
+
+function syncRowClass(status: PostMetricsSyncItemStatus): string {
+  if (status === "running") return "bg-indigo-100 text-indigo-800";
+  if (status === "done") return "bg-emerald-100 text-emerald-800";
+  if (status === "failed") return "bg-rose-100 text-rose-800";
+  return "bg-slate-100 text-slate-600";
+}
+
+function MetricsSyncStatusBanner({ status }: { status: PostMetricsSyncStatusView }) {
+  const { t } = useTranslation("app");
+  const done = status.items.filter((item) => item.status === "done").length;
+  const failed = status.items.filter((item) => item.status === "failed").length;
+  const active = status.phase === "queued" || status.phase === "running";
+  const titleKey =
+    status.phase === "queued"
+      ? "campaignDetail.metricsSyncQueued"
+      : status.phase === "running"
+        ? "campaignDetail.metricsSyncRunning"
+        : status.phase === "partial"
+          ? "campaignDetail.metricsPartialTitle"
+          : status.phase === "failed"
+            ? "campaignDetail.metricsSyncFailed"
+            : "campaignDetail.metricsUpdated";
+  const hint =
+    status.phase === "queued"
+      ? t("campaignDetail.metricsSyncQueuedHint")
+      : status.phase === "done"
+        ? t("campaignDetail.metricsSyncDoneHint", { count: done || status.processed })
+        : status.phase === "partial"
+          ? status.message || t("campaignDetail.metricsSyncPartialHint", { ok: done, failed })
+          : status.phase === "failed"
+            ? status.message || t("campaignDetail.metricsPartialHint", { count: failed || status.total })
+            : null;
+  const tone =
+    status.phase === "done"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+      : status.phase === "partial"
+        ? "border-amber-200 bg-amber-50 text-amber-950"
+        : status.phase === "failed"
+          ? "border-rose-200 bg-rose-50 text-rose-950"
+          : "border-indigo-200 bg-indigo-50 text-indigo-950";
+  const bar = status.total > 0 ? Math.min(100, ((status.processed + (status.items.some((item) => item.status === "running") ? 0.35 : 0)) / status.total) * 100) : 0;
+
+  return (
+    <div className={cn("rounded-xl border px-4 py-3", tone)}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-black">
+          {t(titleKey)}
+          {status.scopeLabel ? <span className="font-bold"> · {status.scopeLabel}</span> : null}
+        </p>
+        {status.total > 0 ? (
+          <p className="shrink-0 text-[11px] font-bold">{t("campaignDetail.metricsSyncProgress", { processed: status.processed, total: status.total })}</p>
+        ) : null}
+      </div>
+      {hint ? <p className="mt-1 text-[11px] font-medium">{hint}</p> : null}
+      {active && status.total > 0 ? (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
+          <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${bar}%` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PostMetricsPanel({
   rows,
   locale,
@@ -185,6 +265,7 @@ export function PostMetricsPanel({
   emptyLabel,
   emptyHint,
   currency,
+  syncStatus,
 }: PanelProps) {
   const { t } = useTranslation("app");
   const { formatCurrency } = usePrivacy();
@@ -342,10 +423,16 @@ export function PostMetricsPanel({
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50"
             >
               <RefreshCw size={14} className={cn(syncing === "all" && "animate-spin")} />
-              {syncing === "all" ? t("campaignDetail.metricsRefreshing") : t("campaignDetail.metricsRefresh")}
+              {syncing === "all"
+                ? syncStatus && syncStatus.total > 0
+                  ? t("campaignDetail.metricsSyncProgress", { processed: syncStatus.processed, total: syncStatus.total })
+                  : t("campaignDetail.metricsRefreshing")
+                : t("campaignDetail.metricsRefresh")}
             </button>
           </div>
         </div>
+
+        {syncStatus ? <MetricsSyncStatusBanner status={syncStatus} /> : null}
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
           <label className="min-w-0 flex-1">
@@ -601,6 +688,7 @@ export function PostMetricsPanel({
                   const network = postNetwork(row);
                   const name = row.creator?.artistic_name || row.creator?.full_name || "";
                   const download = videoHref(row.videoDownloadUrl);
+                  const itemStatus = syncStatus?.items.find((item) => item.id === row.id);
 
                   return (
                     <tr key={row.id} className="hover:bg-slate-50/70">
@@ -640,7 +728,14 @@ export function PostMetricsPanel({
                       <td className="px-4 py-3.5 font-black text-slate-900">{metricNumber(metrics.likes) != null ? formatNumber(metricNumber(metrics.likes) ?? 0) : "—"}</td>
                       <td className="px-4 py-3.5 font-black text-slate-900">{metricNumber(metrics.comments) != null ? formatNumber(metricNumber(metrics.comments) ?? 0) : "—"}</td>
                       <td className="px-4 py-3.5 font-black text-slate-900">{formatEngagement(metricNumber(metrics.engagement), locale)}</td>
-                      <td className="px-4 py-3.5 font-medium text-slate-500">{formatSyncedAt(metricNumber(metrics.synced_at) ?? undefined, locale, t("campaignDetail.neverSynced"))}</td>
+                      <td className="px-4 py-3.5 font-medium text-slate-500">
+                        {itemStatus ? (
+                          <span title={itemStatus.message || undefined} className={cn("mb-1 flex w-fit rounded-full px-2 py-0.5 text-[10px] font-black tracking-wide uppercase", syncRowClass(itemStatus.status))}>
+                            {syncRowLabel(itemStatus.status, t)}
+                          </span>
+                        ) : null}
+                        <p>{formatSyncedAt(metricNumber(metrics.synced_at) ?? undefined, locale, t("campaignDetail.neverSynced"))}</p>
+                      </td>
                       <td className="px-4 py-3.5 text-right">
                         <button
                           type="button"

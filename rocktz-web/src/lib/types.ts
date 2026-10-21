@@ -288,6 +288,19 @@ export type PostMetricsSyncResult = {
   message?: string;
 };
 
+export type PostMetricsSyncItemStatus = "pending" | "running" | "done" | "failed";
+
+export type PostMetricsSyncProgress = {
+  total: number;
+  processed: number;
+  current_id?: number | null;
+  items: Array<{
+    id: number;
+    status: PostMetricsSyncItemStatus;
+    message?: string | null;
+  }>;
+};
+
 export type ShippingSender = {
   id: number;
   company_id: number | null;

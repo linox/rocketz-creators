@@ -24,16 +24,34 @@ class SyncRecurringPostMetricsJob
         $key = MetricsSyncStatus::recurringKey($this->contractId, $this->month, $this->itemId);
         MetricsSyncStatus::put($key, MetricsSyncStatus::RUNNING);
 
+        $progress = null;
+
         try {
             $contract = RecurringContract::query()->findOrFail($this->contractId);
-            $sync = $postMetrics->syncPlanning($contract, $this->month, $this->itemId, $this->force);
-            MetricsSyncStatus::put($key, MetricsSyncStatus::DONE, ['sync' => $sync]);
+            $sync = $postMetrics->syncPlanning(
+                $contract,
+                $this->month,
+                $this->itemId,
+                $this->force,
+                function (array $next) use ($key, &$progress): void {
+                    $progress = $next;
+                    MetricsSyncStatus::put($key, MetricsSyncStatus::RUNNING, ['progress' => $next]);
+                },
+            );
+            MetricsSyncStatus::put($key, MetricsSyncStatus::DONE, [
+                'sync' => $sync,
+                'progress' => $progress,
+            ]);
         } catch (SocialMetricsException $e) {
-            MetricsSyncStatus::put($key, MetricsSyncStatus::FAILED, ['message' => $e->getMessage()]);
+            MetricsSyncStatus::put($key, MetricsSyncStatus::FAILED, [
+                'message' => $e->getMessage(),
+                'progress' => $progress,
+            ]);
         } catch (\Throwable $e) {
             report($e);
             MetricsSyncStatus::put($key, MetricsSyncStatus::FAILED, [
                 'message' => __('auth.post_metrics_unavailable'),
+                'progress' => $progress,
             ]);
         }
     }

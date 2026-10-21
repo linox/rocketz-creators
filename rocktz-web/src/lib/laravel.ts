@@ -60,12 +60,14 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   errors?: Record<string, string[]>;
+  payload?: unknown;
 
-  constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string) {
+  constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string, payload?: unknown) {
     super(message);
     this.status = status;
     this.errors = errors;
     this.code = code;
+    this.payload = payload;
   }
 }
 
@@ -662,7 +664,7 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
   const data = (await response.json().catch(() => ({}))) as T & LaravelError;
 
   if (!response.ok) {
-    throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors, data.code);
+    throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors, data.code, data);
   }
 
   return data;
