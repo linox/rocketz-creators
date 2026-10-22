@@ -6,6 +6,7 @@ use App\Models\CampaignCreator;
 use App\Models\CampaignCreatorContent;
 use App\Models\CampaignDemand;
 use App\Models\User;
+use App\Services\CampaignDemandSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -205,6 +206,118 @@ class CampaignDemandTest extends TestCase
             ->assertJsonPath('data.demands.0.delivery_status', 'approved')
             ->assertJsonPath('data.demands.1.delivery_status', 'pending')
             ->assertJsonPath('data.delivery_status', 'pending');
+    }
+
+    public function test_note_without_a_submitted_video_is_stored_as_pauta(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update(['script_status' => 'approved']);
+        $note = 'Oie, queríamos só adicionar um detalhe ao roteiro.';
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'delivery_status' => 'revision',
+                'revision_details' => $note,
+                'video_status' => 'revision',
+                'video_feedback' => $note,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.pauta', $note)
+            ->assertJsonPath('data.demands.0.video_status', 'pending')
+            ->assertJsonPath('data.demands.0.script_status', 'pending')
+            ->assertJsonPath('data.demands.0.delivery_status', 'pending')
+            ->assertJsonPath('data.demands.0.video_feedback', null);
+
+        $fresh = $demand->fresh();
+        $this->assertSame($note, $fresh->pauta);
+        $this->assertSame([], $fresh->revision_history ?? []);
+        $this->assertDatabaseMissing('notifications', [
+            'creator_id' => $row->creator_id,
+            'title' => __('auth.material_revision_title'),
+        ]);
+    }
+
+    public function test_video_revision_stays_when_a_video_was_sent(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update([
+            'script_status' => 'approved',
+            'video_url' => 'https://cdn.example/video.mp4',
+            'video_submitted_at' => now(),
+            'video_status' => 'submitted',
+            'delivery_status' => 'sent',
+        ]);
+        $note = 'Cortar o final.';
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'delivery_status' => 'revision',
+                'revision_details' => $note,
+                'video_status' => 'revision',
+                'video_feedback' => $note,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.video_status', 'revision')
+            ->assertJsonPath('data.demands.0.script_status', 'approved')
+            ->assertJsonPath('data.demands.0.pauta', null)
+            ->assertJsonPath('data.demands.0.video_feedback', $note);
+
+        $history = $demand->fresh()->revision_history;
+        $this->assertSame('video', $history[0]['stage'] ?? null);
+        $this->assertSame($note, $history[0]['note'] ?? null);
+    }
+
+    public function test_pauta_notes_saved_as_empty_video_revisions_are_released(): void
+    {
+        $row = $this->approvedWithReels(2);
+        $demands = $row->demands()->orderBy('id')->get();
+        $note = 'Destacar frete grátis na loja oficial.';
+        $demands[0]->update([
+            'script_status' => 'approved',
+            'video_status' => 'revision',
+            'delivery_status' => 'revision',
+            'video_feedback' => $note,
+            'revision_details' => $note,
+            'revision_history' => [[
+                'stage' => 'video',
+                'note' => $note,
+                'requested_at' => '2026-10-20T14:07:44+00:00',
+            ]],
+        ]);
+        $demands[1]->update([
+            'video_url' => 'https://cdn.example/real.mp4',
+            'video_submitted_at' => now(),
+            'video_status' => 'revision',
+            'delivery_status' => 'revision',
+            'video_feedback' => 'Cortar o final.',
+            'revision_history' => [[
+                'stage' => 'video',
+                'note' => 'Cortar o final.',
+                'requested_at' => '2026-10-20T15:00:00+00:00',
+            ]],
+        ]);
+
+        app(CampaignDemandSync::class)->releaseBriefNotesStoredAsRevision();
+
+        $brief = $demands[0]->fresh();
+        $this->assertSame($note, $brief->pauta);
+        $this->assertSame('pending', $brief->video_status->value);
+        $this->assertSame('pending', $brief->script_status->value);
+        $this->assertSame('pending', $brief->delivery_status->value);
+        $this->assertNull($brief->video_feedback);
+        $this->assertSame([], $brief->revision_history ?? []);
+
+        $real = $demands[1]->fresh();
+        $this->assertSame('revision', $real->video_status->value);
+        $this->assertNull($real->pauta);
+        $this->assertSame('Cortar o final.', $real->revision_history[0]['note'] ?? null);
+        $this->assertSame('revision', $row->fresh()->video_status->value);
     }
 
     private function approvedWithReels(int $reels): CampaignCreator

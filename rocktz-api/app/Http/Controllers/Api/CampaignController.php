@@ -568,6 +568,7 @@ class CampaignController extends Controller
         }
 
         if ($demand) {
+            $demandAttributes = $this->demands->storeBriefInsteadOfEmptyRevision($demand, $demandAttributes);
             $this->demands->fillSubmission($demand, $demandAttributes);
         } elseif ($contentFields) {
             CampaignCreatorContent::query()->updateOrCreate(

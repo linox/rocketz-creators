@@ -447,6 +447,23 @@ function campaignCreatorSent(row: CampaignCreator) {
   );
 }
 
+function campaignStageHasScript(row: CampaignCreator) {
+  return Boolean(
+    row.script_submitted_at
+    || row.content?.script?.trim()
+    || row.content?.script_file_url?.trim()
+  );
+}
+
+function campaignStageHasVideo(row: CampaignCreator) {
+  return Boolean(
+    row.video_submitted_at
+    || row.content?.video_url?.trim()
+    || row.content?.image_url?.trim()
+    || row.content?.published_link?.trim()
+  );
+}
+
 function planningCreatorSent(item: PlanningItem) {
   return Boolean(
     item.script_submitted_at
@@ -486,8 +503,8 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
   const videoOnly = flow === "video_only";
 
   if (staged || scriptOnly) {
-    const hasScriptMaterial = Boolean(row.content?.script?.trim() || row.content?.script_file_url);
-    if (row.script_status === "submitted" || row.script_status === "revision" || (hasScriptMaterial && row.script_status !== "approved")) {
+    const hasScriptMaterial = campaignStageHasScript(row);
+    if (hasScriptMaterial && (row.script_status === "submitted" || row.script_status === "revision" || row.script_status !== "approved")) {
       items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }, demand));
     }
   }
@@ -499,9 +516,12 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
       : true;
 
   if ((staged && scriptReady) || videoOnly || flow === "live_link" || (!staged && !scriptOnly)) {
-    const creatorSentVideo = row.video_status === "submitted"
+    const hasVideoMaterial = campaignStageHasVideo(row);
+    const creatorSentVideo = hasVideoMaterial && (
+      row.video_status === "submitted"
       || row.video_status === "revision"
-      || (row.delivery_status === "sent" && Boolean(row.content?.video_url || row.content?.published_link) && row.video_status !== "approved");
+      || (row.delivery_status === "sent" && row.video_status !== "approved")
+    );
     if (creatorSentVideo) {
       items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
     }
@@ -667,8 +687,8 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
   const live = flow === "live_link";
 
   if (staged || scriptOnly) {
-    const hasScriptMaterial = Boolean(item.script?.trim() || item.script_file_url);
-    if (item.script_status === "submitted" || item.script_status === "revision" || (hasScriptMaterial && item.script_status !== "approved")) {
+    const hasScriptMaterial = Boolean(item.script_submitted_at || item.script?.trim() || item.script_file_url?.trim());
+    if (hasScriptMaterial && (item.script_status === "submitted" || item.script_status === "revision" || item.script_status !== "approved")) {
       items.push(buildPlanningStageItem(contract, item, "script", { part: 1, total: staged ? 2 : 1 }));
     }
   }
@@ -676,9 +696,17 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
   const scriptReady = staged ? item.script_status === "approved" : true;
 
   if ((staged && scriptReady) || videoOnly || live || (!staged && !scriptOnly)) {
-    const videoPending = item.video_status === "submitted"
+    const hasVideoMaterial = Boolean(
+      item.video_submitted_at
+      || item.media_url?.trim()
+      || item.submission_url?.trim()
+      || item.published_url?.trim()
+    );
+    const videoPending = hasVideoMaterial && (
+      item.video_status === "submitted"
       || item.video_status === "revision"
-      || (item.status === "review" && Boolean(item.media_url || item.submission_url) && item.script_status !== "submitted");
+      || (item.status === "review" && item.script_status !== "submitted")
+    );
     if (videoPending) {
       items.push(buildPlanningStageItem(contract, item, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }));
     }

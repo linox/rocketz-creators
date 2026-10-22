@@ -90,6 +90,15 @@ function DemandCard({
   const script = demand.content?.script?.trim() || "";
   const videoUrl = demand.content?.video_url?.trim() || "";
   const published = safeHttpUrl(demand.content?.published_link || "");
+  const hasVideoMaterial = Boolean(
+    videoUrl
+    || demand.content?.image_url?.trim()
+    || published
+    || demand.video_submitted_at
+  );
+  const canReviseScript = demand.script_status === "submitted"
+    || (Boolean(script || demand.content?.script_file_url) && demand.script_status !== "approved" && !hasVideoMaterial);
+  const canReviseVideo = hasVideoMaterial && demand.video_status !== "approved";
   const needsScript = state === "scriptReview";
   const needsVideo = state === "videoReview" || state === "sent";
 
@@ -109,9 +118,8 @@ function DemandCard({
       placeholder: t("campaignDetail.revisionRequired"),
       requiredMessage: t("campaignDetail.revisionRequired"),
     });
-    if (!note?.trim()) return;
-    const scriptRevision = demand.script_status === "submitted"
-      || (Boolean(script || demand.content?.script_file_url) && demand.script_status !== "approved" && !videoUrl);
+    if (!note?.trim() || (!canReviseScript && !canReviseVideo)) return;
+    const scriptRevision = canReviseScript;
     await onUpdate(demand.id, scriptRevision
       ? { delivery_status: "revision", revision_details: note.trim(), script_status: "revision", script_feedback: note.trim() }
       : { delivery_status: "revision", revision_details: note.trim(), video_status: "revision", video_feedback: note.trim() });
@@ -189,7 +197,7 @@ function DemandCard({
         </p>
       ) : null}
 
-      {canManage && (needsScript || needsVideo || state === "scriptApproved") ? (
+      {canManage && (needsScript || needsVideo || canReviseScript || canReviseVideo) ? (
         <div className="flex flex-wrap gap-2">
           {needsScript ? (
             <button
@@ -211,14 +219,16 @@ function DemandCard({
               <Check size={13} /> {t("campaignDetail.approveMaterial")}
             </button>
           ) : null}
-          <button
-            type="button"
-            disabled={updating}
-            onClick={() => void requestRevision()}
-            className={cn("cursor-pointer rounded-xl border border-rose-200 bg-white px-3 py-2 text-[11px] font-black tracking-wider text-rose-700 uppercase hover:bg-rose-50 disabled:opacity-50")}
-          >
-            {t("campaignDetail.requestRevision")}
-          </button>
+          {canReviseScript || canReviseVideo ? (
+            <button
+              type="button"
+              disabled={updating}
+              onClick={() => void requestRevision()}
+              className={cn("cursor-pointer rounded-xl border border-rose-200 bg-white px-3 py-2 text-[11px] font-black tracking-wider text-rose-700 uppercase hover:bg-rose-50 disabled:opacity-50")}
+            >
+              {t("campaignDetail.requestRevision")}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </article>

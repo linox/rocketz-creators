@@ -161,6 +161,62 @@ class CampaignDemandSync
         }
     }
 
+    /**
+     * A note sent as a revision before the creator submitted that stage is a pauta, not a change request.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    public function storeBriefInsteadOfEmptyRevision(CampaignDemand $demand, array $attributes): array
+    {
+        $attributes = $this->moveEmptyStageRevisionToPauta($demand, $attributes, 'script');
+        $attributes = $this->moveEmptyStageRevisionToPauta($demand, $attributes, 'video');
+
+        return $attributes;
+    }
+
+    /**
+     * Moves notes already stored as a revision on a stage the creator never submitted into the demand pauta.
+     */
+    public function releaseBriefNotesStoredAsRevision(): int
+    {
+        $released = 0;
+        $creatorIds = [];
+
+        CampaignDemand::query()
+            ->where(function ($query) {
+                $query->where(function ($video) {
+                    $video->where('video_status', StageApprovalStatus::Revision->value)
+                        ->whereNull('video_submitted_at')
+                        ->where(fn ($empty) => $empty->whereNull('video_url')->orWhere('video_url', ''))
+                        ->where(fn ($empty) => $empty->whereNull('image_url')->orWhere('image_url', ''))
+                        ->where(fn ($empty) => $empty->whereNull('published_link')->orWhere('published_link', ''));
+                })->orWhere(function ($script) {
+                    $script->where('script_status', StageApprovalStatus::Revision->value)
+                        ->whereNull('script_submitted_at')
+                        ->where(fn ($empty) => $empty->whereNull('script')->orWhere('script', ''))
+                        ->where(fn ($empty) => $empty->whereNull('script_file_url')->orWhere('script_file_url', ''));
+                });
+            })
+            ->orderBy('id')
+            ->each(function (CampaignDemand $demand) use (&$released, &$creatorIds) {
+                if (! $this->releaseStoredRevisionWithoutSubmission($demand)) {
+                    return;
+                }
+                $released++;
+                $creatorIds[$demand->campaign_creator_id] = true;
+            });
+
+        foreach (array_keys($creatorIds) as $creatorId) {
+            $row = CampaignCreator::query()->find($creatorId);
+            if ($row) {
+                $this->rollup($row);
+            }
+        }
+
+        return $released;
+    }
+
     public function rollup(CampaignCreator $row): void
     {
         $demands = $row->demands()->get();
@@ -296,6 +352,209 @@ class CampaignDemandSync
         }
 
         return DeliveryStatus::Pending;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function moveEmptyStageRevisionToPauta(CampaignDemand $demand, array $attributes, string $stage): array
+    {
+        $statusKey = $stage === 'script' ? 'script_status' : 'video_status';
+        if (! NotificationService::is($attributes[$statusKey] ?? null, StageApprovalStatus::Revision)) {
+            return $attributes;
+        }
+        if ($stage === 'script' ? $this->demandHasScript($demand, $attributes) : $this->demandHasVideo($demand, $attributes)) {
+            return $attributes;
+        }
+
+        $feedbackKey = $stage === 'script' ? 'script_feedback' : 'video_feedback';
+        $note = trim((string) ($attributes[$feedbackKey] ?? $attributes['revision_details'] ?? ''));
+        unset($attributes[$feedbackKey]);
+        $attributes[$statusKey] = StageApprovalStatus::Pending->value;
+        $attributes[$feedbackKey] = null;
+
+        $otherStatus = $stage === 'script' ? 'video_status' : 'script_status';
+        $otherIsRevision = NotificationService::is($attributes[$otherStatus] ?? null, StageApprovalStatus::Revision)
+            || $this->statusValue($demand->{$otherStatus}) === StageApprovalStatus::Revision->value;
+        $deliveryIsRevision = NotificationService::is($attributes['delivery_status'] ?? null, DeliveryStatus::Revision)
+            || $this->statusValue($demand->delivery_status) === DeliveryStatus::Revision->value;
+        if (! $otherIsRevision && $deliveryIsRevision) {
+            $attributes['delivery_status'] = DeliveryStatus::Pending->value;
+            $attributes['revision_details'] = null;
+        } elseif (! $otherIsRevision) {
+            unset($attributes['delivery_status'], $attributes['revision_details']);
+        }
+
+        if ($note !== '') {
+            $attributes['pauta'] = $this->appendPauta($attributes['pauta'] ?? $demand->pauta, $note);
+        }
+
+        if ($stage === 'video' && $this->approvedScriptWithoutSubmission($demand, $attributes)) {
+            $attributes['script_status'] = StageApprovalStatus::Pending->value;
+        }
+
+        return $attributes;
+    }
+
+    private function releaseStoredRevisionWithoutSubmission(CampaignDemand $demand): bool
+    {
+        $changed = false;
+        $history = is_array($demand->revision_history) ? $demand->revision_history : [];
+
+        if ($this->statusValue($demand->video_status) === StageApprovalStatus::Revision->value && ! $this->demandHasVideo($demand)) {
+            $note = $this->storedRevisionNote($demand, 'video');
+            if ($note !== '') {
+                $demand->pauta = $this->appendPauta($demand->pauta, $note);
+            }
+            $history = $this->withoutStage($history, 'video');
+            $demand->video_status = StageApprovalStatus::Pending;
+            $demand->video_feedback = null;
+            if ($this->approvedScriptWithoutSubmission($demand)) {
+                $demand->script_status = StageApprovalStatus::Pending;
+            }
+            if ($this->statusValue($demand->script_status) !== StageApprovalStatus::Revision->value
+                && $this->statusValue($demand->delivery_status) === DeliveryStatus::Revision->value) {
+                $demand->delivery_status = DeliveryStatus::Pending;
+                $demand->revision_details = null;
+            }
+            $changed = true;
+        }
+
+        if ($this->statusValue($demand->script_status) === StageApprovalStatus::Revision->value && ! $this->demandHasScript($demand)) {
+            $note = $this->storedRevisionNote($demand, 'script');
+            if ($note !== '') {
+                $demand->pauta = $this->appendPauta($demand->pauta, $note);
+            }
+            $history = $this->withoutStage($history, 'script');
+            $demand->script_status = StageApprovalStatus::Pending;
+            $demand->script_feedback = null;
+            if ($this->statusValue($demand->video_status) !== StageApprovalStatus::Revision->value
+                && $this->statusValue($demand->delivery_status) === DeliveryStatus::Revision->value) {
+                $demand->delivery_status = DeliveryStatus::Pending;
+                $demand->revision_details = null;
+            }
+            $changed = true;
+        }
+
+        if (! $changed) {
+            return false;
+        }
+
+        $demand->revision_history = $history;
+        $demand->save();
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function approvedScriptWithoutSubmission(CampaignDemand $demand, array $attributes = []): bool
+    {
+        if ($this->demandHasScript($demand, $attributes)) {
+            return false;
+        }
+
+        return $this->statusValue($attributes['script_status'] ?? $demand->script_status) === StageApprovalStatus::Approved->value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function demandHasScript(CampaignDemand $demand, array $attributes = []): bool
+    {
+        return filled($demand->script)
+            || filled($demand->script_file_url)
+            || filled($demand->script_submitted_at)
+            || filled($attributes['script'] ?? null)
+            || filled($attributes['script_file_url'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function demandHasVideo(CampaignDemand $demand, array $attributes = []): bool
+    {
+        return filled($demand->video_url)
+            || filled($demand->image_url)
+            || filled($demand->published_link)
+            || filled($demand->video_submitted_at)
+            || filled($attributes['video_url'] ?? null)
+            || filled($attributes['image_url'] ?? null)
+            || filled($attributes['published_link'] ?? null);
+    }
+
+    private function storedRevisionNote(CampaignDemand $demand, string $stage): string
+    {
+        $feedback = $stage === 'script' ? $demand->script_feedback : $demand->video_feedback;
+        $direct = trim((string) $feedback);
+        $history = is_array($demand->revision_history) ? $demand->revision_history : [];
+        $notes = [];
+        foreach ($history as $entry) {
+            if (! is_array($entry) || ($entry['stage'] ?? '') !== $stage) {
+                continue;
+            }
+            $note = trim((string) ($entry['note'] ?? ''));
+            if ($note !== '' && ! in_array($note, $notes, true)) {
+                $notes[] = $note;
+            }
+        }
+        $otherStage = $stage === 'script' ? 'video' : 'script';
+        $otherStatus = $otherStage === 'script' ? $demand->script_status : $demand->video_status;
+        $details = $this->statusValue($otherStatus) === StageApprovalStatus::Revision->value
+            ? ''
+            : trim((string) $demand->revision_details);
+        if ($direct !== '') {
+            array_unshift($notes, $direct);
+        }
+        if ($details !== '') {
+            $notes[] = $details;
+        }
+
+        $unique = [];
+        foreach ($notes as $note) {
+            if ($note !== '' && ! in_array($note, $unique, true)) {
+                $unique[] = $note;
+            }
+        }
+
+        return implode("\n\n", $unique);
+    }
+
+    /**
+     * @param  list<mixed>  $history
+     * @return list<mixed>
+     */
+    private function withoutStage(array $history, string $stage): array
+    {
+        return array_values(array_filter(
+            $history,
+            fn ($entry) => ! is_array($entry) || ($entry['stage'] ?? '') !== $stage,
+        ));
+    }
+
+    private function appendPauta(mixed $current, string $note): string
+    {
+        $note = trim($note);
+        $current = trim((string) $current);
+        if ($note === '' || $current === $note || ($current !== '' && str_contains($current, $note))) {
+            return $current;
+        }
+
+        return $current === '' ? $note : $current."\n\n".$note;
+    }
+
+    private function statusValue(mixed $status): string
+    {
+        if ($status instanceof StageApprovalStatus || $status instanceof DeliveryStatus) {
+            return $status->value;
+        }
+
+        return (string) ($status ?? '');
     }
 
     private function statusMoved(mixed $status): bool
