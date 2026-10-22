@@ -19,6 +19,7 @@ return [
     'mail_not_configured' => 'Email sending is not configured yet.',
     'mail_failed' => 'Could not send the email right now. Try again in a moment.',
     'mail_throttled' => 'Wait a minute before requesting another email.',
+    'too_many_attempts' => 'Too many attempts in a row. Wait a minute and try again.',
     'reset_sent' => 'If the email exists, we will send the reset link.',
     'reset_invalid' => 'Invalid or expired reset token.',
     'reset_success' => 'Password reset successfully.',

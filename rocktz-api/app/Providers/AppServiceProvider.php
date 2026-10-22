@@ -61,6 +61,16 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(8)->by($request->ip().'|'.$token);
         });
 
+        // POST e GET não podem dividir o mesmo contador: a tela consulta o status
+        // a cada 2s enquanto a sincronização do mês inteiro ainda está rodando.
+        RateLimiter::for('metrics-sync', function (Request $request) {
+            return Limit::perMinute(30)->by((string) ($request->user()?->getAuthIdentifier() ?: $request->ip()));
+        });
+
+        RateLimiter::for('metrics-sync-status', function (Request $request) {
+            return Limit::perMinute(180)->by((string) ($request->user()?->getAuthIdentifier() ?: $request->ip()));
+        });
+
         ResetPassword::createUrlUsing(function (object $user, string $token) {
             $frontend = rtrim((string) config('app.frontend_url'), '/');
             $email = urlencode($user->email);

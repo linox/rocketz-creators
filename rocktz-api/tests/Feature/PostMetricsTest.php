@@ -483,6 +483,27 @@ HTML, 200),
         $this->assertArrayNotHasKey('likes', $other->fresh()->metrics ?? []);
     }
 
+    public function test_recurring_metrics_status_polling_does_not_block_a_new_sync(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('auth')->plainTextToken;
+        $contract = RecurringContract::factory()->create();
+
+        for ($i = 0; $i < 12; $i++) {
+            $this->withToken($token)
+                ->getJson("/api/recurring-contracts/{$contract->id}/post-metrics-sync")
+                ->assertAccepted();
+        }
+
+        $this->withToken($token)
+            ->postJson("/api/recurring-contracts/{$contract->id}/post-metrics-sync", [
+                'force' => true,
+                'month' => '2026-08',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', __('auth.post_metrics_none'));
+    }
+
     public function test_creator_cannot_sync_recurring_post_metrics(): void
     {
         $contract = RecurringContract::factory()->create();

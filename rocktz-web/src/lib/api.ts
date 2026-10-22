@@ -35,13 +35,19 @@ type Queued<T> = T & { status?: MetricsJobStatus; message?: string; progress?: P
 
 const QUEUE_POLL_MS = 2000;
 const QUEUE_TIMEOUT_MS = 120_000;
+const METRICS_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
-async function waitForQueuedJob<T extends Queued<object>>(started: T, poll: () => Promise<T>, onTick?: (state: T) => void): Promise<T> {
+async function waitForQueuedJob<T extends Queued<object>>(
+  started: T,
+  poll: () => Promise<T>,
+  onTick?: (state: T) => void,
+  timeoutMs = QUEUE_TIMEOUT_MS,
+): Promise<T> {
   let current = started;
   onTick?.(current);
   const began = Date.now();
   while (current.status === "queued" || current.status === "running") {
-    if (Date.now() - began > QUEUE_TIMEOUT_MS) {
+    if (Date.now() - began > timeoutMs) {
       throw new ApiError(i18n.t("app:campaignDetail.metricsQueueTimeout"), 408);
     }
     await new Promise((resolve) => setTimeout(resolve, QUEUE_POLL_MS));
@@ -212,7 +218,7 @@ export const api = {
     if (body?.month) params.set("month", body.month);
     if (body?.content_planning_item_id) params.set("content_planning_item_id", String(body.content_planning_item_id));
     const query = params.toString() ? `?${params.toString()}` : "";
-    return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`), onTick);
+    return waitForQueuedJob(started, () => laravelFetch(`${path}${query}`), onTick, METRICS_SYNC_TIMEOUT_MS);
   },
 
   recurring: (query = "") => laravelFetch<List<RecurringContract>>(`/recurring-contracts${query}`),

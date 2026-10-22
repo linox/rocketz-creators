@@ -19,6 +19,7 @@ return [
     'mail_not_configured' => 'El envío de e-mail aún no está configurado.',
     'mail_failed' => 'No fue posible enviar el e-mail ahora. Inténtalo de nuevo en unos instantes.',
     'mail_throttled' => 'Espera un minuto antes de solicitar otro e-mail.',
+    'too_many_attempts' => 'Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo.',
     'reset_sent' => 'Si el e-mail existe, enviaremos el enlace de restablecimiento.',
     'reset_invalid' => 'Token de restablecimiento inválido o expirado.',
     'reset_success' => 'Contraseña restablecida con éxito.',

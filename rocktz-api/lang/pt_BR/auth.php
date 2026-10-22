@@ -19,6 +19,7 @@ return [
     'mail_not_configured' => 'Envio de e-mail ainda não está configurado.',
     'mail_failed' => 'Não foi possível enviar o e-mail agora. Tente novamente em instantes.',
     'mail_throttled' => 'Aguarde um minuto antes de solicitar outro e-mail.',
+    'too_many_attempts' => 'Muitas tentativas em sequência. Aguarde um minuto e tente de novo.',
     'reset_sent' => 'Se o e-mail existir, enviaremos o link de redefinição.',
     'reset_invalid' => 'Token de redefinição inválido ou expirado.',
     'reset_success' => 'Senha redefinida com sucesso.',
