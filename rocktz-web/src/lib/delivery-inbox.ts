@@ -436,6 +436,29 @@ function campaignDemandIdentity(demand: CampaignDemand): CampaignInboxDemand {
   };
 }
 
+function campaignCreatorSent(row: CampaignCreator) {
+  return Boolean(
+    row.script_submitted_at
+    || row.video_submitted_at
+    || row.content?.video_url?.trim()
+    || row.content?.image_url?.trim()
+    || row.content?.published_link?.trim()
+    || (row.content?.submission_versions?.length ?? 0) > 0
+  );
+}
+
+function planningCreatorSent(item: PlanningItem) {
+  return Boolean(
+    item.script_submitted_at
+    || item.video_submitted_at
+    || item.submitted_at
+    || item.media_url?.trim()
+    || item.submission_url?.trim()
+    || item.published_url?.trim()
+    || (item.submission_versions?.length ?? 0) > 0
+  );
+}
+
 function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxItem[] {
   if (row.application_status && row.application_status !== "approved") return [];
 
@@ -491,7 +514,7 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
     || (scriptOnly && row.script_status === "approved")
     || (videoOnly && row.video_status === "approved");
 
-  if (fullyApproved && items.length === 0) {
+  if (fullyApproved && items.length === 0 && campaignCreatorSent(row)) {
     const doneStage = scriptOnly ? "script" : "video";
     const done = buildCampaignStageItem(campaign, row, doneStage, { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand);
     done.status = "approved";
@@ -661,8 +684,10 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
     }
   }
 
+  const creatorSent = planningCreatorSent(item);
+
   // Fallback: legacy review without stage fields
-  if (items.length === 0 && (item.status === "review" || item.submitted_at)) {
+  if (items.length === 0 && creatorSent && (item.status === "review" || item.submitted_at)) {
     const stage = (item.script || item.script_file_url) && !item.media_url ? "script" : "video";
     items.push(buildPlanningStageItem(contract, item, stage, { part: staged ? (stage === "script" ? 1 : 2) : 1, total: staged ? 2 : 1 }));
   }
@@ -671,14 +696,14 @@ function fromPlanningItem(contract: RecurringContract, item: PlanningItem): Deli
     || item.status === "published"
     || (staged && item.script_status === "approved" && item.video_status === "approved");
 
-  if (fullyApproved && items.length === 0) {
+  if (fullyApproved && items.length === 0 && creatorSent) {
     const done = buildPlanningStageItem(contract, item, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 });
     done.status = "approved";
     done.id = `recurring-${item.id}-done`;
     items.push(done);
   }
 
-  if (items.length === 0 && (item.status === "rejected" || (item.status === "in_production" && item.feedback_note))) {
+  if (items.length === 0 && creatorSent && (item.status === "rejected" || (item.status === "in_production" && item.feedback_note))) {
     const stage = item.script_status === "revision" ? "script" : "video";
     items.push(buildPlanningStageItem(contract, item, stage, { part: staged ? (stage === "script" ? 1 : 2) : 1, total: staged ? 2 : 1 }));
   }
