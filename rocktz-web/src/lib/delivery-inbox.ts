@@ -448,11 +448,49 @@ function campaignCreatorSent(row: CampaignCreator) {
 }
 
 function campaignStageHasScript(row: CampaignCreator) {
+  const versions = row.content?.submission_versions ?? [];
   return Boolean(
     row.script_submitted_at
     || row.content?.script?.trim()
     || row.content?.script_file_url?.trim()
+    || versions.some((entry) => entry.stage === "script" && Boolean(entry.script?.trim() || entry.script_file_url?.trim()))
   );
+}
+
+function demandScriptBody(demand: CampaignDemand) {
+  const versions = demand.content?.submission_versions ?? [];
+  return Boolean(
+    demand.script_submitted_at
+    || demand.content?.script?.trim()
+    || demand.content?.script_file_url?.trim()
+    || versions.some((entry) => entry.stage === "script" && Boolean(entry.script?.trim() || entry.script_file_url?.trim()))
+  );
+}
+
+/** A pauta lives on the demand. A script sent before that slot existed stays on the participation. */
+function withLegacyScript(row: CampaignCreator, demand: CampaignDemand, projected: CampaignCreator): CampaignCreator {
+  if (demandScriptBody(demand) || !campaignStageHasScript(row)) return projected;
+  const host = row.demands?.find((item) => !demandScriptBody(item));
+  if (!host || host.id !== demand.id) return projected;
+  const parentStatus = row.script_status && row.script_status !== "pending" ? row.script_status : null;
+  return {
+    ...projected,
+    script_status: parentStatus || projected.script_status,
+    script_submitted_at: projected.script_submitted_at || row.script_submitted_at || null,
+    content: {
+      video_url: projected.content?.video_url ?? null,
+      image_url: projected.content?.image_url ?? null,
+      published_link: projected.content?.published_link ?? null,
+      ...(projected.content ?? {}),
+      script: row.content?.script ?? projected.content?.script ?? null,
+      script_file_url: row.content?.script_file_url || projected.content?.script_file_url,
+      script_file_name: row.content?.script_file_name || projected.content?.script_file_name,
+      script_version: row.content?.script_version || projected.content?.script_version,
+      submission_versions: projected.content?.submission_versions?.length
+        ? projected.content.submission_versions
+        : row.content?.submission_versions,
+    },
+  };
 }
 
 function campaignStageHasVideo(row: CampaignCreator) {
@@ -482,12 +520,12 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   if (row.demands?.length) {
     return row.demands.flatMap((demand) => fromCampaignSubmission(
       campaign,
-      {
+      withLegacyScript(row, demand, {
         ...projectDemand(row, demand),
         creator: row.creator,
         creator_id: row.creator_id,
         delivery_type: demand.content_type,
-      },
+      }),
       campaignDemandIdentity(demand),
     ));
   }
@@ -504,7 +542,10 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
 
   if (staged || scriptOnly) {
     const hasScriptMaterial = campaignStageHasScript(row);
-    if (hasScriptMaterial && (row.script_status === "submitted" || row.script_status === "revision" || row.script_status !== "approved")) {
+    const scriptSent = row.script_status === "submitted" || row.script_status === "revision";
+    const scriptNeedsDecision = hasScriptMaterial && row.script_status !== "approved";
+    const scriptApprovedBeforeVideo = hasScriptMaterial && row.script_status === "approved" && !campaignStageHasVideo(row);
+    if (scriptSent || scriptNeedsDecision || scriptApprovedBeforeVideo) {
       items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }, demand));
     }
   }
