@@ -344,6 +344,7 @@ function DeliveriesInboxInner() {
           item.companyName,
           item.sourceName,
           item.title,
+          item.brief,
           item.formatLabel,
           item.formatKey,
         ].join(" ").toLowerCase().includes(term);
@@ -1029,11 +1030,7 @@ function campaignOrigin(item: DeliveryInboxItem, t: (key: string, opts?: Record<
 }
 
 function inboxHeading(item: DeliveryInboxItem, t: (key: string, opts?: Record<string, unknown>) => string) {
-  if (item.demandPosition) {
-    const label = String(inboxFormatLabel(item, t));
-    const pauta = item.title.trim();
-    return pauta ? `${label} — ${pauta}` : label;
-  }
+  if (item.demandPosition) return String(inboxFormatLabel(item, t));
   const named = item.title.trim();
   if (named) return named;
   const key = item.formatKey || item.formatLabel;
@@ -1302,6 +1299,12 @@ function ReadingPane({
       </div>
 
       <div className="space-y-5 p-4">
+        {item.brief?.trim() ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+            <h3 className="m-0 text-[11px] font-extrabold tracking-wider text-amber-900 uppercase">{t("campaignDetail.demandPautaTitle")}</h3>
+            <p className="m-0 mt-1.5 text-sm leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{item.brief}</p>
+          </div>
+        ) : null}
         <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
           <h3 className="m-0 flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-purple-800 uppercase">
             <History size={13} /> {t("deliveries.inbox.changeHistory")}

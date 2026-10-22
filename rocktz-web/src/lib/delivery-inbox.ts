@@ -95,6 +95,8 @@ export type DeliveryInboxItem = {
   period?: string | null;
   /** Recurring content_type / campaign delivery type, e.g. reel */
   formatKey?: string | null;
+  /** Campaign demand brief. Shown in the body, never as the row title. */
+  brief?: string | null;
 };
 
 export type InboxFolder =
@@ -389,7 +391,7 @@ function buildCampaignStageItem(
 
   return {
     id,
-    title: demand ? (demand.pauta?.trim() || "") : campaign.name,
+    title: campaign.name,
     formatLabel,
     formatKey: (demand?.contentType || formatLabel).toLowerCase() || null,
     creatorId: String(row.creator_id),
@@ -420,6 +422,7 @@ function buildCampaignStageItem(
     stagePart: opts.part,
     stageTotal: opts.total,
     period: (row.delivery_date || campaign.delivery_date || campaign.end_date || "").slice(0, 7) || null,
+    brief: demand?.pauta?.trim() || null,
   };
 }
 
