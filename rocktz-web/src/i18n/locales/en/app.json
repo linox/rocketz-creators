@@ -2778,6 +2778,9 @@
     "filterSourceCampaign": "Campaigns",
     "filterSourceRecurring": "Recurring",
     "filterCompanyAll": "All companies",
+    "filterCompanyLabel": "Company",
+    "filterSourceLabel": "Source",
+    "filterKindLabel": "Type",
     "noCompany": "No company",
     "kind": {
       "delivery": "Delivery",

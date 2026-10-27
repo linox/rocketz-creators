@@ -2778,6 +2778,9 @@
     "filterSourceCampaign": "Campanhas",
     "filterSourceRecurring": "Recorrentes",
     "filterCompanyAll": "Todas as empresas",
+    "filterCompanyLabel": "Empresa",
+    "filterSourceLabel": "Origem",
+    "filterKindLabel": "Tipo",
     "noCompany": "Sem empresa",
     "kind": {
       "delivery": "Entrega",

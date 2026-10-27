@@ -72,10 +72,10 @@ function CalendarScreenInner() {
       .finally(() => setLoading(false));
   }, [month, kind]);
 
-  const monthLabel = useMemo(
-    () => new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" }),
-    [month, locale],
-  );
+  const monthLabel = useMemo(() => {
+    const label = new Date(`${month}-01T00:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }, [month, locale]);
 
   const kindOptions = [
     { value: "all", label: t("calendar.filterAll") },
@@ -138,32 +138,37 @@ function CalendarScreenInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center">
-        <div>
-          <h1 className="m-0 text-xl font-black text-slate-900">{isCreator ? t("calendar.titleCreator") : t("calendar.titleAgency")}</h1>
-          <p className="mt-1 text-sm text-slate-500">{isCreator ? t("calendar.subtitleCreator") : t("calendar.subtitleAgency")}</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="m-0 text-xl font-black text-slate-900">{isCreator ? t("calendar.titleCreator") : t("calendar.titleAgency")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{isCreator ? t("calendar.subtitleCreator") : t("calendar.subtitleAgency")}</p>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <button type="button" onClick={() => setMonth((value) => shiftMonth(value, -1))} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label={t("calendar.prev")}>
               <ChevronLeft size={18} />
             </button>
-            <span className="min-w-[140px] text-center text-sm font-bold capitalize text-slate-800">{monthLabel}</span>
+            <span className="min-w-[148px] text-center text-sm font-bold text-slate-800">{monthLabel}</span>
             <button type="button" onClick={() => setMonth((value) => shiftMonth(value, 1))} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label={t("calendar.next")}>
               <ChevronRight size={18} />
             </button>
           </div>
+        </div>
+        <div className={cn("grid gap-3 border-t border-slate-100 pt-4", isAgency ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
           {isAgency ? (
-            <div className="w-full sm:w-56">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterCompanyLabel")}</span>
               <Select2Field searchable theme="light" value={companyId} options={companyOptions} onChange={setCompanyId} />
-            </div>
+            </label>
           ) : null}
-          <div className="w-full sm:w-52">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterSourceLabel")}</span>
             <Select2Field theme="light" value={source} options={sourceOptions} onChange={(value) => setSource(value as SourceFilter)} />
-          </div>
-          <div className="w-full sm:w-52">
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterKindLabel")}</span>
             <Select2Field theme="light" value={kind} options={kindOptions} onChange={(value) => setKind(value as KindFilter)} />
-          </div>
+          </label>
         </div>
       </div>
 
