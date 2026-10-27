@@ -2774,12 +2774,15 @@
     "filterAll": "Delivery and posting",
     "filterDelivery": "Deliveries",
     "filterPost": "Posts",
+    "filterSourceAll": "Campaign and recurring",
+    "filterSourceCampaign": "Campaigns",
+    "filterSourceRecurring": "Recurring",
     "kind": {
       "delivery": "Delivery",
       "post": "Post"
     },
     "sourceCampaign": "Campaign",
-    "sourceRecurring": "Demand",
+    "sourceRecurring": "Recurring",
     "empty": "No events this month.",
     "prev": "Previous month",
     "next": "Next month",

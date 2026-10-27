@@ -9,13 +9,14 @@ import { Select2Field } from "@/components/Select2Field";
 import { WorkCalendar } from "@/components/WorkCalendar";
 import { api } from "@/lib/api";
 import { alertApiError } from "@/lib/alerts";
-import { currentYearMonth, shiftMonth } from "@/lib/calendar";
+import { calendarSourceTone, currentYearMonth, shiftMonth } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import type { CalendarEvent, CalendarEventKind } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 
 type KindFilter = "all" | CalendarEventKind;
+type SourceFilter = "all" | CalendarEvent["source"];
 
 function CalendarScreenInner() {
   const user = useAuth();
@@ -24,6 +25,7 @@ function CalendarScreenInner() {
   const isCreator = user.role === "creator";
   const [month, setMonth] = useState(currentYearMonth());
   const [kind, setKind] = useState<KindFilter>(isCreator ? "all" : "post");
+  const [source, setSource] = useState<SourceFilter>("all");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,9 +49,20 @@ function CalendarScreenInner() {
     { value: "post", label: t("calendar.filterPost") },
   ];
 
+  const sourceOptions = [
+    { value: "all", label: t("calendar.filterSourceAll") },
+    { value: "campaign", label: t("calendar.filterSourceCampaign") },
+    { value: "recurring", label: t("calendar.filterSourceRecurring") },
+  ];
+
+  const visible = useMemo(
+    () => events.filter((event) => source === "all" || event.source === source),
+    [events, source],
+  );
+
   const agenda = useMemo(
-    () => [...events].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind)),
-    [events],
+    () => [...visible].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind)),
+    [visible],
   );
 
   return (
@@ -70,6 +83,9 @@ function CalendarScreenInner() {
             </button>
           </div>
           <div className="w-full sm:w-52">
+            <Select2Field theme="light" value={source} options={sourceOptions} onChange={(value) => setSource(value as SourceFilter)} />
+          </div>
+          <div className="w-full sm:w-52">
             <Select2Field theme="light" value={kind} options={kindOptions} onChange={(value) => setKind(value as KindFilter)} />
           </div>
         </div>
@@ -81,7 +97,7 @@ function CalendarScreenInner() {
         </div>
       ) : (
         <>
-          <WorkCalendar month={month} events={events} showCreator={!isCreator} />
+          <WorkCalendar month={month} events={visible} showCreator={!isCreator} />
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-sm font-bold text-slate-900">{t("calendar.agendaTitle")}</h2>
             {!agenda.length ? (
@@ -91,26 +107,31 @@ function CalendarScreenInner() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {agenda.map((event) => (
-                  <Link key={event.id} href={event.href} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="m-0 truncate text-sm font-bold text-slate-900">{event.title}</p>
-                      <p className="m-0 text-xs text-slate-500">
-                        {event.company?.name ? `${event.company.name} · ` : ""}
-                        {event.creator?.artistic_name ? `${event.creator.artistic_name} · ` : ""}
-                        {event.source === "recurring" ? t("calendar.sourceRecurring") : t("calendar.sourceCampaign")}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", event.kind === "post" ? "border-violet-200 bg-violet-50 text-violet-800" : "border-amber-200 bg-amber-50 text-amber-800")}>
-                        {t(`calendar.kind.${event.kind}`)}
-                      </span>
-                      <span className="text-xs font-bold text-slate-700">
-                        {new Date(`${event.date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" })}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
+                {agenda.map((event) => {
+                  const tone = calendarSourceTone(event.source);
+                  return (
+                    <Link key={event.id} href={event.href} className={cn("flex flex-col gap-1 border-l-4 py-3 pl-3 sm:flex-row sm:items-center sm:justify-between", tone.rail)}>
+                      <div className="min-w-0">
+                        <p className="m-0 truncate text-sm font-bold text-slate-900">{event.title}</p>
+                        <p className="m-0 text-xs text-slate-500">
+                          {event.company?.name ? `${event.company.name} · ` : ""}
+                          {event.creator?.artistic_name ? `${event.creator.artistic_name}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", tone.tag)}>
+                          {event.source === "recurring" ? t("calendar.sourceRecurring") : t("calendar.sourceCampaign")}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-extrabold text-slate-600 uppercase">
+                          {t(`calendar.kind.${event.kind}`)}
+                        </span>
+                        <span className="text-xs font-bold text-slate-700">
+                          {new Date(`${event.date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" })}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>

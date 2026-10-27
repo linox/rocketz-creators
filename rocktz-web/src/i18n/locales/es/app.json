@@ -2774,12 +2774,15 @@
     "filterAll": "Entrega y publicación",
     "filterDelivery": "Entregas",
     "filterPost": "Publicaciones",
+    "filterSourceAll": "Campaña y recurrente",
+    "filterSourceCampaign": "Campañas",
+    "filterSourceRecurring": "Recurrentes",
     "kind": {
       "delivery": "Entrega",
       "post": "Publicación"
     },
     "sourceCampaign": "Campaña",
-    "sourceRecurring": "Demanda",
+    "sourceRecurring": "Recurrente",
     "empty": "Ningún evento en este mes.",
     "prev": "Mes anterior",
     "next": "Próximo mes",

@@ -55,6 +55,27 @@ export function shiftMonth(value: string, delta: number) {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export type CalendarSource = "campaign" | "recurring";
+
+export function calendarSourceTone(source: CalendarSource) {
+  if (source === "recurring") {
+    return {
+      card: "border-purple-200 bg-purple-50 text-purple-900",
+      tag: "border-purple-200 bg-purple-100 text-purple-800",
+      dot: "bg-purple-500",
+      legend: "text-purple-800",
+      rail: "border-l-purple-400",
+    };
+  }
+  return {
+    card: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    tag: "border-indigo-200 bg-indigo-100 text-indigo-800",
+    dot: "bg-indigo-500",
+    legend: "text-indigo-800",
+    rail: "border-l-indigo-400",
+  };
+}
+
 export type PlanningDateKind = "delivery" | "post";
 
 export function planningDateEvents(item: { id: number; planned_date?: string | null; post_date?: string | null }) {
