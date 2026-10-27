@@ -11,10 +11,12 @@ export function WorkCalendar({
   month,
   events,
   showCreator = true,
+  showCompany = false,
 }: {
   month: string;
   events: CalendarEvent[];
   showCreator?: boolean;
+  showCompany?: boolean;
 }) {
   const { t, i18n } = useTranslation("app");
   const locale = intlLocale(normalizeLocale(i18n.language));
@@ -24,6 +26,9 @@ export function WorkCalendar({
     const list = byDay.get(key) ?? [];
     list.push(event);
     byDay.set(key, list);
+  }
+  for (const list of byDay.values()) {
+    list.sort((a, b) => (a.company?.name || "").localeCompare(b.company?.name || "", locale) || a.title.localeCompare(b.title, locale));
   }
 
   return (
@@ -61,6 +66,7 @@ export function WorkCalendar({
                             {showCreator ? <span className="truncate text-[9px] font-semibold">{event.creator?.artistic_name}</span> : null}
                           </div>
                           <p className="mt-0.5 truncate font-bold">{event.title}</p>
+                          {showCompany && event.company?.name ? <p className="truncate text-[9px] font-semibold opacity-70">{event.company.name}</p> : null}
                           <p className="truncate text-[9px] font-medium opacity-80">
                             {t(`calendar.kind.${event.kind}`)}
                             {event.format ? ` · ${event.format}` : ""}
