@@ -42,6 +42,40 @@ body {
   display: none;
 }
 
+/* Safari skips color-mix() backgrounds (Tailwind bg-white/40, bg-amber-50/60, …)
+   on anything inside an element with backdrop-filter, so modal sheets look transparent.
+   The dim and the blur stay on a pseudo-element; the panel is not in that group. */
+.app-modal-overlay.backdrop-blur-sm,
+.app-modal-overlay.backdrop-blur,
+.app-modal-overlay.backdrop-blur-md {
+  isolation: isolate;
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-modal-overlay.backdrop-blur-sm::before,
+.app-modal-overlay.backdrop-blur::before,
+.app-modal-overlay.backdrop-blur-md::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgb(15 23 42 / 0.6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.app-modal-overlay.backdrop-blur-md::before {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.app-modal-overlay.bg-slate-950\/70::before {
+  background-color: rgb(2 6 23 / 0.7);
+}
+
 @media (max-width: 639px) {
   .app-modal-overlay {
     align-items: stretch !important;

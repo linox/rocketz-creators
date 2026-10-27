@@ -31,7 +31,7 @@ export function CampaignAdditionalBriefing({ value, canEdit, companyName, onSave
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-start gap-2">
         <ScrollText size={16} className="mt-0.5 shrink-0 text-amber-700" />
         <div>

@@ -1991,7 +1991,7 @@ function DetailInner() {
             {selected && selectedCreator ? (
               <div className={cn(
                 "flex flex-col gap-5",
-                !isCreator && detailModalOpen && "app-modal-panel relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl",
+                !isCreator && detailModalOpen && "app-modal-panel relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-2xl sm:p-4",
               )}>
                 {!isCreator && detailModalOpen ? (
                   <button type="button" onClick={() => setDetailModalOpen(false)} className="sticky top-0 z-10 inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-100">
@@ -2035,7 +2035,7 @@ function DetailInner() {
                 </div>
 
                 {!isCreator && campaign.is_barter ? (
-                  <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                     <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">{t("campaignDetail.shippingAddress")}</p>
                     {formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).length ? (
                       <p className="mt-1 whitespace-pre-line text-sm font-semibold text-slate-800">{formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).join("\n")}</p>

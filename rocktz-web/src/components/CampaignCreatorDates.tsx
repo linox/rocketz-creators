@@ -47,7 +47,7 @@ export function CampaignCreatorDates({
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
       <div className="flex items-start gap-2">
         <CalendarCheck size={16} className="mt-0.5 shrink-0 text-brand-primary" />
         <div>
