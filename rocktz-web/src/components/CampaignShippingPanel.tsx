@@ -5,6 +5,7 @@ import { ChevronDown, FileSpreadsheet, Loader2, Printer, Tag } from "lucide-reac
 import { useTranslation } from "react-i18next";
 import { CountrySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { Select2Field } from "@/components/Select2Field";
+import { SensitiveInput } from "@/components/SensitiveValue";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { hasRegions, normalizeCountry } from "@/lib/geo";
@@ -308,7 +309,7 @@ export function CampaignShippingPanel({
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {t("campaignDetail.labelsSenderPhone")}
-          <input className={inputClass} value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <SensitiveInput kind="phone" className={inputClass} value={phone} onChange={setPhone} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingCountry")}
@@ -325,13 +326,14 @@ export function CampaignShippingPanel({
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingZip")}
-          <input
+          <SensitiveInput
+            kind="zip"
             className={inputClass}
             value={form.zip}
             inputMode={country === "BR" ? "numeric" : "text"}
             autoComplete="postal-code"
-            onChange={(event) => {
-              const zip = formatPostalCode(country, event.target.value);
+            onChange={(value) => {
+              const zip = formatPostalCode(country, value);
               latestZip.current = zip;
               zipLookupKey.current = "";
               setForm({ ...form, zip });
@@ -346,19 +348,19 @@ export function CampaignShippingPanel({
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingStreet")}
-          <input className={inputClass} value={form.street} autoComplete="address-line1" onChange={(event) => setForm({ ...form, street: event.target.value })} />
+          <SensitiveInput kind="line" className={inputClass} value={form.street} autoComplete="address-line1" onChange={(value) => setForm({ ...form, street: value })} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingNumber")}
-          <input className={inputClass} value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+          <SensitiveInput kind="text" className={inputClass} value={form.number} onChange={(value) => setForm({ ...form, number: value })} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingComplement")}
-          <input className={inputClass} value={form.complement} placeholder={tp("shippingComplementPh")} onChange={(event) => setForm({ ...form, complement: event.target.value })} />
+          <SensitiveInput kind="line" className={inputClass} value={form.complement} placeholder={tp("shippingComplementPh")} onChange={(value) => setForm({ ...form, complement: value })} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingNeighborhood")}
-          <input className={inputClass} value={form.neighborhood} onChange={(event) => setForm({ ...form, neighborhood: event.target.value })} />
+          <SensitiveInput kind="line" className={inputClass} value={form.neighborhood} onChange={(value) => setForm({ ...form, neighborhood: value })} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           {tp("shippingCity")}

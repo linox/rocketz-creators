@@ -222,7 +222,7 @@ function CompanyDashboardInner() {
   }, 0);
 
   const campaignBudget = campaigns.reduce((sum, campaign) => {
-    if (campaign.is_barter || campaign.is_direct_contract) return sum;
+    if (campaign.is_barter || campaign.is_direct_contract || campaign.is_benefit_coupon) return sum;
     return sum + (Number(campaign.total_budget) || 0);
   }, 0);
 

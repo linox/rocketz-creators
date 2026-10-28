@@ -203,6 +203,115 @@ export type CreatorGroup = {
   creators?: CreatorGroupMember[];
 };
 
+export type CreatorCouponCreator = {
+  id: number;
+  artistic_name: string | null;
+  full_name: string | null;
+  photo_url?: string | null;
+  coupon_id?: number | null;
+};
+
+export type CreatorCoupon = {
+  id: number;
+  company_id: number;
+  campaign_id: number;
+  creator_id: number;
+  code: string;
+  discount_percent: number | null;
+  commission_percent: number | null;
+  is_active: boolean;
+  company?: { id: number; name: string } | null;
+  campaign?: { id: number; name: string } | null;
+  creator?: CreatorCouponCreator | null;
+};
+
+export type CreatorCouponCampaignOption = {
+  id: number;
+  name: string;
+  benefit_coupon_code: string | null;
+  benefit_discount_percent: number | null;
+  benefit_commission_percent: number | null;
+  creators: CreatorCouponCreator[];
+};
+
+export type CouponEarningRow = {
+  creator_id: number;
+  artistic_name: string | null;
+  full_name: string | null;
+  codes: string[];
+  amount: number | null;
+  payment_status: FinancePaymentStatus | null;
+  locked: boolean;
+};
+
+export type CouponEarningSheet = {
+  company_id: number;
+  month: string;
+  currency: string;
+  rows: CouponEarningRow[];
+};
+
+export type FinancePaymentStatus = "awaiting_invoice" | "submitted" | "rejected" | "released" | "paid";
+
+export type FinancePayment = {
+  id: number;
+  company_id: number;
+  creator_id: number;
+  source: "campaign" | "recurring" | "coupon";
+  campaign_id: number | null;
+  campaign_creator_id: number | null;
+  recurring_contract_id: number | null;
+  reference_month: string;
+  amount: number;
+  currency: string;
+  invoice_due_date: string;
+  payment_due_date: string | null;
+  status: FinancePaymentStatus;
+  invoice_overdue: boolean;
+  invoice_url: string | null;
+  invoice_preview_url?: string | null;
+  invoice_mime?: string | null;
+  invoice_filename: string | null;
+  invoice_submitted_at: string | null;
+  rejection_reason: string | null;
+  paid_at: string | null;
+  title: string | null;
+  invoice_data?: string | null;
+  company?: { id: number; name: string } | null;
+  creator?: {
+    id: number;
+    artistic_name: string | null;
+    full_name: string | null;
+    photo_url?: string | null;
+    pix_key?: string | null;
+    bank_account?: {
+      holder_name?: string | null;
+      bank_name?: string | null;
+      agency?: string | null;
+      account?: string | null;
+      account_type?: string | null;
+      pix_type?: string | null;
+      pix_key?: string | null;
+    } | null;
+  } | null;
+};
+
+export type FinancePaymentList = {
+  data: FinancePayment[];
+  meta: {
+    company: {
+      id: number;
+      invoice_due_day: number;
+      payment_due_day: number;
+      invoice_data_campaign: string | null;
+      invoice_data_recurring: string | null;
+      invoice_data_coupon: string | null;
+    } | null;
+    counts: Record<string, number>;
+    amounts: Record<string, number>;
+  };
+};
+
 export type Campaign = {
   id: number;
   company_id: number;
@@ -228,6 +337,10 @@ export type Campaign = {
   is_secret: boolean;
   is_direct_contract: boolean;
   is_barter: boolean;
+  is_benefit_coupon?: boolean;
+  benefit_coupon_code?: string | null;
+  benefit_discount_percent?: number | null;
+  benefit_commission_percent?: number | null;
   limit_by_city?: boolean;
   limit_by_age?: boolean;
   min_age?: number | null;

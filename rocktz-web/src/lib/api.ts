@@ -9,6 +9,11 @@ import type {
   ShippingSender,
   Company,
   CreatorGroup,
+  CreatorCoupon,
+  CreatorCouponCampaignOption,
+  CouponEarningSheet,
+  FinancePayment,
+  FinancePaymentList,
   CompanyLandingPage,
   CompanyLandingSignup,
   CompanyLandingMetrics,
@@ -116,6 +121,45 @@ export const api = {
     laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members`, { method: "POST", body: JSON.stringify({ creator_id: creatorId }) }),
   detachCreatorGroupMember: (groupId: number, creatorId: number) =>
     laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members/${creatorId}`, { method: "DELETE" }),
+  coupons: (query = "") => laravelFetch<List<CreatorCoupon>>(`/coupons${query}`),
+  couponOptions: (companyId: number) =>
+    laravelFetch<{ data: { campaigns: CreatorCouponCampaignOption[] } }>(`/coupons/options?company_id=${companyId}`),
+  createCoupon: (body: unknown) => laravelFetch<Item<CreatorCoupon>>("/coupons", { method: "POST", body: JSON.stringify(body) }),
+  updateCoupon: (id: number, body: unknown) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCoupon: (id: number) => laravelFetch<{ message: string }>(`/coupons/${id}`, { method: "DELETE" }),
+  couponEarnings: (query = "") => laravelFetch<{ data: CouponEarningSheet }>(`/coupon-earnings${query}`),
+  saveCouponEarnings: (body: { company_id?: number; month: string; entries: { creator_id: number; amount: number | null }[] }) =>
+    laravelFetch<{ message: string; data: CouponEarningSheet }>("/coupon-earnings", { method: "POST", body: JSON.stringify(body) }),
+  financePayments: (query = "") => laravelFetch<FinancePaymentList>(`/finance-payments${query}`),
+  updateFinanceSettings: (body: {
+    company_id?: number;
+    invoice_due_day: number;
+    payment_due_day: number;
+    invoice_data_campaign?: string | null;
+    invoice_data_recurring?: string | null;
+    invoice_data_coupon?: string | null;
+  }) =>
+    laravelFetch<{
+      message: string;
+      data: {
+        id: number;
+        invoice_due_day: number;
+        payment_due_day: number;
+        invoice_data_campaign: string | null;
+        invoice_data_recurring: string | null;
+        invoice_data_coupon: string | null;
+      };
+    }>("/finance-payments/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  updateFinancePayment: (id: number, body: { invoice_due_date: string; payment_due_date: string }) =>
+    laravelFetch<{ message: string; data: FinancePayment }>(`/finance-payments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  submitFinanceInvoice: (id: number, mediaId: number) =>
+    laravelFetch<{ message: string; data: FinancePayment }>(`/finance-payments/${id}/invoice`, { method: "POST", body: JSON.stringify({ media_id: mediaId }) }),
+  approveFinancePayment: (id: number, paymentDueDate: string) =>
+    laravelFetch<{ message: string; data: FinancePayment }>(`/finance-payments/${id}/approve`, { method: "POST", body: JSON.stringify({ payment_due_date: paymentDueDate }) }),
+  rejectFinancePayment: (id: number, reason: string) =>
+    laravelFetch<{ message: string; data: FinancePayment }>(`/finance-payments/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  payFinancePayment: (id: number) =>
+    laravelFetch<{ message: string; data: FinancePayment }>(`/finance-payments/${id}/pay`, { method: "POST" }),
   publicLanding: (slug: string) => laravelFetch<Item<CompanyLandingPage>>(`/landings/${encodeURIComponent(slug)}`),
   trackLandingEvent: (slug: string, event: "view" | "cta_click" | "signup_started") =>
     laravelFetch<{ ok: boolean }>(`/landings/${encodeURIComponent(slug)}/events`, { method: "POST", body: JSON.stringify({ event }) }),

@@ -767,7 +767,7 @@ export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onC
 
   const mapped = useMemo<PostMetricsRow[]>(() => {
     const cost = (row: CampaignCreator) => (
-      hideCreatorValues || campaign.is_barter || campaign.is_direct_contract ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0
+      hideCreatorValues || campaign.is_barter || campaign.is_direct_contract || campaign.is_benefit_coupon ? 0 : Number(row.amount) || Number(campaign.creator_cache) || 0
     );
     return rows.flatMap((row) => {
       const publishedDemands = (row.demands ?? []).filter((demand) => demand.content?.published_link?.trim());
@@ -804,7 +804,7 @@ export function CampaignMetricsPanel({ campaign, rows, locale, formatNumber, onC
         };
       });
     });
-  }, [campaign.creator_cache, campaign.is_barter, campaign.is_direct_contract, hideCreatorValues, rows, t]);
+  }, [campaign.creator_cache, campaign.is_barter, campaign.is_benefit_coupon, campaign.is_direct_contract, hideCreatorValues, rows, t]);
 
   async function refresh(campaignCreatorId?: number) {
     if (!mapped.some((row) => row.published_link?.trim())) {

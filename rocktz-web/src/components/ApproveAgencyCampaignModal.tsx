@@ -64,9 +64,9 @@ export function ApproveAgencyCampaignModal({
             id="approve-agency-fee"
             value={percent}
             onChange={setPercent}
-            totalBudget={campaign.is_barter ? 0 : campaign.total_budget}
+            totalBudget={campaign.is_barter || campaign.is_benefit_coupon ? 0 : campaign.total_budget}
             formatCurrency={(amount) => formatCurrency(amount, moneyCurrency(campaign))}
-            disabled={saving || campaign.is_barter}
+            disabled={saving || campaign.is_barter || Boolean(campaign.is_benefit_coupon)}
           />
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 p-4 sm:p-5">

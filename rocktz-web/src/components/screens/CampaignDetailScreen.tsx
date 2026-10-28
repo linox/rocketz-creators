@@ -16,7 +16,6 @@ import {
   BarChart3,
   Calendar,
   CalendarCheck,
-  CalendarClock,
   Camera,
   Check,
   CheckCircle2,
@@ -53,6 +52,7 @@ import {
   Search,
   Sparkles,
   ThumbsUp,
+  TicketPercent,
   Trash2,
   TrendingUp,
   UserCheck,
@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
+import { BenefitCouponFields } from "@/components/BenefitCouponFields";
 import { MoneyInput } from "@/components/MoneyInput";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignAudienceFields } from "@/components/CampaignAudienceFields";
@@ -92,9 +93,12 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
+import { benefitCouponLine, parseBenefitPercent, parseBenefitSuffix } from "@/lib/benefit-coupon";
 import { demandProgress } from "@/lib/campaign-demands";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatShippingLines } from "@/lib/shipping-address";
+import { maskShippingPreview } from "@/lib/mask-sensitive";
+import { SensitiveText } from "@/components/SensitiveValue";
 import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
@@ -379,12 +383,12 @@ function metricValue(metrics: Record<string, number> | undefined, keys: string[]
 }
 
 function suggestedFee(row: CampaignCreator, campaign: Campaign) {
-  if (campaign.is_barter) return 0;
+  if (campaign.is_barter || campaign.is_benefit_coupon) return 0;
   return Number(campaign.creator_cache) || Number(row.amount) || 0;
 }
 
 function effectiveCreatorFee(row: CampaignCreator | null | undefined, campaign: Campaign) {
-  if (campaign.is_barter || campaign.is_direct_contract) return 0;
+  if (campaign.is_barter || campaign.is_direct_contract || campaign.is_benefit_coupon) return 0;
   if (!row) return Number(campaign.creator_cache) || 0;
   return Number(row.amount) || Number(campaign.creator_cache) || 0;
 }
@@ -573,8 +577,6 @@ function DetailInner() {
   const [approveOpen, setApproveOpen] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
   const [agencyFeeDraft, setAgencyFeeDraft] = useState("");
-  const [payModal, setPayModal] = useState<{ row: CampaignCreator; mode: "pay" | "schedule" } | null>(null);
-  const [payDate, setPayDate] = useState("");
   const [imageOpen, setImageOpen] = useState(false);
   const [editing, setEditing] = useState<CampaignCreator | null>(null);
   const [imageUrl, setImageUrl] = useState("");
@@ -595,6 +597,10 @@ function DetailInner() {
     is_secret: false,
     is_direct_contract: false,
     is_barter: false,
+    is_benefit_coupon: false,
+    benefit_coupon_code: "",
+    benefit_discount_percent: "",
+    benefit_commission_percent: "",
     has_custom_contract: false,
     custom_contract_terms: "",
     application_question: "",
@@ -866,7 +872,8 @@ function DetailInner() {
   const agencyMargin = agencyFeeFromBudget(totalBudget, feePercent);
   const endDate = campaign?.end_date ? new Date(`${campaign.end_date}T00:00:00`) : null;
   const daysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
-  const specialMode = Boolean(campaign?.is_barter || campaign?.is_direct_contract);
+  const specialMode = Boolean(campaign?.is_barter || campaign?.is_direct_contract || campaign?.is_benefit_coupon);
+  const cashPayout = Boolean(campaign && !campaign.is_barter && !campaign.is_benefit_coupon);
   const statusCfg = STATUS_STYLE[campaign?.status ?? "briefing"] || STATUS_STYLE.briefing;
 
   function setActiveTab(next: Tab) {
@@ -957,43 +964,6 @@ function DetailInner() {
     return { className: "border-rose-200 bg-rose-50 text-rose-700", label: t("campaignDetail.pending") };
   }
 
-  async function markPaid(row: CampaignCreator) {
-    if (!campaign) return;
-    if (campaign.is_barter || campaign.is_direct_contract) return;
-    const amount = creatorPay(effectiveCreatorFee(row, campaign));
-    const pix = row.creator?.pix_key?.trim();
-    const ok = await alertConfirm(
-      t("campaignDetail.payConfirmTitle"),
-      t("campaignDetail.payConfirmText", {
-        name: row.creator?.artistic_name ?? "",
-        amount,
-        pix: pix || t("campaignDetail.noPix"),
-      }),
-      t("campaignDetail.payNow"),
-    );
-    if (!ok) return;
-    const done = await patch(row, {
-      payment_status: "paid",
-      payment_date: new Date().toISOString().slice(0, 10),
-    });
-    if (done) {
-      setPayModal(null);
-      await alertSuccess(t("campaignDetail.paymentMarked"));
-    }
-  }
-
-  async function schedulePayment(row: CampaignCreator, date: string) {
-    if (!date) {
-      await alertWarning(tc("alerts.incompleteTitle"), t("campaignDetail.scheduleDateRequired"));
-      return;
-    }
-    const done = await patch(row, { payment_status: "scheduled", payment_date: date });
-    if (done) {
-      setPayModal(null);
-      await alertSuccess(t("campaignDetail.paymentScheduled"));
-    }
-  }
-
   async function payAllReady() {
     if (!campaign || financeSummary.readyRows.length === 0) return;
     const ok = await alertConfirm(
@@ -1059,6 +1029,10 @@ function DetailInner() {
       is_secret: campaign.is_secret,
       is_direct_contract: campaign.is_direct_contract,
       is_barter: campaign.is_barter,
+      is_benefit_coupon: Boolean(campaign.is_benefit_coupon),
+      benefit_coupon_code: campaign.benefit_coupon_code || "",
+      benefit_discount_percent: campaign.benefit_discount_percent != null ? String(campaign.benefit_discount_percent) : "",
+      benefit_commission_percent: campaign.benefit_commission_percent != null ? String(campaign.benefit_commission_percent) : "",
       has_custom_contract: Boolean(campaign.has_custom_contract),
       custom_contract_terms: campaign.custom_contract_terms || "",
       application_question: campaign.application_question || "",
@@ -1104,7 +1078,27 @@ function DetailInner() {
     event.preventDefault();
     if (!campaign) return;
     const feePercent = parseAgencyFeePercent(editForm.agency_fee_percent);
-    if (isAdmin && !editForm.is_barter && feePercent == null) {
+    const editNonCash = editForm.is_barter || editForm.is_benefit_coupon;
+    if (editForm.is_benefit_coupon && editForm.is_barter) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponExclusive"));
+      return;
+    }
+    const benefitDiscountValue = parseBenefitPercent(editForm.benefit_discount_percent);
+    const benefitCommissionValue = parseBenefitPercent(editForm.benefit_commission_percent);
+    const benefitSuffix = parseBenefitSuffix(editForm.benefit_coupon_code);
+    if (editForm.is_benefit_coupon && !benefitSuffix.ok) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponSuffix"));
+      return;
+    }
+    if (editForm.is_benefit_coupon && (benefitDiscountValue == null || benefitCommissionValue == null)) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponRequired"));
+      return;
+    }
+    if (!hideCreatorValues && !editNonCash && (!editForm.creator_cache.trim() || parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) <= 0)) {
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
+      return;
+    }
+    if (isAdmin && !editNonCash && feePercent == null) {
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
       return;
     }
@@ -1154,8 +1148,8 @@ function DetailInner() {
         objective: editForm.objective,
         approval_flow: editForm.approval_flow,
         posting_profile: editForm.posting_profile,
-        total_budget: editForm.is_barter || !editForm.total_budget ? 0 : parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)),
-        ...(hideCreatorValues ? {} : { creator_cache: editForm.is_barter ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null }),
+        total_budget: editNonCash || !editForm.total_budget ? 0 : parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)),
+        ...(hideCreatorValues ? {} : { creator_cache: editNonCash ? 0 : editForm.creator_cache ? parseMoneyMask(editForm.creator_cache, moneyCurrency(campaign)) : null }),
         agency_fee_percent: isAdmin ? feePercent ?? undefined : undefined,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
@@ -1164,6 +1158,10 @@ function DetailInner() {
         is_secret: editForm.is_secret,
         is_direct_contract: editForm.is_direct_contract,
         is_barter: editForm.is_barter,
+        is_benefit_coupon: editForm.is_benefit_coupon,
+        benefit_coupon_code: editForm.is_benefit_coupon && benefitSuffix.ok ? benefitSuffix.suffix : null,
+        benefit_discount_percent: editForm.is_benefit_coupon ? benefitDiscountValue : null,
+        benefit_commission_percent: editForm.is_benefit_coupon ? benefitCommissionValue : null,
         has_custom_contract: editForm.has_custom_contract,
         custom_contract_terms: editForm.has_custom_contract ? editForm.custom_contract_terms.trim() : null,
         application_question: editForm.application_question.trim() || null,
@@ -1345,9 +1343,10 @@ function DetailInner() {
   }
 
   const companyName = campaign.company?.name || t("campaigns.client");
-  const moneyOrMode = (value: number) => (campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value, moneyCurrency(campaign)));
-  const creatorPay = (value: number) => (hideCreatorValues ? HIDDEN_CREATOR_VALUE : moneyOrMode(value));
+  const moneyOrMode = (value: number) => (campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("deliveries.direct") : formatCurrency(value, moneyCurrency(campaign)));
+  const creatorPay = (value: number) => (hideCreatorValues && !campaign.is_benefit_coupon ? HIDDEN_CREATOR_VALUE : moneyOrMode(value));
   const myFeeDisplay = (() => {
+    if (campaign.is_benefit_coupon) return benefitCouponLine(t, campaign);
     if (campaign.is_barter) return t("deliveries.barter");
     if (campaign.is_direct_contract) return t("deliveries.direct");
     const amount = effectiveCreatorFee(myParticipation, campaign);
@@ -1401,6 +1400,11 @@ function DetailInner() {
                   {campaign.is_barter ? (
                     <span className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">
                       <Gift size={9} /> {t("campaigns.barter")}
+                    </span>
+                  ) : null}
+                  {campaign.is_benefit_coupon ? (
+                    <span className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
+                      <TicketPercent size={9} /> {t("campaigns.benefitCoupon")}
                     </span>
                   ) : null}
                   {campaign.has_custom_contract ? (
@@ -1570,7 +1574,7 @@ function DetailInner() {
                     </span>
                   ) : null}
                 </div>
-                <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{myFeeDisplay}</span>
+                <span className={cn("pt-3 font-black tracking-tight text-slate-900", campaign.is_benefit_coupon ? "text-sm leading-snug sm:text-base" : "text-xl sm:text-2xl")}>{myFeeDisplay}</span>
               </div>
               <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1599,7 +1603,7 @@ function DetailInner() {
               </div>
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{t("campaignDetail.kpiInvestmentBadge")}</span>
             </div>
-            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(totalBudget, moneyCurrency(campaign))}</span>
+            <span className={cn("pt-3 font-black tracking-tight text-slate-900", campaign.is_benefit_coupon ? "text-sm leading-snug sm:text-base" : "text-xl sm:text-2xl")}>{campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : campaign.is_barter ? t("deliveries.barter") : campaign.is_direct_contract ? t("campaigns.directContract") : formatCurrency(totalBudget, moneyCurrency(campaign))}</span>
           </div>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1613,7 +1617,7 @@ function DetailInner() {
                 {approvedCreators.length === 1 ? t("campaignDetail.kpiCastingOne", { count: approvedCreators.length }) : t("campaignDetail.kpiCastingMany", { count: approvedCreators.length })}
               </span>
             </div>
-            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{creatorPay(castingCost)}</span>
+            <span className={cn("pt-3 font-black tracking-tight text-slate-900", campaign.is_benefit_coupon ? "text-sm leading-snug sm:text-base" : "text-xl sm:text-2xl")}>{creatorPay(castingCost)}</span>
           </div>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1627,7 +1631,7 @@ function DetailInner() {
                 {specialMode ? t("campaignDetail.kpiPartnership") : t("campaignDetail.kpiFee", { percent: feePercent })}
               </span>
             </div>
-            <span className="pt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{moneyOrMode(agencyMargin)}</span>
+            <span className={cn("pt-3 font-black tracking-tight text-slate-900", campaign.is_benefit_coupon ? "text-sm leading-snug sm:text-base" : "text-xl sm:text-2xl")}>{moneyOrMode(agencyMargin)}</span>
           </div>
           <div className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -2037,11 +2041,13 @@ function DetailInner() {
                 {!isCreator && campaign.is_barter ? (
                   <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                     <p className="text-[10px] font-bold tracking-wider text-amber-700 uppercase">{t("campaignDetail.shippingAddress")}</p>
-                    {formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).length ? (
-                      <p className="mt-1 whitespace-pre-line text-sm font-semibold text-slate-800">{formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).join("\n")}</p>
-                    ) : (
-                      <p className="mt-1 text-sm font-medium text-slate-500">{t("campaignDetail.shippingMissing")}</p>
-                    )}
+                    <SensitiveText
+                      multiline
+                      value={formatShippingLines(selectedCreator.shipping_address, selectedCreator.country, locale).join("\n")}
+                      preview={maskShippingPreview(selectedCreator.shipping_address)}
+                      empty={t("campaignDetail.shippingMissing")}
+                      className="mt-1 text-sm font-semibold text-slate-800"
+                    />
                   </div>
                 ) : null}
 
@@ -2588,11 +2594,11 @@ function DetailInner() {
                         <MoneyInput
                           currency={moneyCurrency(campaign)}
                           value={amountMasked}
-                          disabled={!canManage || isAppApproved || campaign.is_barter}
+                          disabled={!canManage || isAppApproved || campaign.is_barter || Boolean(campaign.is_benefit_coupon)}
                           onChange={(value) => setCustomAmounts((prev) => ({ ...prev, [row.id]: value }))}
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pr-2.5 text-xs font-black text-slate-900 focus:border-brand-primary focus:bg-white focus:ring-2 focus:ring-brand-primary/20 focus:outline-none disabled:bg-slate-100 disabled:opacity-75"
                         />
-                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
+                        <span className="text-[9px] font-medium text-slate-400">{campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : campaign.is_barter ? t("campaignDetail.barterFeeHint") : t("campaignDetail.feeAdjustable", { default: formatCurrency(Number(campaign.creator_cache) || 0, moneyCurrency(campaign)) })}</span>
                       </div>
                       )}
                       <div className="flex flex-wrap items-center gap-2">
@@ -2783,7 +2789,7 @@ function DetailInner() {
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div>
                 <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.coupon")}</span>
-                <span className="text-xs font-bold text-slate-800">{String(campaign.briefing?.coupon || t("campaignDetail.noneItem"))}</span>
+                <span className="text-xs font-bold text-slate-800">{campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : String(campaign.briefing?.coupon || t("campaignDetail.noneItem"))}</span>
               </div>
               <div>
                 <span className="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.hashtags")}</span>
@@ -2827,7 +2833,13 @@ function DetailInner() {
             <h2 className="text-lg font-black text-slate-900">{t("campaignDetail.financeTitle")}</h2>
             <p className="text-xs text-slate-500">{t("campaignDetail.financeHint")}</p>
           </div>
-          {isAdmin && !campaign.is_barter ? (
+          {campaign.is_benefit_coupon ? (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
+              <p className="text-sm font-black text-violet-950">{benefitCouponLine(t, campaign)}</p>
+              <p className="mt-1 text-xs font-medium text-violet-800">{t("campaigns.benefitCouponFinanceHint")}</p>
+            </div>
+          ) : null}
+          {isAdmin && cashPayout ? (
             <div className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-purple-50/50 p-4 sm:flex-row sm:items-end">
               <div className="min-w-0 flex-1">
                 <AgencyFeePercentField
@@ -2848,7 +2860,7 @@ function DetailInner() {
               </button>
             </div>
           ) : null}
-          {!campaign.is_barter ? (
+          {cashPayout ? (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.paySummaryTotal")}</p>
@@ -2868,12 +2880,20 @@ function DetailInner() {
               </div>
             </div>
           ) : null}
-          {canManage && financeSummary.readyRows.length > 0 && !campaign.is_barter ? (
+          {canManage && financeSummary.readyRows.length > 0 && cashPayout && campaign.is_direct_contract ? (
             <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs font-semibold text-emerald-800">{t("campaignDetail.payReadyHint", { count: financeSummary.readyRows.length, amount: creatorPay(financeSummary.ready) })}</p>
               <button type="button" onClick={() => void payAllReady()} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-extrabold text-white hover:bg-emerald-700">
                 <Banknote size={14} /> {t("campaignDetail.payAllReady")}
               </button>
+            </div>
+          ) : null}
+          {canManage && cashPayout && !campaign.is_direct_contract ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-violet-900">{t("campaignDetail.financeInvoiceHint")}</p>
+              <Link href="/finance" className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-violet-700 px-4 text-xs font-extrabold text-white hover:bg-violet-800">
+                {t("campaignDetail.openFinance")}
+              </Link>
             </div>
           ) : null}
           <div className="overflow-x-auto">
@@ -2896,7 +2916,7 @@ function DetailInner() {
                   const amount = effectiveCreatorFee(row, campaign);
                   const pay = paymentBadge(row.payment_status);
                   const unpaid = row.payment_status !== "paid";
-                  const canPay = canManage && contentOk && unpaid && !campaign.is_barter && !campaign.is_direct_contract;
+                  const showFinanceLink = canManage && unpaid && cashPayout && !campaign.is_direct_contract;
                   return (
                     <tr key={row.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3.5 font-bold text-slate-900">
@@ -2938,30 +2958,12 @@ function DetailInner() {
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col items-end gap-1.5">
-                          {canPay ? (
-                            <div className="flex flex-wrap justify-end gap-1.5">
-                              <button
-                                type="button"
-                                disabled={updatingId === row.id}
-                                onClick={() => void markPaid(row)}
-                                className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-[10px] font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50"
-                              >
-                                <Banknote size={12} /> {t("campaignDetail.payNow")}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={updatingId === row.id}
-                                onClick={() => {
-                                  setPayDate(row.payment_date || new Date().toISOString().slice(0, 10));
-                                  setPayModal({ row, mode: "schedule" });
-                                }}
-                                className="inline-flex h-8 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-[10px] font-extrabold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-                              >
-                                <CalendarClock size={12} /> {t("campaignDetail.schedulePayment")}
-                              </button>
-                            </div>
+                          {showFinanceLink ? (
+                            <Link href="/finance" className="inline-flex h-8 items-center rounded-lg bg-violet-700 px-2.5 text-[10px] font-extrabold text-white hover:bg-violet-800">
+                              {t("campaignDetail.openFinance")}
+                            </Link>
                           ) : null}
-                          {!contentOk && unpaid && !campaign.is_barter ? (
+                          {!contentOk && unpaid && cashPayout ? (
                             <p className="max-w-[180px] text-right text-[10px] font-medium text-amber-700">{t("campaignDetail.waitingContentHint")}</p>
                           ) : null}
                           {canManage ? (
@@ -3143,21 +3145,21 @@ function DetailInner() {
                   ) : null}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.budget", { currency: moneyCurrency(campaign) })}</label>
-                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.total_budget} onChange={(value) => setEditForm({ ...editForm, total_budget: value })} />
+                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter || editForm.is_benefit_coupon} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.total_budget} onChange={(value) => setEditForm({ ...editForm, total_budget: value })} />
                   </div>
                   {hideCreatorValues ? null : (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("campaigns.creatorCache", { currency: moneyCurrency(campaign) })}</label>
-                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.creator_cache} onChange={(value) => setEditForm({ ...editForm, creator_cache: value })} />
+                    <MoneyInput currency={moneyCurrency(campaign)} disabled={editForm.is_barter || editForm.is_benefit_coupon} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={editForm.creator_cache} onChange={(value) => setEditForm({ ...editForm, creator_cache: value })} />
                   </div>
                   )}
                   {isAdmin ? (
                     <AgencyFeePercentField
                       value={editForm.agency_fee_percent}
                       onChange={(value) => setEditForm({ ...editForm, agency_fee_percent: value })}
-                      totalBudget={editForm.is_barter ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : 0}
+                      totalBudget={editForm.is_barter || editForm.is_benefit_coupon ? 0 : editForm.total_budget ? parseMoneyMask(editForm.total_budget, moneyCurrency(campaign)) : 0}
                       formatCurrency={(amount) => formatCurrency(amount, moneyCurrency(campaign))}
-                      disabled={editForm.is_barter}
+                      disabled={editForm.is_barter || editForm.is_benefit_coupon}
                     />
                   ) : null}
                 </div>
@@ -3276,8 +3278,18 @@ function DetailInner() {
                 <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_secret} onChange={(event) => setEditForm({ ...editForm, is_secret: event.target.checked })} /> {t("deliveries.secretNda")}</label>
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editForm.is_direct_contract} onChange={(event) => setEditForm({ ...editForm, is_direct_contract: event.target.checked })} /> {t("deliveries.directCompany")}</label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" checked={editForm.is_barter} onChange={(event) => setEditForm({ ...editForm, is_barter: event.target.checked })} /> {t("deliveries.barterProducts")}</label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" checked={editForm.is_barter} onChange={(event) => setEditForm({ ...editForm, is_barter: event.target.checked, is_benefit_coupon: event.target.checked ? false : editForm.is_benefit_coupon })} /> {t("deliveries.barterProducts")}</label>
                 </div>
+                <BenefitCouponFields
+                  enabled={editForm.is_benefit_coupon}
+                  onEnabledChange={(value) => setEditForm({ ...editForm, is_benefit_coupon: value, is_barter: value ? false : editForm.is_barter })}
+                  code={editForm.benefit_coupon_code}
+                  onCodeChange={(value) => setEditForm({ ...editForm, benefit_coupon_code: value })}
+                  discount={editForm.benefit_discount_percent}
+                  onDiscountChange={(value) => setEditForm({ ...editForm, benefit_discount_percent: value })}
+                  commission={editForm.benefit_commission_percent}
+                  onCommissionChange={(value) => setEditForm({ ...editForm, benefit_commission_percent: value })}
+                />
                 <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
                   <label className="flex items-start gap-2 text-xs font-bold">
                     <input type="checkbox" checked={editForm.has_custom_contract} onChange={(event) => setEditForm({ ...editForm, has_custom_contract: event.target.checked })} className="mt-0.5" />
@@ -3459,68 +3471,6 @@ function DetailInner() {
                   <X size={14} /> {t("campaignDetail.confirmReject")}
                 </button>
               </div>
-            </motion.div>
-          </div>
-        ) : null}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {payModal ? (
-          <div className="app-modal-overlay fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto p-3 sm:p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setPayModal(null)} aria-label={tc("close")} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="app-modal-panel relative z-10 my-auto flex w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                    <CalendarClock size={18} />
-                  </div>
-                  <h3 className="text-base font-black text-slate-900">{t("campaignDetail.scheduleModalTitle")}</h3>
-                </div>
-                <button type="button" onClick={() => setPayModal(null)} className="cursor-pointer p-1 text-slate-400 hover:text-slate-700">✕</button>
-              </div>
-              <p className="text-xs text-slate-600">
-                {t("campaignDetail.scheduleModalHint", {
-                  name: payModal.row.creator?.artistic_name ?? "",
-                  amount: creatorPay(effectiveCreatorFee(payModal.row, campaign)),
-                })}
-              </p>
-              {payModal.row.creator?.pix_key ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                  {t("campaignDetail.pixKey")}: {payModal.row.creator.pix_key}
-                </p>
-              ) : (
-                <p className="text-xs font-semibold text-amber-700">{t("campaignDetail.noPix")}</p>
-              )}
-              {payModal.row.creator?.bank_account?.bank_name ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold whitespace-pre-line text-slate-600">
-                  {formatBankLines(payModal.row.creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).filter((line) => line !== payModal.row.creator?.pix_key).join("\n")}
-                </p>
-              ) : null}
-              <form
-                noValidate
-                className="flex flex-col gap-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void schedulePayment(payModal.row, payDate);
-                }}
-              >
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase" htmlFor="campaign-pay-date">{t("campaignDetail.scheduleDateLabel")}</label>
-                  <input
-                    id="campaign-pay-date"
-                    type="date"
-                    value={payDate}
-                    onChange={(event) => setPayDate(event.target.value)}
-                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
-                  <button type="button" onClick={() => setPayModal(null)} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">{tc("cancel")}</button>
-                  <button type="submit" disabled={updatingId === payModal.row.id} className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50">
-                    <CalendarClock size={14} /> {t("campaignDetail.confirmSchedule")}
-                  </button>
-                </div>
-              </form>
             </motion.div>
           </div>
         ) : null}

@@ -30,7 +30,7 @@ class CampaignPaymentTest extends TestCase
         $this->assertSame(PaymentStatus::Pending, $row->fresh()->payment_status);
     }
 
-    public function test_admin_can_pay_when_delivery_is_approved(): void
+    public function test_admin_cannot_pay_cash_campaign_without_approved_invoice(): void
     {
         [$token, $row] = $this->adminWithParticipation([
             'delivery_status' => DeliveryStatus::Approved,
@@ -40,15 +40,13 @@ class CampaignPaymentTest extends TestCase
             ->patchJson("/api/campaign-creators/{$row->id}", [
                 'payment_status' => PaymentStatus::Paid->value,
             ])
-            ->assertOk()
-            ->assertJsonPath('data.payment_status', 'paid');
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.payment_status.0', 'O pagamento em dinheiro é liberado na área financeira, depois que a nota fiscal for aprovada.');
 
-        $fresh = $row->fresh();
-        $this->assertSame(PaymentStatus::Paid, $fresh->payment_status);
-        $this->assertSame(now()->toDateString(), $fresh->payment_date?->toDateString());
+        $this->assertSame(PaymentStatus::Pending, $row->fresh()->payment_status);
     }
 
-    public function test_admin_can_schedule_payment_when_content_is_approved(): void
+    public function test_cash_campaign_cannot_be_scheduled_outside_finance(): void
     {
         [$token, $row] = $this->adminWithParticipation([
             'delivery_status' => DeliveryStatus::Published,
@@ -66,12 +64,11 @@ class CampaignPaymentTest extends TestCase
                 'payment_status' => PaymentStatus::Scheduled->value,
                 'payment_date' => '2026-09-01',
             ])
-            ->assertOk()
-            ->assertJsonPath('data.payment_status', 'scheduled')
-            ->assertJsonPath('data.payment_date', '2026-09-01');
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.payment_status.0', 'O pagamento em dinheiro é liberado na área financeira, depois que a nota fiscal for aprovada.');
     }
 
-    public function test_script_only_campaign_can_be_paid_when_script_is_approved(): void
+    public function test_script_only_cash_campaign_also_requires_an_approved_invoice(): void
     {
         $admin = User::factory()->admin()->create();
         $campaign = Campaign::factory()->create([
@@ -88,8 +85,8 @@ class CampaignPaymentTest extends TestCase
             ->patchJson("/api/campaign-creators/{$row->id}", [
                 'payment_status' => PaymentStatus::Paid->value,
             ])
-            ->assertOk()
-            ->assertJsonPath('data.payment_status', 'paid');
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.payment_status.0', 'O pagamento em dinheiro é liberado na área financeira, depois que a nota fiscal for aprovada.');
     }
 
     public function test_creator_cannot_mark_own_payment_as_paid(): void

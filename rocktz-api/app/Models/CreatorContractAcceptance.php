@@ -34,6 +34,9 @@ class CreatorContractAcceptance extends Model
     protected function casts(): array
     {
         return [
+            'document' => 'encrypted',
+            'email' => 'encrypted',
+            'ip' => 'encrypted',
             'accepted_at' => 'datetime',
             'declarations' => 'array',
             'all_accepted' => 'boolean',

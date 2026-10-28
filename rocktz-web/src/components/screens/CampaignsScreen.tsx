@@ -30,6 +30,7 @@ import {
   Package,
   Plus,
   Scale,
+  TicketPercent,
   Trash2,
   Users,
   Video,
@@ -38,6 +39,7 @@ import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
+import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { networkTierI18nKey, tierFromRange } from "@/lib/network-size";
@@ -177,6 +179,11 @@ function CampaignCard({
                 <Gift size={10} /> {t("campaigns.barter")}
               </span>
             ) : null}
+            {campaign.is_benefit_coupon ? (
+              <span className="flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-violet-200 uppercase backdrop-blur-md">
+                <TicketPercent size={10} /> {t("campaigns.benefitCoupon")}
+              </span>
+            ) : null}
             {campaign.has_custom_contract ? (
               <span className="flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-0.5 text-[9px] font-bold tracking-wider text-indigo-200 uppercase backdrop-blur-md">
                 <Scale size={10} /> {t("campaigns.customContract")}
@@ -263,7 +270,12 @@ function CampaignCard({
             </div>
           ) : null}
           <div className="flex items-center gap-2.5 text-xs font-bold text-[#0F172A]">
-            {campaign.is_barter ? (
+            {campaign.is_benefit_coupon ? (
+              <>
+                <TicketPercent size={13} className="shrink-0 text-violet-600" />
+                <span className="text-violet-700">{benefitCouponLine(t, campaign)}</span>
+              </>
+            ) : campaign.is_barter ? (
               <>
                 <Gift size={13} className="shrink-0 text-amber-500" />
                 <span className="text-amber-600">{t("campaigns.barterFull")}</span>

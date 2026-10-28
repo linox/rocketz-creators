@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Check, Copy, KeyRound, Mail, Sparkles, X } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { UserAvatar } from "@/components/UserAvatar";
+import { SensitiveText } from "@/components/SensitiveValue";
 import { PasswordField } from "@/components/PasswordField";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -101,7 +102,7 @@ export function ChangeCreatorPasswordModal({
             <UserAvatar src={creator.photo_url} name={creator.artistic_name || creator.full_name} size="md" className="border border-slate-200" />
             <div className="min-w-0">
               <h4 className="m-0 truncate text-sm font-bold text-slate-900">@{creator.artistic_name}</h4>
-              <p className="m-0 truncate text-xs text-slate-500">{creator.email || t("changePassword.noEmail")}</p>
+              <SensitiveText value={creator.email} kind="email" empty={t("changePassword.noEmail")} className="truncate text-xs text-slate-500" />
             </div>
           </div>
           <span className="shrink-0 rounded-full border border-purple-200 bg-purple-100 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-purple-800 uppercase">

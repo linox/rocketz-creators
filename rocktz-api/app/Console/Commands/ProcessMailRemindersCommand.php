@@ -13,6 +13,8 @@ use App\Models\Company;
 use App\Models\ContentPlanningItem;
 use App\Models\MailTemplate;
 use App\Models\User;
+use App\Services\FinancePaymentNotifier;
+use App\Services\FinancePaymentSync;
 use App\Services\Mail\TransactionalMailService;
 use App\Support\FrontendUrl;
 use Illuminate\Console\Command;
@@ -101,6 +103,7 @@ class ProcessMailRemindersCommand extends Command
             });
 
         $this->sendPostDayReminders($mail);
+        app(FinancePaymentNotifier::class)->remind(app(FinancePaymentSync::class));
 
         $reviewOffsets = MailTemplate::query()->where('key', MailTemplateKey::DeliveryPendingReviewReminder->value)->value('reminder_offsets')
             ?: [1, 3];

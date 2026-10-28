@@ -36,6 +36,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'is_secret',
     'is_direct_contract',
     'is_barter',
+    'is_benefit_coupon',
+    'benefit_coupon_code',
+    'benefit_discount_percent',
+    'benefit_commission_percent',
     'limit_by_city',
     'limit_by_age',
     'min_age',
@@ -98,6 +102,9 @@ class Campaign extends Model
             'is_secret' => 'boolean',
             'is_direct_contract' => 'boolean',
             'is_barter' => 'boolean',
+            'is_benefit_coupon' => 'boolean',
+            'benefit_discount_percent' => 'decimal:2',
+            'benefit_commission_percent' => 'decimal:2',
             'limit_by_city' => 'boolean',
             'limit_by_age' => 'boolean',
             'min_age' => 'integer',
@@ -107,7 +114,8 @@ class Campaign extends Model
             'min_followers' => 'integer',
             'max_followers' => 'integer',
             'has_custom_contract' => 'boolean',
-            'sender_address' => 'array',
+            'sender_phone' => 'encrypted',
+            'sender_address' => 'encrypted:array',
             'approval_flow' => ApprovalFlowType::class,
             'posting_profile' => PostingProfile::class,
         ];
@@ -136,6 +144,11 @@ class Campaign extends Model
     public function campaignCreators(): HasMany
     {
         return $this->hasMany(CampaignCreator::class);
+    }
+
+    public function creatorCoupons(): HasMany
+    {
+        return $this->hasMany(CreatorCoupon::class);
     }
 
     public function creators(): BelongsToMany

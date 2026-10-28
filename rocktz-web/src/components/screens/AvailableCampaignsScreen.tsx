@@ -15,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   Gift,
+  TicketPercent,
   Info,
   Layers,
   MapPin,
@@ -32,6 +33,7 @@ import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { alertApiError, alertSuccess, alertWarning, alertWarningLink } from "@/lib/alerts";
+import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { hasCompleteShippingAddress } from "@/lib/shipping-address";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
@@ -43,7 +45,7 @@ import { mediaPublicUrl } from "@/lib/media-playback";
 import { ApiError } from "@/lib/laravel";
 
 const EXTRA_NICHES = ["ugc", "fashion", "tech", "lifestyle", "food"] as const;
-type FormatFilter = "all" | "paid" | "barter";
+type FormatFilter = "all" | "paid" | "barter" | "coupon";
 type ViewMode = "grid" | "detailed";
 
 function briefingStr(campaign: Campaign, key: string) {
@@ -161,7 +163,8 @@ function AvailableInner() {
       if (!match) return false;
     }
     if (format === "barter" && !campaign.is_barter) return false;
-    if (format === "paid" && campaign.is_barter) return false;
+    if (format === "coupon" && !campaign.is_benefit_coupon) return false;
+    if (format === "paid" && (campaign.is_barter || campaign.is_benefit_coupon)) return false;
     if (region !== "all" && campaign.limit_by_city && campaign.state !== region) return false;
     if (cityFilter !== "all" && (!campaign.limit_by_city || campaign.city !== cityFilter)) return false;
     return true;
@@ -366,10 +369,11 @@ function AvailableInner() {
         </div>
         <div className="flex w-full items-center justify-between gap-3 overflow-x-auto md:w-auto md:justify-end">
           <div className="flex shrink-0 items-center rounded-xl border border-slate-200/60 bg-slate-100 p-1">
-            {([["all", t("available.formatAll")], ["paid", t("available.formatPaid")], ["barter", t("available.formatBarter")]] as const).map(([key, label]) => (
-              <button key={key} type="button" onClick={() => setFormat(key)} className={cn("flex cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-all", format === key ? (key === "paid" ? "bg-white text-emerald-700 shadow-sm" : key === "barter" ? "bg-white text-purple-700 shadow-sm" : "bg-white text-slate-900 shadow-sm") : "text-slate-500 hover:text-slate-800")}>
+            {([["all", t("available.formatAll")], ["paid", t("available.formatPaid")], ["barter", t("available.formatBarter")], ["coupon", t("available.formatCoupon")]] as const).map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setFormat(key)} className={cn("flex cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition-all", format === key ? (key === "paid" ? "bg-white text-emerald-700 shadow-sm" : key === "barter" ? "bg-white text-purple-700 shadow-sm" : key === "coupon" ? "bg-white text-violet-700 shadow-sm" : "bg-white text-slate-900 shadow-sm") : "text-slate-500 hover:text-slate-800")}>
                 {key === "paid" ? <DollarSign size={13} /> : null}
                 {key === "barter" ? <Gift size={13} /> : null}
+                {key === "coupon" ? <TicketPercent size={13} /> : null}
                 {label}
               </button>
             ))}
@@ -462,8 +466,8 @@ function AvailableInner() {
                   </div>
                   <div className="absolute right-3 bottom-3 left-3 flex items-end justify-between text-white">
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-bold tracking-wider text-indigo-200 uppercase">{campaign.is_barter ? t("available.compensation") : t("available.suggestedCache")}</span>
-                      <span className="text-base font-black text-emerald-400">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
+                      <span className="text-[9px] font-bold tracking-wider text-indigo-200 uppercase">{campaign.is_barter || campaign.is_benefit_coupon ? t("available.compensation") : t("available.suggestedCache")}</span>
+                      <span className={cn("font-black text-emerald-400", campaign.is_benefit_coupon ? "text-sm leading-tight" : "text-base")}>{campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
                     </div>
                     <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-medium text-slate-200 backdrop-blur-sm">{segmentLabel}</span>
                   </div>
@@ -531,8 +535,8 @@ function AvailableInner() {
                         <h2 className="text-xl font-black text-slate-900 transition-colors group-hover:text-brand-primary">{campaign.name}</h2>
                       </div>
                       <div className="hidden shrink-0 flex-col items-end lg:flex">
-                        <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{campaign.is_barter ? t("available.compensation") : t("available.suggestedCache")}</span>
-                        <span className="text-xl font-black text-emerald-600">{campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
+                        <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">{campaign.is_barter || campaign.is_benefit_coupon ? t("available.compensation") : t("available.suggestedCache")}</span>
+                        <span className={cn("font-black text-emerald-600", campaign.is_benefit_coupon ? "max-w-56 text-right text-sm leading-tight" : "text-xl")}>{campaign.is_benefit_coupon ? benefitCouponLine(t, campaign) : campaign.is_barter ? t("available.barterPay") : formatCurrency(cache, moneyCurrency(campaign))}</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-2">
@@ -706,6 +710,11 @@ function AvailableInner() {
                 {applying.is_barter ? (
                   <div className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 p-3.5 text-xs font-bold text-purple-900">
                     <Gift size={16} /> {t("available.barterBanner")}
+                  </div>
+                ) : null}
+                {applying.is_benefit_coupon ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 text-xs font-bold text-violet-900">
+                    <TicketPercent size={16} /> {t("available.benefitBanner")} {benefitCouponLine(t, applying)}
                   </div>
                 ) : null}
                 {applying.has_custom_contract && applying.custom_contract_terms ? (

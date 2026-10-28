@@ -7,11 +7,14 @@ use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
+use App\Http\Controllers\Api\CouponEarningController;
 use App\Http\Controllers\Api\CreatorController;
+use App\Http\Controllers\Api\CreatorCouponController;
 use App\Http\Controllers\Api\CreatorGroupController;
 use App\Http\Controllers\Api\CreatorStorefrontController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceTokenController;
+use App\Http\Controllers\Api\FinancePaymentController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MailMessageController;
 use App\Http\Controllers\Api\MailTemplateController;
@@ -118,6 +121,16 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::get('recurring-contracts/{recurringContract}/post-metrics-sync', [RecurringContractController::class, 'postMetricsStatus'])->middleware('throttle:metrics-sync-status');
     Route::patch('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'updateItem']);
 
+    Route::get('coupons', [CreatorCouponController::class, 'index']);
+
+    Route::get('finance-payments', [FinancePaymentController::class, 'index']);
+    Route::patch('finance-payments/settings', [FinancePaymentController::class, 'updateSettings']);
+    Route::patch('finance-payments/{financePayment}', [FinancePaymentController::class, 'update']);
+    Route::post('finance-payments/{financePayment}/invoice', [FinancePaymentController::class, 'submitInvoice']);
+    Route::post('finance-payments/{financePayment}/approve', [FinancePaymentController::class, 'approve']);
+    Route::post('finance-payments/{financePayment}/reject', [FinancePaymentController::class, 'reject']);
+    Route::post('finance-payments/{financePayment}/pay', [FinancePaymentController::class, 'pay']);
+
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
@@ -126,6 +139,12 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('notification-preferences', [NotificationPreferenceController::class, 'update']);
 
     Route::middleware('role:admin,company')->group(function () {
+        Route::get('coupon-earnings', [CouponEarningController::class, 'index']);
+        Route::post('coupon-earnings', [CouponEarningController::class, 'store']);
+        Route::get('coupons/options', [CreatorCouponController::class, 'options']);
+        Route::post('coupons', [CreatorCouponController::class, 'store']);
+        Route::patch('coupons/{creatorCoupon}', [CreatorCouponController::class, 'update']);
+        Route::delete('coupons/{creatorCoupon}', [CreatorCouponController::class, 'destroy']);
         Route::get('creator-groups', [CreatorGroupController::class, 'index']);
         Route::post('creator-groups', [CreatorGroupController::class, 'store']);
         Route::patch('creator-groups/{creatorGroup}', [CreatorGroupController::class, 'update']);

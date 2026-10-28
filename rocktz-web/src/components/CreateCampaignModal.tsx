@@ -17,6 +17,7 @@ import {
   Video,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { BenefitCouponFields } from "@/components/BenefitCouponFields";
 import { CampaignImageUpload } from "@/components/CampaignImageUpload";
 import { AgencyFeePercentField } from "@/components/AgencyFeePercentField";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -36,6 +37,7 @@ import type { Company } from "@/lib/types";
 import { moneyCurrency, DEFAULT_COUNTRY, hasRegions } from "@/lib/geo";
 import { parseMoneyMask, remaskMoney } from "@/lib/masks";
 import { parseAgeLimit } from "@/lib/campaign-age";
+import { parseBenefitPercent, parseBenefitSuffix } from "@/lib/benefit-coupon";
 import { rangeFromTier } from "@/lib/network-size";
 import { uploadScriptDocument } from "@/lib/script-document";
 import { userHidesCreatorValues } from "@/lib/auth";
@@ -132,6 +134,10 @@ export function CreateCampaignModal({
   const [isSecret, setIsSecret] = useState(false);
   const [isDirect, setIsDirect] = useState(false);
   const [isBarter, setIsBarter] = useState(false);
+  const [isBenefit, setIsBenefit] = useState(false);
+  const [benefitCode, setBenefitCode] = useState("");
+  const [benefitDiscount, setBenefitDiscount] = useState("");
+  const [benefitCommission, setBenefitCommission] = useState("");
   const [hasCustomContract, setHasCustomContract] = useState(false);
   const [customContractTerms, setCustomContractTerms] = useState("");
   const [applicationQuestion, setApplicationQuestion] = useState("");
@@ -205,6 +211,10 @@ export function CreateCampaignModal({
     setIsSecret(false);
     setIsDirect(false);
     setIsBarter(false);
+    setIsBenefit(false);
+    setBenefitCode("");
+    setBenefitDiscount("");
+    setBenefitCommission("");
     setHasCustomContract(false);
     setCustomContractTerms("");
     setApplicationQuestion("");
@@ -263,7 +273,26 @@ export function CreateCampaignModal({
         return;
       }
     }
-    if (!hideCreatorValues && !isBarter && (!creatorCache.trim() || parseMoneyMask(creatorCache, currency) <= 0)) {
+    const nonCash = isBarter || isBenefit;
+    if (isBenefit && isBarter) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponExclusive"));
+      return;
+    }
+    const benefitDiscountValue = parseBenefitPercent(benefitDiscount);
+    const benefitCommissionValue = parseBenefitPercent(benefitCommission);
+    const benefitSuffix = parseBenefitSuffix(benefitCode);
+    if (isBenefit && !benefitSuffix.ok) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponSuffix"));
+      return;
+    }
+    if (isBenefit && (benefitDiscountValue == null || benefitCommissionValue == null)) {
+      setTab("geral");
+      await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.benefitCouponRequired"));
+      return;
+    }
+    if (!hideCreatorValues && !nonCash && (!creatorCache.trim() || parseMoneyMask(creatorCache, currency) <= 0)) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.creatorCacheRequired"));
       return;
@@ -306,7 +335,7 @@ export function CreateCampaignModal({
       return;
     }
     const feePercent = parseAgencyFeePercent(agencyFeePercent);
-    if (isAdmin && !isBarter && feePercent == null) {
+    if (isAdmin && !nonCash && feePercent == null) {
       setTab("geral");
       await alertWarning(tc("alerts.incompleteTitle"), t("campaigns.agencyFeeInvalid"));
       return;
@@ -328,13 +357,17 @@ export function CreateCampaignModal({
         start_date: startDate,
         end_date: endDate,
         delivery_date: deliveryDate || null,
-        total_budget: isBarter || !budget ? 0 : parseMoneyMask(budget, currency),
-        ...(hideCreatorValues ? {} : { creator_cache: isBarter ? 0 : creatorCache ? parseMoneyMask(creatorCache, currency) : null }),
+        total_budget: nonCash || !budget ? 0 : parseMoneyMask(budget, currency),
+        ...(hideCreatorValues ? {} : { creator_cache: nonCash ? 0 : creatorCache ? parseMoneyMask(creatorCache, currency) : null }),
         agency_fee_percent: isAdmin ? feePercent ?? DEFAULT_AGENCY_FEE_PERCENT : undefined,
         image_url: imageUrl || null,
         is_secret: isSecret,
         is_direct_contract: isDirect,
         is_barter: isBarter,
+        is_benefit_coupon: isBenefit,
+        benefit_coupon_code: isBenefit && benefitSuffix.ok ? benefitSuffix.suffix : null,
+        benefit_discount_percent: isBenefit ? benefitDiscountValue : null,
+        benefit_commission_percent: isBenefit ? benefitCommissionValue : null,
         has_custom_contract: hasCustomContract,
         custom_contract_terms: hasCustomContract ? customContractTerms.trim() : null,
         application_question: applicationQuestion.trim() || null,
@@ -483,25 +516,25 @@ export function CreateCampaignModal({
                 <div className={`grid gap-4 ${hideCreatorValues ? (isAdmin ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1") : isAdmin ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
                   {hideCreatorValues ? null : (
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.creatorCache", { currency })}{!isBarter ? " *" : ""}</label>
-                    <MoneyInput currency={currency} placeholder={t("campaigns.creatorCachePh")} disabled={isBarter} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={setCreatorCache} />
+                    <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.creatorCache", { currency })}{!(isBarter || isBenefit) ? " *" : ""}</label>
+                    <MoneyInput currency={currency} placeholder={t("campaigns.creatorCachePh")} disabled={isBarter || isBenefit} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={creatorCache} onChange={setCreatorCache} />
                     <span className="text-[10px] leading-relaxed text-[#64748B]">{t("campaigns.creatorCacheHint")}</span>
                   </div>
                   )}
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-bold tracking-wider text-[#64748B] uppercase">{t("campaigns.budget", { currency })}</label>
-                      {isBarter ? <span className="text-[10px] font-bold text-amber-600">{t("campaigns.budgetOptional")}</span> : null}
+                      {isBarter || isBenefit ? <span className="text-[10px] font-bold text-amber-600">{t("campaigns.budgetOptional")}</span> : null}
                     </div>
-                    <MoneyInput currency={currency} placeholder={t("campaigns.budgetPh")} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary" value={budget} onChange={setBudget} />
+                    <MoneyInput currency={currency} placeholder={t("campaigns.budgetPh")} disabled={isBenefit} className="w-full rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-primary disabled:bg-slate-100" value={budget} onChange={setBudget} />
                   </div>
                   {isAdmin ? (
                     <AgencyFeePercentField
                       value={agencyFeePercent}
                       onChange={setAgencyFeePercent}
-                      totalBudget={isBarter ? 0 : budget ? parseMoneyMask(budget, currency) : 0}
+                      totalBudget={isBarter || isBenefit ? 0 : budget ? parseMoneyMask(budget, currency) : 0}
                       formatCurrency={(amount) => formatCurrency(amount, currency)}
-                      disabled={isBarter}
+                      disabled={isBarter || isBenefit}
                     />
                   ) : null}
                 </div>
@@ -584,7 +617,7 @@ export function CreateCampaignModal({
                 </label>
                 <div className="flex flex-col gap-3 rounded-xl border border-amber-100 bg-amber-50/40 p-4">
                   <label className="flex cursor-pointer items-start gap-3">
-                    <input type="checkbox" checked={isBarter} onChange={(e) => setIsBarter(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600" />
+                    <input type="checkbox" checked={isBarter} onChange={(e) => { setIsBarter(e.target.checked); if (e.target.checked) setIsBenefit(false); }} className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600" />
                     <span>
                       <span className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
                         <Gift size={12} className="text-amber-500" /> {t("campaigns.barterTitle")}
@@ -599,6 +632,19 @@ export function CreateCampaignModal({
                     </div>
                   ) : null}
                 </div>
+                <BenefitCouponFields
+                  enabled={isBenefit}
+                  onEnabledChange={(value) => {
+                    setIsBenefit(value);
+                    if (value) setIsBarter(false);
+                  }}
+                  code={benefitCode}
+                  onCodeChange={setBenefitCode}
+                  discount={benefitDiscount}
+                  onDiscountChange={setBenefitDiscount}
+                  commission={benefitCommission}
+                  onCommissionChange={setBenefitCommission}
+                />
                 <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
                   <label className="flex cursor-pointer items-start gap-3">
                     <input type="checkbox" checked={hasCustomContract} onChange={(e) => setHasCustomContract(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600" />

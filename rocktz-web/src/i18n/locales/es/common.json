@@ -76,5 +76,7 @@
     "placeholder": "Seleccione",
     "search": "Buscar...",
     "empty": "Ninguna opción"
-  }
+  },
+  "sensitiveShow": "Mostrar dato",
+  "sensitiveHide": "Ocultar dato"
 }

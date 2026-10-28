@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { CategoryTagsField } from "@/components/CategoryTagsField";
 import { CountrySelect, CurrencySelect, RegionSelect } from "@/components/GeoSelectFields";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
+import { SensitiveInput } from "@/components/SensitiveValue";
 import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
@@ -206,15 +207,15 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }: Ed
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.email")}</label>
                   <div className="relative">
-                    <input type="email" disabled value={user.email} className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 py-2.5 pr-3.5 pl-9 text-sm font-medium text-slate-500" />
-                    <Mail size={16} className="absolute top-3 left-3 text-slate-400" />
+                    <SensitiveInput kind="email" type="email" disabled value={user.email} className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 py-2.5 pr-3.5 pl-9 text-sm font-medium text-slate-500" onChange={() => undefined} />
+                    <Mail size={16} className="pointer-events-none absolute top-3 left-3 text-slate-400" />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.whatsapp")}</label>
                   <div className="relative">
-                    <input type="text" value={whatsapp} onChange={(event) => setWhatsapp(formatWhatsApp(event.target.value))} placeholder={t("editProfile.whatsappPh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-9 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
-                    <Smartphone size={16} className="absolute top-3 left-3 text-slate-400" />
+                    <SensitiveInput kind="phone" value={whatsapp} onChange={(value) => setWhatsapp(formatWhatsApp(value))} placeholder={t("editProfile.whatsappPh")} className="w-full rounded-xl border border-slate-200 py-2.5 pr-3.5 pl-9 text-sm font-semibold text-slate-800 outline-none focus:border-brand-primary" />
+                    <Smartphone size={16} className="pointer-events-none absolute top-3 left-3 text-slate-400" />
                   </div>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
+import { SensitiveText } from "@/components/SensitiveValue";
 import { PageHeader, StatCard } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
 import { alertApiError } from "@/lib/alerts";
@@ -216,13 +217,17 @@ function LogsInner() {
                   <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatWhen(row.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="font-semibold text-slate-900">{row.actor_name || t("logs.anonymous")}</div>
-                    <div className="text-[11px] text-slate-400">{row.actor_email}</div>
+                    <div className="text-[11px] text-slate-400">
+                      <SensitiveText value={row.actor_email} kind="email" empty="" className="text-[11px] text-slate-400" />
+                    </div>
                     <div className="text-[11px] text-slate-400">{row.actor_role ? tn(row.actor_role === "admin" ? "roleAdmin" : row.actor_role === "company" ? "roleCompany" : "roleCreator") : null}</div>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{t(eventI18nKey(row.action), { defaultValue: row.action })}</td>
                   <td className="px-4 py-3">{row.category === "access" ? t("logs.access") : t("logs.actions")}</td>
                   <td className="px-4 py-3 text-slate-500">{row.subject_type ? `${row.subject_type} #${row.subject_id}` : "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">{row.ip || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500" onClick={(event) => event.stopPropagation()}>
+                    <SensitiveText value={row.ip} kind="ip" empty="—" />
+                  </td>
                 </tr>
                 {openId === row.id ? (
                   <tr className="border-t border-slate-100 bg-slate-50/80">
@@ -232,7 +237,18 @@ function LogsInner() {
                         <div><span className="font-bold">{t("logs.status")}:</span> {row.status_code ?? "—"}</div>
                         <div className="sm:col-span-2"><span className="font-bold">{t("logs.userAgent")}:</span> {row.user_agent || "—"}</div>
                         {row.properties && Object.keys(row.properties).length > 0 ? (
-                          <pre className="sm:col-span-2 overflow-x-auto rounded-xl bg-white p-3 text-[11px]">{JSON.stringify(row.properties, null, 2)}</pre>
+                          <div className="sm:col-span-2 flex flex-col gap-1 rounded-xl bg-white p-3 text-[11px]">
+                            {Object.entries(row.properties).map(([key, value]) => (
+                              <div key={key} className="flex flex-wrap items-center gap-1">
+                                <span className="font-bold">{key}:</span>
+                                {typeof value === "string" && /email|phone|whatsapp|cpf|cnpj|document|pix|ip/i.test(key) ? (
+                                  <SensitiveText value={value} kind={/ip/i.test(key) ? "ip" : /email/i.test(key) ? "email" : /cnpj/i.test(key) ? "cnpj" : /cpf|document/i.test(key) ? "cpf" : /phone|whatsapp/i.test(key) ? "phone" : "pix"} />
+                                ) : (
+                                  <span className="break-all">{typeof value === "string" ? value : JSON.stringify(value)}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
                     </td>

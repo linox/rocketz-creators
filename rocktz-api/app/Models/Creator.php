@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedDate;
 use App\Enums\CreatorStatus;
 use App\Enums\Permission;
 use App\Enums\UserRole;
@@ -63,9 +64,14 @@ class Creator extends Model
     protected function casts(): array
     {
         return [
-            'birth_date' => 'date',
-            'shipping_address' => 'array',
-            'bank_account' => 'array',
+            'document' => 'encrypted',
+            'cpf' => 'encrypted',
+            'whatsapp' => 'encrypted',
+            'birth_date' => EncryptedDate::class,
+            'shipping_address' => 'encrypted:array',
+            'pix_key' => 'encrypted',
+            'bank_account' => 'encrypted:array',
+            'bank_details' => 'encrypted',
             'socials' => 'array',
             'metrics' => 'array',
             'categories' => 'array',
@@ -132,6 +138,11 @@ class Creator extends Model
     public function campaignCreators(): HasMany
     {
         return $this->hasMany(CampaignCreator::class);
+    }
+
+    public function creatorCoupons(): HasMany
+    {
+        return $this->hasMany(CreatorCoupon::class);
     }
 
     public function campaigns(): BelongsToMany

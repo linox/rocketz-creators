@@ -26,6 +26,8 @@ use App\Models\CompanyLandingPage;
 use App\Models\Creator;
 use App\Models\CreatorGroup;
 use App\Services\CampaignDemandSync;
+use App\Services\CreatorCouponIssuer;
+use App\Services\FinancePaymentSync;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorPrivacy;
@@ -48,6 +50,8 @@ class CampaignController extends Controller
         private readonly NotificationService $notifications,
         private readonly MailNotifier $mail,
         private readonly CampaignDemandSync $demands,
+        private readonly CreatorCouponIssuer $coupons,
+        private readonly FinancePaymentSync $finance,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -247,6 +251,7 @@ class CampaignController extends Controller
     {
         $this->assertCanManage($request, $campaign);
         $previousStatus = $campaign->status;
+        $wasBenefitCoupon = (bool) $campaign->is_benefit_coupon;
         $data = $this->validatedCampaign($request, false);
         $hasGroups = array_key_exists('creator_group_ids', $data);
         $groupIds = $hasGroups ? $data['creator_group_ids'] : null;
@@ -285,6 +290,7 @@ class CampaignController extends Controller
         });
 
         $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator']);
+        $this->coupons->syncCampaign($campaign, $campaign->is_benefit_coupon && ! $wasBenefitCoupon);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
         $this->syncCampaignApprovedLimit($campaign, false);
 
@@ -533,6 +539,14 @@ class CampaignController extends Controller
         if ($nextPaymentValue === PaymentStatus::Paid->value && empty($data['payment_date'])) {
             $data['payment_date'] = now()->toDateString();
         }
+        if (in_array($nextPaymentValue, [PaymentStatus::Paid->value, PaymentStatus::Scheduled->value], true)) {
+            $financePayment = $this->finance->ensureCampaignPayment($campaignCreator);
+            if ($financePayment) {
+                throw ValidationException::withMessages([
+                    'payment_status' => __('auth.finance_invoice_required'),
+                ]);
+            }
+        }
 
         if (array_key_exists('additional_briefing', $data)) {
             $effectiveStatus = $nextStatus ?? $campaignCreator->application_status?->value;
@@ -564,7 +578,12 @@ class CampaignController extends Controller
         });
 
         if ($becomingApproved) {
-            $this->demands->syncCreator($campaignCreator->fresh());
+            $freshParticipation = $campaignCreator->fresh();
+            $this->demands->syncCreator($freshParticipation);
+            $freshParticipation?->loadMissing(['creator', 'campaign']);
+            if ($freshParticipation?->creator && $freshParticipation->campaign) {
+                $this->coupons->issue($freshParticipation->campaign, $freshParticipation->creator);
+            }
         }
 
         if ($demand) {
@@ -649,6 +668,7 @@ class CampaignController extends Controller
                 $this->syncCampaignApprovedLimit($locked, true);
             }
         });
+        $this->coupons->release((int) $campaignCreator->campaign_id, (int) $campaignCreator->creator_id);
 
         return response()->json(['message' => __('auth.creator_removed')]);
     }
@@ -702,6 +722,11 @@ class CampaignController extends Controller
             return $created;
         });
 
+        $row->loadMissing('creator');
+        if ($row->creator && $row->application_status === ApplicationStatus::Approved) {
+            $this->coupons->issue($campaign->fresh(), $row->creator, $shouldNotify);
+        }
+
         if ($shouldNotify && ! $campaign->isPendingAgency()) {
             $this->notifications->notifyCreator((int) $data['creator_id'], [
                 'campaign_id' => $campaign->id,
@@ -737,12 +762,16 @@ class CampaignController extends Controller
             'agency_fee' => ['nullable', 'numeric'],
             'agency_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'creators_budget' => ['nullable', 'numeric'],
-            'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter') && ! CreatorPrivacy::hidesCreatorValues($user)), 'nullable', 'numeric', 'min:0'],
+            'creator_cache' => [Rule::requiredIf(fn () => $creating && ! $request->boolean('is_barter') && ! $request->boolean('is_benefit_coupon') && ! CreatorPrivacy::hidesCreatorValues($user)), 'nullable', 'numeric', 'min:0'],
             'status' => ['nullable', Rule::enum(CampaignStatus::class)],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'is_secret' => ['sometimes', 'boolean'],
             'is_direct_contract' => ['sometimes', 'boolean'],
             'is_barter' => ['sometimes', 'boolean'],
+            'is_benefit_coupon' => ['sometimes', 'boolean'],
+            'benefit_coupon_code' => ['nullable', 'string', 'max:40'],
+            'benefit_discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'benefit_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'limit_by_city' => ['sometimes', 'boolean'],
             'limit_by_age' => ['sometimes', 'boolean'],
             'min_age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
@@ -828,11 +857,110 @@ class CampaignController extends Controller
             unset($data['creator_cache'], $data['creators_budget']);
         }
 
+        $data = $this->withBenefitCoupon($request, $data, $creating);
+
         return $this->withAgencyFeeSplit(
             $data,
             $creating ? null : $request->route('campaign'),
             $user,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withBenefitCoupon(Request $request, array $data, bool $creating): array
+    {
+        $touches = $creating
+            || $request->exists('is_benefit_coupon')
+            || $request->exists('benefit_coupon_code')
+            || $request->exists('benefit_discount_percent')
+            || $request->exists('benefit_commission_percent')
+            || $request->exists('is_barter');
+
+        if (! $touches) {
+            return $data;
+        }
+
+        $existing = $creating ? null : $request->route('campaign');
+        $campaign = $existing instanceof Campaign ? $existing : null;
+        $enabled = array_key_exists('is_benefit_coupon', $data)
+            ? (bool) $data['is_benefit_coupon']
+            : (bool) ($campaign?->is_benefit_coupon ?? false);
+        $barter = array_key_exists('is_barter', $data)
+            ? (bool) $data['is_barter']
+            : (bool) ($campaign?->is_barter ?? false);
+
+        if ($enabled && $barter) {
+            throw ValidationException::withMessages([
+                'is_benefit_coupon' => __('auth.benefit_coupon_exclusive'),
+            ]);
+        }
+
+        if (! $enabled) {
+            if ($creating || array_key_exists('is_benefit_coupon', $data)) {
+                $data['is_benefit_coupon'] = false;
+                $data['benefit_coupon_code'] = null;
+                $data['benefit_discount_percent'] = null;
+                $data['benefit_commission_percent'] = null;
+            }
+
+            return $data;
+        }
+
+        $rawCode = array_key_exists('benefit_coupon_code', $data)
+            ? (string) $data['benefit_coupon_code']
+            : (string) ($campaign?->benefit_coupon_code ?? '');
+        $code = strtoupper((string) preg_replace('/\s+/', '', trim($rawCode)));
+        $discount = $this->benefitPercent($data, 'benefit_discount_percent', $campaign);
+        $commission = $this->benefitPercent($data, 'benefit_commission_percent', $campaign);
+
+        if ($code !== '' && ! preg_match('/^[A-Z0-9][A-Z0-9-]{0,19}$/', $code)) {
+            throw ValidationException::withMessages([
+                'benefit_coupon_code' => __('auth.benefit_coupon_suffix'),
+            ]);
+        }
+
+        if ($discount === null || $commission === null) {
+            throw ValidationException::withMessages([
+                'benefit_discount_percent' => __('auth.benefit_coupon_required'),
+            ]);
+        }
+
+        if ($discount <= 0 || $discount > 100 || $commission <= 0 || $commission > 100) {
+            throw ValidationException::withMessages([
+                'benefit_discount_percent' => __('auth.benefit_coupon_percent_invalid'),
+            ]);
+        }
+
+        $data['is_benefit_coupon'] = true;
+        $data['is_barter'] = false;
+        $data['benefit_coupon_code'] = $code !== '' ? $code : null;
+        $data['benefit_discount_percent'] = $discount;
+        $data['benefit_commission_percent'] = $commission;
+        $data['total_budget'] = 0;
+        $data['creator_cache'] = 0;
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function benefitPercent(array $data, string $key, ?Campaign $campaign): ?float
+    {
+        if (array_key_exists($key, $data)) {
+            if ($data[$key] === null || $data[$key] === '') {
+                return null;
+            }
+
+            return round((float) $data[$key], 2);
+        }
+
+        $current = $campaign?->{$key};
+
+        return $current === null ? null : round((float) $current, 2);
     }
 
     /**
@@ -1083,7 +1211,10 @@ class CampaignController extends Controller
 
         $savingBarter = ($campaign === null && (bool) ($data['is_barter'] ?? false))
             || (array_key_exists('is_barter', $data) && $data['is_barter']);
-        if ($savingBarter) {
+        $savingBenefit = array_key_exists('is_benefit_coupon', $data)
+            ? (bool) $data['is_benefit_coupon']
+            : (bool) ($campaign?->is_benefit_coupon ?? false);
+        if ($savingBarter || $savingBenefit) {
             $data['total_budget'] = 0;
             $data['creator_cache'] = 0;
         } elseif (array_key_exists('creator_cache', $data) && $data['creator_cache'] === null) {

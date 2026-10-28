@@ -8,6 +8,7 @@ import {
   Building2,
   CalendarDays,
   BarChart3,
+  Coins,
   Eye,
   EyeOff,
   Globe,
@@ -24,9 +25,11 @@ import {
   ShieldCheck,
   Sparkles,
   Store,
+  TicketPercent,
   Users,
   UsersRound,
   Video,
+  Wallet,
   X,
 } from "lucide-react";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
@@ -261,6 +264,8 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         { href: "/dashboard", label: t("dashboard"), icon: LayoutDashboard, active: isActive("/dashboard") || path === "/" },
         { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
         { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
+        { href: "/coupons", label: t("coupons"), icon: TicketPercent, active: isActive("/coupons") },
+        { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") },
         ...(showRecurringNav ? [{ href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") }] : []),
       ]
     : user.role === "company"
@@ -268,12 +273,16 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
           { href: "/company-dashboard", label: t("tabHome"), icon: Home, active: isActive("/company-dashboard") },
           { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
           { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
+          { href: "/coupons", label: t("coupons"), icon: TicketPercent, active: isActive("/coupons") },
+          { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") },
           ...(showRecurringNav ? [{ href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") }] : []),
         ]
       : [
           { href: home, label: t("tabHome"), icon: Home, active: isCreatorHomeActive || isActive("/creator-dashboard") },
           { href: "/available-campaigns", label: t("tabAvailable"), icon: Sparkles, active: isAvailableCampaignsActive },
           { href: creatorProfileBase ? `${creatorProfileBase}?tab=campaigns` : "/campaigns", label: t("campaigns"), icon: Megaphone, active: isCreatorCampaignsActive },
+          { href: "/coupons", label: t("myCoupons"), icon: TicketPercent, active: isActive("/coupons") },
+          { href: "/finance", label: t("myFinance"), icon: Wallet, active: isActive("/finance") },
           ...(showRecurringNav ? [{ href: creatorProfileBase ? `${creatorProfileBase}?tab=recurring` : "/recurring", label: t("tabRecurring"), icon: Repeat, active: isCreatorRecurringActive }] : []),
         ];
   const moreActive = !primaryNav.some((item) => item.active) && !isCreatorShippingActive && !isCreatorBankActive;
@@ -302,6 +311,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/companies" label={t("companies")} icon={Building2} active={isActive("/companies")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} badge={pendingCampaigns} onClick={close} />
+                <SidebarItem href="/coupons" label={t("coupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
+                <SidebarItem href="/coupon-earnings" label={t("couponEarnings")} icon={Coins} active={isActive("/coupon-earnings")} onClick={close} />
+                <SidebarItem href="/finance" label={t("finance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
                 {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
@@ -334,6 +346,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
                 <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
                 <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
+                <SidebarItem href="/coupons" label={t("coupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
+                <SidebarItem href="/coupon-earnings" label={t("couponEarnings")} icon={Coins} active={isActive("/coupon-earnings")} onClick={close} />
+                <SidebarItem href="/finance" label={t("finance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
                 {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
                 <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
                 <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
@@ -356,6 +371,8 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
                 <SidebarItem href={home} label={t("home")} icon={Home} active={isCreatorHomeActive || isActive("/creator-dashboard")} onClick={close} />
                 <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
                 {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=campaigns`} label={t("myCampaigns")} icon={Megaphone} active={isCreatorCampaignsActive} onClick={close} /> : null}
+                <SidebarItem href="/coupons" label={t("myCoupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
+                <SidebarItem href="/finance" label={t("myFinance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
                 {showRecurringNav && creatorProfileBase ? (
                   <SidebarItem href={`${creatorProfileBase}?tab=recurring`} label={t("recurring")} icon={Repeat} active={isCreatorRecurringActive} onClick={close} />
                 ) : null}

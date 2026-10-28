@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\CompanyContact;
 use App\Models\CompanyUser;
+use App\Support\SensitiveIndex;
 use Database\Seeders\Concerns\SeedsDemoAccounts;
 use Illuminate\Database\Seeder;
 
@@ -20,8 +21,8 @@ class CompanySeeder extends Seeder
         $auroraUser = $this->ensureUser(DemoAccounts::COMPANY_AURORA, UserRole::Company, 'Marca Aurora');
 
         $aurora = Company::query()
-            ->where('email', DemoAccounts::COMPANY_AURORA)
-            ->orWhere('cnpj', '12.345.678/0001-90')
+            ->where('email_hash', SensitiveIndex::normalized(DemoAccounts::COMPANY_AURORA))
+            ->orWhere('cnpj_hash', SensitiveIndex::digits('12.345.678/0001-90'))
             ->first();
         if (! $aurora) {
             $aurora = Company::factory()->active()->create([
@@ -46,7 +47,7 @@ class CompanySeeder extends Seeder
             ]);
         }
 
-        if (! CompanyContact::query()->where('company_id', $aurora->id)->where('email', 'marina@aurora.test')->exists()) {
+        if (! CompanyContact::query()->where('company_id', $aurora->id)->where('email_hash', SensitiveIndex::normalized('marina@aurora.test'))->exists()) {
             CompanyContact::factory()->create([
                 'company_id' => $aurora->id,
                 'name' => 'Marina Alves',
@@ -56,7 +57,7 @@ class CompanySeeder extends Seeder
             ]);
         }
 
-        if (! CompanyContact::query()->where('company_id', $aurora->id)->where('email', 'pedro@aurora.test')->exists()) {
+        if (! CompanyContact::query()->where('company_id', $aurora->id)->where('email_hash', SensitiveIndex::normalized('pedro@aurora.test'))->exists()) {
             CompanyContact::factory()->create([
                 'company_id' => $aurora->id,
                 'name' => 'Pedro Lima',
@@ -73,8 +74,8 @@ class CompanySeeder extends Seeder
         $lumenUser = $this->ensureUser(DemoAccounts::COMPANY_LUMEN, UserRole::Company, 'Studio Lumen');
 
         $lumen = Company::query()
-            ->where('email', DemoAccounts::COMPANY_LUMEN)
-            ->orWhere('cnpj', '98.765.432/0001-10')
+            ->where('email_hash', SensitiveIndex::normalized(DemoAccounts::COMPANY_LUMEN))
+            ->orWhere('cnpj_hash', SensitiveIndex::digits('98.765.432/0001-10'))
             ->first();
         if (! $lumen) {
             $lumen = Company::factory()->pending()->create([

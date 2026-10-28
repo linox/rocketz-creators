@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Support\SensitiveIndex;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -34,11 +35,14 @@ class ActivityLogController extends Controller
         }
         if (! empty($data['q'])) {
             $needle = '%'.$data['q'].'%';
-            $query->where(function ($inner) use ($needle) {
+            $ipHash = filter_var($data['q'], FILTER_VALIDATE_IP) ? SensitiveIndex::ip($data['q']) : null;
+            $query->where(function ($inner) use ($needle, $ipHash) {
                 $inner->where('actor_email', 'like', $needle)
                     ->orWhere('actor_name', 'like', $needle)
-                    ->orWhere('ip', 'like', $needle)
                     ->orWhere('path', 'like', $needle);
+                if ($ipHash) {
+                    $inner->orWhere('ip_hash', $ipHash);
+                }
             });
         }
         if (! empty($data['from'])) {

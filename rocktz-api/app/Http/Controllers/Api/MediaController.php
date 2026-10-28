@@ -318,6 +318,31 @@ class MediaController extends Controller
         return $this->download('documents', $filename);
     }
 
+    public function previewDocument(string $filename): BinaryFileResponse|RedirectResponse
+    {
+        abort_unless((bool) preg_match('/^[A-Za-z0-9._-]+$/', $filename), 404);
+
+        $path = 'documents/'.$filename;
+        $mime = $this->documentMime($filename);
+        if (Storage::disk('uploads')->exists($path)) {
+            $absolute = Storage::disk('uploads')->path($path);
+            $mime = $this->documentMime($filename, $absolute);
+
+            return response()->file($absolute, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'private, max-age=300',
+                'Content-Security-Policy' => 'frame-ancestors *',
+                'Cross-Origin-Resource-Policy' => 'cross-origin',
+                'X-Content-Type-Options' => 'nosniff',
+            ])->setContentDisposition('inline', $filename);
+        }
+
+        $redirect = $this->redirectRemoteMedia($path, false, $mime);
+        abort_if($redirect === null, 404);
+
+        return $redirect;
+    }
+
     public function download(string $folder, string $filename): StreamedResponse|RedirectResponse
     {
         abort_unless(in_array($folder, ['portfolio', 'avatars', 'documents'], true), 404);
@@ -467,14 +492,30 @@ class MediaController extends Controller
         }
     }
 
-    private function redirectRemoteMedia(string $path, bool $asAttachment): ?RedirectResponse
+    private function redirectRemoteMedia(string $path, bool $asAttachment, ?string $inlineType = null): ?RedirectResponse
     {
-        $signed = MediaUrl::signedGet($path, $asAttachment);
+        $signed = MediaUrl::signedGet($path, $asAttachment, $inlineType);
         if ($signed === null) {
             return null;
         }
 
         return redirect()->away($signed);
+    }
+
+    private function documentMime(string $filename, ?string $absolute = null): string
+    {
+        $extension = strtolower((string) pathinfo($filename, PATHINFO_EXTENSION));
+
+        return match ($extension) {
+            'pdf' => 'application/pdf',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            'jpg', 'jpeg' => 'image/jpeg',
+            default => $absolute
+                ? ((string) (new \finfo(FILEINFO_MIME_TYPE))->file($absolute) ?: 'application/octet-stream')
+                : 'application/octet-stream',
+        };
     }
 
     /**

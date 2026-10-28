@@ -4,6 +4,7 @@ import { FormEvent, Fragment, Suspense, useEffect, useMemo, useRef, useState, ty
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import {
@@ -74,6 +75,7 @@ import { DeliveryUploadProgress } from "@/components/DeliveryUploadProgress";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { Select2Field } from "@/components/Select2Field";
+import { SensitiveInput, SensitiveText } from "@/components/SensitiveValue";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
@@ -96,6 +98,7 @@ import { formatWhatsApp, formatInstagram, formatTikTok, formatYouTube, formatKwa
 import { DEFAULT_COUNTRY, DEFAULT_CURRENCY, currencyForProfile, defaultCurrencyForCountry, formatLocation, hasRegions, isValidCurrency, isValidRegion } from "@/lib/geo";
 import { EMPTY_SHIPPING, formatPostalCode, formatShippingLines, postalCodeReady, shippingCountryCode, shippingFormFromAddress, shippingIssue, shippingPayload, type ShippingForm } from "@/lib/shipping-address";
 import { BANK_ACCOUNT_TYPES, EMPTY_BANK, PIX_TYPES, bankFormFromAccount, bankIssue, bankPayload, formatBankLines, formatPixKey, type BankForm } from "@/lib/bank-account";
+import { maskBankPreview, maskShippingPreview, pixMaskKind } from "@/lib/mask-sensitive";
 import { normalizeCreatorCategories } from "@/lib/creatorCategories";
 import { formatTaxDocument, isValidTaxDocument, taxDocumentMaxLength, taxDocumentsLabel } from "@/lib/taxDocuments";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -627,12 +630,6 @@ function pricesFromCreator(data: Creator, currency: string): PriceForm {
     youtube: moneyToMask(data.pricing?.youtube, currency),
     kwai: moneyToMask(data.pricing?.kwai, currency),
   };
-}
-
-function maskPII(value: string | null | undefined, hidden: boolean | undefined, fallback: string) {
-  if (!value) return fallback;
-  if (hidden) return "••••••••";
-  return value;
 }
 
 function followersAwaitingSync(creator: Creator) {
@@ -1176,13 +1173,18 @@ function ProfileInner() {
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const rejectedApplications = myParticipations.filter((item) => item.row.application_status === "rejected");
 
+  function paymentAmount(campaign: Campaign, row: { amount: number | null }) {
+    if (campaign.is_benefit_coupon || campaign.is_barter) return 0;
+    return Number(row.amount) || Number(campaign.creator_cache) || 0;
+  }
+
   const totalReceived = approvedCampaigns
     .filter((item) => item.row.payment_status === "paid")
-    .reduce((sum, item) => sum + (Number(item.row.amount) || Number(item.campaign.creator_cache) || 0), 0);
+    .reduce((sum, item) => sum + paymentAmount(item.campaign, item.row), 0);
 
   const totalToReceive = approvedCampaigns
     .filter((item) => item.row.payment_status !== "paid" && item.row.delivery_status === "approved")
-    .reduce((sum, item) => sum + (Number(item.row.amount) || Number(item.campaign.creator_cache) || 0), 0);
+    .reduce((sum, item) => sum + paymentAmount(item.campaign, item.row), 0);
 
   const monthlyEarnings = myContracts.reduce((sum, contract) => {
     const row = contract.creators?.find((item) => item.creator_id === profile.id);
@@ -1233,6 +1235,7 @@ function ProfileInner() {
 
   function creatorFeeText(campaign: Campaign, row: { amount: number | null; payment_status?: string | null }) {
     if (hideCreatorValues) return HIDDEN_CREATOR_VALUE;
+    if (campaign.is_benefit_coupon) return benefitCouponLine(ta, campaign);
     if (campaign.is_barter) return ta("available.barterPay");
     const amount = Number(row.amount) || Number(campaign.creator_cache) || 0;
     if (amount > 0) return formatPay(amount);
@@ -1240,32 +1243,35 @@ function ProfileInner() {
   }
 
   const earningsLines = [
-    ...approvedCampaigns.map((item) => {
+    ...approvedCampaigns.flatMap((item) => {
+      const amount = paymentAmount(item.campaign, item.row);
+      if (amount <= 0) return [];
       const kind: EarningsKind = item.row.payment_status === "paid"
         ? "paid"
         : item.row.delivery_status === "approved"
           ? "receivable"
           : "progress";
-      return {
+      return [{
         id: `campaign-${item.row.id}`,
         kind,
         title: item.campaign.name,
         company: item.campaign.company?.name || "",
         date: item.row.payment_date || item.row.delivery_date || item.campaign.end_date || item.campaign.start_date || null,
-        amountLabel: creatorFeeText(item.campaign, item.row),
-      };
+        amountLabel: hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatPay(amount),
+      }];
     }),
-    ...myContracts.map((contract) => {
+    ...myContracts.flatMap((contract) => {
       const row = contract.creators?.find((item) => item.creator_id === profile.id);
       const amount = Number(row?.monthly_cache ?? row?.monthly_fee ?? 0);
-      return {
+      if (amount <= 0) return [];
+      return [{
         id: `recurring-${contract.id}`,
         kind: "recurring" as const,
         title: contract.title,
         company: contract.company?.name || "",
         date: contract.start_date,
-        amountLabel: hideCreatorValues ? HIDDEN_CREATOR_VALUE : amount > 0 ? formatPay(amount) : ta("available.toDefine"),
-      };
+        amountLabel: hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatPay(amount),
+      }];
     }),
   ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const visibleEarnings = earningsFilter === "all" ? earningsLines : earningsLines.filter((line) => line.kind === earningsFilter);
@@ -1844,32 +1850,40 @@ function ProfileInner() {
               <div className="flex flex-col gap-3 text-xs leading-relaxed text-[#475569]">
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("emailLabel")}</span>
-                  <span>{maskPII(creator.email, hideValues, tp("notInformed"))}</span>
+                  <SensitiveText value={creator.email} kind="email" empty={tp("notInformed")} forceHidden={hideValues} />
                 </div>
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("whatsappLabel")}</span>
-                  <span>{maskPII(creator.whatsapp, hideValues, tp("notInformed"))}</span>
+                  <SensitiveText value={creator.whatsapp} kind="phone" empty={tp("notInformed")} forceHidden={hideValues} />
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("cpfCreator", { documents: documentsLabel })}</span>
+                  <SensitiveText value={creator.cpf || creator.document} kind="cpf" empty={tp("notInformed")} forceHidden={hideValues} />
                 </div>
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("birthDate")}</span>
-                  <span>{maskPII(creator.birth_date ? new Date(`${creator.birth_date}T00:00:00`).toLocaleDateString(locale) : null, hideValues, tp("notInformed"))}</span>
+                  <SensitiveText value={creator.birth_date ? new Date(`${creator.birth_date}T00:00:00`).toLocaleDateString(locale) : null} kind="date" empty={tp("notInformed")} forceHidden={hideValues} />
                 </div>
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("shippingTitle")}</span>
-                  {formatShippingLines(creator.shipping_address, creator.country).length ? (
-                    <span className="block whitespace-pre-line">{maskPII(formatShippingLines(creator.shipping_address, creator.country, locale).join("\n"), hideValues, tp("notInformed"))}</span>
-                  ) : (
-                    <span>{tp("notInformed")}</span>
-                  )}
+                  <SensitiveText
+                    multiline
+                    value={formatShippingLines(creator.shipping_address, creator.country, locale).join("\n")}
+                    preview={maskShippingPreview(creator.shipping_address)}
+                    empty={tp("notInformed")}
+                    forceHidden={hideValues}
+                  />
                   <button type="button" onClick={() => goTab("shipping")} className="mt-2 text-[11px] font-bold text-amber-700 hover:underline">{tp("openShippingPage")}</button>
                 </div>
                 <div>
                   <span className="block text-[9px] font-bold tracking-wide text-[#64748B] uppercase">{tp("bankTitle")}</span>
-                  {formatBankLines(creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).length ? (
-                    <span className="block whitespace-pre-line">{maskPII(formatBankLines(creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).join("\n"), hideValues, tp("notInformed"))}</span>
-                  ) : (
-                    <span>{maskPII(creator.pix_key, hideValues, tp("notInformed"))}</span>
-                  )}
+                  <SensitiveText
+                    multiline
+                    value={formatBankLines(creator.bank_account, { checking: tp("bankChecking"), savings: tp("bankSavings"), agency: tp("bankAgency"), account: tp("bankAccount") }).join("\n") || creator.pix_key || ""}
+                    preview={maskBankPreview(creator.bank_account, creator.pix_key)}
+                    empty={tp("notInformed")}
+                    forceHidden={hideValues}
+                  />
                   <button type="button" onClick={() => goTab("bank")} className="mt-2 text-[11px] font-bold text-emerald-700 hover:underline">{tp("openBankPage")}</button>
                 </div>
                 <SocialLinks socials={creator.socials} emptyLabel={tp("notInformed")} />
@@ -1916,7 +1930,7 @@ function ProfileInner() {
                     {creator.contract_acceptance ? (
                       <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-2 text-[11px] text-slate-500">
                         <div className="flex justify-between"><span>{tp("acceptanceDate")}</span><span className="font-semibold text-slate-700">{creator.contract_acceptance.accepted_at ? new Date(creator.contract_acceptance.accepted_at).toLocaleDateString(locale) : "—"}</span></div>
-                        <div className="flex justify-between"><span>{tp("signedBy")}</span><span className="font-semibold text-slate-700">{creator.contract_acceptance.full_name}</span></div>
+                        <div className="flex justify-between gap-2"><span>{tp("signedBy")}</span><SensitiveText value={creator.contract_acceptance.full_name} kind="name" className="font-semibold text-slate-700" /></div>
                       </div>
                     ) : null}
                     <button type="button" onClick={() => setContractOpen(true)} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-purple-700 shadow-xs hover:bg-slate-100">
@@ -2015,13 +2029,14 @@ function ProfileInner() {
                     />
                   </Field>
                   <Field label={tp("shippingZip")}>
-                    <input
+                    <SensitiveInput
+                      kind="zip"
                       className={inputClass}
                       value={shipping.zip}
                       inputMode={shippingCountry === "BR" ? "numeric" : "text"}
                       autoComplete="postal-code"
-                      onChange={(e) => {
-                        const zip = formatPostalCode(shippingCountry, e.target.value);
+                      onChange={(value) => {
+                        const zip = formatPostalCode(shippingCountry, value);
                         latestShippingZip.current = zip;
                         zipLookupKey.current = "";
                         setShipping({ ...shipping, zip });
@@ -2035,16 +2050,16 @@ function ProfileInner() {
                     {lookingUpZip ? <p className="text-[10px] text-slate-500">{tp("shippingLookingUp")}</p> : null}
                   </Field>
                   <Field label={tp("shippingStreet")}>
-                    <input className={inputClass} value={shipping.street} autoComplete="address-line1" onChange={(e) => setShipping({ ...shipping, street: e.target.value })} />
+                    <SensitiveInput kind="line" className={inputClass} value={shipping.street} autoComplete="address-line1" onChange={(value) => setShipping({ ...shipping, street: value })} />
                   </Field>
                   <Field label={tp("shippingNumber")}>
-                    <input className={inputClass} value={shipping.number} onChange={(e) => setShipping({ ...shipping, number: e.target.value })} />
+                    <SensitiveInput kind="text" className={inputClass} value={shipping.number} onChange={(value) => setShipping({ ...shipping, number: value })} />
                   </Field>
                   <Field label={tp("shippingComplement")}>
-                    <input className={inputClass} value={shipping.complement} placeholder={tp("shippingComplementPh")} onChange={(e) => setShipping({ ...shipping, complement: e.target.value })} />
+                    <SensitiveInput kind="line" className={inputClass} value={shipping.complement} placeholder={tp("shippingComplementPh")} onChange={(value) => setShipping({ ...shipping, complement: value })} />
                   </Field>
                   <Field label={tp("shippingNeighborhood")}>
-                    <input className={inputClass} value={shipping.neighborhood} onChange={(e) => setShipping({ ...shipping, neighborhood: e.target.value })} />
+                    <SensitiveInput kind="line" className={inputClass} value={shipping.neighborhood} onChange={(value) => setShipping({ ...shipping, neighborhood: value })} />
                   </Field>
                   <Field label={tp("shippingCity")}>
                     <input className={inputClass} value={shipping.city} autoComplete="address-level2" onChange={(e) => setShipping({ ...shipping, city: e.target.value })} />
@@ -2076,16 +2091,16 @@ function ProfileInner() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label={tp("bankHolder")}>
-                    <input className={inputClass} value={bank.holderName} autoComplete="name" onChange={(e) => patchBank({ holderName: e.target.value })} />
+                    <SensitiveInput kind="name" className={inputClass} value={bank.holderName} autoComplete="name" onChange={(value) => patchBank({ holderName: value })} />
                   </Field>
                   <Field label={tp("bankName")}>
                     <input className={inputClass} value={bank.bankName} onChange={(e) => patchBank({ bankName: e.target.value })} />
                   </Field>
                   <Field label={tp("bankAgency")}>
-                    <input className={inputClass} inputMode="numeric" value={bank.agency} onChange={(e) => patchBank({ agency: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+                    <SensitiveInput kind="text" className={inputClass} inputMode="numeric" value={bank.agency} onChange={(value) => patchBank({ agency: value.replace(/\D/g, "").slice(0, 6) })} />
                   </Field>
                   <Field label={tp("bankAccount")}>
-                    <input className={inputClass} value={bank.account} placeholder={tp("bankAccountPh")} onChange={(e) => patchBank({ account: e.target.value.replace(/[^\d-]/g, "").slice(0, 20) })} />
+                    <SensitiveInput kind="text" className={inputClass} value={bank.account} placeholder={tp("bankAccountPh")} onChange={(value) => patchBank({ account: value.replace(/[^\d-]/g, "").slice(0, 20) })} />
                   </Field>
                   <Field label={tp("bankType")}>
                     <Select2Field
@@ -2117,12 +2132,13 @@ function ProfileInner() {
                     />
                   </Field>
                   <Field label={tp("pixKey")} className="md:col-span-2">
-                    <input
+                    <SensitiveInput
+                      kind={pixMaskKind(bank.pixType)}
                       className={inputClass}
                       value={bank.pixKey}
                       inputMode={bank.pixType === "email" ? "email" : bank.pixType === "random" ? "text" : "numeric"}
                       autoComplete={bank.pixType === "email" ? "email" : "off"}
-                      onChange={(e) => patchBank({ pixKey: formatPixKey(bank.pixType, e.target.value) })}
+                      onChange={(value) => patchBank({ pixKey: formatPixKey(bank.pixType, value) })}
                     />
                   </Field>
                 </div>
@@ -2158,7 +2174,7 @@ function ProfileInner() {
                       <input className={cn(inputClass, "pl-8 font-semibold")} value={artisticName} onChange={(e) => setArtisticName(e.target.value.replace(/^@+/, ""))} />
                     </div>
                   </Field>
-                  <Field label={tp("whatsappContact")}><input className={inputClass} value={whatsapp} onChange={(e) => setWhatsapp(formatWhatsApp(e.target.value))} /></Field>
+                  <Field label={tp("whatsappContact")}><SensitiveInput kind="phone" className={inputClass} value={whatsapp} onChange={(value) => setWhatsapp(formatWhatsApp(value))} /></Field>
                   <Field label={tp("country")}>
                     <CountrySelect theme="light" value={country} onChange={(value) => {
                       const nextCurrency = defaultCurrencyForCountry(value);
@@ -2180,9 +2196,9 @@ function ProfileInner() {
                     <RegionSelect theme="light" country={country} value={state} onChange={setState} />
                   </Field>
                   <Field label={tp("city")}><input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-                  <Field label={tp("cpfCreator", { documents: documentsLabel })}><input className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(e) => setCpf(formatTaxDocument(country, e.target.value))} /></Field>
+                  <Field label={tp("cpfCreator", { documents: documentsLabel })}><SensitiveInput kind="cpf" className={inputClass} value={cpf} maxLength={taxDocumentMaxLength(country)} onChange={(value) => setCpf(formatTaxDocument(country, value))} /></Field>
                   <Field label={tp("birthDate")}>
-                    <input type="date" className={inputClass} value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthDate(e.target.value)} />
+                    <SensitiveInput type="date" kind="date" className={inputClass} value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={setBirthDate} />
                     <p className="text-[10px] text-slate-500">{tp("birthDateHint")}</p>
                   </Field>
                 </div>

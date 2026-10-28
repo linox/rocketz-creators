@@ -23,6 +23,22 @@ class ActivityLogger
         'code',
         'authorization',
         'google_id',
+        'cpf',
+        'document',
+        'cnpj',
+        'whatsapp',
+        'phone',
+        'pix_key',
+        'birth_date',
+        'sender_phone',
+        'agency',
+        'account',
+        'holder_name',
+        'street',
+        'zip',
+        'neighborhood',
+        'complement',
+        'number',
     ];
 
     /**

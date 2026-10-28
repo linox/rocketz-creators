@@ -28,7 +28,8 @@ class ShippingSender extends Model
     protected function casts(): array
     {
         return [
-            'address' => 'array',
+            'phone' => 'encrypted',
+            'address' => 'encrypted:array',
         ];
     }
 

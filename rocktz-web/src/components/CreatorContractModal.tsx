@@ -16,6 +16,7 @@ import {
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { SensitiveInput } from "@/components/SensitiveValue";
 import { getCreatorContract, type CreatorContractAuditRecord } from "@/data/creatorContractTerms";
 import { downloadCreatorTermDocument } from "@/lib/creator-contract-document";
 import type { Creator } from "@/lib/types";
@@ -560,13 +561,14 @@ export function CreatorContractModal({
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
                       {t("termModal.fullNameLabel")}
                     </label>
-                    <input
-                      type="text"
+                    <SensitiveInput
+                      kind="name"
+                      tone="dark"
                       disabled={readOnly || !!signedAudit}
                       value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
+                      onChange={setNameInput}
                       placeholder={t("termModal.namePh")}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all disabled:opacity-70"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all"
                     />
                   </div>
 
@@ -583,20 +585,21 @@ export function CreatorContractModal({
                         </span>
                       )}
                     </div>
-                    <input
-                      type="text"
+                    <SensitiveInput
+                      kind="cpf"
+                      tone="dark"
                       maxLength={taxDocumentMaxLength(country)}
                       disabled={readOnly || !!signedAudit}
                       value={documentInput}
-                      onChange={(e) => {
-                        setDocumentInput(formatTaxDocument(country, e.target.value));
+                      onChange={(value) => {
+                        setDocumentInput(formatTaxDocument(country, value));
                         if (errorValidation) setErrorValidation(null);
                       }}
                       placeholder={taxDocumentPlaceholder(country, documentsLabel)}
-                      className={`w-full px-3.5 py-2 rounded-xl bg-white/10 border text-white text-xs outline-none transition-all disabled:opacity-70 ${
+                      className={`w-full px-3.5 py-2 rounded-xl bg-white/10 border text-white text-xs outline-none transition-all ${
                         documentInput && !isValidTaxDocument(country, documentInput) && documentInput.length >= taxDocumentMaxLength(country)
-                          ? 'border-rose-400/80 bg-rose-950/20 focus:border-rose-400'
-                          : 'border-white/15 focus:border-purple-400 focus:bg-white/20'
+                          ? "border-rose-400/80 bg-rose-950/20 focus:border-rose-400"
+                          : "border-white/15 focus:border-purple-400 focus:bg-white/20"
                       }`}
                     />
                   </div>
@@ -605,13 +608,15 @@ export function CreatorContractModal({
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">
                       {t("termModal.emailLabel")}
                     </label>
-                    <input
+                    <SensitiveInput
+                      kind="email"
                       type="email"
+                      tone="dark"
                       disabled={readOnly || !!signedAudit}
                       value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
+                      onChange={setEmailInput}
                       placeholder={t("termModal.emailPh")}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all disabled:opacity-70"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs outline-none focus:border-purple-400 focus:bg-white/20 transition-all"
                     />
                   </div>
 

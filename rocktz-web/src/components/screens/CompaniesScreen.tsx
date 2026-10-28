@@ -8,6 +8,7 @@ import { Building2, CheckCircle2, Clock, Edit, Eye, Mail, MapPin, Phone, Plus, S
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PasswordField } from "@/components/PasswordField";
 import { Select2Field } from "@/components/Select2Field";
+import { SensitiveInput, SensitiveText } from "@/components/SensitiveValue";
 import { CountrySelect, CurrencySelect } from "@/components/GeoSelectFields";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
@@ -155,13 +156,18 @@ function CompanyCard({
           </div>
           <div className="flex items-center gap-3 text-xs text-[#64748B]">
             <Mail size={14} className="shrink-0" />
-            {company.email || t("companies.emailMissing")}
+            <SensitiveText value={company.email} kind="email" empty={t("companies.emailMissing")} />
           </div>
           <div className="flex items-center gap-3 text-xs text-[#64748B]">
             <Phone size={14} className="shrink-0" />
-            {company.whatsapp || t("companies.whatsappMissing")}
+            <SensitiveText value={company.whatsapp} kind="phone" empty={t("companies.whatsappMissing")} />
           </div>
-          {company.cnpj ? <div className="mt-1 font-mono text-[11px] text-[#94A3B8]">{t("companies.cnpjLabel")}: {company.cnpj}</div> : null}
+          {company.cnpj ? (
+            <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-[#94A3B8]">
+              <span>{t("companies.cnpjLabel")}:</span>
+              <SensitiveText value={company.cnpj} kind="cnpj" />
+            </div>
+          ) : null}
         </div>
 
         {contacts.length > 0 ? (
@@ -174,7 +180,9 @@ function CompanyCard({
                     {contact.name}
                     {contact.role ? ` (${contact.role})` : ""}
                   </span>
-                  <span className="shrink-0 text-[10px] text-slate-400">{contact.whatsapp || contact.email}</span>
+                  <span className="shrink-0 text-[10px] text-slate-400">
+                    {contact.whatsapp ? <SensitiveText value={contact.whatsapp} kind="phone" /> : contact.email ? <SensitiveText value={contact.email} kind="email" /> : null}
+                  </span>
                 </div>
               ))}
             </div>
@@ -658,7 +666,7 @@ function CompaniesInner() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.cnpj")}</label>
-                  <input className={INPUT} value={createForm.cnpj} onChange={(event) => setCreateForm({ ...createForm, cnpj: formatCNPJ(event.target.value) })} />
+                  <SensitiveInput kind="cnpj" className={INPUT} value={createForm.cnpj} onChange={(value) => setCreateForm({ ...createForm, cnpj: formatCNPJ(value) })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.segment")}</label>
@@ -668,11 +676,11 @@ function CompaniesInner() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.email")}</label>
-                  <input type="email" className={INPUT} value={createForm.email} onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })} />
+                  <SensitiveInput kind="email" type="email" className={INPUT} value={createForm.email} onChange={(value) => setCreateForm({ ...createForm, email: value })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.whatsapp")}</label>
-                  <input className={INPUT} value={createForm.whatsapp} onChange={(event) => setCreateForm({ ...createForm, whatsapp: formatWhatsApp(event.target.value) })} />
+                  <SensitiveInput kind="phone" className={INPUT} value={createForm.whatsapp} onChange={(value) => setCreateForm({ ...createForm, whatsapp: formatWhatsApp(value) })} />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -739,7 +747,7 @@ function CompaniesInner() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.cnpj")}</label>
-                  <input className={INPUT} value={editForm.cnpj} onChange={(event) => setEditForm({ ...editForm, cnpj: formatCNPJ(event.target.value) })} />
+                  <SensitiveInput kind="cnpj" className={INPUT} value={editForm.cnpj} onChange={(value) => setEditForm({ ...editForm, cnpj: formatCNPJ(value) })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.segment")}</label>
@@ -749,11 +757,11 @@ function CompaniesInner() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.emailMain")}</label>
-                  <input type="email" className={INPUT} value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} />
+                  <SensitiveInput kind="email" type="email" className={INPUT} value={editForm.email} onChange={(value) => setEditForm({ ...editForm, email: value })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className={LABEL}>{t("companies.whatsappMain")}</label>
-                  <input className={INPUT} value={editForm.whatsapp} onChange={(event) => setEditForm({ ...editForm, whatsapp: formatWhatsApp(event.target.value) })} />
+                  <SensitiveInput kind="phone" className={INPUT} value={editForm.whatsapp} onChange={(value) => setEditForm({ ...editForm, whatsapp: formatWhatsApp(value) })} />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -786,8 +794,8 @@ function CompaniesInner() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <input className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 font-medium outline-none" placeholder={t("companies.contactName")} value={newContact.name} onChange={(event) => setNewContact({ ...newContact, name: event.target.value })} />
                   <input className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 font-medium outline-none" placeholder={t("companies.contactRole")} value={newContact.role} onChange={(event) => setNewContact({ ...newContact, role: event.target.value })} />
-                  <input type="email" className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 outline-none" placeholder={t("companies.contactEmail")} value={newContact.email} onChange={(event) => setNewContact({ ...newContact, email: event.target.value })} />
-                  <input className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 outline-none" placeholder={t("companies.contactWhatsapp")} value={newContact.whatsapp} onChange={(event) => setNewContact({ ...newContact, whatsapp: formatWhatsApp(event.target.value) })} />
+                  <SensitiveInput kind="email" type="email" className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 outline-none" placeholder={t("companies.contactEmail")} value={newContact.email} onChange={(value) => setNewContact({ ...newContact, email: value })} />
+                  <SensitiveInput kind="phone" className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 outline-none" placeholder={t("companies.contactWhatsapp")} value={newContact.whatsapp} onChange={(value) => setNewContact({ ...newContact, whatsapp: formatWhatsApp(value) })} />
                 </div>
                 <button type="button" onClick={() => void addContact()} className="flex items-center justify-center gap-1.5 self-end rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-100">
                   <Plus size={14} /> {t("companies.addContact")}
@@ -804,8 +812,8 @@ function CompaniesInner() {
                             {contact.role ? <span className="ml-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-normal text-indigo-600">{contact.role}</span> : null}
                           </span>
                           <span className="flex flex-wrap gap-2 text-[10px] text-[#64748B]">
-                            {contact.email ? <span>{contact.email}</span> : null}
-                            {contact.whatsapp ? <span>{contact.whatsapp}</span> : null}
+                            {contact.email ? <SensitiveText value={contact.email} kind="email" /> : null}
+                            {contact.whatsapp ? <SensitiveText value={contact.whatsapp} kind="phone" /> : null}
                           </span>
                         </div>
                         <button type="button" title={t("companies.removeContact")} onClick={() => setTempContacts((current) => current.filter((_, i) => i !== index))} className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700">

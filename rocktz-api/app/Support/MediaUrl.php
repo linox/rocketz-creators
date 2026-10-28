@@ -30,6 +30,23 @@ class MediaUrl
         return self::appPath('downloads', $path);
     }
 
+    public static function preview(string $path): string
+    {
+        $path = ltrim($path, '/');
+        if (preg_match('#^documents/([A-Za-z0-9._-]+)$#', $path, $matches) === 1) {
+            $relative = URL::temporarySignedRoute(
+                'media.documents.preview',
+                now()->addHours(max(1, (int) config('media.r2_presign_hours', 6))),
+                ['filename' => $matches[1]],
+                false,
+            );
+
+            return rtrim((string) config('app.url'), '/').$relative;
+        }
+
+        return self::deliveryUrl($path);
+    }
+
     public static function downloadFromPublicUrl(?string $url): ?string
     {
         $url = trim((string) $url);
@@ -129,7 +146,7 @@ class MediaUrl
         return implode('/', array_slice($segments, $index));
     }
 
-    public static function signedGet(string $path, bool $asAttachment = false): ?string
+    public static function signedGet(string $path, bool $asAttachment = false, ?string $inlineType = null): ?string
     {
         if (! MediaDisk::r2Configured()) {
             return null;
@@ -138,8 +155,12 @@ class MediaUrl
         $storage = Storage::disk('r2');
         $expires = now()->addHours((int) config('media.r2_presign_hours', 6));
         $options = [];
+        $filename = basename($path);
         if ($asAttachment) {
-            $options['ResponseContentDisposition'] = 'attachment; filename="'.basename($path).'"';
+            $options['ResponseContentDisposition'] = 'attachment; filename="'.$filename.'"';
+        } elseif ($inlineType) {
+            $options['ResponseContentDisposition'] = 'inline; filename="'.$filename.'"';
+            $options['ResponseContentType'] = $inlineType;
         }
 
         try {

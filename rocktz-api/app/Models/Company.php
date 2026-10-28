@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Enums\CompanyStatus;
+use App\Enums\FinancePaymentSource;
 use App\Support\Geo;
+use App\Support\SensitiveIndex;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,6 +29,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'objective',
     'status',
     'creator_invite_code',
+    'invoice_due_day',
+    'payment_due_day',
+    'invoice_data_campaign',
+    'invoice_data_recurring',
+    'invoice_data_coupon',
 ])]
 class Company extends Model
 {
@@ -41,12 +48,29 @@ class Company extends Model
     protected function casts(): array
     {
         return [
+            'cnpj' => 'encrypted',
+            'whatsapp' => 'encrypted',
+            'email' => 'encrypted',
             'status' => CompanyStatus::class,
+            'invoice_due_day' => 'integer',
+            'payment_due_day' => 'integer',
+            'invoice_data_campaign' => 'encrypted',
+            'invoice_data_recurring' => 'encrypted',
+            'invoice_data_coupon' => 'encrypted',
         ];
     }
 
     protected static function booted(): void
     {
+        static::saving(function (Company $company) {
+            if ($company->isDirty('cnpj')) {
+                $company->cnpj_hash = SensitiveIndex::digits($company->cnpj);
+            }
+            if ($company->isDirty('email')) {
+                $company->email_hash = SensitiveIndex::normalized($company->email);
+            }
+        });
+
         static::creating(function (Company $company) {
             if (! filled($company->creator_invite_code)) {
                 $company->creator_invite_code = static::generateInviteCode();
@@ -170,5 +194,18 @@ class Company extends Model
     public function currencyCode(): string
     {
         return Geo::isValidCurrency($this->currency) ? Geo::normalizeCurrency($this->currency) : Geo::defaultCurrency($this->countryCode());
+    }
+
+    public function invoiceDataFor(?FinancePaymentSource $source): ?string
+    {
+        $value = match ($source) {
+            FinancePaymentSource::Campaign => $this->invoice_data_campaign,
+            FinancePaymentSource::Recurring => $this->invoice_data_recurring,
+            FinancePaymentSource::Coupon => $this->invoice_data_coupon,
+            default => null,
+        };
+        $text = trim((string) $value);
+
+        return $text === '' ? null : $text;
     }
 }

@@ -24,6 +24,7 @@ import {
   Users,
   Video,
 } from "lucide-react";
+import { SensitiveText } from "@/components/SensitiveValue";
 import { motion } from "motion/react";
 import { UserAvatar } from "@/components/UserAvatar";
 import type { AuthUser, UserRole } from "@/lib/auth";
@@ -188,7 +189,7 @@ export function UserProfileMenu({
             </h3>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
               <Mail size={12} className="shrink-0 text-slate-400" />
-              <span className="truncate">{email}</span>
+              <SensitiveText value={email} kind="email" empty="" className="min-w-0 truncate text-xs text-slate-500" />
             </div>
           </div>
         </div>
@@ -196,10 +197,10 @@ export function UserProfileMenu({
         {phone || instagram || locationText ? (
           <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200/60 pt-3 text-[11px] text-slate-600">
             {phone ? (
-              <a href={`tel:+55${phoneDigits}`} className="flex max-w-full items-center gap-1 rounded-lg border border-slate-200/80 bg-white px-2 py-1 shadow-xs hover:border-slate-300">
+              <span className="flex max-w-full items-center gap-1 rounded-lg border border-slate-200/80 bg-white px-2 py-1 shadow-xs">
                 <Smartphone size={11} className="shrink-0 text-slate-400" />
-                <span className="truncate">{phone}</span>
-              </a>
+                <SensitiveText value={phone} kind="phone" href={`tel:+55${phoneDigits}`} className="truncate text-[11px] text-slate-600" />
+              </span>
             ) : null}
             {instagram ? (
               <a
@@ -375,7 +376,7 @@ export function UserProfileMenu({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-black text-white">{displayName}</p>
-              <p className="truncate text-[10px] text-white/70">{email}</p>
+              <SensitiveText value={email} kind="email" tone="dark" empty="" className="truncate text-[10px] text-white/70" />
             </div>
           </div>
           <div className="mt-2 flex items-center gap-1.5 border-t border-white/15 pt-2">

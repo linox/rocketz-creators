@@ -34,6 +34,11 @@ enum MailTemplateKey: string
     case AdminFailureVolume = 'admin.failure_volume';
     case PasswordReset = 'auth.password_reset';
     case TwoFactorCode = 'auth.two_factor';
+    case InvoiceDue = 'finance.invoice_due';
+    case InvoiceOverdue = 'finance.invoice_overdue';
+    case InvoiceSubmitted = 'finance.invoice_submitted';
+    case InvoiceRejected = 'finance.invoice_rejected';
+    case PaymentReleased = 'finance.payment_released';
 
     public function audience(): MailTemplateAudience
     {
@@ -44,7 +49,8 @@ enum MailTemplateKey: string
             self::CampaignCreatorApplied,
             self::DeliverySubmitted,
             self::DeliveryPendingReviewReminder,
-            self::CampaignPublished => MailTemplateAudience::Company,
+            self::CampaignPublished,
+            self::InvoiceSubmitted => MailTemplateAudience::Company,
             self::AdminCreatorPending,
             self::AdminCompanyPending,
             self::AdminCampaignPending,
@@ -61,7 +67,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::CampaignOpportunity => MailTemplateCategory::Opportunity,
-            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder => MailTemplateCategory::Reminder,
+            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder, self::InvoiceDue, self::InvoiceOverdue => MailTemplateCategory::Reminder,
             self::AdminDeliveryStuck,
             self::AdminDemandOverdue,
             self::AdminCampaignStartingEmpty,
@@ -139,6 +145,9 @@ enum MailTemplateKey: string
             self::CompanyRejected => ['link_plataforma'],
             self::PasswordReset => ['link_plataforma'],
             self::TwoFactorCode => ['codigo'],
+            self::InvoiceDue, self::InvoiceOverdue => ['link_plataforma', 'data_limite', 'nome_campanha'],
+            self::InvoiceRejected => ['link_plataforma', 'motivo_reprovacao'],
+            self::PaymentReleased => ['link_plataforma', 'data_pagamento'],
             default => ['link_plataforma'],
         };
     }
@@ -162,6 +171,10 @@ enum MailTemplateKey: string
             self::CreatorRejected => ['motivo_reprovacao'],
             self::CampaignApplicationRejected => ['nome_campanha'],
             self::TwoFactorCode => ['codigo'],
+            self::InvoiceDue, self::InvoiceOverdue => ['nome_campanha', 'nome_empresa', 'data_limite', 'valor_campanha'],
+            self::InvoiceSubmitted => ['nome_criador', 'nome_campanha', 'valor_campanha'],
+            self::InvoiceRejected => ['nome_campanha', 'motivo_reprovacao'],
+            self::PaymentReleased => ['nome_campanha', 'valor_campanha', 'data_pagamento'],
             default => [],
         };
     }
@@ -173,6 +186,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::DemandReminder, self::DeliveryPendingReviewReminder => [3, 1, 0, -1],
+            self::InvoiceDue => [3, 1, 0],
             self::PostDayReminder => [0],
             default => [],
         };

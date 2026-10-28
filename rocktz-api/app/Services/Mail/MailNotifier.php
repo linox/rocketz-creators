@@ -382,7 +382,7 @@ class MailNotifier
      */
     private function campaignVars(Campaign $campaign, array $extra = []): array
     {
-        $value = $campaign->is_barter ? null : $campaign->creator_cache;
+        $value = ($campaign->is_barter || $campaign->is_benefit_coupon) ? null : $campaign->creator_cache;
 
         return array_merge([
             'nome_campanha' => $campaign->name,

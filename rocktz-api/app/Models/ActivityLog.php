@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SensitiveIndex;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -33,7 +34,17 @@ class ActivityLog extends Model
             'properties' => 'array',
             'status_code' => 'integer',
             'subject_id' => 'integer',
+            'ip' => 'encrypted',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (ActivityLog $log) {
+            if ($log->isDirty('ip')) {
+                $log->ip_hash = SensitiveIndex::ip($log->ip);
+            }
+        });
     }
 
     public function user(): BelongsTo
