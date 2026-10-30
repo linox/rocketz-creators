@@ -242,6 +242,7 @@ function FinanceInner() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [source, setSource] = useState("");
+  const [month, setMonth] = useState("");
   const [search, setSearch] = useState("");
   const [invoiceDay, setInvoiceDay] = useState("5");
   const [paymentDay, setPaymentDay] = useState("15");
@@ -304,6 +305,7 @@ function FinanceInner() {
     if (isManager && companyId) params.set("company_id", companyId);
     if (status) params.set("status", status);
     if (source) params.set("source", source);
+    if (month) params.set("month", month);
     const query = params.toString() ? `?${params.toString()}` : "";
     api.financePayments(query)
       .then((res) => {
@@ -332,7 +334,7 @@ function FinanceInner() {
     return () => {
       cancelled = true;
     };
-  }, [canAccessFinance, companyId, isManager, source, status]);
+  }, [canAccessFinance, companyId, isManager, month, source, status]);
 
   const visible = payments.filter((row) => {
     const query = search.trim().toLowerCase();
@@ -365,6 +367,7 @@ function FinanceInner() {
     if (isManager && companyId) params.set("company_id", companyId);
     if (status) params.set("status", status);
     if (source) params.set("source", source);
+    if (month) params.set("month", month);
     const query = params.toString() ? `?${params.toString()}` : "";
     const res = await api.financePayments(query);
     setPayments(res.data);
@@ -517,7 +520,10 @@ function FinanceInner() {
           placeholder={t("finance.companyPh")}
           value={companyId}
           options={companies.map((company) => ({ value: String(company.id), label: company.name }))}
-          onChange={setCompanyId}
+          onChange={(value) => {
+            setCompanyId(value);
+            setMonth("");
+          }}
         />
       ) : null}
 
@@ -573,7 +579,7 @@ function FinanceInner() {
             <Summary tone="emerald" icon={<CheckCircle2 size={18} />} label={t(isCreator ? "finance.receivedTotal" : "finance.paidTotal")} value={money(sum("paid"), currency)} hint={String(counts.paid ?? 0)} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -606,13 +612,21 @@ function FinanceInner() {
               ]}
               onChange={setSource}
             />
+            <Select2Field
+              theme="light"
+              value={month}
+              placeholder={t("finance.allMonths")}
+              allowClear
+              options={(meta?.months ?? []).map((value) => ({ value, label: formatMonth(value, locale) }))}
+              onChange={setMonth}
+            />
           </div>
 
           {loading ? (
             <p className="text-sm text-slate-500">{t("finance.loading")}</p>
           ) : visible.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-sm text-slate-500">
-              {payments.length === 0 && !status && !source && !search ? t("finance.emptyAll") : t("finance.empty")}
+              {payments.length === 0 && !status && !source && !month && !search ? t("finance.emptyAll") : t("finance.empty")}
             </p>
           ) : (
             <div className="flex flex-col gap-3">

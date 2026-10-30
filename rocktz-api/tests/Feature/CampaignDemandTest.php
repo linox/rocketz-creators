@@ -180,6 +180,7 @@ class CampaignDemandTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('data.demands.0.script_status', 'approved')
+            ->assertJsonPath('data.demands.0.content.movements.0.type', 'script_approved')
             ->assertJsonPath('data.demands.1.script_status', 'pending')
             ->assertJsonPath('data.script_status', 'pending');
 
@@ -206,6 +207,39 @@ class CampaignDemandTest extends TestCase
             ->assertJsonPath('data.demands.0.delivery_status', 'approved')
             ->assertJsonPath('data.demands.1.delivery_status', 'pending')
             ->assertJsonPath('data.delivery_status', 'pending');
+
+        $movements = $demands[0]->fresh()->movements;
+        $this->assertSame(['script_approved', 'video_approved'], array_column($movements, 'type'));
+        $this->assertNotEmpty($movements[0]['at'] ?? null);
+        $this->assertNotEmpty($movements[1]['at'] ?? null);
+    }
+
+    public function test_concluding_with_a_link_records_publication_movement(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update([
+            'script_status' => 'approved',
+            'movements' => [[
+                'type' => 'script_approved',
+                'at' => '2026-10-01T12:00:00+00:00',
+            ]],
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'published_link' => 'https://instagram.com/p/abc',
+                'delivery_status' => 'published',
+                'video_status' => 'approved',
+                'script_status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'published');
+
+        $types = array_column($demand->fresh()->movements, 'type');
+        $this->assertSame(['script_approved', 'video_approved', 'published'], $types);
     }
 
     public function test_note_without_a_submitted_video_is_stored_as_pauta(): void

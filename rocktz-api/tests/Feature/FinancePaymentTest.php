@@ -136,6 +136,48 @@ class FinancePaymentTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    public function test_finance_list_filters_by_the_months_of_existing_payments(): void
+    {
+        $this->travelTo('2026-10-28');
+        [$company, $manager, $creator, $campaign] = $this->scene();
+        $contract = RecurringContract::factory()->create([
+            'company_id' => $company->id,
+            'status' => RecurringContractStatus::Active,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-12-31',
+        ]);
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $contract->id,
+            'creator_id' => $creator->id,
+            'monthly_cache' => 800,
+            'start_date' => '2026-10-01',
+        ]);
+
+        $listed = $this->asUser($manager)
+            ->getJson('/api/finance-payments?company_id='.$company->id)
+            ->assertOk();
+
+        $campaignId = collect($listed->json('data'))->firstWhere('campaign_id', $campaign->id)['id'];
+        FinancePayment::query()->whereKey($campaignId)->update(['reference_month' => '2026-09-01']);
+
+        $filtered = $this->asUser($manager)
+            ->getJson('/api/finance-payments?company_id='.$company->id.'&month=2026-09')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $campaignId)
+            ->assertJsonPath('data.0.reference_month', '2026-09-01')
+            ->assertJsonPath('meta.months', ['2026-10', '2026-09']);
+
+        $this->assertEquals(1500, $filtered->json('meta.amounts.awaiting_invoice'));
+
+        $this->asUser($creator->user)
+            ->getJson('/api/finance-payments?month=2026-10')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.reference_month', '2026-10-01')
+            ->assertJsonPath('meta.months', ['2026-10', '2026-09']);
+    }
+
     public function test_invoice_is_reviewed_before_payment_is_released(): void
     {
         $this->travelTo('2026-10-28');

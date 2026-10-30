@@ -9,6 +9,7 @@ use App\Enums\StageApprovalStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\CampaignDemand;
+use App\Support\DeliveryMovements;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Support\Collection;
@@ -120,6 +121,7 @@ class CampaignDemandSync
             $fields['upload_progress'] = $attributes['upload_progress'] ?? null;
         }
 
+        DeliveryMovements::capture($demand, $fields);
         $demand->fill($fields)->save();
 
         if (NotificationService::is($fields['script_status'] ?? null, StageApprovalStatus::Revision)) {

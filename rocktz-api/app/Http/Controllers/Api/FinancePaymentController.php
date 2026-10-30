@@ -48,6 +48,27 @@ class FinancePaymentController extends Controller
             $query->where('company_id', $companyId);
         }
 
+        $months = (clone $query)
+            ->setEagerLoads([])
+            ->reorder()
+            ->select('reference_month')
+            ->distinct()
+            ->orderByDesc('reference_month')
+            ->pluck('reference_month')
+            ->map(fn ($month) => Carbon::parse($month)->format('Y-m'))
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        $month = $request->string('month')->toString();
+        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month) === 1) {
+            $start = Carbon::createFromFormat('!Y-m', $month)->startOfMonth();
+            $query->whereBetween('reference_month', [
+                $start->toDateString(),
+                $start->copy()->endOfMonth()->toDateString(),
+            ]);
+        }
+
         $summary = (clone $query)
             ->setEagerLoads([])
             ->reorder()
@@ -78,6 +99,7 @@ class FinancePaymentController extends Controller
                 'company' => $company ? $this->companySettings($company) : null,
                 'counts' => $counts,
                 'amounts' => $amounts,
+                'months' => $months,
             ],
         ]);
     }

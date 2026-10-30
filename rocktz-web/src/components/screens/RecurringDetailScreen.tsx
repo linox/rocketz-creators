@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import { isoToday, planningItemIsOverdue } from "@/lib/delivery-date";
+import { buildDeliveryMovements, isPlaceholderSubmissionTime } from "@/lib/delivery-inbox";
 import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import {
@@ -73,7 +74,7 @@ import { usePrivacy } from "@/lib/privacy";
 import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
-import type { Creator, PlanningItem, RecurringContract, RevisionHistoryEntry } from "@/lib/types";
+import type { Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
@@ -215,28 +216,20 @@ function pautaVideoVersions(item: PlanningItem): PautaVideoVersion[] {
     }));
 }
 
-function pautaRevisionHistory(item: PlanningItem): RevisionHistoryEntry[] {
-  const stored = (item.revision_history ?? []).filter((entry) => entry.note?.trim());
-  if (stored.length > 0) {
-    return [...stored].sort((a, b) => +new Date(b.requested_at || 0) - +new Date(a.requested_at || 0));
-  }
-  const fallback: RevisionHistoryEntry[] = [];
-  if (item.script_feedback?.trim()) {
-    fallback.push({
-      stage: "script",
-      note: item.script_feedback.trim(),
-      requested_at: item.reviewed_at ?? undefined,
-    });
-  }
-  const videoNote = (item.video_feedback || item.feedback_note || "").trim();
-  if (videoNote && !fallback.some((entry) => entry.note === videoNote)) {
-    fallback.push({
-      stage: "video",
-      note: videoNote,
-      requested_at: item.reviewed_at ?? undefined,
-    });
-  }
-  return fallback;
+function pautaRevisionHistory(item: PlanningItem) {
+  return buildDeliveryMovements({
+    scriptStatus: item.script_status,
+    videoStatus: item.video_status,
+    deliveryStatus: item.status,
+    scriptSubmittedAt: item.script_submitted_at,
+    videoSubmittedAt: item.video_submitted_at || (item.media_url || item.submission_url ? item.submitted_at : null),
+    reviewedAt: item.reviewed_at,
+    versions: item.submission_versions,
+    revisions: item.revision_history,
+    scriptFeedback: item.script_feedback,
+    videoFeedback: item.video_feedback || item.feedback_note,
+    movements: item.movements,
+  });
 }
 
 function todayIsoDate() {
@@ -2645,7 +2638,7 @@ function DetailInner() {
                   <History size={18} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-base font-black text-slate-900">{t("recurringDetail.revisionHistoryTitle")}</h3>
+                  <h3 className="text-base font-black text-slate-900">{t("deliveries.inbox.movements")}</h3>
                   <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">{revisionHistoryItem.title}</p>
                 </div>
               </div>
@@ -2659,27 +2652,29 @@ function DetailInner() {
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-5">
               {pautaRevisionHistory(revisionHistoryItem).length ? (
-                pautaRevisionHistory(revisionHistoryItem).map((entry, index) => (
-                  <div key={`${entry.requested_at || "n"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                pautaRevisionHistory(revisionHistoryItem).map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <span className={cn(
-                        "rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase",
-                        entry.stage === "script" ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-rose-200 bg-rose-50 text-rose-700",
-                      )}>
-                        {entry.stage === "script" ? t("recurringDetail.revisionHistoryScript") : t("recurringDetail.revisionHistoryVideo")}
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-extrabold text-slate-700 uppercase">
+                        {t(`deliveries.inbox.movement.${entry.type}`)}
                       </span>
-                      {entry.requested_at ? (
+                      {entry.version ? (
+                        <span className="text-[10px] font-extrabold text-slate-500">V{entry.version}</span>
+                      ) : null}
+                      {entry.at && !isPlaceholderSubmissionTime(entry.at) ? (
                         <span className="text-[10px] font-semibold text-slate-400">
-                          {new Date(entry.requested_at).toLocaleString(locale)}
+                          {new Date(entry.at).toLocaleString(locale)}
                         </span>
                       ) : null}
                     </div>
-                    <p className="m-0 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{entry.note}</p>
+                    {entry.note ? (
+                      <p className="m-0 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{entry.note}</p>
+                    ) : null}
                   </div>
                 ))
               ) : (
                 <p className="m-0 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs font-medium text-slate-500">
-                  {t("recurringDetail.revisionHistoryEmpty")}
+                  {t("deliveries.inbox.movementsEmpty")}
                 </p>
               )}
             </div>

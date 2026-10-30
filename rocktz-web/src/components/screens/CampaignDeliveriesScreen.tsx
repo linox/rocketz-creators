@@ -52,6 +52,7 @@ import {
   statusAfterView,
   type DeliveryInboxItem,
   type DeliveryStatus,
+  type DeliveryMovement,
   type DeliveryVersion,
   type InboxFolder,
   type InboxQuickFilter,
@@ -82,6 +83,24 @@ function readAgencyCompany(userId: number): string {
 
 function inboxStatusKey(item: DeliveryInboxItem) {
   return isOnSchedule(item) ? "on_track" : item.status;
+}
+
+function approvalMovements(item: DeliveryInboxItem, at: string, withPublishedLink: boolean): DeliveryMovement[] {
+  const stamp = Date.now();
+  if (withPublishedLink) {
+    const movements: DeliveryMovement[] = [{ id: `pub-${item.id}-${stamp}`, type: "published", at }];
+    if (!item.movements.some((entry) => entry.type === "video_approved")) {
+      movements.push({ id: `vap-${item.id}-${stamp}`, type: "video_approved", at });
+    }
+    if (!item.movements.some((entry) => entry.type === "script_approved")) {
+      movements.push({ id: `sap-${item.id}-${stamp}`, type: "script_approved", at });
+    }
+    return movements;
+  }
+  if (item.approvalStage === "script") {
+    return [{ id: `sap-${item.id}-${stamp}`, type: "script_approved", at }];
+  }
+  return [{ id: `vap-${item.id}-${stamp}`, type: "video_approved", at }];
 }
 
 function statusTone(status: DeliveryStatus | "on_track") {
@@ -451,20 +470,7 @@ function DeliveriesInboxInner() {
         ...row,
         status: "approved",
         viewedAt: row.viewedAt ?? now,
-        activity: [
-          ...row.activity,
-          {
-            id: `ap-${Date.now()}`,
-            type: "approved",
-            userName: actorName,
-            message: withPublishedLink
-              ? t("deliveries.inbox.activityConcludedWithLink")
-              : isScriptStage
-                ? t("deliveries.inbox.activityApprovedScript")
-                : t("deliveries.inbox.activityApproved", { version: row.currentVersion }),
-            createdAt: now,
-          },
-        ],
+        movements: [...approvalMovements(row, now, withPublishedLink), ...row.movements],
       }));
       await alertSuccess(
         withPublishedLink
@@ -499,15 +505,14 @@ function DeliveriesInboxInner() {
       patchItem(selected.id, (row) => ({
         ...row,
         status: "revision_requested",
-        activity: [
-          ...row.activity,
+        movements: [
           {
             id: `rev-${Date.now()}`,
-            type: "revision",
-            userName: actorName,
-            message: note,
-            createdAt: now,
+            type: row.approvalStage === "script" ? "script_revision" : "video_revision",
+            at: now,
+            note,
           },
+          ...row.movements,
         ],
         revisions: [
           ...(row.revisions ?? []),
@@ -597,16 +602,7 @@ function DeliveriesInboxInner() {
               ...item,
               status: "approved",
               viewedAt: item.viewedAt ?? now,
-              activity: [
-                ...item.activity,
-                {
-                  id: `bap-${item.id}-${Date.now()}`,
-                  type: "approved" as const,
-                  userName: actorName,
-                  message: t("deliveries.inbox.activityApproved", { version: item.currentVersion }),
-                  createdAt: now,
-                },
-              ],
+              movements: [...approvalMovements(item, now, false), ...item.movements],
             }
           : item
       )));
@@ -1305,26 +1301,27 @@ function ReadingPane({
             <p className="m-0 mt-1.5 text-sm leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{item.brief}</p>
           </div>
         ) : null}
-        <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
-          <h3 className="m-0 flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-purple-800 uppercase">
-            <History size={13} /> {t("deliveries.inbox.changeHistory")}
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <h3 className="m-0 flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-slate-500 uppercase">
+            <History size={13} /> {t("deliveries.inbox.movements")}
           </h3>
-          {(item.revisions ?? []).length ? (
-            <div className="mt-2 space-y-2">
-              {[...item.revisions].reverse().map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-purple-100 bg-white px-3 py-2">
-                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[9px] font-extrabold text-purple-700 uppercase">
-                      {entry.stage === "script" ? t("deliveries.inbox.changeHistoryScript") : t("deliveries.inbox.changeHistoryVideo")}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-400">{new Date(entry.requestedAt).toLocaleString(locale)}</span>
-                  </div>
-                  <p className="m-0 text-xs leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{entry.note}</p>
+          {item.movements.length ? (
+            <div className="mt-2 space-y-3 border-l border-slate-200 pl-3">
+              {item.movements.map((entry) => (
+                <div key={entry.id}>
+                  <p className="m-0 text-xs font-bold text-slate-800">
+                    {t(`deliveries.inbox.movement.${entry.type}`)}
+                    {entry.version ? ` · V${entry.version}` : ""}
+                  </p>
+                  {entry.note ? <p className="m-0 mt-0.5 text-[11px] leading-relaxed font-medium whitespace-pre-wrap text-slate-600">{entry.note}</p> : null}
+                  {entry.at && !isPlaceholderSubmissionTime(entry.at) ? (
+                    <p className="m-0 text-[10px] text-slate-400">{new Date(entry.at).toLocaleString(locale)}</p>
+                  ) : null}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="m-0 mt-2 text-[11px] font-medium text-slate-500">{t("deliveries.inbox.changeHistoryEmpty")}</p>
+            <p className="m-0 mt-2 text-[11px] font-medium text-slate-500">{t("deliveries.inbox.movementsEmpty")}</p>
           )}
         </div>
         {awaitingVideoWithoutFile ? null : (
@@ -1464,17 +1461,19 @@ function ReadingPane({
 
         <div>
           <h3 className="m-0 text-xs font-extrabold tracking-wider text-slate-500 uppercase">{t("deliveries.inbox.activity")}</h3>
-          <div className="mt-2 space-y-3 border-l border-slate-200 pl-3">
-            {[...item.activity].reverse().map((act) => (
-              <div key={act.id}>
-                <p className="m-0 text-xs font-bold text-slate-800">{act.userName}</p>
-                <p className="m-0 text-[11px] text-slate-500">{act.message}</p>
-                {isPlaceholderSubmissionTime(act.createdAt) ? null : (
-                  <p className="m-0 text-[10px] text-slate-400">{new Date(act.createdAt).toLocaleString(locale)}</p>
-                )}
-              </div>
-            ))}
-          </div>
+          {item.activity.length ? (
+            <div className="mt-2 space-y-3 border-l border-slate-200 pl-3">
+              {[...item.activity].reverse().map((act) => (
+                <div key={act.id}>
+                  <p className="m-0 text-xs font-bold text-slate-800">{act.userName}</p>
+                  <p className="m-0 text-[11px] text-slate-500">{act.message}</p>
+                  {isPlaceholderSubmissionTime(act.createdAt) ? null : (
+                    <p className="m-0 text-[10px] text-slate-400">{new Date(act.createdAt).toLocaleString(locale)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-3 flex gap-2">
             <input
               id="delivery-comment"

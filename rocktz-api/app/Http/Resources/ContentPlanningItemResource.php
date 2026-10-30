@@ -63,6 +63,7 @@ class ContentPlanningItemResource extends JsonResource
             'video_version' => (int) ($this->video_version ?? 0),
             'submission_versions' => $this->submission_versions ?? [],
             'revision_history' => $this->revision_history ?? [],
+            'movements' => $this->movements ?? [],
             'published_url' => $this->published_url,
             'metrics' => $this->metrics ?? [],
             'media_url' => MediaUrl::publicAbsolute($this->media_url),

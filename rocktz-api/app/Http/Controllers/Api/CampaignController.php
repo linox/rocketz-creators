@@ -31,6 +31,7 @@ use App\Services\FinancePaymentSync;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorPrivacy;
+use App\Support\DeliveryMovements;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
@@ -559,6 +560,11 @@ class CampaignController extends Controller
         }
 
         $previousBriefing = trim((string) ($campaignCreator->additional_briefing ?? ''));
+        $movementBefore = [
+            'script_status' => $campaignCreator->script_status,
+            'video_status' => $campaignCreator->video_status,
+            'delivery_status' => $campaignCreator->delivery_status,
+        ];
         $wasApproved = $campaignCreator->application_status === ApplicationStatus::Approved;
         $becomingApproved = $nextStatus === $approvedStatus && ! $wasApproved;
         $leavingApproved = $wasApproved && $nextStatus !== null && $nextStatus !== $approvedStatus;
@@ -599,6 +605,21 @@ class CampaignController extends Controller
         $campaignCreator->unsetRelation('content');
         $campaignCreator->unsetRelation('demands');
         $campaignCreator->load(['content', 'demands']);
+
+        $tracksMovement = ! $demand && (
+            array_key_exists('script_status', $data)
+            || array_key_exists('video_status', $data)
+            || array_key_exists('delivery_status', $data)
+        );
+        if ($tracksMovement) {
+            $content = $campaignCreator->content
+                ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $campaignCreator->id]);
+            DeliveryMovements::capture($content, array_merge($data, $contentFields), $movementBefore);
+            if ($content->isDirty()) {
+                $content->save();
+                $campaignCreator->setRelation('content', $content);
+            }
+        }
 
         if (! $demand && Schema::hasColumn('campaign_creator_contents', 'revision_history')) {
             if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Revision)) {

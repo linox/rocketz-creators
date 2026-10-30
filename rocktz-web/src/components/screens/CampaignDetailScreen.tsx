@@ -104,8 +104,9 @@ import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nK
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { effectiveCampaignDeliveryDate, isDateBeforeToday } from "@/lib/delivery-date";
+import { buildDeliveryMovements, isPlaceholderSubmissionTime } from "@/lib/delivery-inbox";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
-import type { Campaign, CampaignCreator, Company, Creator, CreatorGroup, RevisionHistoryEntry } from "@/lib/types";
+import type { Campaign, CampaignCreator, Company, Creator, CreatorGroup } from "@/lib/types";
 import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import { numericIdFromBrowser } from "@/lib/route-id";
@@ -214,50 +215,20 @@ function hasSubmittedMaterial(row: CampaignCreator) {
   return false;
 }
 
-type CampaignHistoryEntry = {
-  kind: "revision" | "submitted";
-  stage: string;
-  note?: string;
-  at?: string;
-  version?: number;
-};
-
-function campaignChangeHistory(row: CampaignCreator): CampaignHistoryEntry[] {
-  const entries: CampaignHistoryEntry[] = [];
-  const stored = (row.content?.revision_history ?? []).filter((entry: RevisionHistoryEntry) => entry.note?.trim());
-  for (const entry of stored) {
-    entries.push({
-      kind: "revision",
-      stage: entry.stage,
-      note: entry.note.trim(),
-      at: entry.requested_at,
-    });
-  }
-  if (stored.length === 0) {
-    if (row.script_feedback?.trim()) {
-      entries.push({ kind: "revision", stage: "script", note: row.script_feedback.trim() });
-    }
-    if (row.video_feedback?.trim()) {
-      entries.push({ kind: "revision", stage: "video", note: row.video_feedback.trim() });
-    }
-    const details = row.revision_details?.trim();
-    if (details && !entries.some((entry) => entry.note === details)) {
-      const stage = row.script_status === "revision" && !row.content?.video_url?.trim() ? "script" : "video";
-      entries.push({ kind: "revision", stage, note: details });
-    }
-  }
-  for (const version of row.content?.submission_versions ?? []) {
-    entries.push({
-      kind: "submitted",
-      stage: version.stage,
-      at: version.submitted_at,
-      version: version.version,
-    });
-  }
-  return entries.sort((a, b) => {
-    const ta = a.at ? +new Date(a.at) : 0;
-    const tb = b.at ? +new Date(b.at) : 0;
-    return tb - ta;
+function campaignChangeHistory(row: CampaignCreator) {
+  const details = row.revision_details?.trim() || "";
+  const scriptFeedback = row.script_feedback?.trim() || "";
+  return buildDeliveryMovements({
+    scriptStatus: row.script_status,
+    videoStatus: row.video_status,
+    deliveryStatus: row.delivery_status,
+    scriptSubmittedAt: row.script_submitted_at,
+    videoSubmittedAt: row.video_submitted_at,
+    versions: row.content?.submission_versions,
+    revisions: row.content?.revision_history,
+    scriptFeedback: row.script_feedback,
+    videoFeedback: row.video_feedback?.trim() || (details && details !== scriptFeedback ? details : ""),
+    movements: row.content?.movements,
   });
 }
 
@@ -3562,7 +3533,7 @@ function DetailInner() {
                   <History size={18} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-base font-black text-slate-900">{t("campaignDetail.revisionHistoryTitle")}</h3>
+                  <h3 className="text-base font-black text-slate-900">{t("deliveries.inbox.movements")}</h3>
                   {selectedCreator ? (
                     <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">@{selectedCreator.artistic_name}</p>
                   ) : null}
@@ -3574,22 +3545,16 @@ function DetailInner() {
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-5">
               {campaignChangeHistory(selected).length ? (
-                campaignChangeHistory(selected).map((entry, index) => (
-                  <div key={`${entry.kind}-${entry.at || "n"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                campaignChangeHistory(selected).map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <span className={cn(
-                        "rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase",
-                        entry.stage === "script" ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-rose-200 bg-rose-50 text-rose-700",
-                      )}>
-                        {entry.stage === "script" ? t("campaignDetail.revisionHistoryScript") : t("campaignDetail.revisionHistoryVideo")}
-                      </span>
-                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-extrabold text-slate-600 uppercase">
-                        {entry.kind === "submitted" ? t("campaignDetail.historySubmitted") : t("campaignDetail.historyRevision")}
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-extrabold text-slate-700 uppercase">
+                        {t(`deliveries.inbox.movement.${entry.type}`)}
                       </span>
                       {entry.version ? (
                         <span className="text-[10px] font-extrabold text-slate-500">{t("campaignDetail.scriptVersion", { n: entry.version })}</span>
                       ) : null}
-                      {entry.at ? (
+                      {entry.at && !isPlaceholderSubmissionTime(entry.at) ? (
                         <span className="text-[10px] font-semibold text-slate-400">{new Date(entry.at).toLocaleString(locale)}</span>
                       ) : null}
                     </div>
@@ -3600,7 +3565,7 @@ function DetailInner() {
                 ))
               ) : (
                 <p className="m-0 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs font-medium text-slate-500">
-                  {t("campaignDetail.revisionHistoryEmpty")}
+                  {t("deliveries.inbox.movementsEmpty")}
                 </p>
               )}
             </div>

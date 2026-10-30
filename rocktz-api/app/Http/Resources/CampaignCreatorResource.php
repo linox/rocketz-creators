@@ -134,6 +134,7 @@ class CampaignCreatorResource extends JsonResource
             'video_version' => (int) ($content->video_version ?? 0),
             'submission_versions' => $content->submission_versions ?? [],
             'revision_history' => $content->revision_history ?? [],
+            'movements' => $content->movements ?? [],
             'story_prints' => $content->story_prints ?? [],
             'metrics' => $content->metrics ?? [],
         ];

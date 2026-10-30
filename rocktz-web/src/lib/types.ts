@@ -309,6 +309,7 @@ export type FinancePaymentList = {
     } | null;
     counts: Record<string, number>;
     amounts: Record<string, number>;
+    months: string[];
   };
 };
 
@@ -510,6 +511,7 @@ export type CampaignCreator = {
     video_version?: number;
     submission_versions?: SubmissionVersionEntry[];
     revision_history?: RevisionHistoryEntry[];
+    movements?: DeliveryMovementLog[];
     story_prints?: unknown[];
     metrics?: PostMetrics;
   } | null;
@@ -552,6 +554,12 @@ export type RevisionHistoryEntry = {
   stage: string;
   note: string;
   requested_at?: string;
+};
+
+export type DeliveryMovementLog = {
+  type: string;
+  at?: string | null;
+  note?: string | null;
 };
 
 export type RecurringContract = {
@@ -643,6 +651,7 @@ export type PlanningItem = {
   video_version?: number;
   submission_versions?: SubmissionVersionEntry[];
   revision_history?: RevisionHistoryEntry[];
+  movements?: DeliveryMovementLog[];
   submission_url: string | null;
   media_url: string | null;
   video_download_url?: string | null;

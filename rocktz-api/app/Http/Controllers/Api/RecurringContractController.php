@@ -22,6 +22,7 @@ use App\Models\RecurringContractCreator;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorPrivacy;
+use App\Support\DeliveryMovements;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
@@ -533,6 +534,7 @@ class RecurringContractController extends Controller
             $data['reviewed_at'] = now();
         }
 
+        DeliveryMovements::capture($contentPlanningItem, $data);
         $contentPlanningItem->fill($data);
 
         if (NotificationService::is($data['script_status'] ?? null, StageApprovalStatus::Revision)) {

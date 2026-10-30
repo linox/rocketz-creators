@@ -11,6 +11,7 @@ use App\Models\CampaignCreatorContent;
 use App\Models\CampaignDemand;
 use App\Models\ContentPlanningItem;
 use App\Models\User;
+use App\Support\DeliveryMovements;
 use App\Support\SubmissionVersioning;
 use Illuminate\Support\Facades\DB;
 
@@ -173,6 +174,11 @@ class MediaSubmissionService
     {
         [$row, $rowFields] = DB::transaction(function () use ($id, $payload) {
             $row = CampaignCreator::query()->with(['campaign', 'creator.user', 'content'])->findOrFail($id);
+            $movementBefore = [
+                'script_status' => $row->script_status,
+                'video_status' => $row->video_status,
+                'delivery_status' => $row->delivery_status,
+            ];
             $contentFields = array_intersect_key($payload, array_flip([
                 'script', 'video_url', 'video_file_size', 'image_url', 'published_link',
             ]));
@@ -201,6 +207,14 @@ class MediaSubmissionService
 
             $row->unsetRelation('content');
             $row->load('content');
+
+            $content = $row->content
+                ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $row->id]);
+            DeliveryMovements::capture($content, $rowFields, $movementBefore);
+            if ($content->isDirty()) {
+                $content->save();
+                $row->setRelation('content', $content);
+            }
 
             if (NotificationService::is($rowFields['video_status'] ?? null, StageApprovalStatus::Submitted)) {
                 SubmissionVersioning::append($row->content ?? CampaignCreatorContent::query()->firstOrCreate(['campaign_creator_id' => $row->id]), 'video', [
@@ -243,6 +257,7 @@ class MediaSubmissionService
                 $data['video_submitted_at'] = now();
             }
 
+            DeliveryMovements::capture($item, $data);
             $item->fill($data);
             $item->pending_upload_id = null;
             $item->upload_progress = null;

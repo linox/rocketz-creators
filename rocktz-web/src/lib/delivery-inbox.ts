@@ -57,6 +57,23 @@ export type DeliveryRevision = {
   requestedAt: string;
 };
 
+export type DeliveryMovementType =
+  | "script_submitted"
+  | "script_approved"
+  | "script_revision"
+  | "video_submitted"
+  | "video_approved"
+  | "video_revision"
+  | "published";
+
+export type DeliveryMovement = {
+  id: string;
+  type: DeliveryMovementType;
+  at?: string | null;
+  note?: string | null;
+  version?: number | null;
+};
+
 export type DeliveryInboxItem = {
   id: string;
   title: string;
@@ -80,6 +97,7 @@ export type DeliveryInboxItem = {
   versions: DeliveryVersion[];
   activity: DeliveryActivity[];
   revisions: DeliveryRevision[];
+  movements: DeliveryMovement[];
   archived?: boolean;
   participationId?: number | null;
   /** Campaign demand approved from this inbox row. */
@@ -263,6 +281,132 @@ function revisionNotes(
   return [{ id: `${id}-rev-fallback`, stage, note, requestedAt: fallbackAt }];
 }
 
+const MOVEMENT_ORDER: Record<DeliveryMovementType, number> = {
+  script_submitted: 1,
+  script_revision: 2,
+  script_approved: 3,
+  video_submitted: 4,
+  video_revision: 5,
+  video_approved: 6,
+  published: 7,
+};
+
+function movementTime(iso?: string | null) {
+  if (!iso || isPlaceholderSubmissionTime(iso)) return null;
+  const time = +new Date(iso);
+  return Number.isFinite(time) ? time : null;
+}
+
+export function buildDeliveryMovements(source: {
+  scriptStatus?: string | null;
+  videoStatus?: string | null;
+  deliveryStatus?: string | null;
+  scriptSubmittedAt?: string | null;
+  videoSubmittedAt?: string | null;
+  reviewedAt?: string | null;
+  versions?: { stage: string; version?: number; submitted_at?: string }[];
+  revisions?: { stage: string; note?: string; requested_at?: string }[];
+  scriptFeedback?: string | null;
+  videoFeedback?: string | null;
+  movements?: { type?: string; at?: string | null; note?: string | null }[];
+}): DeliveryMovement[] {
+  const events: Array<DeliveryMovement & { sortAt: number }> = [];
+  const stored = source.movements ?? [];
+
+  const pushSubmission = (
+    type: "script_submitted" | "video_submitted",
+    stage: "script" | "video",
+    submittedAt?: string | null,
+  ) => {
+    const versions = (source.versions ?? []).filter((entry) => entry.stage === stage);
+    if (versions.length) {
+      versions.forEach((entry, index) => {
+        events.push({
+          id: `${type}-${entry.version ?? index}-${entry.submitted_at ?? "n"}`,
+          type,
+          at: entry.submitted_at ?? null,
+          version: entry.version ?? null,
+          sortAt: 0,
+        });
+      });
+      return;
+    }
+    if (submittedAt) {
+      events.push({ id: `${type}-at`, type, at: submittedAt, version: 1, sortAt: 0 });
+    }
+  };
+
+  const pushRevisions = (
+    type: "script_revision" | "video_revision",
+    stage: "script" | "video",
+    fallback?: string | null,
+  ) => {
+    const history = (source.revisions ?? []).filter((entry) => entry.stage === stage && entry.note?.trim());
+    if (history.length) {
+      history.forEach((entry, index) => {
+        events.push({
+          id: `${type}-${entry.requested_at ?? index}`,
+          type,
+          at: entry.requested_at ?? null,
+          note: entry.note?.trim() ?? null,
+          sortAt: 0,
+        });
+      });
+      return;
+    }
+    const note = fallback?.trim();
+    if (!note) return;
+    if (events.some((entry) => entry.note === note)) return;
+    events.push({ id: `${type}-fallback`, type, at: null, note, sortAt: 0 });
+  };
+
+  const pushLogged = (type: DeliveryMovementType, active: boolean, fallbackAt?: string | null) => {
+    const rows = stored.filter((entry) => entry.type === type);
+    if (rows.length) {
+      rows.forEach((entry, index) => {
+        events.push({
+          id: `${type}-${entry.at ?? index}`,
+          type,
+          at: entry.at ?? null,
+          note: entry.note?.trim() || null,
+          sortAt: 0,
+        });
+      });
+      return;
+    }
+    if (!active) return;
+    events.push({ id: `${type}-current`, type, at: fallbackAt ?? null, sortAt: 0 });
+  };
+
+  pushSubmission("script_submitted", "script", source.scriptSubmittedAt);
+  pushSubmission("video_submitted", "video", source.videoSubmittedAt);
+  pushRevisions("script_revision", "script", source.scriptFeedback);
+  pushRevisions("video_revision", "video", source.videoFeedback);
+
+  const published = source.deliveryStatus === "published";
+  const videoApproved = source.videoStatus === "approved";
+  const scriptApproved = source.scriptStatus === "approved";
+  pushLogged("script_approved", scriptApproved, !videoApproved && !published ? source.reviewedAt : null);
+  pushLogged("video_approved", videoApproved, !published ? source.reviewedAt : null);
+  pushLogged("published", published, source.reviewedAt);
+
+  for (const event of events) {
+    event.sortAt = movementTime(event.at) ?? 0;
+  }
+  for (const event of events) {
+    if (movementTime(event.at) !== null) continue;
+    const anchor = events.reduce((max, other) => {
+      if (MOVEMENT_ORDER[other.type] >= MOVEMENT_ORDER[event.type]) return max;
+      return Math.max(max, other.sortAt);
+    }, 0);
+    event.sortAt = anchor + MOVEMENT_ORDER[event.type];
+  }
+
+  return events
+    .sort((a, b) => b.sortAt - a.sortAt || MOVEMENT_ORDER[b.type] - MOVEMENT_ORDER[a.type])
+    .map(({ sortAt: _sortAt, ...event }) => event);
+}
+
 function campaignFlow(campaign: Campaign) {
   return campaign.approval_flow || "script_and_video";
 }
@@ -365,21 +509,20 @@ function buildCampaignStageItem(
     : (row.content?.video_version || versions[versions.length - 1]?.versionNumber || 1);
 
   const activity: DeliveryActivity[] = [];
-  if (isScript && (row.script_submitted_at || row.content?.script || row.content?.script_file_url)) {
-    activity.push({ id: `${id}-sub`, type: "submitted", userName: creatorName, createdAt });
-  }
-  if (!isScript && (row.video_submitted_at || row.content?.video_url)) {
-    activity.push({ id: `${id}-sub`, type: "submitted", userName: creatorName, createdAt });
-  }
-  if (isScript && row.script_feedback) {
-    activity.push({ id: `${id}-fb`, type: "revision", userName: companyName, message: row.script_feedback, createdAt });
-  }
-  if (!isScript && row.video_feedback) {
-    activity.push({ id: `${id}-fb`, type: "revision", userName: companyName, message: row.video_feedback, createdAt });
-  }
-  if (status === "approved") {
-    activity.push({ id: `${id}-ap`, type: "approved", userName: companyName, createdAt });
-  }
+  const videoFeedback = row.video_feedback?.trim() || "";
+  const revisionDetails = row.revision_details?.trim() || "";
+  const movements = buildDeliveryMovements({
+    scriptStatus: row.script_status,
+    videoStatus: row.video_status,
+    deliveryStatus: row.delivery_status,
+    scriptSubmittedAt: row.script_submitted_at,
+    videoSubmittedAt: row.video_submitted_at,
+    versions: row.content?.submission_versions,
+    revisions: row.content?.revision_history,
+    scriptFeedback: row.script_feedback,
+    videoFeedback: videoFeedback || (revisionDetails && revisionDetails !== row.script_feedback?.trim() ? revisionDetails : ""),
+    movements: row.content?.movements,
+  });
 
   const revisions = revisionNotes(
     row.content?.revision_history,
@@ -413,6 +556,7 @@ function buildCampaignStageItem(
     versions,
     activity,
     revisions,
+    movements,
     participationId: row.id,
     demandId: demand?.id ?? null,
     demandPosition: demand?.position ?? null,
@@ -665,18 +809,19 @@ function buildPlanningStageItem(
     : (item.video_version || versions[versions.length - 1]?.versionNumber || 1);
 
   const activity: DeliveryActivity[] = [];
-  if (item.submitted_at || (isScript ? (item.script || item.script_file_url) : fileUrl)) {
-    activity.push({ id: `${id}-sub`, type: "submitted", userName: creatorName, message: item.submission_notes, createdAt });
-  }
-  if (isScript && item.script_feedback) {
-    activity.push({ id: `${id}-fb`, type: "revision", userName: companyName, message: item.script_feedback, createdAt: item.reviewed_at || createdAt });
-  }
-  if (!isScript && (item.video_feedback || item.feedback_note)) {
-    activity.push({ id: `${id}-fb`, type: "revision", userName: companyName, message: item.video_feedback || item.feedback_note, createdAt: item.reviewed_at || createdAt });
-  }
-  if (status === "approved") {
-    activity.push({ id: `${id}-ap`, type: "approved", userName: companyName, createdAt: item.reviewed_at || createdAt });
-  }
+  const movements = buildDeliveryMovements({
+    scriptStatus: item.script_status,
+    videoStatus: item.video_status,
+    deliveryStatus: item.status,
+    scriptSubmittedAt: item.script_submitted_at,
+    videoSubmittedAt: item.video_submitted_at || (item.media_url || item.submission_url ? item.submitted_at : null),
+    reviewedAt: item.reviewed_at,
+    versions: item.submission_versions,
+    revisions: item.revision_history,
+    scriptFeedback: item.script_feedback,
+    videoFeedback: item.video_feedback || item.feedback_note,
+    movements: item.movements,
+  });
 
   const revisions = revisionNotes(
     item.revision_history,
@@ -710,6 +855,7 @@ function buildPlanningStageItem(
     versions,
     activity,
     revisions,
+    movements,
     participationId: null,
     planningItemId: item.id,
     approvalStage: stage,
