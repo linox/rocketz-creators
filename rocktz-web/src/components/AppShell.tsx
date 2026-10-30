@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   Building2,
   CalendarDays,
   BarChart3,
+  ChevronDown,
+  CircleDollarSign,
   Coins,
   Eye,
   EyeOff,
   Globe,
   Home,
   Landmark,
+  Layers,
   LayoutDashboard,
   Mail,
   Megaphone,
@@ -22,15 +25,18 @@ import {
   Package,
   Repeat,
   ScrollText,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Store,
   TicketPercent,
+  UserRound,
   Users,
   UsersRound,
   Video,
   Wallet,
   X,
+  Zap,
 } from "lucide-react";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
@@ -110,6 +116,97 @@ function SidebarItem({
     <Link href={href} onClick={onClick} aria-current={active ? "page" : undefined} className={className}>
       {inner}
     </Link>
+  );
+}
+
+type SidebarLink = NavItem & { active: boolean };
+
+type SidebarSection = {
+  id: string;
+  label: string;
+  icon: typeof Home;
+  items: SidebarLink[];
+};
+
+function sidebarSection(
+  id: string,
+  label: string,
+  icon: typeof Home,
+  items: Array<SidebarLink | false | null | undefined>,
+): SidebarSection | null {
+  const visible = items.filter((item): item is SidebarLink => Boolean(item));
+  return visible.length > 0 ? { id, label, icon, items: visible } : null;
+}
+
+function readStoredNavGroups(role: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(`rocketz:nav-groups:${role}`);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+
+function SidebarGroup({
+  id,
+  label,
+  icon: Icon,
+  items,
+  open,
+  onToggle,
+  onNavigate,
+}: SidebarSection & { open: boolean; onToggle: () => void; onNavigate: () => void }) {
+  const badge = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
+  const hasActive = items.some((item) => item.active);
+  const panelId = `nav-group-${id}`;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold tracking-wider uppercase transition-colors",
+          hasActive ? "text-white" : "text-white/55 hover:bg-white/10 hover:text-white",
+          hasActive && !open && "bg-white/10 text-white",
+        )}
+      >
+        <Icon size={15} strokeWidth={1.85} className="shrink-0" />
+        <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
+        {!open && badge > 0 ? (
+          <span className="min-w-[18px] shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white">
+            {badge > 999 ? "999+" : badge}
+          </span>
+        ) : null}
+        <ChevronDown
+          size={14}
+          strokeWidth={2.25}
+          className={cn("shrink-0 text-white/55 transition-transform duration-200 motion-reduce:transition-none", open && "rotate-180")}
+        />
+      </button>
+      <div
+        id={panelId}
+        role="region"
+        aria-label={label}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className={cn("min-h-0 overflow-hidden", !open && "pointer-events-none")} inert={!open}>
+          <div className="mt-0.5 ml-3 space-y-0.5 border-l border-white/15 py-0.5 pl-1.5">
+            {items.map((item) => (
+              <SidebarItem key={item.href} {...item} onClick={onNavigate} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -255,6 +352,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const isCreatorShippingActive = onCreatorProfile && creatorTab === "shipping";
   const isCreatorBankActive = onCreatorProfile && creatorTab === "bank";
   const showRecurringNav = user.role === "admin" || hasRecurring === true;
+  const showFinanceNav = user.role !== "admin" || userHasPermission(user, "finance.access");
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
   const isJoinActive = isActive("/join");
@@ -265,7 +363,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
         { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
         { href: "/coupons", label: t("coupons"), icon: TicketPercent, active: isActive("/coupons") },
-        { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") },
+        ...(showFinanceNav ? [{ href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") }] : []),
         ...(showRecurringNav ? [{ href: "/recurring", label: t("tabRecurring"), icon: Repeat, active: isActive("/recurring") }] : []),
       ]
     : user.role === "company"
@@ -287,6 +385,146 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         ];
   const moreActive = !primaryNav.some((item) => item.active) && !isCreatorShippingActive && !isCreatorBankActive;
 
+  const pinnedNav: SidebarLink[] = user.role === "admin"
+    ? [{ href: "/dashboard", label: t("dashboard"), icon: LayoutDashboard, active: isActive("/dashboard") || path === "/" }]
+    : user.role === "company"
+      ? [{ href: "/company-dashboard", label: t("home"), icon: Home, active: isActive("/company-dashboard") }]
+      : [{ href: home, label: t("home"), icon: Home, active: isCreatorHomeActive || isActive("/creator-dashboard") }];
+
+  const navSections = (
+    user.role === "admin"
+      ? [
+          sidebarSection("people", t("groupPeople"), Users, [
+            { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
+            { href: "/creator-groups", label: t("creatorGroups"), icon: UsersRound, active: isActive("/creator-groups") },
+            { href: "/companies", label: t("companies"), icon: Building2, active: isActive("/companies") },
+          ]),
+          sidebarSection("content", t("groupContent"), Layers, [
+            { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
+            showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
+            { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+            { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
+          ]),
+          sidebarSection("finance", t("groupFinance"), CircleDollarSign, [
+            { href: "/coupons", label: t("coupons"), icon: TicketPercent, active: isActive("/coupons") },
+            { href: "/coupon-earnings", label: t("couponEarnings"), icon: Coins, active: isActive("/coupon-earnings") },
+            showFinanceNav ? { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") } : null,
+          ]),
+          sidebarSection("admin", t("groupAdmin"), Settings2, [
+            { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
+            userHasPermission(user, "mail.manage") ? { href: "/mail", label: t("mailTemplates"), icon: Mail, active: isActive("/mail") && !isActive("/mail/log") } : null,
+            userHasPermission(user, "mail.manage") ? { href: "/mail/log", label: t("mailLog"), icon: Mail, active: isActive("/mail/log") } : null,
+            userHasPermission(user, "logs.view") ? { href: "/logs", label: t("activityLogs"), icon: ScrollText, active: isActive("/logs") } : null,
+            userHasPermission(user, "users.manage") ? { href: "/users", label: t("users"), icon: ShieldCheck, active: isActive("/users") || isActive("/admin-users") } : null,
+            { href: "/settings/storefront", label: t("storefrontSettings"), icon: Store, active: isActive("/settings/storefront") },
+          ]),
+          sidebarSection("shortcuts", t("groupShortcuts"), Zap, [
+            { href: "/available-campaigns?view=creator", label: t("viewAsCreator"), icon: Sparkles, active: false },
+            { href: "/available-campaigns", label: t("availableCampaigns"), icon: Sparkles, active: isAvailableCampaignsActive },
+            { href: "/company-dashboard", label: t("companyPortal"), icon: Building2, active: isActive("/company-dashboard") },
+            { href: "/join", label: t("landing"), icon: Globe, active: isJoinActive },
+          ]),
+        ]
+      : user.role === "company"
+        ? [
+            sidebarSection("people", t("groupPeople"), Users, [
+              { href: "/creators", label: t("creators"), icon: Users, active: isActive("/creators") },
+              { href: "/creator-groups", label: t("creatorGroups"), icon: UsersRound, active: isActive("/creator-groups") },
+            ]),
+            sidebarSection("content", t("groupContent"), Layers, [
+              { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
+              showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
+              { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+              { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
+            ]),
+            sidebarSection("finance", t("groupFinance"), CircleDollarSign, [
+              { href: "/coupons", label: t("coupons"), icon: TicketPercent, active: isActive("/coupons") },
+              { href: "/coupon-earnings", label: t("couponEarnings"), icon: Coins, active: isActive("/coupon-earnings") },
+              { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") },
+            ]),
+            sidebarSection("admin", t("groupAdmin"), Settings2, [
+              { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
+              { href: "/company-landing", label: t("myLanding"), icon: Globe, active: isActive("/company-landing") },
+              companyPublicLandingSlug
+                ? {
+                    href: companyLandingPath(companyPublicLandingSlug),
+                    label: t("viewLanding"),
+                    icon: Globe,
+                    active: false,
+                    external: true,
+                  }
+                : null,
+            ]),
+          ]
+        : [
+            sidebarSection("content", t("groupContent"), Layers, [
+              { href: "/available-campaigns", label: t("availableCampaigns"), icon: Sparkles, active: isAvailableCampaignsActive },
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=campaigns`, label: t("myCampaigns"), icon: Megaphone, active: isCreatorCampaignsActive } : null,
+              showRecurringNav && creatorProfileBase
+                ? { href: `${creatorProfileBase}?tab=recurring`, label: t("recurring"), icon: Repeat, active: isCreatorRecurringActive }
+                : null,
+              showRecurringNav && !creatorProfileBase
+                ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") }
+                : null,
+              { href: "/calendar", label: t("calendar"), icon: CalendarDays, active: isActive("/calendar") },
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=portfolio`, label: t("portfolio"), icon: Video, active: isCreatorPortfolioActive } : null,
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=storefront`, label: t("storefront"), icon: Store, active: isCreatorStorefrontActive } : null,
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=storefront-metrics`, label: t("storefrontMetrics"), icon: BarChart3, active: isCreatorStorefrontMetricsActive } : null,
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=about`, label: t("mediaKit"), icon: Sparkles, active: isCreatorProfileActive } : null,
+            ]),
+            sidebarSection("finance", t("groupFinance"), CircleDollarSign, [
+              { href: "/coupons", label: t("myCoupons"), icon: TicketPercent, active: isActive("/coupons") },
+              { href: "/finance", label: t("myFinance"), icon: Wallet, active: isActive("/finance") },
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=bank`, label: t("bankAccount"), icon: Landmark, active: isCreatorBankActive } : null,
+            ]),
+            sidebarSection("account", t("groupAccount"), UserRound, [
+              creatorProfileBase ? { href: `${creatorProfileBase}?tab=shipping`, label: t("shippingAddress"), icon: Package, active: isCreatorShippingActive } : null,
+              { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
+            ]),
+          ]
+  ).filter((section): section is SidebarSection => section !== null);
+
+  const activeGroupId = navSections.find((section) => section.items.some((item) => item.active))?.id ?? null;
+  const activeGroupIdRef = useRef<string | null>(null);
+  activeGroupIdRef.current = activeGroupId;
+  const [openGroups, setOpenGroups] = useState<string[] | null>(null);
+  const searchKey = searchParams.toString();
+
+  useEffect(() => {
+    const stored = readStoredNavGroups(user.role);
+    const next = new Set(stored);
+    if (activeGroupIdRef.current) next.add(activeGroupIdRef.current);
+    setOpenGroups([...next]);
+  }, [user.role]);
+
+  useEffect(() => {
+    if (!activeGroupId) return;
+    setOpenGroups((prev) => {
+      if (!prev || prev.includes(activeGroupId)) return prev;
+      return [...prev, activeGroupId];
+    });
+  }, [activeGroupId, pathname, searchKey]);
+
+  useEffect(() => {
+    if (!openGroups) return;
+    try {
+      window.localStorage.setItem(`rocketz:nav-groups:${user.role}`, JSON.stringify(openGroups));
+    } catch {
+      /* ignore */
+    }
+  }, [openGroups, user.role]);
+
+  const openIds = openGroups ?? (activeGroupId ? [activeGroupId] : []);
+
+  function toggleNavGroup(id: string) {
+    setOpenGroups((prev) => {
+      const current = prev ?? openIds;
+      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    });
+  }
+
+  const panelLabel = user.role === "admin" ? t("agency") : user.role === "company" ? t("companyPanel") : t("creatorPortal");
+
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[#F9FAFB] font-sans">
       {open ? <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={close} /> : null}
@@ -302,93 +540,23 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             <RocketzLogo variant="sidebar" size="md" href={home} />
           </div>
 
-          <nav className="flex-1 space-y-0.5 overflow-y-auto">
-            {user.role === "admin" ? (
-              <>
-                <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("agency")}</div>
-                <SidebarItem href="/dashboard" label={t("dashboard")} icon={LayoutDashboard} active={isActive("/dashboard") || path === "/"} onClick={close} />
-                <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
-                <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
-                <SidebarItem href="/companies" label={t("companies")} icon={Building2} active={isActive("/companies")} onClick={close} />
-                <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} badge={pendingCampaigns} onClick={close} />
-                <SidebarItem href="/coupons" label={t("coupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
-                <SidebarItem href="/coupon-earnings" label={t("couponEarnings")} icon={Coins} active={isActive("/coupon-earnings")} onClick={close} />
-                <SidebarItem href="/finance" label={t("finance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
-                {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
-                <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
-                <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
-                <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-                {userHasPermission(user, "mail.manage") ? (
-                  <>
-                    <SidebarItem href="/mail" label={t("mailTemplates")} icon={Mail} active={isActive("/mail") && !isActive("/mail/log")} onClick={close} />
-                    <SidebarItem href="/mail/log" label={t("mailLog")} icon={Mail} active={isActive("/mail/log")} onClick={close} />
-                  </>
-                ) : null}
-                {userHasPermission(user, "logs.view") ? (
-                  <SidebarItem href="/logs" label={t("activityLogs")} icon={ScrollText} active={isActive("/logs")} onClick={close} />
-                ) : null}
-                {userHasPermission(user, "users.manage") ? (
-                  <SidebarItem href="/users" label={t("users")} icon={ShieldCheck} active={isActive("/users") || isActive("/admin-users")} onClick={close} />
-                ) : null}
-                <SidebarItem href="/settings/storefront" label={t("storefrontSettings")} icon={Store} active={isActive("/settings/storefront")} onClick={close} />
-                <div className="mt-6 border-t border-white/20 pt-6">
-                  <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("shortcuts")}</div>
-                  <SidebarItem href="/available-campaigns?view=creator" label={t("viewAsCreator")} icon={Sparkles} active={false} onClick={close} />
-                  <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
-                  <SidebarItem href="/company-dashboard" label={t("companyPortal")} icon={Building2} active={isActive("/company-dashboard")} onClick={close} />
-                  <SidebarItem href="/join" label={t("landing")} icon={Globe} active={isJoinActive} onClick={close} />
-                </div>
-              </>
-            ) : user.role === "company" ? (
-              <>
-                <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("companyPanel")}</div>
-                <SidebarItem href="/company-dashboard" label={t("home")} icon={Home} active={isActive("/company-dashboard")} onClick={close} />
-                <SidebarItem href="/creators" label={t("creators")} icon={Users} active={isActive("/creators")} onClick={close} />
-                <SidebarItem href="/creator-groups" label={t("creatorGroups")} icon={UsersRound} active={isActive("/creator-groups")} onClick={close} />
-                <SidebarItem href="/campaigns" label={t("campaigns")} icon={Megaphone} active={isActive("/campaigns")} onClick={close} />
-                <SidebarItem href="/coupons" label={t("coupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
-                <SidebarItem href="/coupon-earnings" label={t("couponEarnings")} icon={Coins} active={isActive("/coupon-earnings")} onClick={close} />
-                <SidebarItem href="/finance" label={t("finance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
-                {showRecurringNav ? <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} /> : null}
-                <SidebarItem href="/campaign-deliveries" label={t("deliveries")} icon={Video} active={isActive("/campaign-deliveries")} onClick={close} />
-                <SidebarItem href="/calendar" label={t("postingAgenda")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
-                <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-                <SidebarItem href="/company-landing" label={t("myLanding")} icon={Globe} active={isActive("/company-landing")} onClick={close} />
-                {companyPublicLandingSlug ? (
-                  <SidebarItem
-                    href={companyLandingPath(companyPublicLandingSlug)}
-                    label={t("viewLanding")}
-                    icon={Globe}
-                    active={false}
-                    external
-                    onClick={close}
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-label={panelLabel}>
+            <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{panelLabel}</div>
+            {pinnedNav.map((item) => (
+              <SidebarItem key={item.href} {...item} onClick={close} />
+            ))}
+            <div className="mt-2 space-y-1">
+              {navSections.map((section) => (
+                <div key={section.id} className={cn(section.id === "shortcuts" && "mt-2 border-t border-white/15 pt-2")}>
+                  <SidebarGroup
+                    {...section}
+                    open={openIds.includes(section.id)}
+                    onToggle={() => toggleNavGroup(section.id)}
+                    onNavigate={close}
                   />
-                ) : null}
-              </>
-            ) : (
-              <>
-                <div className="mb-2 px-3 text-[10px] font-bold tracking-wider text-white/55 uppercase">{t("creatorPortal")}</div>
-                <SidebarItem href={home} label={t("home")} icon={Home} active={isCreatorHomeActive || isActive("/creator-dashboard")} onClick={close} />
-                <SidebarItem href="/available-campaigns" label={t("availableCampaigns")} icon={Sparkles} active={isAvailableCampaignsActive} onClick={close} />
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=campaigns`} label={t("myCampaigns")} icon={Megaphone} active={isCreatorCampaignsActive} onClick={close} /> : null}
-                <SidebarItem href="/coupons" label={t("myCoupons")} icon={TicketPercent} active={isActive("/coupons")} onClick={close} />
-                <SidebarItem href="/finance" label={t("myFinance")} icon={Wallet} active={isActive("/finance")} onClick={close} />
-                {showRecurringNav && creatorProfileBase ? (
-                  <SidebarItem href={`${creatorProfileBase}?tab=recurring`} label={t("recurring")} icon={Repeat} active={isCreatorRecurringActive} onClick={close} />
-                ) : null}
-                {showRecurringNav && !creatorProfileBase ? (
-                  <SidebarItem href="/recurring" label={t("recurring")} icon={Repeat} active={isActive("/recurring")} onClick={close} />
-                ) : null}
-                <SidebarItem href="/calendar" label={t("calendar")} icon={CalendarDays} active={isActive("/calendar")} onClick={close} />
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=portfolio`} label={t("portfolio")} icon={Video} active={isCreatorPortfolioActive} onClick={close} /> : null}
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront`} label={t("storefront")} icon={Store} active={isCreatorStorefrontActive} onClick={close} /> : null}
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=storefront-metrics`} label={t("storefrontMetrics")} icon={BarChart3} active={isCreatorStorefrontMetricsActive} onClick={close} /> : null}
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=about`} label={t("mediaKit")} icon={Sparkles} active={isCreatorProfileActive} onClick={close} /> : null}
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=shipping`} label={t("shippingAddress")} icon={Package} active={isCreatorShippingActive} onClick={close} /> : null}
-                {creatorProfileBase ? <SidebarItem href={`${creatorProfileBase}?tab=bank`} label={t("bankAccount")} icon={Landmark} active={isCreatorBankActive} onClick={close} /> : null}
-                <SidebarItem href="/notifications" label={t("notifications")} icon={Bell} active={isNotificationsActive} badge={unread} onClick={close} />
-              </>
-            )}
+                </div>
+              ))}
+            </div>
           </nav>
 
           <div className="mt-auto space-y-2 border-t border-white/20 pt-4">

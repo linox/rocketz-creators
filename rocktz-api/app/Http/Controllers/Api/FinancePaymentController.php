@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\FinancePaymentSource;
 use App\Enums\FinancePaymentStatus;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FinancePaymentResource;
@@ -27,6 +28,7 @@ class FinancePaymentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->assertAdminFinance($request);
         $user = $request->user();
         $companyId = $this->scopedCompanyId($request);
         $creatorId = $user->role === UserRole::Creator ? (int) ($user->creator?->id ?? 0) : null;
@@ -300,6 +302,7 @@ class FinancePaymentController extends Controller
 
     private function managedCompanyId(Request $request): int
     {
+        $this->assertAdminFinance($request);
         $user = $request->user();
         abort_unless(in_array($user->role, [UserRole::Admin, UserRole::Company], true), 403, __('auth.forbidden'));
 
@@ -312,8 +315,19 @@ class FinancePaymentController extends Controller
         return $companyId;
     }
 
+    private function assertAdminFinance(Request $request): void
+    {
+        $user = $request->user();
+        if ($user->role !== UserRole::Admin) {
+            return;
+        }
+
+        abort_unless($user->hasPermission(Permission::FinanceAccess), 403, __('auth.forbidden_permission'));
+    }
+
     private function assertCanManage(Request $request, FinancePayment $payment): void
     {
+        $this->assertAdminFinance($request);
         $user = $request->user();
         if ($user->role === UserRole::Admin) {
             return;

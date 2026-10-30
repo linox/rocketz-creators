@@ -28,6 +28,7 @@ const ADMIN_PERMISSIONS = [
   "data.reset",
   "mail.manage",
   "logs.view",
+  "finance.access",
   "creators.hide_values",
 ] as const;
 
@@ -41,7 +42,7 @@ function permissionsForRole(role: string) {
 
 function defaultPermissionsForRole(role: string) {
   if (role !== "admin") return [];
-  return permissionsForRole(role).filter((slug) => slug !== "creators.hide_values");
+  return permissionsForRole(role).filter((slug) => slug !== "creators.hide_values" && slug !== "finance.access");
 }
 
 function permissionKey(slug: string) {

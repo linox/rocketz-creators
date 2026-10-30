@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Enums\FinancePaymentSource;
 use App\Enums\MailTemplateKey;
 use App\Enums\NotificationType;
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Company;
 use App\Models\FinancePayment;
 use App\Models\MailTemplate;
@@ -78,7 +78,7 @@ class FinancePaymentNotifier
             }
         }
 
-        User::query()->where('role', UserRole::Admin)->orderBy('id')->each(function (User $admin) use ($context, $payment) {
+        User::query()->adminsWithPermission(Permission::FinanceAccess)->orderBy('id')->each(function (User $admin) use ($context, $payment) {
             $this->mail->send(MailTemplateKey::InvoiceSubmitted, $admin, $context, $payment, 'submitted');
         });
 
@@ -100,7 +100,7 @@ class FinancePaymentNotifier
             ]);
         }
 
-        $this->notifications->notifyAdmins($title, $message, NotificationType::General, '/finance', [
+        $this->notifications->notifyAdminsWithPermission(Permission::FinanceAccess, $title, $message, NotificationType::General, '/finance', [
             'campaign_id' => $payment->campaign_id,
             'creator_id' => $payment->creator_id,
             'recurring_contract_id' => $payment->recurring_contract_id,

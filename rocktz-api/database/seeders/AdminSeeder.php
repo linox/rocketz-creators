@@ -2,7 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Enums\Permission;
 use App\Enums\UserRole;
+use App\Services\PermissionService;
 use Database\Seeders\Concerns\SeedsDemoAccounts;
 use Illuminate\Database\Seeder;
 
@@ -12,6 +14,10 @@ class AdminSeeder extends Seeder
 
     public function run(): void
     {
-        $this->ensureUser(DemoAccounts::ADMIN, UserRole::Admin, 'Admin Rocketz');
+        $user = $this->ensureUser(DemoAccounts::ADMIN, UserRole::Admin, 'Admin Rocketz');
+        $slugs = $user->permissionSlugs();
+        if (! in_array(Permission::FinanceAccess->value, $slugs, true)) {
+            app(PermissionService::class)->sync($user, [...$slugs, Permission::FinanceAccess->value]);
+        }
     }
 }

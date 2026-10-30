@@ -14,6 +14,7 @@ enum Permission: string
     case DataReset = 'data.reset';
     case MailManage = 'mail.manage';
     case LogsView = 'logs.view';
+    case FinanceAccess = 'finance.access';
 
     /**
      * @return list<self>
@@ -31,6 +32,7 @@ enum Permission: string
                 self::DataReset,
                 self::MailManage,
                 self::LogsView,
+                self::FinanceAccess,
             ],
             UserRole::Company => [
                 self::CampaignsPublishWithoutApproval,
@@ -49,7 +51,8 @@ enum Permission: string
     }
 
     /**
-     * Permissões ligadas ao criar um usuário. Ocultar valores é opt-in.
+     * Permissões ligadas ao criar um usuário.
+     * Ocultar valores e o financeiro são opt-in.
      *
      * @return list<string>
      */
@@ -57,7 +60,10 @@ enum Permission: string
     {
         return array_values(array_filter(
             self::slugsForRole($role),
-            fn (string $slug) => $slug !== self::CreatorsHideValues->value,
+            fn (string $slug) => ! in_array($slug, [
+                self::CreatorsHideValues->value,
+                self::FinanceAccess->value,
+            ], true),
         ));
     }
 }

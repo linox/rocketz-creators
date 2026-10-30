@@ -489,6 +489,7 @@
   },
   "finance": {
     "title": "Finance",
+    "forbidden": "You do not have access to finance. Ask someone who manages users for the Finance permission.",
     "myTitle": "My payments",
     "subtitle": "Payments for campaigns, coupons and recurring work, released after the invoice.",
     "mySubtitle": "Send the invoice by the deadline. Payment is released only after review.",
@@ -1132,6 +1133,10 @@
       "logs_view": {
         "label": "View platform logs",
         "hint": "Inspect logins, access and actions taken in the platform."
+      },
+      "finance_access": {
+        "label": "Finance",
+        "hint": "Opens the finance area and receives invoice and payment emails and alerts. Other administrators do not receive those alerts."
       },
       "creators_hide_values": {
         "label": "Hide creator values",

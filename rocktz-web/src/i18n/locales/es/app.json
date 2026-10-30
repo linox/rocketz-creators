@@ -489,6 +489,7 @@
   },
   "finance": {
     "title": "Financiero",
+    "forbidden": "No tienes acceso al financiero. Pide el permiso Financiero a quien gestiona los usuarios.",
     "myTitle": "Mis pagos",
     "subtitle": "Pagos de campañas, cupones y trabajos recurrentes, liberados después de la factura.",
     "mySubtitle": "Envía la factura en el plazo. El pago solo se libera después de la revisión.",
@@ -1136,6 +1137,10 @@
       "logs_view": {
         "label": "Ver logs de la plataforma",
         "hint": "Consultar accesos, inicios de sesión y acciones hechas en la plataforma."
+      },
+      "finance_access": {
+        "label": "Financiero",
+        "hint": "Accede al área financiera y recibe los e-mails y avisos de facturas y pagos. Los demás administradores no reciben esos avisos."
       }
     }
   },

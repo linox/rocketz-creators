@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Jobs\SendPushNotificationJob;
 use App\Models\CompanyUser;
@@ -62,6 +63,20 @@ class NotificationService
     public function notifyAdmins(string $title, string $message, NotificationType $type, ?string $link = null, array $extra = []): void
     {
         User::query()->where('role', UserRole::Admin)->get()->each(function (User $admin) use ($title, $message, $type, $link, $extra) {
+            $this->send(array_merge($extra, [
+                'user_id' => $admin->id,
+                'title' => $title,
+                'message' => $message,
+                'type' => $type,
+                'target_role' => NotificationTargetRole::Admin,
+                'link' => $link,
+            ]));
+        });
+    }
+
+    public function notifyAdminsWithPermission(Permission $permission, string $title, string $message, NotificationType $type, ?string $link = null, array $extra = []): void
+    {
+        User::query()->adminsWithPermission($permission)->orderBy('id')->get()->each(function (User $admin) use ($title, $message, $type, $link, $extra) {
             $this->send(array_merge($extra, [
                 'user_id' => $admin->id,
                 'title' => $title,

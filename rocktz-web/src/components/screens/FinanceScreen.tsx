@@ -11,6 +11,7 @@ import { api, money } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { formatBankLines, formatPixKey } from "@/lib/bank-account";
 import { maskBankPreview } from "@/lib/mask-sensitive";
+import { userHasPermission } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
 import type { Company, FinancePayment, FinancePaymentList, FinancePaymentStatus } from "@/lib/types";
 
@@ -233,6 +234,7 @@ function FinanceInner() {
   const isAdmin = user.role === "admin";
   const isCreator = user.role === "creator";
   const isManager = !isCreator;
+  const canAccessFinance = !isAdmin || userHasPermission(user, "finance.access");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState(isAdmin ? "" : String(user.company?.id || ""));
   const [payments, setPayments] = useState<FinancePayment[]>([]);
@@ -263,6 +265,7 @@ function FinanceInner() {
   );
 
   useEffect(() => {
+    if (!canAccessFinance) return;
     if (!isAdmin) {
       setCompanyId(String(user.company?.id || ""));
       return;
@@ -278,13 +281,17 @@ function FinanceInner() {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin, user.company?.id]);
+  }, [canAccessFinance, isAdmin, user.company?.id]);
 
   useEffect(() => {
     loadedSettingsFor.current = null;
   }, [companyId]);
 
   useEffect(() => {
+    if (!canAccessFinance) {
+      setLoading(false);
+      return;
+    }
     if (isManager && !companyId) {
       setPayments([]);
       setMeta(null);
@@ -325,7 +332,7 @@ function FinanceInner() {
     return () => {
       cancelled = true;
     };
-  }, [companyId, isManager, source, status]);
+  }, [canAccessFinance, companyId, isManager, source, status]);
 
   const visible = payments.filter((row) => {
     const query = search.trim().toLowerCase();
@@ -483,6 +490,18 @@ function FinanceInner() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (!canAccessFinance) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-950">{t("finance.title")}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">{t("finance.subtitle")}</p>
+        </div>
+        <p className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-sm text-slate-500">{t("finance.forbidden")}</p>
+      </div>
+    );
   }
 
   return (

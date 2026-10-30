@@ -10,6 +10,7 @@ use App\Support\AppLocale;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -175,6 +176,19 @@ class User extends Authenticatable implements HasLocalePreference
     public function mailMessages(): HasMany
     {
         return $this->hasMany(MailMessage::class);
+    }
+
+    /**
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeAdminsWithPermission(Builder $query, Permission|string $permission): Builder
+    {
+        $slug = $permission instanceof Permission ? $permission->value : $permission;
+
+        return $query
+            ->where('role', UserRole::Admin)
+            ->whereHas('permissionGrants', fn (Builder $grants) => $grants->where('permission', $slug));
     }
 
     public function permissionGrants(): HasMany

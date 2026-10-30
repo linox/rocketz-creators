@@ -489,6 +489,7 @@
   },
   "finance": {
     "title": "Financeiro",
+    "forbidden": "Você não tem acesso ao financeiro. Peça a permissão Financeiro a quem gerencia os usuários.",
     "myTitle": "Meus pagamentos",
     "subtitle": "Pagamentos de campanhas, cupons e trabalhos recorrentes, liberados depois da nota fiscal.",
     "mySubtitle": "Envie a nota fiscal no prazo. O pagamento só é liberado depois da conferência.",
@@ -1132,6 +1133,10 @@
       "logs_view": {
         "label": "Ver logs da plataforma",
         "hint": "Consultar acessos, logins e ações feitas na plataforma."
+      },
+      "finance_access": {
+        "label": "Financeiro",
+        "hint": "Acessa a área financeira e recebe os e-mails e avisos de notas e pagamentos. Os demais administradores não recebem esses avisos."
       },
       "creators_hide_values": {
         "label": "Ocultar valores de criadores",

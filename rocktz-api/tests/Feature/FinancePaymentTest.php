@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\ApplicationStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\PaymentStatus;
+use App\Enums\Permission;
 use App\Enums\RecurringContractStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
@@ -17,6 +18,7 @@ use App\Models\MediaFile;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -139,6 +141,11 @@ class FinancePaymentTest extends TestCase
         $this->travelTo('2026-10-28');
         [$company, $manager, $creator, $campaign] = $this->scene();
         $admin = User::factory()->admin()->create();
+        app(PermissionService::class)->sync($admin, [
+            ...Permission::defaultSlugsForRole($admin->role),
+            Permission::FinanceAccess->value,
+        ]);
+        $outsider = User::factory()->admin()->create();
         $paymentId = $this->asUser($manager)
             ->getJson('/api/finance-payments?company_id='.$company->id)
             ->json('data.0.id');
@@ -178,6 +185,21 @@ class FinancePaymentTest extends TestCase
             'user_id' => $admin->id,
             'template_key' => MailTemplateKey::InvoiceSubmitted->value,
         ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $admin->id,
+            'link' => '/finance',
+            'title' => 'Nota fiscal enviada',
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $outsider->id,
+            'template_key' => MailTemplateKey::InvoiceSubmitted->value,
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $outsider->id,
+            'link' => '/finance',
+        ]);
+        $this->asUser($outsider)->getJson('/api/finance-payments')->assertForbidden();
+        $this->asUser($admin)->getJson('/api/finance-payments')->assertOk();
 
         $this->asUser($manager)
             ->postJson("/api/finance-payments/{$paymentId}/reject", ['reason' => 'Valor divergente'])
