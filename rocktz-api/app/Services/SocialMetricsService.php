@@ -253,19 +253,31 @@ class SocialMetricsService
 
     private function fetch(string $network, string $handle): SocialSnapshot
     {
-        if ($this->scrapeCreatorsKey() !== '') {
-            try {
-                return $this->fetchViaScrapeCreators($network, $handle);
-            } catch (SocialMetricsException $e) {
-                try {
-                    return $this->fetchPublic($network, $handle);
-                } catch (SocialMetricsException) {
-                    throw $e;
-                }
-            }
+        if ($this->scrapeCreatorsKey() === '') {
+            return $this->fetchPublic($network, $handle);
         }
 
-        return $this->fetchPublic($network, $handle);
+        try {
+            return $this->fetchViaScrapeCreators($network, $handle);
+        } catch (\Throwable $scrapeError) {
+            try {
+                return $this->fetchPublic($network, $handle);
+            } catch (\Throwable $publicError) {
+                report($scrapeError);
+
+                if ($scrapeError instanceof SocialMetricsException) {
+                    throw $scrapeError;
+                }
+
+                if ($publicError instanceof SocialMetricsException) {
+                    throw $publicError;
+                }
+
+                report($publicError);
+
+                throw new SocialMetricsException(__('auth.social_profile_unavailable'), previous: $scrapeError);
+            }
+        }
     }
 
     private function fetchPublic(string $network, string $handle): SocialSnapshot
@@ -809,7 +821,7 @@ class SocialMetricsService
                 'tiktok' => $this->fillTikTokFromVideos($snapshot),
                 default => $snapshot,
             };
-        } catch (SocialMetricsException) {
+        } catch (\Throwable) {
             return $snapshot;
         }
     }
@@ -1016,6 +1028,7 @@ class SocialMetricsService
         return $this->requestJson(
             rtrim($this->scrapeCreatorsUrl(), '/').$path.'?'.http_build_query($query),
             ['x-api-key' => $this->scrapeCreatorsKey()],
+            45,
         );
     }
 
@@ -1023,9 +1036,10 @@ class SocialMetricsService
      * @param  array<string, string>  $headers
      * @return array<string, mixed>
      */
-    private function requestJson(string $url, array $headers = []): array
+    private function requestJson(string $url, array $headers = [], int $timeout = 12): array
     {
         $response = $this->http()
+            ->timeout($timeout)
             ->withHeaders($headers)
             ->acceptJson()
             ->get($url);

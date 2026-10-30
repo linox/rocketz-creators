@@ -1248,6 +1248,7 @@ class PostMetricsService
         $query['cache_max_age'] = $query['cache_max_age'] ?? '1d';
 
         $response = $this->http()
+            ->timeout(45)
             ->withHeaders(['x-api-key' => $this->scrapeCreatorsKey()])
             ->acceptJson()
             ->get(rtrim($this->scrapeCreatorsUrl(), '/').$path.'?'.http_build_query($query));

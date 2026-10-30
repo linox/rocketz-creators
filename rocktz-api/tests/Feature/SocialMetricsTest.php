@@ -7,6 +7,7 @@ use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -380,6 +381,36 @@ HTML, 200),
 
         Http::fake([
             'https://api.scrapecreators.com/*' => Http::response(['error' => 'not found'], 404),
+            'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
+                'data' => [
+                    'user' => [
+                        'username' => 'tw2o',
+                        'edge_followed_by' => ['count' => 58235],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/creators/{$creator->id}/social-sync", [
+                'network' => 'instagram',
+                'handle' => '@tw2o',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('sync.instagram.ok', true)
+            ->assertJsonPath('sync.instagram.followers', 58235);
+    }
+
+    public function test_scrapecreators_timeout_falls_back_to_public_instagram(): void
+    {
+        config()->set('services.social.scrape_creators_key', 'test-key');
+        [$creator, $token] = $this->creatorWithToken(['instagram' => 'tw2o']);
+
+        Http::fake([
+            'https://api.scrapecreators.com/*' => function () {
+                throw new ConnectionException('cURL error 28: Operation timed out after 12002 milliseconds');
+            },
             'https://i.instagram.com/api/v1/users/web_profile_info*' => Http::response([
                 'data' => [
                     'user' => [
