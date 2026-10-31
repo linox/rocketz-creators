@@ -93,7 +93,7 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
           {banner ? (
             <div className="aspect-[21/9] w-full md:aspect-[3/1]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={banner} alt="" className="h-full w-full object-cover object-center" />
+              <img src={banner} alt="" decoding="async" fetchPriority="high" className="h-full w-full object-cover object-center" />
             </div>
           ) : (
             <div className="h-20 bg-gradient-to-r from-[#8A3FFC] to-indigo-500 sm:h-36" />
@@ -101,7 +101,7 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
           <div className="relative px-4 pb-4 sm:px-8 sm:pb-8">
             <div className="-mt-10 mb-3 flex flex-col gap-3 sm:-mt-14 sm:mb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
               <div className="flex items-end gap-3">
-                <UserAvatar src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-2xl" className="h-20 w-20 border-4 border-white shadow-md sm:h-28 sm:w-28" textClassName="text-3xl font-bold" />
+                <UserAvatar priority src={creator.photo_url} name={creator.artistic_name} size="custom" shape="rounded-2xl" className="h-20 w-20 border-4 border-white shadow-md sm:h-28 sm:w-28" textClassName="text-3xl font-bold" />
                 <div className="pb-1">
                   <p className="text-[11px] font-black tracking-widest text-brand-primary uppercase">{t("storefront.publicKicker")}</p>
                   <h1 className="text-xl font-black text-slate-950 sm:text-2xl">@{creator.artistic_name}</h1>
@@ -142,7 +142,7 @@ export function CreatorPublicStorefront({ page }: { page: CreatorStorefront }) {
                 <div className="relative aspect-[4/3] shrink-0 bg-slate-100">
                   {item.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" className="h-full w-full object-cover" />
+                    <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-slate-300">{item.type === "coupon" ? <Ticket size={36} /> : <Link2 size={36} />}</div>
                   )}

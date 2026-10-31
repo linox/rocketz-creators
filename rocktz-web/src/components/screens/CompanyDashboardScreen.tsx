@@ -33,6 +33,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { api } from "@/lib/api";
+import { peekLaravelGet } from "@/lib/laravel";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -92,6 +93,22 @@ function hasApprovalMaterial(item: PendingApproval) {
   return Boolean(item.script?.trim() || item.scriptFileUrl?.trim() || item.videoUrl?.trim());
 }
 
+function cachedCompanyDashboard(companyId: number) {
+  if (!companyId) return null;
+  const company = peekLaravelGet<{ data: Company }>(`/companies/${companyId}`)?.data;
+  const campaigns = peekLaravelGet<{ data: Campaign[] }>("/campaigns?include=content")?.data;
+  const recurring = peekLaravelGet<{ data: RecurringContract[] }>("/recurring-contracts?include=items")?.data;
+  const creators = peekLaravelGet<{ data: Creator[] }>(`/creators?company_id=${companyId}`)?.data;
+  if (!company || !campaigns || !recurring || !creators) return null;
+  return {
+    company,
+    campaigns: campaigns.filter((item) => item.company_id === companyId),
+    recurring: recurring.filter((item) => item.company_id === companyId),
+    creators,
+    landing: peekLaravelGet<{ data: CompanyLandingPage }>(`/companies/${companyId}/landing`)?.data ?? null,
+  };
+}
+
 function isActiveCampaign(status: string) {
   return status === "briefing" || status === "selection" || status === "production";
 }
@@ -107,22 +124,24 @@ function CompanyDashboardInner() {
   const isAdmin = user.role === "admin";
   const queryCompanyId = Number(searchParams.get("companyId") || 0);
 
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [recurring, setRecurring] = useState<RecurringContract[]>([]);
-  const [creators, setCreators] = useState<Creator[]>([]);
-  const [landing, setLanding] = useState<CompanyLandingPage | null>(null);
+  const [companies, setCompanies] = useState<Company[]>(() =>
+    isAdmin ? peekLaravelGet<{ data: Company[] }>("/companies")?.data ?? [] : [],
+  );
+  const companyId = isAdmin
+    ? (queryCompanyId || companies[0]?.id || 0)
+    : (user.company?.id ?? 0);
+  const [dashSeed] = useState(() => cachedCompanyDashboard(companyId));
+  const [company, setCompany] = useState<Company | null>(dashSeed?.company ?? null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(dashSeed?.campaigns ?? []);
+  const [recurring, setRecurring] = useState<RecurringContract[]>(dashSeed?.recurring ?? []);
+  const [creators, setCreators] = useState<Creator[]>(dashSeed?.creators ?? []);
+  const [landing, setLanding] = useState<CompanyLandingPage | null>(dashSeed?.landing ?? null);
   const [tab, setTab] = useState<DashTab>("overview");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(dashSeed == null);
   const [favSearch, setFavSearch] = useState("");
   const [materialItem, setMaterialItem] = useState<PendingApproval | null>(null);
   const [approvingCampaign, setApprovingCampaign] = useState<Campaign | null>(null);
   const [groupCount, setGroupCount] = useState(0);
-
-  const companyId = isAdmin
-    ? (queryCompanyId || companies[0]?.id || 0)
-    : (user.company?.id ?? 0);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -134,19 +153,51 @@ function CompanyDashboardInner() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const cached = cachedCompanyDashboard(companyId);
+    if (cached) {
+      setCompany(cached.company);
+      setCampaigns(cached.campaigns);
+      setRecurring(cached.recurring);
+      setCreators(cached.creators);
+      setLanding(cached.landing);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    let cancelled = false;
     Promise.all([
-      api.company(companyId).then((res) => setCompany(res.data)),
-      api.campaigns("?include=content").then((res) => setCampaigns(res.data.filter((item) => item.company_id === companyId))),
-      api.recurring("?include=items").then((res) => setRecurring(res.data.filter((item) => item.company_id === companyId))),
-      api.creators(`?company_id=${companyId}`).then((res) => setCreators(res.data)),
-      api.companyLanding(companyId).then((res) => setLanding(res.data)).catch(() => setLanding(null)),
+      api.company(companyId).then((res) => {
+        if (!cancelled) setCompany(res.data);
+      }),
+      api.campaigns("?include=content").then((res) => {
+        if (!cancelled) setCampaigns(res.data.filter((item) => item.company_id === companyId));
+      }),
+      api.recurring("?include=items").then((res) => {
+        if (!cancelled) setRecurring(res.data.filter((item) => item.company_id === companyId));
+      }),
+      api.creators(`?company_id=${companyId}`).then((res) => {
+        if (!cancelled) setCreators(res.data);
+      }),
+      api.companyLanding(companyId).then((res) => {
+        if (!cancelled) setLanding(res.data);
+      }).catch(() => {
+        if (!cancelled) setLanding(null);
+      }),
       api.creatorGroups(isAdmin ? `?company_id=${companyId}` : "").then((res) => {
-        setGroupCount(res.data.filter((group) => group.company_id === companyId).length);
-      }).catch(() => setGroupCount(0)),
+        if (!cancelled) setGroupCount(res.data.filter((group) => group.company_id === companyId).length);
+      }).catch(() => {
+        if (!cancelled) setGroupCount(0);
+      }),
     ])
-      .catch(alertApiError)
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) void alertApiError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [companyId, isAdmin]);
 
   useEffect(() => {
@@ -487,6 +538,7 @@ function CompanyDashboardInner() {
           </span>
           <div className="mt-3 flex min-w-0 items-center gap-3">
             <UserAvatar
+              priority
               src={company.logo_url}
               name={company.name}
               size="custom"

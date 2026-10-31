@@ -149,7 +149,7 @@ export function CompanyPublicLanding({
           <div className="flex min-w-0 items-center gap-3">
             {logoSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoSrc} alt={name} referrerPolicy="no-referrer" className="h-10 w-10 rounded-xl object-cover sm:h-12 sm:w-12" />
+              <img src={logoSrc} alt={name} referrerPolicy="no-referrer" decoding="async" fetchPriority="high" className="h-10 w-10 rounded-xl object-cover sm:h-12 sm:w-12" />
             ) : (
               <div className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black text-white sm:h-12 sm:w-12" style={{ backgroundColor: primary }}>
                 {name.slice(0, 1).toUpperCase()}
@@ -165,7 +165,7 @@ export function CompanyPublicLanding({
         {bannerSrc ? (
           <div className="mb-8 overflow-hidden rounded-3xl border border-black/5 shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerSrc} alt={name} referrerPolicy="no-referrer" className="h-48 w-full object-cover sm:h-72" />
+            <img src={bannerSrc} alt={name} referrerPolicy="no-referrer" decoding="async" fetchPriority="high" className="h-48 w-full object-cover sm:h-72" />
           </div>
         ) : (
           <div className="mb-8 h-40 rounded-3xl sm:h-56" style={{ background: `linear-gradient(135deg, ${primary} 0%, ${button} 100%)` }} />

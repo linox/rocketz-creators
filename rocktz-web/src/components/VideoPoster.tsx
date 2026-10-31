@@ -50,7 +50,7 @@ export function VideoPoster({ src, className }: Props) {
     <div className={cn("relative h-full w-full overflow-hidden bg-slate-900", className)}>
       {posterUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={posterUrl} alt="" className="h-full w-full object-cover" />
+        <img src={posterUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
       ) : playbackUrl ? (
         <video
           src={playbackUrl.includes("#") ? playbackUrl : `${playbackUrl}#t=0.4`}

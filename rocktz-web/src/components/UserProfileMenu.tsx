@@ -371,7 +371,7 @@ export function UserProfileMenu({
         <div className="rounded-2xl border border-white/20 bg-white/10 p-2 backdrop-blur-sm">
           <div className="flex items-center gap-2.5 p-1.5">
             <div className="relative shrink-0">
-              <UserAvatar src={photoURL} name={displayName} size="custom" className="h-9 w-9 border border-white/30 shadow-xs" textClassName="text-xs" />
+              <UserAvatar priority src={photoURL} name={displayName} size="custom" className="h-9 w-9 border border-white/30 shadow-xs" textClassName="text-xs" />
               <span className={cn("absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#8A3FFC]", roleInfo.dot)} />
             </div>
             <div className="min-w-0 flex-1">
@@ -422,7 +422,7 @@ export function UserProfileMenu({
         title={t("userMenu")}
       >
         <div className="relative shrink-0">
-          <UserAvatar src={photoURL} name={displayName} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
+          <UserAvatar priority src={photoURL} name={displayName} size="custom" shape="rounded-lg" className="h-7 w-7 border border-slate-200" textClassName="text-[10px]" />
           <span className={cn("absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full border border-white", roleInfo.dot)} />
         </div>
         <div className="hidden min-w-0 flex-col text-left sm:flex">

@@ -82,7 +82,7 @@ import { CONTRACT_METADATA } from "@/data/creatorContractTerms";
 import { creatorTermAudit } from "@/lib/creator-contract-document";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertLoading, alertSuccess, alertWarning, closeAlert } from "@/lib/alerts";
-import { ApiError } from "@/lib/laravel";
+import { ApiError, peekLaravelGet } from "@/lib/laravel";
 import { cn } from "@/lib/cn";
 import {
   campaignCreatorDeliveryState,
@@ -661,9 +661,18 @@ function ProfileInner() {
   const pathId = numericIdFromBrowser("creators", pathname);
   const id = pathId ?? (user.role === "creator" ? user.creator?.id ?? null : null);
 
-  const [creator, setCreator] = useState<Creator | null>(null);
+  const [creator, setCreator] = useState<Creator | null>(() =>
+    id ? peekLaravelGet<{ data: Creator }>(`/creators/${id}`)?.data ?? null : null,
+  );
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => creator == null);
+  const [creatorForId, setCreatorForId] = useState(id);
+  if (creatorForId !== id) {
+    const next = id ? peekLaravelGet<{ data: Creator }>(`/creators/${id}`)?.data ?? null : null;
+    setCreatorForId(id);
+    setCreator(next);
+    setLoading(next == null);
+  }
   const [viewMode, setViewMode] = useState<"agency" | "creator">("agency");
   const [editing, setEditing] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -903,6 +912,14 @@ function ProfileInner() {
   }
 
   useEffect(() => {
+    const cached = id ? peekLaravelGet<{ data: Creator }>(`/creators/${id}`)?.data ?? null : null;
+    if (cached) {
+      setCreator(cached);
+      hydrate(cached);
+      setLoading(false);
+    } else if (id) {
+      setLoading(true);
+    }
     load();
   }, [id]);
 
@@ -1662,7 +1679,7 @@ function ProfileInner() {
             </Link>
           ) : null}
           <div className="flex items-center gap-4">
-            <UserAvatar src={creator.photo_url} name={creator.artistic_name || creator.full_name} size="custom" shape="rounded-2xl" className="h-16 w-16 border border-[#E2E8F0] shadow-sm" textClassName="text-xl" />
+            <UserAvatar priority src={creator.photo_url} name={creator.artistic_name || creator.full_name} size="custom" shape="rounded-2xl" className="h-16 w-16 border border-[#E2E8F0] shadow-sm" textClassName="text-xl" />
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="m-0 text-[26px] font-bold text-[#0F172A]">@{creator.artistic_name}</h1>

@@ -472,7 +472,7 @@ export function CreatorStorefrontPanel({ creatorId }: { creatorId: number }) {
             <div className="relative aspect-[4/3] bg-slate-100">
               {item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" className="h-full w-full object-cover" />
+                <img src={mediaPublicUrl(item.image_url) || item.image_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-300">{item.type === "coupon" ? <Ticket size={32} /> : <Link2 size={32} />}</div>
               )}

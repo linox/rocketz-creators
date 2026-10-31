@@ -67,6 +67,7 @@ export function UserAvatar({
   className,
   textClassName,
   shape = "rounded-xl",
+  priority = false,
 }: {
   src?: string | null;
   name?: string | null;
@@ -75,6 +76,7 @@ export function UserAvatar({
   className?: string;
   textClassName?: string;
   shape?: AvatarShape;
+  priority?: boolean;
 }) {
   const [hasError, setHasError] = useState(false);
   const resolvedSrc = mediaPublicUrl(src);
@@ -108,6 +110,9 @@ export function UserAvatar({
         onError={() => setHasError(true)}
         className="h-full w-full object-cover"
         referrerPolicy="no-referrer"
+        decoding="async"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
       />
     </div>
   );

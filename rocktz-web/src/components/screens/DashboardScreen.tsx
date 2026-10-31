@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
+import { peekLaravelGet } from "@/lib/laravel";
 import { alertApiError } from "@/lib/alerts";
 import { useAuth } from "@/lib/use-auth";
 import { usePrivacy } from "@/lib/privacy";
@@ -290,7 +291,7 @@ function DashboardInner() {
   const user = useAuth();
   const { t } = useTranslation("app");
   const { formatCurrency } = usePrivacy();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(() => peekLaravelGet<DashboardStats>("/dashboard"));
 
   useEffect(() => {
     api.dashboard().then(setStats).catch(alertApiError);

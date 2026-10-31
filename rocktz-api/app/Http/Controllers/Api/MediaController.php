@@ -370,6 +370,15 @@ class MediaController extends Controller
 
         $path = $folder.'/'.$filename;
         if (! Storage::disk('uploads')->exists($path)) {
+            if ($this->isStreamedImage($filename)) {
+                $redirect = $this->redirectRemoteMedia($path, false, $this->documentMime($filename));
+                if ($redirect !== null) {
+                    $redirect->headers->set('Cache-Control', 'private, max-age=3600');
+
+                    return $redirect;
+                }
+            }
+
             $remote = $this->streamRemote($request, $path, $filename);
             abort_if($remote === null, 404);
 
@@ -516,6 +525,13 @@ class MediaController extends Controller
                 ? ((string) (new \finfo(FILEINFO_MIME_TYPE))->file($absolute) ?: 'application/octet-stream')
                 : 'application/octet-stream',
         };
+    }
+
+    private function isStreamedImage(string $filename): bool
+    {
+        $extension = strtolower((string) pathinfo($filename, PATHINFO_EXTENSION));
+
+        return in_array($extension, MediaKind::IMAGE_EXTENSIONS, true);
     }
 
     /**

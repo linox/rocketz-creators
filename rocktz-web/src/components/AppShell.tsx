@@ -54,7 +54,7 @@ import { alertApiError, alertSuccess } from "@/lib/alerts";
 import type { AuthUser } from "@/lib/auth";
 import { userHasPermission } from "@/lib/auth";
 import { cn } from "@/lib/cn";
-import { fetchMe, logoutRequest } from "@/lib/laravel";
+import { fetchMe, logoutRequest, peekLaravelGet } from "@/lib/laravel";
 import { companyLandingPath } from "@/lib/landing-origin";
 import { APP_VERSION } from "@/lib/app-version";
 import { cacheNavBadges, isNavCacheFresh, peekNavBadges } from "@/lib/session-cache";
@@ -276,7 +276,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
       }
     }
 
-    void loadBadges(true);
+    void loadBadges(false);
     const timer = window.setInterval(() => {
       void loadBadges();
     }, 60_000);
@@ -301,6 +301,11 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
 
     let cancelled = false;
     const companyId = user.company.id;
+    const cached = peekLaravelGet<{ data: { status?: string; slug?: string | null } }>(`/companies/${companyId}/landing`);
+    if (cached?.data) {
+      setCompanyPublicLandingSlug(cached.data.status === "published" && cached.data.slug ? cached.data.slug : null);
+      return;
+    }
 
     api.companyLanding(companyId)
       .then((res) => {
@@ -315,7 +320,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
     return () => {
       cancelled = true;
     };
-  }, [user.role, user.company?.id, pathname]);
+  }, [user.role, user.company?.id]);
 
   useEffect(() => {
     setOpen(false);

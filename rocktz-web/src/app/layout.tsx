@@ -34,6 +34,11 @@ document.addEventListener("gestureend", function (event) { event.preventDefault(
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className="scroll-smooth" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://api.creatorz.digital" />
+        <link rel="dns-prefetch" href="https://api.creatorz.digital" />
+        <link rel="preconnect" href="https://images.unsplash.com" />
+      </head>
       <body className="min-h-screen font-sans antialiased">
         <script
           id="rocktz-locale"

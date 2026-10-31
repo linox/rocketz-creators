@@ -165,6 +165,8 @@ function ParallaxImage({
         src={src}
         alt={alt}
         style={{ y, scale }}
+        loading="lazy"
+        decoding="async"
         className="h-full w-full object-cover will-change-transform"
       />
       {children}
@@ -730,9 +732,11 @@ export function LandingPage() {
                 className="relative aspect-[4/3.8] w-full overflow-hidden rounded-3xl border border-slate-100 bg-slate-100 shadow-2xl"
               >
                 <motion.img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=85"
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=960&q=75"
                   alt={tl("hero.creatorAlt")}
                   style={{ y: heroImageY, scale: heroImageScale }}
+                  fetchPriority="high"
+                  decoding="async"
                   className="h-full w-full object-cover will-change-transform"
                 />
                 <motion.div style={{ y: heroCardOneY }} className="absolute right-4 top-4 w-full max-w-[240px]">
@@ -759,8 +763,10 @@ export function LandingPage() {
                     <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">{tl("hero.approvedContent")}</p>
                     <div className="relative mb-2.5 aspect-video overflow-hidden rounded-xl bg-slate-900">
                       <img
-                        src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80"
+                        src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=480&q=75"
                         alt={tl("hero.approvedPreview")}
+                        loading="lazy"
+                        decoding="async"
                         className="h-full w-full object-cover"
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-slate-900/20">

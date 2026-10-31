@@ -595,4 +595,28 @@ class MediaUploadTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'video/mp4');
     }
+
+    public function test_image_stream_redirects_to_storage_when_on_r2(): void
+    {
+        config([
+            'media.disk' => 'r2',
+            'filesystems.disks.r2.key' => 'key',
+            'filesystems.disks.r2.secret' => 'secret',
+            'filesystems.disks.r2.bucket' => 'media',
+            'filesystems.disks.r2.endpoint' => 'https://example.r2.cloudflarestorage.com',
+            'filesystems.disks.r2.url' => 'https://cdn.test',
+        ]);
+        Storage::fake('uploads');
+        Storage::fake('r2');
+        Storage::disk('uploads')->put('avatars/local.jpg', 'local-bytes');
+        Storage::disk('r2')->put('avatars/foto.webp', 'image-bytes');
+
+        $this->get('/stream/avatars/local.jpg')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg');
+
+        $this->get('/stream/avatars/foto.webp')
+            ->assertRedirect()
+            ->assertHeader('Cache-Control', 'max-age=3600, private');
+    }
 }

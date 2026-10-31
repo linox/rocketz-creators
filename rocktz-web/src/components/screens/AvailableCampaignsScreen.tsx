@@ -32,6 +32,7 @@ import { RegionSelect } from "@/components/GeoSelectFields";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { peekLaravelGet } from "@/lib/laravel";
 import { alertApiError, alertSuccess, alertWarning, alertWarningLink } from "@/lib/alerts";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { hasCompleteShippingAddress } from "@/lib/shipping-address";
@@ -77,8 +78,8 @@ function AvailableInner() {
     ? `/creators/${user.creator.id}?tab=about&contract=1`
     : "/creator-dashboard";
 
-  const [items, setItems] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Campaign[]>(() => peekLaravelGet<{ data: Campaign[] }>("/campaigns/available")?.data ?? []);
+  const [loading, setLoading] = useState(() => items.length === 0);
   const [search, setSearch] = useState("");
   const [format, setFormat] = useState<FormatFilter>("all");
   const [segment, setSegment] = useState("all");
@@ -453,7 +454,7 @@ function AvailableInner() {
             return (
               <article key={campaign.id} className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand-primary hover:shadow-md">
                 <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
-                  {campaign.image_url ? <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
+                  {campaign.image_url ? <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" loading="lazy" decoding="async" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                   <div className="absolute top-3 left-3">
                     <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 py-1 pr-2.5 pl-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
@@ -516,7 +517,7 @@ function AvailableInner() {
             return (
               <article key={campaign.id} className="group flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand-primary/80 lg:flex-row">
                 <div className="relative h-56 shrink-0 overflow-hidden bg-slate-900 lg:h-auto lg:w-80">
-                  {campaign.image_url ? <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
+                  {campaign.image_url ? <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105" referrerPolicy="no-referrer" loading="lazy" decoding="async" /> : <div className="h-full w-full bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900" />}
                   <div className="absolute top-4 left-4">
                     <span className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 py-1 pr-2.5 pl-1 text-[10px] font-extrabold tracking-wide text-white uppercase backdrop-blur-md">
                       <UserAvatar src={campaign.company?.logo_url} name={campaign.company?.name || t("available.partnerBrand")} size="custom" shape="rounded-lg" className="h-5 w-5 border border-white/20" textClassName="text-[8px]" />

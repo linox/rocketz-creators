@@ -162,6 +162,7 @@ export function consumeAuthHash(): {
 export function clearToken() {
   localStorage.removeItem(AUTH_COOKIE);
   clearSessionCache();
+  clearLaravelGetCache();
 }
 
 export function persistAuth(payload: AuthPayload, afterSignup = false): string {
@@ -632,7 +633,85 @@ function parseRemoteStorageError(raw: string, status: number): string {
   return i18n.t("common:alerts.uploadBlockedCors");
 }
 
+const GET_CACHE_TTL_MS = 120_000;
+const GET_CACHE_MAX = 40;
+
+type GetCacheEntry = { at: number; data: unknown };
+
+const getResponseCache = new Map<string, GetCacheEntry>();
+const getInflight = new Map<string, Promise<unknown>>();
+let getCacheGeneration = 0;
+
+function getCacheKey(path: string): string {
+  const token = getToken();
+  const scope = token ? token.slice(-16) : "anon";
+  return `${scope}|${getAppLocale()}|${path}`;
+}
+
+function shouldRememberGet(path: string): boolean {
+  return !path.includes("/social-sync") && !path.includes("/follower-sync") && !path.includes("/media/uploads");
+}
+
+function rememberGetResponse(path: string, data: unknown, generation: number) {
+  if (generation !== getCacheGeneration || !shouldRememberGet(path)) return;
+  let snapshot: unknown;
+  try {
+    snapshot = structuredClone(data);
+  } catch {
+    return;
+  }
+  const key = getCacheKey(path);
+  getResponseCache.delete(key);
+  getResponseCache.set(key, { at: Date.now(), data: snapshot });
+  while (getResponseCache.size > GET_CACHE_MAX) {
+    const oldest = getResponseCache.keys().next().value;
+    if (oldest === undefined) break;
+    getResponseCache.delete(oldest);
+  }
+}
+
+export function peekLaravelGet<T>(path: string): T | null {
+  const key = getCacheKey(path);
+  const entry = getResponseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > GET_CACHE_TTL_MS) {
+    getResponseCache.delete(key);
+    return null;
+  }
+  try {
+    return structuredClone(entry.data) as T;
+  } catch {
+    return entry.data as T;
+  }
+}
+
+export function clearLaravelGetCache() {
+  getCacheGeneration += 1;
+  getResponseCache.clear();
+}
+
 export async function laravelFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const isGet = method === "GET" && !init.body && !init.signal;
+  const generation = getCacheGeneration;
+  const cacheKey = isGet ? getCacheKey(path) : "";
+
+  if (isGet) {
+    const pending = getInflight.get(cacheKey);
+    if (pending) return pending as Promise<T>;
+  }
+
+  const run = requestLaravel<T>(path, init, method, generation);
+  if (!isGet) return run;
+
+  getInflight.set(cacheKey, run);
+  void run.finally(() => {
+    if (getInflight.get(cacheKey) === run) getInflight.delete(cacheKey);
+  });
+  return run;
+}
+
+async function requestLaravel<T>(path: string, init: RequestInit, method: string, generation: number): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   headers.set("Accept-Language", getAppLocale());
@@ -666,6 +745,9 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
   if (!response.ok) {
     throw new ApiError(humanizeMediaError(path, data.message) ?? i18n.t("common:alerts.tryAgain"), response.status, data.errors, data.code, data);
   }
+
+  if (method === "GET") rememberGetResponse(path, data, generation);
+  else if (method !== "HEAD") clearLaravelGetCache();
 
   return data;
 }

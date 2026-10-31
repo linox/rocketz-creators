@@ -42,6 +42,7 @@ import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
+import { peekLaravelGet } from "@/lib/laravel";
 import { networkTierI18nKey, tierFromRange } from "@/lib/network-size";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -151,7 +152,7 @@ function CampaignCard({
       <div className="relative aspect-video w-full shrink-0 overflow-hidden bg-slate-900">
         {campaign.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
         ) : (
           <div className={cn("flex h-full w-full flex-col items-center justify-center p-6 text-center", finished ? "bg-slate-800" : "bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950")}>
             {finished ? <Archive size={24} className="mb-1 text-slate-400" /> : <Megaphone size={22} className="mb-2 text-white/80" />}
@@ -329,8 +330,8 @@ function CampaignsInner() {
   const isAdmin = user.role === "admin";
   const canManage = user.role === "admin" || user.role === "company";
 
-  const [items, setItems] = useState<Campaign[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [items, setItems] = useState<Campaign[]>(() => peekLaravelGet<{ data: Campaign[] }>("/campaigns?include=content")?.data ?? []);
+  const [companies, setCompanies] = useState<Company[]>(() => peekLaravelGet<{ data: Company[] }>("/companies?status=active")?.data ?? []);
   const [activeView, setActiveView] = useState<"active" | "finished" | "materials">("active");
   const [statusFilter, setStatusFilter] = useState("all");
   const [materialFilter, setMaterialFilter] = useState("all");

@@ -87,6 +87,7 @@ import { CampaignMetricsPanel } from "@/components/CampaignMetricsPanel";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { api } from "@/lib/api";
+import { peekLaravelGet } from "@/lib/laravel";
 import { agencyFeeFromBudget, currentAgencyFeePercent, parseAgencyFeePercent } from "@/lib/agency-fee";
 import { isPendingAgency } from "@/lib/agency-approval";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
@@ -515,8 +516,17 @@ function DetailInner() {
   const canPublishWithoutApproval = user.role === "admin" || Boolean(user.can_publish_without_approval);
   const canChangeStatus = canPublishWithoutApproval;
 
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [campaign, setCampaign] = useState<Campaign | null>(() =>
+    id && id !== "_" ? peekLaravelGet<{ data: Campaign }>(`/campaigns/${id}`)?.data ?? null : null,
+  );
+  const [loading, setLoading] = useState(() => campaign == null);
+  const [campaignForId, setCampaignForId] = useState(id);
+  if (campaignForId !== id) {
+    const next = id && id !== "_" ? peekLaravelGet<{ data: Campaign }>(`/campaigns/${id}`)?.data ?? null : null;
+    setCampaignForId(id);
+    setCampaign(next);
+    setLoading(next == null);
+  }
   const [creators, setCreators] = useState<Creator[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [tab, setTab] = useState<Tab>("entregas");
@@ -628,6 +638,14 @@ function DetailInner() {
   }
 
   useEffect(() => {
+    const cached = id && id !== "_" ? peekLaravelGet<{ data: Campaign }>(`/campaigns/${id}`)?.data ?? null : null;
+    if (cached) {
+      setCampaign(cached);
+      setImageUrl(cached.image_url || "");
+      setLoading(false);
+    } else if (id && id !== "_") {
+      setLoading(true);
+    }
     load();
     if (isAdmin) {
       api.companies("?status=active").then((res) => setCompanies(res.data)).catch(() => undefined);
@@ -1486,7 +1504,7 @@ function DetailInner() {
           {campaign.image_url ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <img src={mediaPublicUrl(campaign.image_url) || campaign.image_url} alt={campaign.name} referrerPolicy="no-referrer" decoding="async" fetchPriority="high" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
               <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-4">
                 <span className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-slate-900/80 px-2.5 py-1 text-[10px] font-black tracking-wider text-white uppercase backdrop-blur-md">
                   <ImageIcon size={11} className="text-brand-primary" /> {t("campaignDetail.coverFormat")}
