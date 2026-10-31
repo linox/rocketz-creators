@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, DollarSign, FileSearch } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, DollarSign, FileSearch } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
@@ -30,28 +30,28 @@ function InvoiceDataNote({ text }: { text: string }) {
     }
   };
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="mt-3 inline-flex text-sm font-bold text-purple-700 underline">
-        {t("finance.viewInvoiceData")}
-      </button>
-    );
-  }
-
   return (
-    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("finance.invoiceDataOnPayment")}</p>
-        <div className="flex shrink-0 items-center gap-3">
-          <button type="button" onClick={() => setOpen(false)} className="text-[10px] font-black tracking-wide text-slate-500 uppercase hover:text-slate-800">
-            {t("finance.hideInvoiceData")}
-          </button>
-          <button type="button" onClick={() => void copy()} className="text-[10px] font-black tracking-wide text-purple-700 uppercase hover:text-purple-900">
-            {t("finance.copyInvoiceData")}
-          </button>
+    <div className="mt-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-bold text-slate-700 hover:border-purple-300 hover:text-purple-800"
+      >
+        {t("finance.invoiceDataToggle")}
+        <ChevronDown size={14} className={`shrink-0 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("finance.invoiceDataOnPayment")}</p>
+            <button type="button" onClick={() => void copy()} className="text-[10px] font-black tracking-wide text-purple-700 uppercase hover:text-purple-900">
+              {t("finance.copyInvoiceData")}
+            </button>
+          </div>
+          <p className="mt-1 text-sm leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{text}</p>
         </div>
-      </div>
-      <p className="mt-1 text-sm leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{text}</p>
+      ) : null}
     </div>
   );
 }
@@ -684,6 +684,12 @@ function FinanceInner() {
                       <p className="text-lg font-black text-slate-950">{money(row.amount, row.currency)}</p>
                     </div>
 
+                    {row.invoice_data ? (
+                      <InvoiceDataNote text={row.invoice_data} />
+                    ) : isCreator && (row.status === "awaiting_invoice" || row.status === "rejected") ? (
+                      <p className="mt-3 text-sm text-slate-500">{t("finance.invoiceDataEmpty")}</p>
+                    ) : null}
+
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <label className="flex flex-col gap-1 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
                         {t("finance.invoiceDue")}
@@ -715,12 +721,6 @@ function FinanceInner() {
                       </label>
                     </div>
 
-                    {row.invoice_data ? (
-                      <InvoiceDataNote text={row.invoice_data} />
-                    ) : isCreator && (row.status === "awaiting_invoice" || row.status === "rejected") ? (
-                      <p className="mt-3 text-sm text-slate-500">{t("finance.invoiceDataEmpty")}</p>
-                    ) : null}
-
                     {row.rejection_reason && row.status === "rejected" ? (
                       <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
                         <span className="font-bold">{t("finance.rejection")}: </span>
@@ -728,13 +728,19 @@ function FinanceInner() {
                       </p>
                     ) : null}
 
-                    {row.invoice_url ? (
-                      <button type="button" onClick={() => setPreview(row)} className="mt-3 inline-flex text-sm font-bold text-purple-700 underline">
-                        {t("finance.viewInvoice")}{row.invoice_filename ? ` · ${row.invoice_filename}` : ""}
-                      </button>
-                    ) : null}
-
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      {row.invoice_url ? (
+                        <button
+                          type="button"
+                          title={row.invoice_filename || undefined}
+                          onClick={() => setPreview(row)}
+                          className="inline-flex h-10 max-w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-extrabold text-slate-700 hover:bg-slate-50"
+                        >
+                          <FileSearch size={14} className="shrink-0" />
+                          <span>{t("finance.viewInvoice")}</span>
+                          {row.invoice_filename ? <span className="max-w-48 truncate font-semibold text-slate-400 normal-case">{row.invoice_filename}</span> : null}
+                        </button>
+                      ) : null}
                       {isCreator && (row.status === "awaiting_invoice" || row.status === "rejected") ? (
                         <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl bg-slate-950 px-4 text-xs font-extrabold text-white hover:bg-slate-800">
                           {busyId === row.id ? t("finance.sending") : row.status === "rejected" ? t("finance.replaceInvoice") : t("finance.sendInvoice")}
