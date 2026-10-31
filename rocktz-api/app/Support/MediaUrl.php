@@ -17,14 +17,7 @@ class MediaUrl
     {
         $path = ltrim($path, '/');
         if (preg_match('#^documents/([A-Za-z0-9._-]+)$#', $path, $matches) === 1) {
-            $relative = URL::temporarySignedRoute(
-                'media.documents.download',
-                now()->addHours(max(1, (int) config('media.r2_presign_hours', 6))),
-                ['filename' => $matches[1]],
-                false,
-            );
-
-            return rtrim((string) config('app.url'), '/').$relative;
+            return self::signedDocumentUrl('media.documents.download', $matches[1]);
         }
 
         return self::appPath('downloads', $path);
@@ -34,14 +27,7 @@ class MediaUrl
     {
         $path = ltrim($path, '/');
         if (preg_match('#^documents/([A-Za-z0-9._-]+)$#', $path, $matches) === 1) {
-            $relative = URL::temporarySignedRoute(
-                'media.documents.preview',
-                now()->addHours(max(1, (int) config('media.r2_presign_hours', 6))),
-                ['filename' => $matches[1]],
-                false,
-            );
-
-            return rtrim((string) config('app.url'), '/').$relative;
+            return self::signedDocumentUrl('media.documents.preview', $matches[1]);
         }
 
         return self::deliveryUrl($path);
@@ -146,6 +132,33 @@ class MediaUrl
         return implode('/', array_slice($segments, $index));
     }
 
+    /**
+     * @param  mixed  $versions
+     * @return array<int, mixed>
+     */
+    public static function freshSubmissionVersions(mixed $versions): array
+    {
+        if (! is_array($versions)) {
+            return [];
+        }
+
+        $keys = ['script_file_url', 'pauta_script_file_url', 'video_url', 'media_url', 'submission_url', 'image_url'];
+
+        return array_map(function ($entry) use ($keys) {
+            if (! is_array($entry)) {
+                return $entry;
+            }
+
+            foreach ($keys as $key) {
+                if (isset($entry[$key]) && is_string($entry[$key]) && $entry[$key] !== '') {
+                    $entry[$key] = self::publicAbsolute($entry[$key]);
+                }
+            }
+
+            return $entry;
+        }, $versions);
+    }
+
     public static function signedGet(string $path, bool $asAttachment = false, ?string $inlineType = null): ?string
     {
         if (! MediaDisk::r2Configured()) {
@@ -168,6 +181,18 @@ class MediaUrl
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private static function signedDocumentUrl(string $routeName, string $filename): string
+    {
+        $relative = URL::temporarySignedRoute(
+            $routeName,
+            now()->addDays(max(1, (int) config('media.document_sign_days', 14))),
+            ['filename' => $filename],
+            false,
+        );
+
+        return rtrim((string) config('app.url'), '/').$relative;
     }
 
     private static function isRemoteMediaHost(string $host): bool

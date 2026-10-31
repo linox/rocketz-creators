@@ -61,7 +61,7 @@ class ContentPlanningItemResource extends JsonResource
             'upload_progress' => $this->upload_progress !== null ? (int) $this->upload_progress : null,
             'script_version' => (int) ($this->script_version ?? 0),
             'video_version' => (int) ($this->video_version ?? 0),
-            'submission_versions' => $this->submission_versions ?? [],
+            'submission_versions' => MediaUrl::freshSubmissionVersions($this->submission_versions ?? []),
             'revision_history' => $this->revision_history ?? [],
             'movements' => $this->movements ?? [],
             'published_url' => $this->published_url,

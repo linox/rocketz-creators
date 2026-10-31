@@ -132,7 +132,7 @@ class CampaignCreatorResource extends JsonResource
             'published_link' => $content->published_link,
             'script_version' => (int) ($content->script_version ?? 0),
             'video_version' => (int) ($content->video_version ?? 0),
-            'submission_versions' => $content->submission_versions ?? [],
+            'submission_versions' => MediaUrl::freshSubmissionVersions($content->submission_versions ?? []),
             'revision_history' => $content->revision_history ?? [],
             'movements' => $content->movements ?? [],
             'story_prints' => $content->story_prints ?? [],

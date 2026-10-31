@@ -5,6 +5,7 @@ return [
     'chunk_bytes' => (int) env('MEDIA_CHUNK_BYTES', 2 * 1024 * 1024),
     'r2_min_part_bytes' => (int) env('MEDIA_R2_MIN_PART_BYTES', 8 * 1024 * 1024),
     'r2_presign_hours' => (int) env('MEDIA_R2_PRESIGN_HOURS', 6),
+    'document_sign_days' => (int) env('MEDIA_DOCUMENT_SIGN_DAYS', 14),
     'r2_cors_origins' => env('R2_CORS_ORIGINS', 'https://creatorz.digital,https://www.creatorz.digital,http://localhost:3000,http://127.0.0.1:3000'),
     'ffmpeg_path' => env('FFMPEG_PATH', ''),
     'ffprobe_path' => env('FFPROBE_PATH', ''),

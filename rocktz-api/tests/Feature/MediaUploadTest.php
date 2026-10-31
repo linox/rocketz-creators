@@ -150,6 +150,21 @@ class MediaUploadTest extends TestCase
             ->assertOk();
     }
 
+    public function test_document_download_survives_past_the_short_storage_window(): void
+    {
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('documents/document-roteiro.pdf', '%PDF-1.4');
+
+        $signedAt = now();
+        $url = MediaUrl::download('documents/document-roteiro.pdf');
+
+        $this->travelTo($signedAt->copy()->addHours(10));
+        $this->get($url)->assertOk();
+
+        $this->travelTo($signedAt->copy()->addDays(15));
+        $this->get($url)->assertForbidden();
+    }
+
     public function test_video_stream_supports_byte_range(): void
     {
         Storage::fake('uploads');
