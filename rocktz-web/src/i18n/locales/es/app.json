@@ -509,6 +509,8 @@
     "invoiceDataCoupon": "Cupones",
     "invoiceDataPh": "Razón social, identificación fiscal y dirección",
     "invoiceDataOnPayment": "Datos para emitir la factura",
+    "viewInvoiceData": "Ver datos para emitir la factura",
+    "hideInvoiceData": "Ocultar",
     "invoiceDataEmpty": "La empresa todavía no informó los datos de la factura.",
     "copyInvoiceData": "Copiar",
     "invoiceDataCopied": "Datos de la factura copiados",

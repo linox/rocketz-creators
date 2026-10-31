@@ -509,6 +509,8 @@
     "invoiceDataCoupon": "Coupons",
     "invoiceDataPh": "Legal name, tax ID and address",
     "invoiceDataOnPayment": "Details for the invoice",
+    "viewInvoiceData": "View invoice details",
+    "hideInvoiceData": "Hide",
     "invoiceDataEmpty": "The company has not added invoice details yet.",
     "copyInvoiceData": "Copy",
     "invoiceDataCopied": "Invoice details copied",

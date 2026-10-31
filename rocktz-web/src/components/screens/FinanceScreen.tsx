@@ -20,6 +20,7 @@ const areaClass = "min-h-28 w-full resize-y rounded-xl border border-slate-200 b
 
 function InvoiceDataNote({ text }: { text: string }) {
   const { t } = useTranslation("app");
+  const [open, setOpen] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -29,13 +30,26 @@ function InvoiceDataNote({ text }: { text: string }) {
     }
   };
 
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-3 inline-flex text-sm font-bold text-purple-700 underline">
+        {t("finance.viewInvoiceData")}
+      </button>
+    );
+  }
+
   return (
     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("finance.invoiceDataOnPayment")}</p>
-        <button type="button" onClick={() => void copy()} className="text-[10px] font-black tracking-wide text-purple-700 uppercase hover:text-purple-900">
-          {t("finance.copyInvoiceData")}
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          <button type="button" onClick={() => setOpen(false)} className="text-[10px] font-black tracking-wide text-slate-500 uppercase hover:text-slate-800">
+            {t("finance.hideInvoiceData")}
+          </button>
+          <button type="button" onClick={() => void copy()} className="text-[10px] font-black tracking-wide text-purple-700 uppercase hover:text-purple-900">
+            {t("finance.copyInvoiceData")}
+          </button>
+        </div>
       </div>
       <p className="mt-1 text-sm leading-relaxed font-medium whitespace-pre-wrap text-slate-800">{text}</p>
     </div>
