@@ -21,9 +21,10 @@ class CampaignDemandSync
 
     public function syncCampaign(Campaign $campaign): void
     {
-        $campaign->loadMissing(['deliverable', 'campaignCreators']);
+        $campaign->loadMissing(['deliverable', 'campaignCreators.demands']);
 
         foreach ($campaign->campaignCreators as $row) {
+            $row->setRelation('campaign', $campaign);
             $this->syncCreator($row);
         }
     }
@@ -44,13 +45,14 @@ class CampaignDemandSync
             return 0;
         }
 
-        $row->loadMissing('campaign.deliverable');
+        $row->loadMissing(['campaign.deliverable', 'demands']);
         $deliverable = $row->campaign?->deliverable;
         if ($deliverable === null) {
             return 0;
         }
 
-        $hadNone = ! $row->demands()->exists();
+        $demands = $row->demands;
+        $hadNone = $demands->isEmpty();
         $created = 0;
         $first = null;
 
@@ -60,7 +62,7 @@ class CampaignDemandSync
                 continue;
             }
 
-            $existing = $row->demands()->where('content_type', $type)->count();
+            $existing = $demands->where('content_type', $type)->count();
 
             for ($position = $existing + 1; $position <= $quota; $position++) {
                 $demand = $row->demands()->create([

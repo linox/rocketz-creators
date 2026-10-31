@@ -25,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -48,8 +49,6 @@ class DashboardController extends Controller
      */
     private function adminStats(): array
     {
-        $running = [CampaignStatus::Briefing, CampaignStatus::Selection, CampaignStatus::Approval, CampaignStatus::Production, CampaignStatus::Published];
-
         $signatureQuery = CampaignCreator::query()
             ->with(['creator', 'campaign'])
             ->whereIn('signature_status', [SignatureStatus::Pending, SignatureStatus::Sent])
@@ -62,43 +61,37 @@ class DashboardController extends Controller
 
         $pendingSignatures = (clone $signatureQuery)->latest()->limit(5)->get();
 
-        $runningCampaigns = Campaign::query()->whereIn('status', $running);
-        $activeRecurring = RecurringContract::query()
-            ->with('recurringContractCreators')
-            ->where('status', RecurringContractStatus::Active);
-        $recurringMonthlyValue = (clone $activeRecurring)->get()->sum(fn (RecurringContract $contract) => $this->recurringMonthlyValue($contract));
-        $totalCampaignValue = (float) (clone $runningCampaigns)->sum('total_budget');
+        $activeRecurring = RecurringContract::query()->where('status', RecurringContractStatus::Active);
+        $counts = $this->adminCounts();
+        $recurringMonthlyValue = $this->sumRecurringMonthly($activeRecurring);
+        $totalCampaignValue = (float) $counts->total_campaign_value;
 
         $planningDeliveryQuery = ContentPlanningItem::query()
             ->with(['creator', 'recurringContract'])
             ->whereNotIn('status', [ContentPlanningStatus::Published, ContentPlanningStatus::Rejected]);
 
-        $managedCampaignContent = CampaignCreator::query()
-            ->where('application_status', ApplicationStatus::Approved)
-            ->count();
-        $managedRecurringContent = ContentPlanningItem::query()
-            ->where('status', '!=', ContentPlanningStatus::Rejected)
-            ->count();
+        $managedCampaignContent = (int) $counts->managed_campaign_content;
+        $managedRecurringContent = (int) $counts->managed_recurring_content;
 
         return [
-            'total_creators' => Creator::query()->count(),
-            'active_creators' => Creator::query()->where('status', CreatorStatus::Active)->count(),
-            'pending_approval_creators' => Creator::query()->where('status', CreatorStatus::Review)->count(),
-            'total_companies' => Company::query()->count(),
+            'total_creators' => (int) $counts->total_creators,
+            'active_creators' => (int) $counts->active_creators,
+            'pending_approval_creators' => (int) $counts->pending_approval_creators,
+            'total_companies' => (int) $counts->total_companies,
             'managed_content' => $managedCampaignContent + $managedRecurringContent,
             'managed_campaign_content' => $managedCampaignContent,
             'managed_recurring_content' => $managedRecurringContent,
-            'running_campaigns' => (clone $runningCampaigns)->count(),
-            'finished_campaigns' => Campaign::query()->where('status', CampaignStatus::Finished)->count(),
-            'running_recurring' => (clone $activeRecurring)->count(),
-            'pending_agency_campaigns' => Campaign::query()->where('status', CampaignStatus::PendingAgency)->count(),
-            'pending_agency_recurring' => RecurringContract::query()->where('status', RecurringContractStatus::PendingAgency)->count(),
+            'running_campaigns' => (int) $counts->running_campaigns,
+            'finished_campaigns' => (int) $counts->finished_campaigns,
+            'running_recurring' => (int) $counts->running_recurring,
+            'pending_agency_campaigns' => (int) $counts->pending_agency_campaigns,
+            'pending_agency_recurring' => (int) $counts->pending_agency_recurring,
             'total_campaign_value' => $totalCampaignValue,
-            'recurring_monthly_value' => (float) $recurringMonthlyValue,
+            'recurring_monthly_value' => $recurringMonthlyValue,
             'total_managed_value' => $totalCampaignValue + (float) $recurringMonthlyValue,
-            'pending_signatures' => (clone $signatureQuery)->count(),
-            'upcoming_deliveries' => (clone $deliveryQuery)->count() + (clone $planningDeliveryQuery)->count(),
-            'pending_applications' => CampaignCreator::query()->where('application_status', ApplicationStatus::Pending)->count(),
+            'pending_signatures' => (int) $counts->pending_signatures,
+            'upcoming_deliveries' => (int) $counts->upcoming_campaign_deliveries + (int) $counts->upcoming_planning_deliveries,
+            'pending_applications' => (int) $counts->pending_applications,
             'revenue' => $this->revenueSeries(),
             'signatures' => $pendingSignatures->map(fn (CampaignCreator $row) => [
                 'id' => $row->id,
@@ -125,17 +118,113 @@ class DashboardController extends Controller
         ];
     }
 
+    private function adminCounts(): object
+    {
+        $running = [
+            CampaignStatus::Briefing->value,
+            CampaignStatus::Selection->value,
+            CampaignStatus::Approval->value,
+            CampaignStatus::Production->value,
+            CampaignStatus::Published->value,
+        ];
+
+        $count = DB::raw('count(*)');
+
+        return DB::query()
+            ->selectSub(Creator::query()->select($count), 'total_creators')
+            ->selectSub(Creator::query()->where('status', CreatorStatus::Active)->select($count), 'active_creators')
+            ->selectSub(Creator::query()->where('status', CreatorStatus::Review)->select($count), 'pending_approval_creators')
+            ->selectSub(Company::query()->select($count), 'total_companies')
+            ->selectSub(CampaignCreator::query()->where('application_status', ApplicationStatus::Approved)->select($count), 'managed_campaign_content')
+            ->selectSub(ContentPlanningItem::query()->where('status', '!=', ContentPlanningStatus::Rejected)->select($count), 'managed_recurring_content')
+            ->selectSub(Campaign::query()->whereIn('status', $running)->select($count), 'running_campaigns')
+            ->selectSub(Campaign::query()->where('status', CampaignStatus::Finished)->select($count), 'finished_campaigns')
+            ->selectSub(RecurringContract::query()->where('status', RecurringContractStatus::Active)->select($count), 'running_recurring')
+            ->selectSub(Campaign::query()->where('status', CampaignStatus::PendingAgency)->select($count), 'pending_agency_campaigns')
+            ->selectSub(RecurringContract::query()->where('status', RecurringContractStatus::PendingAgency)->select($count), 'pending_agency_recurring')
+            ->selectSub(Campaign::query()->whereIn('status', $running)->select(DB::raw('coalesce(sum(total_budget), 0)')), 'total_campaign_value')
+            ->selectSub(
+                CampaignCreator::query()
+                    ->whereIn('signature_status', [SignatureStatus::Pending, SignatureStatus::Sent])
+                    ->where('application_status', ApplicationStatus::Approved)
+                    ->select($count),
+                'pending_signatures',
+            )
+            ->selectSub(
+                CampaignCreator::query()
+                    ->where('application_status', ApplicationStatus::Approved)
+                    ->where('delivery_status', '!=', DeliveryStatus::Published)
+                    ->select($count),
+                'upcoming_campaign_deliveries',
+            )
+            ->selectSub(
+                ContentPlanningItem::query()
+                    ->whereNotIn('status', [ContentPlanningStatus::Published, ContentPlanningStatus::Rejected])
+                    ->select($count),
+                'upcoming_planning_deliveries',
+            )
+            ->selectSub(CampaignCreator::query()->where('application_status', ApplicationStatus::Pending)->select($count), 'pending_applications')
+            ->first();
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<RecurringContract>  $query
+     */
+    private function sumRecurringMonthly($query): float
+    {
+        if (CreatorPrivacy::hidesCreatorValues(request()->user())) {
+            return (float) (clone $query)->sum('monthly_fee');
+        }
+
+        $fromFee = (float) (clone $query)->where('monthly_fee', '>', 0)->sum('monthly_fee');
+        $ids = (clone $query)
+            ->where(function ($inner) {
+                $inner->whereNull('monthly_fee')->orWhere('monthly_fee', '<=', 0);
+            })
+            ->pluck('id');
+
+        return $fromFee + array_sum($this->creatorMonthlyTotals($ids));
+    }
+
+    /**
+     * @param  Collection<int, int>|array<int, int>  $ids
+     * @return array<int, float>
+     */
+    private function creatorMonthlyTotals($ids): array
+    {
+        $ids = collect($ids)->filter()->values();
+        if ($ids->isEmpty() || CreatorPrivacy::hidesCreatorValues(request()->user())) {
+            return [];
+        }
+
+        return RecurringContractCreator::query()
+            ->whereIn('recurring_contract_id', $ids)
+            ->groupBy('recurring_contract_id')
+            ->selectRaw('recurring_contract_id, SUM(CASE WHEN monthly_cache > 0 THEN monthly_cache ELSE COALESCE(monthly_fee, 0) END) as total')
+            ->pluck('total', 'recurring_contract_id')
+            ->map(fn ($total) => (float) $total)
+            ->all();
+    }
+
     /**
      * @return array<string, mixed>
      */
     private function companyStats(int $companyId): array
     {
-        $campaigns = Campaign::query()->where('company_id', $companyId);
+        $campaigns = Campaign::query()
+            ->where('company_id', $companyId)
+            ->selectRaw('count(*) as campaigns')
+            ->selectRaw(
+                'sum(case when status not in (?, ?) then 1 else 0 end) as running_campaigns',
+                [CampaignStatus::Finished->value, CampaignStatus::PendingAgency->value],
+            )
+            ->selectRaw('coalesce(sum(total_budget), 0) as total_campaign_value')
+            ->first();
 
         return [
-            'campaigns' => (clone $campaigns)->count(),
-            'running_campaigns' => (clone $campaigns)->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency])->count(),
-            'total_campaign_value' => (float) (clone $campaigns)->sum('total_budget'),
+            'campaigns' => (int) ($campaigns->campaigns ?? 0),
+            'running_campaigns' => (int) ($campaigns->running_campaigns ?? 0),
+            'total_campaign_value' => (float) ($campaigns->total_campaign_value ?? 0),
             'currency' => Company::query()->find($companyId)?->currencyCode(),
             'pending_applications' => CampaignCreator::query()
                 ->whereHas('campaign', fn ($q) => $q->where('company_id', $companyId))
@@ -291,15 +380,19 @@ class DashboardController extends Controller
 
         $windowStart = now()->startOfMonth()->subMonths(5);
 
-        RecurringContract::query()
-            ->with('recurringContractCreators')
+        $contracts = RecurringContract::query()
             ->where('status', '!=', RecurringContractStatus::PendingAgency)
             ->where(function ($query) use ($windowStart) {
                 $query->whereNull('end_date')->orWhereDate('end_date', '>=', $windowStart->toDateString());
             })
-            ->get()
-            ->each(function (RecurringContract $contract) use (&$series) {
-                $value = $this->recurringMonthlyValue($contract);
+            ->get(['id', 'monthly_fee', 'start_date', 'end_date']);
+        $creatorTotals = $this->creatorMonthlyTotals($contracts->pluck('id'));
+
+        $contracts->each(function (RecurringContract $contract) use (&$series, $creatorTotals) {
+                $fee = (float) ($contract->monthly_fee ?? 0);
+                $value = $fee > 0 || CreatorPrivacy::hidesCreatorValues(request()->user())
+                    ? $fee
+                    : (float) ($creatorTotals[$contract->id] ?? 0);
                 if ($value <= 0) {
                     return;
                 }

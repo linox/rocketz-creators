@@ -37,7 +37,6 @@ use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
 use App\Support\SafeHttpUrl;
 use App\Support\SubmissionVersioning;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,18 +95,7 @@ class CampaignController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
 
-        $campaigns = $query->latest()->get();
-        if ($includeContent) {
-            // flatMap devolve Support\Collection; load/loadMissing só existem na coleção Eloquent.
-            $participations = new EloquentCollection(
-                $campaigns->flatMap(fn (Campaign $campaign) => $campaign->campaignCreators)->all(),
-            );
-            $participations->loadMissing('creator');
-            $this->demands->syncCampaigns($campaigns);
-            $participations->load(['content', 'demands']);
-        }
-
-        return response()->json(['data' => CampaignResource::collection($campaigns)]);
+        return response()->json(['data' => CampaignResource::collection($query->latest()->get())]);
     }
 
     public function available(Request $request): JsonResponse
@@ -120,8 +108,16 @@ class CampaignController extends Controller
             __('auth.creator_must_be_approved'),
         );
 
+        $with = ['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups'];
+        if ($user->role === UserRole::Creator && $user->creator) {
+            $creatorId = (int) $user->creator->id;
+            $with['campaignCreators'] = fn ($q) => $q->where('creator_id', $creatorId);
+        } else {
+            $with[] = 'campaignCreators';
+        }
+
         $query = Campaign::query()
-            ->with(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators'])
+            ->with($with)
             ->withCount(['campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved)])
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
