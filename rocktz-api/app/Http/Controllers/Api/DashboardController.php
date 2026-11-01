@@ -14,6 +14,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\CampaignDemand;
 use App\Models\Company;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
@@ -72,6 +73,7 @@ class DashboardController extends Controller
 
         $managedCampaignContent = (int) $counts->managed_campaign_content;
         $managedRecurringContent = (int) $counts->managed_recurring_content;
+        $revenue = $this->revenueSeries();
 
         return [
             'total_creators' => (int) $counts->total_creators,
@@ -92,7 +94,8 @@ class DashboardController extends Controller
             'pending_signatures' => (int) $counts->pending_signatures,
             'upcoming_deliveries' => (int) $counts->upcoming_campaign_deliveries + (int) $counts->upcoming_planning_deliveries,
             'pending_applications' => (int) $counts->pending_applications,
-            'revenue' => $this->revenueSeries(),
+            'revenue' => $revenue,
+            'content_deliveries' => $this->contentDeliverySeries($revenue),
             'signatures' => $pendingSignatures->map(fn (CampaignCreator $row) => [
                 'id' => $row->id,
                 'creator_name' => $row->creator?->full_name,
@@ -355,6 +358,173 @@ class DashboardController extends Controller
         }
 
         return $months;
+    }
+
+    /**
+     * Peças de campanha e de recorrente nos últimos seis meses.
+     * Publicada, em andamento (no prazo) ou atrasada. A verba do mês vai junto para o eixo da direita.
+     *
+     * @param  list<array{name: string, value: float}>|null  $budgets
+     * @return list<array<string, mixed>>
+     */
+    private function contentDeliverySeries(?array $budgets = null): array
+    {
+        $series = [];
+        foreach ($this->lastSixMonths() as $key => $name) {
+            $series[$key] = [
+                'month' => $key,
+                'name' => $name,
+                'current' => $key === now()->format('Y-m'),
+                'published' => 0,
+                'in_progress' => 0,
+                'overdue' => 0,
+                'campaign_published' => 0,
+                'campaign_in_progress' => 0,
+                'campaign_overdue' => 0,
+                'recurring_published' => 0,
+                'recurring_in_progress' => 0,
+                'recurring_overdue' => 0,
+                'budget' => 0.0,
+            ];
+        }
+
+        $this->tallyCampaignDeliveries($series);
+        $this->tallyRecurringDeliveries($series);
+
+        $budgets ??= $this->revenueSeries();
+        $index = 0;
+        foreach (array_keys($series) as $key) {
+            $series[$key]['budget'] = (float) ($budgets[$index]['value'] ?? 0);
+            $index++;
+        }
+
+        return array_values($series);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $series
+     */
+    private function tallyCampaignDeliveries(array &$series): void
+    {
+        CampaignDemand::query()
+            ->select(['id', 'campaign_creator_id', 'delivery_status'])
+            ->whereHas('campaignCreator', fn (Builder $query) => $query->where('application_status', ApplicationStatus::Approved))
+            ->with([
+                'campaignCreator' => fn ($query) => $query->select(['id', 'campaign_id', 'delivery_date', 'post_date']),
+                'campaignCreator.campaign' => fn ($query) => $query->select(['id', 'delivery_date']),
+            ])
+            ->get()
+            ->each(function (CampaignDemand $demand) use (&$series) {
+                $creator = $demand->campaignCreator;
+                if ($creator === null) {
+                    return;
+                }
+
+                $published = $demand->delivery_status === DeliveryStatus::Published;
+                $this->tallyDelivery(
+                    $series,
+                    'campaign',
+                    $creator->delivery_date ?? $creator->campaign?->delivery_date,
+                    $published,
+                    $published ? $creator->post_date : null,
+                );
+            });
+
+        CampaignCreator::query()
+            ->select(['id', 'campaign_id', 'delivery_date', 'post_date', 'delivery_status'])
+            ->where('application_status', ApplicationStatus::Approved)
+            ->whereDoesntHave('demands')
+            ->with(['campaign' => fn ($query) => $query->select(['id', 'delivery_date'])])
+            ->get()
+            ->each(function (CampaignCreator $creator) use (&$series) {
+                $published = $creator->delivery_status === DeliveryStatus::Published;
+                $this->tallyDelivery(
+                    $series,
+                    'campaign',
+                    $creator->delivery_date ?? $creator->campaign?->delivery_date,
+                    $published,
+                    $published ? $creator->post_date : null,
+                );
+            });
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $series
+     */
+    private function tallyRecurringDeliveries(array &$series): void
+    {
+        ContentPlanningItem::query()
+            ->select(['id', 'status', 'planned_date', 'post_date', 'month'])
+            ->where('status', '!=', ContentPlanningStatus::Rejected)
+            ->get()
+            ->each(function (ContentPlanningItem $item) use (&$series) {
+                $published = $item->status === ContentPlanningStatus::Published;
+                $due = $item->planned_date ?? $this->monthStart($item->month);
+
+                if ($published) {
+                    $this->tallyDelivery($series, 'recurring', $due, true, $item->post_date);
+
+                    return;
+                }
+
+                if ($item->planned_date !== null) {
+                    $this->tallyDelivery($series, 'recurring', $item->planned_date, false);
+
+                    return;
+                }
+
+                $currentKey = now()->format('Y-m');
+                if ($due !== null && $item->month < $currentKey) {
+                    $this->tallyDelivery($series, 'recurring', $due->copy()->endOfMonth(), false);
+
+                    return;
+                }
+
+                if ($due !== null) {
+                    $this->incrementDelivery($series, 'recurring', $item->month, 'in_progress');
+                }
+            });
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $series
+     */
+    private function tallyDelivery(array &$series, string $source, ?Carbon $due, bool $published, ?Carbon $publishedFallback = null): void
+    {
+        if ($published) {
+            $this->incrementDelivery($series, $source, ($due ?? $publishedFallback)?->format('Y-m'), 'published');
+
+            return;
+        }
+
+        if ($due === null) {
+            return;
+        }
+
+        $bucket = $due->copy()->startOfDay()->lt(now()->startOfDay()) ? 'overdue' : 'in_progress';
+        $this->incrementDelivery($series, $source, $due->format('Y-m'), $bucket);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $series
+     */
+    private function incrementDelivery(array &$series, string $source, ?string $month, string $bucket): void
+    {
+        if ($month === null || ! isset($series[$month])) {
+            return;
+        }
+
+        $series[$month][$bucket] = (int) $series[$month][$bucket] + 1;
+        $series[$month][$source.'_'.$bucket] = (int) $series[$month][$source.'_'.$bucket] + 1;
+    }
+
+    private function monthStart(?string $month): ?Carbon
+    {
+        if (! is_string($month) || ! preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return null;
+        }
+
+        return Carbon::createFromFormat('Y-m-d', $month.'-01')?->startOfMonth();
     }
 
     /**

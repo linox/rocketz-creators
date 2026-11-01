@@ -3,13 +3,16 @@
 namespace Tests\Feature;
 
 use App\Enums\CampaignStatus;
+use App\Enums\ContentPlanningStatus;
 use App\Enums\CreatorStatus;
+use App\Enums\DeliveryStatus;
 use App\Enums\LandingSignupStatus;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\Permission;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\CampaignDemand;
 use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\CompanyLandingSignup;
@@ -106,6 +109,133 @@ class DomainApiTest extends TestCase
         $this->assertGreaterThanOrEqual(3, (int) $response->json('managed_content'));
 
         $this->assertEqualsWithDelta(4500, (float) $response->json('recurring_monthly_value'), 0.01);
+    }
+
+    public function test_admin_dashboard_groups_content_deliveries_by_month(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $company = Company::factory()->active()->create();
+        $creator = Creator::factory()->active()->create();
+        $campaign = Campaign::factory()->production()->create([
+            'company_id' => $company->id,
+            'start_date' => now()->startOfMonth()->toDateString(),
+            'total_budget' => 1000,
+        ]);
+
+        $currentCreator = CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'delivery_date' => now()->endOfMonth()->toDateString(),
+        ]);
+        CampaignDemand::query()->create([
+            'campaign_creator_id' => $currentCreator->id,
+            'content_type' => 'reels',
+            'position' => 1,
+            'delivery_status' => DeliveryStatus::Published,
+        ]);
+        CampaignDemand::query()->create([
+            'campaign_creator_id' => $currentCreator->id,
+            'content_type' => 'stories',
+            'position' => 1,
+            'delivery_status' => DeliveryStatus::Pending,
+        ]);
+
+        $overdueCreator = CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => Creator::factory()->active(),
+            'delivery_date' => now()->subMonth()->startOfMonth()->addDays(4)->toDateString(),
+        ]);
+        CampaignDemand::query()->create([
+            'campaign_creator_id' => $overdueCreator->id,
+            'content_type' => 'reels',
+            'position' => 1,
+            'delivery_status' => DeliveryStatus::Revision,
+        ]);
+
+        $pending = CampaignCreator::factory()->pendingApplication()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => Creator::factory()->active(),
+            'delivery_date' => now()->endOfMonth()->toDateString(),
+        ]);
+        CampaignDemand::query()->create([
+            'campaign_creator_id' => $pending->id,
+            'content_type' => 'reels',
+            'position' => 1,
+            'delivery_status' => DeliveryStatus::Published,
+        ]);
+
+        CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => Creator::factory()->active(),
+            'delivery_date' => now()->endOfMonth()->toDateString(),
+            'delivery_status' => DeliveryStatus::Sent,
+        ]);
+
+        $contract = RecurringContract::factory()->active()->create([
+            'company_id' => $company->id,
+            'start_date' => now()->subMonths(2)->startOfMonth()->toDateString(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'monthly_fee' => 0,
+        ]);
+        $previousMonth = now()->subMonth()->format('Y-m');
+        ContentPlanningItem::factory()->published()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $company->id,
+            'creator_id' => $creator->id,
+            'month' => $previousMonth,
+            'planned_date' => now()->subMonth()->startOfMonth()->addDays(6)->toDateString(),
+        ]);
+        ContentPlanningItem::factory()->planned()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $company->id,
+            'creator_id' => $creator->id,
+            'month' => $previousMonth,
+            'planned_date' => now()->subMonth()->startOfMonth()->addDays(12)->toDateString(),
+        ]);
+        ContentPlanningItem::factory()->create([
+            'recurring_contract_id' => $contract->id,
+            'company_id' => $company->id,
+            'creator_id' => $creator->id,
+            'month' => now()->format('Y-m'),
+            'planned_date' => now()->toDateString(),
+            'status' => ContentPlanningStatus::Rejected,
+        ]);
+
+        $response = $this->actingAs($admin, 'sanctum')->getJson('/api/dashboard')->assertOk()
+            ->assertJsonStructure([
+                'content_deliveries' => [[
+                    'month',
+                    'name',
+                    'current',
+                    'published',
+                    'in_progress',
+                    'overdue',
+                    'campaign_published',
+                    'campaign_in_progress',
+                    'campaign_overdue',
+                    'recurring_published',
+                    'recurring_in_progress',
+                    'recurring_overdue',
+                    'budget',
+                ]],
+            ]);
+
+        $series = collect($response->json('content_deliveries'));
+        $current = $series->firstWhere('current', true);
+        $previous = $series->firstWhere('month', $previousMonth);
+
+        $this->assertNotNull($current);
+        $this->assertSame(1, $current['campaign_published']);
+        $this->assertSame(2, $current['campaign_in_progress']);
+        $this->assertSame(0, $current['campaign_overdue']);
+        $this->assertSame(0, $current['recurring_published']);
+        $this->assertEqualsWithDelta(1000, (float) $current['budget'], 0.01);
+
+        $this->assertNotNull($previous);
+        $this->assertSame(1, $previous['campaign_overdue']);
+        $this->assertSame(1, $previous['recurring_published']);
+        $this->assertSame(1, $previous['recurring_overdue']);
+        $this->assertSame(0, $previous['recurring_in_progress']);
     }
 
     public function test_creator_dashboard_includes_audience_activity_and_fees(): void

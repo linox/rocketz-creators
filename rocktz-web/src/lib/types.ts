@@ -698,6 +698,22 @@ export type CalendarEvent = {
   company?: { id: number; name: string } | null;
 };
 
+export type DashboardDeliveryPoint = {
+  month: string;
+  name: string;
+  current: boolean;
+  published: number;
+  in_progress: number;
+  overdue: number;
+  campaign_published: number;
+  campaign_in_progress: number;
+  campaign_overdue: number;
+  recurring_published: number;
+  recurring_in_progress: number;
+  recurring_overdue: number;
+  budget: number;
+};
+
 export type DashboardPreviewItem = {
   id: number;
   name?: string;
@@ -735,6 +751,7 @@ export type DashboardStats = {
   fees?: { paid: number; pending: number };
   activity?: { name: string; value: number }[];
   revenue?: { name: string; value: number }[];
+  content_deliveries?: DashboardDeliveryPoint[];
   signatures?: { id: number; creator_name?: string | null; creator_artistic: string; campaign_name: string; status: string }[];
   deliveries?: {
     id: number | string;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ArrowRight, CheckCircle2, FileText, Megaphone, Repeat, TrendingUp, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -13,7 +13,71 @@ import { peekLaravelGet } from "@/lib/laravel";
 import { alertApiError } from "@/lib/alerts";
 import { useAuth } from "@/lib/use-auth";
 import { usePrivacy } from "@/lib/privacy";
-import type { DashboardStats } from "@/lib/types";
+import type { DashboardDeliveryPoint, DashboardStats } from "@/lib/types";
+
+const DELIVERY_COLORS = {
+  published: "#10B981",
+  inProgress: "#6366F1",
+  overdue: "#F59E0B",
+  budget: "#64748B",
+} as const;
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#64748B]">
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
+}
+
+function DeliveryChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: { payload?: DashboardDeliveryPoint }[];
+}) {
+  const { t } = useTranslation("app");
+  const { formatCurrency, formatNumber } = usePrivacy();
+  const row = payload?.[0]?.payload;
+  if (!active || !row) return null;
+
+  const lines = [
+    { key: "published", label: t("dash.deliveryPublished"), color: DELIVERY_COLORS.published, total: row.published, campaign: row.campaign_published, recurring: row.recurring_published },
+    { key: "in_progress", label: t("dash.deliveryInProgress"), color: DELIVERY_COLORS.inProgress, total: row.in_progress, campaign: row.campaign_in_progress, recurring: row.recurring_in_progress },
+    { key: "overdue", label: t("dash.deliveryOverdueLabel"), color: DELIVERY_COLORS.overdue, total: row.overdue, campaign: row.campaign_overdue, recurring: row.recurring_overdue },
+  ] as const;
+
+  return (
+    <div className="min-w-[190px] rounded-xl bg-white px-3 py-2.5 text-[12px] shadow-lg">
+      <div className="mb-2 font-bold text-[#0F172A]">{row.name}</div>
+      {lines.map((line) => (
+        <div key={line.key} className="mb-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-[#0F172A]">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: line.color }} />
+              {line.label}
+            </span>
+            <span className="font-bold text-[#0F172A]">{formatNumber(line.total)}</span>
+          </div>
+          {line.total > 0 ? (
+            <div className="pl-3.5 text-[10px] text-[#64748B]">
+              {t("dash.deliverySplit", { campaign: line.campaign, recurring: line.recurring })}
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <div className="mt-1 flex items-center justify-between gap-4 border-t border-slate-100 pt-1.5 font-semibold text-[#64748B]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-2 rounded-full" style={{ backgroundColor: DELIVERY_COLORS.budget }} />
+          {t("dash.budgetCombined")}
+        </span>
+        <span className="text-[#0F172A]">{formatCurrency(row.budget)}</span>
+      </div>
+    </div>
+  );
+}
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -30,9 +94,11 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 
 function AdminDashboard({ stats }: { stats: DashboardStats }) {
   const { t } = useTranslation("app");
-  const { formatCurrency, formatNumber } = usePrivacy();
-  const revenue = stats.revenue ?? [];
-  const emptyChart = !revenue.length || revenue.every((row) => !row.value);
+  const { formatCurrency, formatNumber, hideValues } = usePrivacy();
+  const deliveries = stats.content_deliveries ?? [];
+  const emptyChart = !deliveries.length || deliveries.every((row) => !row.published && !row.in_progress && !row.overdue && !row.budget);
+  const current = deliveries.find((row) => row.current) ?? deliveries.at(-1);
+  const planned = (current?.published ?? 0) + (current?.in_progress ?? 0) + (current?.overdue ?? 0);
   const pendingAgency = (stats.pending_agency_campaigns ?? 0) + (stats.pending_agency_recurring ?? 0);
   const hasRecurringWork = (stats.running_recurring ?? 0) > 0
     || (stats.pending_agency_recurring ?? 0) > 0
@@ -113,11 +179,22 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+          <div className="flex flex-col gap-2 border-b border-[#E2E8F0] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-[16px] font-bold text-[#0F172A]">{t("dash.revenue")}</h2>
-            <span className="text-[12px] font-bold text-brand-primary">{t("dash.monthly")}</span>
+            {current && planned > 0 ? (
+              <div className="flex flex-col items-start sm:items-end">
+                <span className="text-[12px] font-bold text-brand-primary">
+                  {t("dash.deliverySummary", { count: current.published, published: formatNumber(current.published), planned: formatNumber(planned) })}
+                </span>
+                {(current.overdue ?? 0) > 0 ? (
+                  <span className="text-[11px] font-semibold text-amber-600">
+                    {t("dash.deliveryOverdue", { count: current.overdue })}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          <div className="h-[220px] w-full p-3 sm:h-[320px] sm:p-6">
+          <div className="flex h-[280px] w-full flex-col p-3 sm:h-[360px] sm:p-6">
             {emptyChart ? (
               <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 p-6 text-center">
                 <TrendingUp size={28} className="animate-pulse text-slate-300" />
@@ -125,24 +202,37 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
                 <span className="max-w-xs text-[11px] text-[#64748B]">{t("dash.emptyChartHint")}</span>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenue}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366F1" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `R$ ${formatNumber(Number(val))}`} tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip
-                    formatter={(value) => [formatCurrency(Number(value)), t("dash.budgetCombined")]}
-                    contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
-                  />
-                  <Area type="monotone" dataKey="value" stroke="#6366F1" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <>
+                <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <LegendDot color={DELIVERY_COLORS.published} label={t("dash.deliveryPublished")} />
+                  <LegendDot color={DELIVERY_COLORS.inProgress} label={t("dash.deliveryInProgress")} />
+                  <LegendDot color={DELIVERY_COLORS.overdue} label={t("dash.deliveryOverdueLabel")} />
+                  <LegendDot color={DELIVERY_COLORS.budget} label={t("dash.budget")} />
+                </div>
+                <div className="min-h-0 flex-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={deliveries} barCategoryGap="28%">
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} />
+                      <YAxis yAxisId="count" allowDecimals={false} axisLine={false} tickLine={false} width={32} tick={{ fill: "#64748b", fontSize: 10 }} />
+                      <YAxis
+                        yAxisId="budget"
+                        orientation="right"
+                        axisLine={false}
+                        tickLine={false}
+                        width={72}
+                        tickFormatter={(val) => (hideValues ? "••••" : `R$ ${formatNumber(Number(val))}`)}
+                        tick={{ fill: "#64748b", fontSize: 10 }}
+                      />
+                      <Tooltip content={<DeliveryChartTooltip />} cursor={{ fill: "#F8FAFC" }} />
+                      <Bar yAxisId="count" dataKey="published" stackId="deliveries" fill={DELIVERY_COLORS.published} maxBarSize={28} />
+                      <Bar yAxisId="count" dataKey="in_progress" stackId="deliveries" fill={DELIVERY_COLORS.inProgress} maxBarSize={28} />
+                      <Bar yAxisId="count" dataKey="overdue" stackId="deliveries" fill={DELIVERY_COLORS.overdue} maxBarSize={28} radius={[4, 4, 0, 0]} />
+                      <Line yAxisId="budget" type="monotone" dataKey="budget" stroke={DELIVERY_COLORS.budget} strokeWidth={2} dot={{ r: 3, fill: DELIVERY_COLORS.budget }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
             )}
           </div>
         </div>
