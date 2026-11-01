@@ -6,6 +6,7 @@ use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\UserRole;
+use App\Models\BarterShipment;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
@@ -301,6 +302,30 @@ class MailNotifier
             'cta_url' => FrontendUrl::to($ctaPath),
             'link_demanda' => FrontendUrl::to($ctaPath),
         ], $ids));
+    }
+
+    public function barterDelivered(BarterShipment $shipment): ?MailMessage
+    {
+        $shipment->loadMissing('campaignCreator.creator.user', 'campaignCreator.campaign.company');
+        $participation = $shipment->campaignCreator;
+        $creator = $participation?->creator;
+        $user = $creator?->user;
+        $campaign = $participation?->campaign;
+        if (! $user || ! $campaign) {
+            return null;
+        }
+
+        return $this->mail->send(MailTemplateKey::BarterDelivered, $user, [
+            'nome_criador' => $creator->artistic_name ?: $creator->full_name ?: $user->name,
+            'nome_campanha' => $campaign->name,
+            'nome_empresa' => $campaign->company?->name,
+            'codigo_rastreio' => $shipment->tracking_code,
+            'cta_url' => FrontendUrl::to('/permutas'),
+            'link_campanha' => FrontendUrl::to('/campaigns/'.$campaign->id),
+            'campaign_id' => $campaign->id,
+            'company_id' => $campaign->company_id,
+            'creator_id' => $creator->id,
+        ], $shipment, 'delivered');
     }
 
     public function deliveryApproved(User $user, string $campaignName, string $demandName, string $ctaPath, array $ids = []): void

@@ -28,6 +28,7 @@ import {
   Megaphone,
   UsersRound,
   Package,
+  PackageCheck,
   Plus,
   Scale,
   TicketPercent,
@@ -136,6 +137,14 @@ function CampaignCard({
   const summary = formatDeliverablesSummary(campaign.deliverables);
   const pending = campaign.pending_applications ?? 0;
   const location = campaignLocationLabel(locale, campaign);
+  const barterTotal = campaign.approved_creators_count ?? 0;
+  const barterDelivered = campaign.barter_delivered_count ?? 0;
+  const barterComplete = barterTotal > 0 && barterDelivered >= barterTotal;
+  const barterDelivery = barterComplete
+    ? t("campaigns.barterDeliveredAll")
+    : barterDelivered === 0
+      ? t("campaigns.barterDeliveredNone")
+      : t("campaigns.barterDeliveredProgress", { delivered: barterDelivered, total: barterTotal });
 
   return (
     <motion.article
@@ -288,6 +297,12 @@ function CampaignCard({
               </>
             )}
           </div>
+          {campaign.is_barter && campaign.barter_delivered_count != null && barterTotal > 0 ? (
+            <Link href="/permutas" className="flex items-center gap-2.5 text-xs font-bold">
+              <PackageCheck size={13} className={cn("shrink-0", barterComplete ? "text-emerald-600" : "text-amber-600")} />
+              <span className={barterComplete ? "text-emerald-700" : "text-amber-700"}>{barterDelivery}</span>
+            </Link>
+          ) : null}
         </div>
       </div>
 

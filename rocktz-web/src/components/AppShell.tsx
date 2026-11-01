@@ -13,6 +13,7 @@ import {
   Coins,
   Eye,
   EyeOff,
+  Gift,
   Globe,
   Home,
   Landmark,
@@ -408,6 +409,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
             showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
             { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+            { href: "/permutas", label: t("permutas"), icon: Gift, active: isActive("/permutas") },
             { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
           ]),
           sidebarSection("finance", t("groupFinance"), CircleDollarSign, [
@@ -440,6 +442,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
               showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
               { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+              { href: "/permutas", label: t("permutas"), icon: Gift, active: isActive("/permutas") },
               { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
             ]),
             sidebarSection("finance", t("groupFinance"), CircleDollarSign, [
@@ -471,6 +474,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               showRecurringNav && !creatorProfileBase
                 ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") }
                 : null,
+              { href: "/permutas", label: t("permutas"), icon: Gift, active: isActive("/permutas") },
               { href: "/calendar", label: t("calendar"), icon: CalendarDays, active: isActive("/calendar") },
               creatorProfileBase ? { href: `${creatorProfileBase}?tab=portfolio`, label: t("portfolio"), icon: Video, active: isCreatorPortfolioActive } : null,
               creatorProfileBase ? { href: `${creatorProfileBase}?tab=storefront`, label: t("storefront"), icon: Store, active: isCreatorStorefrontActive } : null,

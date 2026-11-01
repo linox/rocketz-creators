@@ -48,6 +48,10 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback'),
     ],
 
+    'correios' => [
+        'tracking_url' => env('CORREIOS_TRACKING_URL', 'https://correios-rastreio-api.vercel.app'),
+    ],
+
     'social' => [
         'cache_hours' => (int) env('SOCIAL_METRICS_CACHE_HOURS', 24),
         'fetch_delay_ms' => (int) env('SOCIAL_METRICS_FETCH_DELAY_MS', 400),

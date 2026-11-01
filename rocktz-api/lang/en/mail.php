@@ -64,6 +64,12 @@ return [
             'body' => "Your application for {{nome_campanha}} is in review.\n\nApplying does not guarantee approval. We will email you when there is an update.",
             'cta' => 'Track application',
         ],
+        'barter.delivered' => [
+            'subject' => 'Your barter from {{nome_campanha}} was delivered',
+            'greeting' => 'Hi, {{nome_criador}}!',
+            'body' => "The barter for {{nome_campanha}} was delivered.\n\nThe tracking code is {{codigo_rastreio}}.",
+            'cta' => 'View shipments',
+        ],
         'campaign.application_approved' => [
             'subject' => 'You were approved for {{nome_campanha}}',
             'greeting' => 'Hi, {{nome_criador}}!',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\ApprovalFlowType;
+use App\Enums\BarterShipmentStatus;
 use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\DeliveryStatus;
@@ -25,6 +26,7 @@ use App\Models\Company;
 use App\Models\CompanyLandingPage;
 use App\Models\Creator;
 use App\Models\CreatorGroup;
+use App\Services\BarterShipmentSync;
 use App\Services\CampaignDemandSync;
 use App\Services\CreatorCouponIssuer;
 use App\Services\FinancePaymentSync;
@@ -52,6 +54,7 @@ class CampaignController extends Controller
         private readonly CampaignDemandSync $demands,
         private readonly CreatorCouponIssuer $coupons,
         private readonly FinancePaymentSync $finance,
+        private readonly BarterShipmentSync $barterShipments,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -63,6 +66,7 @@ class CampaignController extends Controller
             ->withCount([
                 'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
                 'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+                ...$this->barterDeliveredCount(),
             ]);
 
         if ($user?->role === UserRole::Creator) {
@@ -70,7 +74,7 @@ class CampaignController extends Controller
             $query->with([
                 'briefing',
                 'campaignCreators' => function ($q) use ($includeContent, $creatorId) {
-                    $q->where('creator_id', $creatorId)->with('creator');
+                    $q->where('creator_id', $creatorId)->with(['creator', 'barterShipment']);
                     if ($includeContent) {
                         $q->with(['content', 'demands']);
                     }
@@ -79,7 +83,7 @@ class CampaignController extends Controller
         } else {
             $query->with([
                 'campaignCreators' => function ($q) use ($includeContent) {
-                    $q->with('creator');
+                    $q->with(['creator', 'barterShipment']);
                     if ($includeContent) {
                         $q->with(['content', 'demands']);
                     }
@@ -111,14 +115,17 @@ class CampaignController extends Controller
         $with = ['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups'];
         if ($user->role === UserRole::Creator && $user->creator) {
             $creatorId = (int) $user->creator->id;
-            $with['campaignCreators'] = fn ($q) => $q->where('creator_id', $creatorId);
+            $with['campaignCreators'] = fn ($q) => $q->where('creator_id', $creatorId)->with('barterShipment');
         } else {
-            $with[] = 'campaignCreators';
+            $with[] = 'campaignCreators.barterShipment';
         }
 
         $query = Campaign::query()
             ->with($with)
-            ->withCount(['campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved)])
+            ->withCount([
+                'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+                ...$this->barterDeliveredCount(),
+            ])
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
@@ -137,10 +144,11 @@ class CampaignController extends Controller
         $this->assertCanView($request, $campaign);
         $campaign->load(['deliverable', 'campaignCreators']);
         $this->demands->syncCampaign($campaign);
-        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.barterShipment', 'campaignCreators.content', 'campaignCreators.demands']);
         $campaign->loadCount([
             'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
             'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
+            ...$this->barterDeliveredCount(),
         ]);
 
         return response()->json(['data' => new CampaignResource($campaign)]);
@@ -201,7 +209,7 @@ class CampaignController extends Controller
             return response()->json(['status' => $status], 202);
         }
 
-        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.content', 'campaignCreators.demands']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.barterShipment', 'campaignCreators.content', 'campaignCreators.demands']);
         $campaign->loadCount([
             'campaignCreators as pending_applications_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Pending),
             'campaignCreators as approved_creators_count' => fn ($q) => $q->where('application_status', ApplicationStatus::Approved),
@@ -249,6 +257,7 @@ class CampaignController extends Controller
         $this->assertCanManage($request, $campaign);
         $previousStatus = $campaign->status;
         $wasBenefitCoupon = (bool) $campaign->is_benefit_coupon;
+        $wasBarter = (bool) $campaign->is_barter;
         $data = $this->validatedCampaign($request, false);
         $hasGroups = array_key_exists('creator_group_ids', $data);
         $groupIds = $hasGroups ? $data['creator_group_ids'] : null;
@@ -286,7 +295,10 @@ class CampaignController extends Controller
             }
         });
 
-        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator']);
+        $campaign = $campaign->fresh()->load(['company', 'briefing', 'deliverable', 'landingPage', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.barterShipment']);
+        if ($campaign->is_barter || $wasBarter) {
+            $this->barterShipments->syncCampaign($campaign);
+        }
         $this->coupons->syncCampaign($campaign, $campaign->is_benefit_coupon && ! $wasBenefitCoupon);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
         $this->syncCampaignApprovedLimit($campaign, false);
@@ -308,7 +320,7 @@ class CampaignController extends Controller
             'status' => CampaignStatus::Briefing,
             ...Campaign::feeSplit((float) $campaign->total_budget, $percent),
         ]);
-        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator']);
+        $campaign->load(['company', 'briefing', 'deliverable', 'creatorGroups', 'campaignCreators.creator', 'campaignCreators.barterShipment']);
         $this->notifyReleasedIfNeeded($campaign, $previousStatus);
         $this->syncCampaignApprovedLimit($campaign, false);
 
@@ -583,9 +595,14 @@ class CampaignController extends Controller
             $freshParticipation = $campaignCreator->fresh();
             $this->demands->syncCreator($freshParticipation);
             $freshParticipation?->loadMissing(['creator', 'campaign']);
+            if ($freshParticipation) {
+                $this->barterShipments->syncParticipation($freshParticipation);
+            }
             if ($freshParticipation?->creator && $freshParticipation->campaign) {
                 $this->coupons->issue($freshParticipation->campaign, $freshParticipation->creator);
             }
+        } elseif ($leavingApproved) {
+            $this->barterShipments->syncParticipation($campaignCreator->fresh() ?? $campaignCreator);
         }
 
         if ($demand) {
@@ -740,6 +757,9 @@ class CampaignController extends Controller
         });
 
         $row->loadMissing('creator');
+        if ($row->application_status === ApplicationStatus::Approved) {
+            $this->barterShipments->syncParticipation($row);
+        }
         if ($row->creator && $row->application_status === ApplicationStatus::Approved) {
             $this->coupons->issue($campaign->fresh(), $row->creator, $shouldNotify);
         }
@@ -1257,6 +1277,24 @@ class CampaignController extends Controller
         }
 
         return array_merge($data, Campaign::feeSplit($budget, $percent));
+    }
+
+    /**
+     * @return array<string, \Closure>
+     */
+    private function barterDeliveredCount(): array
+    {
+        return [
+            'campaignCreators as barter_delivered_count' => function ($relation): void {
+                $relation->where('application_status', ApplicationStatus::Approved)
+                    ->whereHas('barterShipment', function ($shipment): void {
+                        $shipment->whereIn('status', [
+                            BarterShipmentStatus::Delivered->value,
+                            BarterShipmentStatus::Handed->value,
+                        ]);
+                    });
+            },
+        ];
     }
 
     private function scoped(Request $request)

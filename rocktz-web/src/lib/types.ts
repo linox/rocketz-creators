@@ -348,6 +348,7 @@ export type Campaign = {
   max_age?: number | null;
   max_approved_creators?: number | null;
   approved_creators_count?: number | null;
+  barter_delivered_count?: number | null;
   restrict_to_landing?: boolean;
   state?: string | null;
   city?: string | null;
@@ -481,6 +482,10 @@ export type CampaignCreator = {
   payment_status?: string | null;
   payment_date?: string | null;
   application_status: string | null;
+  barter_shipment?: {
+    status: string;
+    tracking_code: string | null;
+  } | null;
   favorited?: boolean;
   notes: string | null;
   additional_briefing?: string | null;
@@ -856,5 +861,66 @@ export type CreatorStorefront = {
   stats?: StorefrontStats;
   categories: StorefrontCategory[];
   items: StorefrontItem[];
+};
+
+export type BarterShipmentMethod = "correios" | "hand" | "other";
+
+export type BarterShipmentStatus =
+  | "pending"
+  | "posted"
+  | "in_transit"
+  | "out_for_delivery"
+  | "awaiting_pickup"
+  | "delivered"
+  | "handed"
+  | "sent"
+  | "returned"
+  | "issue"
+  | "not_found"
+  | "other";
+
+export type BarterTrackingEvent = {
+  occurred_at: string | null;
+  status: string;
+  category: string | null;
+  details: string | null;
+  origin: string | null;
+  destination: string | null;
+};
+
+export type BarterShipment = {
+  method: BarterShipmentMethod;
+  tracking_code: string | null;
+  carrier_label: string | null;
+  status: BarterShipmentStatus;
+  status_label: string | null;
+  service_label: string | null;
+  events: BarterTrackingEvent[];
+  days_in_transit: number | null;
+  posted_at: string | null;
+  delivered_at: string | null;
+  last_checked_at: string | null;
+  last_error: string | null;
+  notes: string | null;
+};
+
+export type BarterShipmentRow = {
+  campaign_creator_id: number;
+  can_manage: boolean;
+  campaign: {
+    id: number | null;
+    name: string | null;
+    company_name: string | null;
+    barter_details: string | null;
+  };
+  creator: {
+    id: number | null;
+    artistic_name: string | null;
+    full_name: string | null;
+    photo_url: string | null;
+    city: string | null;
+    state: string | null;
+  };
+  shipment: BarterShipment | null;
 };
 

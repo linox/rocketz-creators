@@ -4,6 +4,7 @@ import { FormEvent, Fragment, Suspense, useEffect, useMemo, useRef, useState, ty
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { BarterDeliveryBadge } from "@/components/BarterDeliveryBadge";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
@@ -3500,6 +3501,9 @@ function ActiveCampaignsTable({
                   <DeliveryStatusIcon state={deliveryStatus} />
                   {deliveryLabel(deliveryStatus)}
                 </span>
+                {campaign.is_barter && row.application_status === "approved" ? (
+                  <BarterDeliveryBadge status={row.barter_shipment?.status} />
+                ) : null}
                 </div>
               </div>
               <DeliveryUploadProgress
@@ -3562,10 +3566,15 @@ function ActiveCampaignsTable({
                       <WorkDateCell value={row.post_date} fmtDate={fmtDate} />
                     </td>
                     <td className="p-3.5">
-                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", applicationBadgeClass(row.application_status))}>
-                        {row.application_status === "approved" ? <CheckCircle2 size={11} /> : null}
-                        {applicationLabel(row.application_status)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", applicationBadgeClass(row.application_status))}>
+                          {row.application_status === "approved" ? <CheckCircle2 size={11} /> : null}
+                          {applicationLabel(row.application_status)}
+                        </span>
+                        {campaign.is_barter && row.application_status === "approved" ? (
+                          <BarterDeliveryBadge status={row.barter_shipment?.status} />
+                        ) : null}
+                      </div>
                     </td>
                     <td className="p-3.5">
                       <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(deliveryStatus))}>

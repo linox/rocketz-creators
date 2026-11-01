@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BarterShipmentController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
@@ -114,6 +115,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::get('campaigns/{campaign}/post-metrics-sync', [CampaignController::class, 'postMetricsStatus'])->middleware('throttle:metrics-sync-status');
     Route::post('campaigns/{campaign}/apply', [CampaignController::class, 'apply']);
     Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
+    Route::get('barter-shipments', [BarterShipmentController::class, 'index']);
 
     Route::get('recurring-contracts', [RecurringContractController::class, 'index']);
     Route::get('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'show']);
@@ -157,6 +159,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::get('shipping-senders', [ShippingLabelController::class, 'index']);
         Route::put('campaigns/{campaign}/shipping-sender', [ShippingLabelController::class, 'update']);
         Route::get('campaigns/{campaign}/shipping-labels', [ShippingLabelController::class, 'download']);
+        Route::put('campaign-creators/{campaignCreator}/barter-shipment', [BarterShipmentController::class, 'update']);
+        Route::post('campaign-creators/{campaignCreator}/barter-shipment/refresh', [BarterShipmentController::class, 'refresh'])->middleware('throttle:30,1');
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);
         Route::patch('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'update']);
         Route::post('recurring-contracts/{recurringContract}/creators', [RecurringContractController::class, 'attachCreator']);

@@ -64,6 +64,12 @@ return [
             'body' => "Tu inscripción en {{nome_campanha}} está en análisis.\n\nParticipar en la selección no garantiza la aprobación. Te avisaremos cuando haya novedades.",
             'cta' => 'Seguir inscripción',
         ],
+        'barter.delivered' => [
+            'subject' => 'Tu permuta de {{nome_campanha}} fue entregada',
+            'greeting' => 'Hola, {{nome_criador}}!',
+            'body' => "La permuta de la campaña {{nome_campanha}} fue entregada.\n\nEl código de rastreo es {{codigo_rastreio}}.",
+            'cta' => 'Ver permutas',
+        ],
         'campaign.application_approved' => [
             'subject' => 'Fuiste aprobado para la campaña {{nome_campanha}}',
             'greeting' => 'Hola, {{nome_criador}}!',

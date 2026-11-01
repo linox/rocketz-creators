@@ -77,6 +77,13 @@ class CampaignCreatorResource extends JsonResource
                 in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true),
                 (bool) $this->favorited,
             ),
+            'barter_shipment' => $this->when(
+                $this->relationLoaded('barterShipment'),
+                fn () => $this->barterShipment ? [
+                    'status' => $this->barterShipment->status?->value,
+                    'tracking_code' => $this->barterShipment->tracking_code,
+                ] : null,
+            ),
             'rejection_reason' => $this->rejection_reason,
             'revision_details' => $this->revision_details,
             'script_status' => $this->script_status?->value,

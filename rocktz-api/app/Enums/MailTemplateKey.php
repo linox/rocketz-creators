@@ -39,6 +39,7 @@ enum MailTemplateKey: string
     case InvoiceSubmitted = 'finance.invoice_submitted';
     case InvoiceRejected = 'finance.invoice_rejected';
     case PaymentReleased = 'finance.payment_released';
+    case BarterDelivered = 'barter.delivered';
 
     public function audience(): MailTemplateAudience
     {
@@ -148,6 +149,7 @@ enum MailTemplateKey: string
             self::InvoiceDue, self::InvoiceOverdue => ['link_plataforma', 'data_limite', 'nome_campanha'],
             self::InvoiceRejected => ['link_plataforma', 'motivo_reprovacao'],
             self::PaymentReleased => ['link_plataforma', 'data_pagamento'],
+            self::BarterDelivered => ['nome_campanha', 'codigo_rastreio', 'link_campanha'],
             default => ['link_plataforma'],
         };
     }
@@ -175,6 +177,7 @@ enum MailTemplateKey: string
             self::InvoiceSubmitted => ['nome_criador', 'nome_campanha', 'valor_campanha'],
             self::InvoiceRejected => ['nome_campanha', 'motivo_reprovacao'],
             self::PaymentReleased => ['nome_campanha', 'valor_campanha', 'data_pagamento'],
+            self::BarterDelivered => ['nome_criador', 'nome_campanha', 'codigo_rastreio'],
             default => [],
         };
     }

@@ -60,6 +60,10 @@ class CampaignResource extends JsonResource
             'max_age' => $this->max_age !== null ? (int) $this->max_age : null,
             'max_approved_creators' => $this->max_approved_creators !== null ? (int) $this->max_approved_creators : null,
             'approved_creators_count' => $this->when(! $isCreator && ! $foreignCompany, fn () => $this->approvedCreatorsCount()),
+            'barter_delivered_count' => $this->when(
+                ! $isCreator && ! $foreignCompany && $this->is_barter && $this->barterDeliveredCount() !== null,
+                fn () => $this->barterDeliveredCount(),
+            ),
             'restrict_to_landing' => (bool) $this->restrict_to_landing,
             'company_landing_page_id' => $this->company_landing_page_id ? (int) $this->company_landing_page_id : null,
             'min_followers' => $this->audienceVisible($request) && $this->min_followers !== null ? (int) $this->min_followers : null,

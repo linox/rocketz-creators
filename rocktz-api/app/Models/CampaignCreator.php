@@ -94,4 +94,9 @@ class CampaignCreator extends Model
     {
         return $this->hasMany(CampaignDemand::class)->orderBy('id');
     }
+
+    public function barterShipment(): HasOne
+    {
+        return $this->hasOne(BarterShipment::class);
+    }
 }

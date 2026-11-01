@@ -4,6 +4,7 @@ import type { AuthUser } from "@/lib/auth";
 import { ApiError, laravelDownload, laravelFetch, laravelUpload, type UploadProgressHandler } from "@/lib/laravel";
 import type {
   AppNotification,
+  BarterShipmentRow,
   Campaign,
   CampaignCreator,
   ShippingSender,
@@ -232,6 +233,11 @@ export const api = {
   shippingSenders: () => laravelFetch<List<ShippingSender>>("/shipping-senders"),
   saveCampaignSender: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}/shipping-sender`, { method: "PUT", body: JSON.stringify(body) }),
   downloadShippingLabels: (id: number, format: "pdf" | "csv") => laravelDownload(`/campaigns/${id}/shipping-labels?format=${format}`),
+  barterShipments: () => laravelFetch<List<BarterShipmentRow>>("/barter-shipments"),
+  saveBarterShipment: (id: number, body: { method: string; tracking_code?: string; carrier_label?: string; notes?: string }) =>
+    laravelFetch<Item<BarterShipmentRow>>(`/campaign-creators/${id}/barter-shipment`, { method: "PUT", body: JSON.stringify(body) }),
+  refreshBarterShipment: (id: number) =>
+    laravelFetch<Item<BarterShipmentRow>>(`/campaign-creators/${id}/barter-shipment/refresh`, { method: "POST" }),
   approveCampaignAgency: (id: number, body?: { agency_fee_percent?: number }) =>
     laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),

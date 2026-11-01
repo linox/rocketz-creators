@@ -216,6 +216,15 @@ class Campaign extends Model
             ->count();
     }
 
+    public function barterDeliveredCount(): ?int
+    {
+        if (! array_key_exists('barter_delivered_count', $this->attributes)) {
+            return null;
+        }
+
+        return (int) $this->attributes['barter_delivered_count'];
+    }
+
     public function approvedCreatorsLimitReached(bool $fresh = false): bool
     {
         $limit = $this->max_approved_creators;

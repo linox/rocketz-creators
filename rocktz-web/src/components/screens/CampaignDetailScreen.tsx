@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { BarterDeliveryBadge } from "@/components/BarterDeliveryBadge";
 import { formatBankLines } from "@/lib/bank-account";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
@@ -1789,7 +1790,7 @@ function DetailInner() {
                         <div
                           key={row.id}
                           className={cn(
-                            "group relative flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
+                            "group flex flex-col items-center rounded-xl border bg-white p-2.5 text-center shadow-sm transition-all hover:border-indigo-200 hover:shadow-md",
                             cardTag
                               ? CREATOR_TAG_CARD[cardTag]
                               : pace === "on_track" || deliveryState === "published" || deliveryState === "approved"
@@ -1800,9 +1801,9 @@ function DetailInner() {
                           )}
                         >
                           {cardTag && tagLabel ? (
-                            <span className={cn("absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase shadow-xs", CREATOR_TAG_PILL[cardTag])}>
-                              <span className={cn("h-1.5 w-1.5 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
-                              {tagLabel}
+                            <span className={cn("mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase", CREATOR_TAG_PILL[cardTag])}>
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
+                              <span className="truncate">{tagLabel}</span>
                             </span>
                           ) : null}
                           <Link
@@ -1834,9 +1835,12 @@ function DetailInner() {
                               {new Date(`${deliveryWhen.date}T00:00:00`).toLocaleDateString(locale)}
                             </span>
                           ) : null}
-                          <span className={cn("mt-1.5 rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(deliveryState), "border-slate-200 bg-slate-50")}>
+                          <span className={cn("mt-1.5 max-w-full truncate rounded-full border px-2 py-0.5 text-[9px] font-extrabold", deliveryClass(deliveryState), "border-slate-200 bg-slate-50")}>
                             {deliveryLabel(deliveryState, t)}
                           </span>
+                          {campaign.is_barter ? (
+                            <BarterDeliveryBadge status={row.barter_shipment?.status} className="mt-1 px-2 py-0.5 text-[8px]" />
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => {
@@ -1860,7 +1864,7 @@ function DetailInner() {
                           if (mobile) setDetailModalOpen(true);
                         }}
                         className={cn(
-                          "relative flex cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all",
+                          "flex min-w-0 cursor-pointer flex-col gap-2.5 rounded-xl border p-3 transition-all",
                           selectedId === row.id
                             ? "border-brand-primary/60 bg-indigo-50/50 ring-1 ring-brand-primary/20 shadow-xs"
                             : cardTag
@@ -1869,48 +1873,58 @@ function DetailInner() {
                         )}
                       >
                         {cardTag && tagLabel ? (
-                          <span className={cn("absolute -top-2 right-2 z-10 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase shadow-xs", CREATOR_TAG_PILL[cardTag])}>
-                            <span className={cn("h-1.5 w-1.5 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
-                            {tagLabel}
+                          <span className={cn("inline-flex w-fit max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[8px] font-extrabold tracking-wide uppercase", CREATOR_TAG_PILL[cardTag])}>
+                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", CREATOR_TAG_DOT[cardTag], cardTag === "attention" && "animate-pulse")} />
+                            <span className="truncate">{tagLabel}</span>
                           </span>
                         ) : null}
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-2.5">
                           <Link
                             href={`/creators/${row.creator_id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(event) => event.stopPropagation()}
                             aria-label={t("campaignDetail.openProfile", { name: row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.creatorFallback") })}
-                            className="flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                            className="shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
                           >
-                            <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-9 w-9 border border-slate-200" textClassName="text-xs" />
-                            <div className="min-w-0 text-left">
-                              <span className="flex items-center gap-1 truncate text-xs font-black text-brand-primary underline-offset-2 hover:underline">
-                                <span className="truncate">@{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}</span>
-                                <ExternalLink size={11} className="shrink-0" aria-hidden="true" />
-                              </span>
-                              {row.creator?.full_name ? <span className="block truncate text-[10px] font-semibold text-slate-400">{row.creator.full_name}</span> : null}
-                            </div>
+                            <UserAvatar src={row.creator?.photo_url} name={row.creator?.artistic_name || row.creator?.full_name} size="custom" shape="rounded-xl" className="h-10 w-10 border border-slate-200" textClassName="text-xs" />
                           </Link>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
-                            {row.additional_briefing?.trim() ? (
-                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
-                            ) : null}
-                            {demandProgress(row) ? (
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-extrabold text-slate-600">{t("campaignDetail.demandProgress", demandProgress(row)!)}</span>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setExpandedIds((prev) => (prev.includes(row.id) ? prev.filter((item) => item !== row.id) : [...prev, row.id]));
-                              }}
-                              className="rounded-md p-1 text-slate-400 hover:text-slate-700"
-                            >
-                              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-1">
+                              <Link
+                                href={`/creators/${row.creator_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(event) => event.stopPropagation()}
+                                className="min-w-0 flex-1 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                              >
+                                <span className="block text-sm leading-tight font-black break-words text-slate-900">{row.creator?.full_name || row.creator?.artistic_name || t("campaignDetail.creatorFallback")}</span>
+                                <span className="mt-0.5 block text-xs leading-tight font-bold break-all text-brand-primary underline-offset-2 hover:underline">
+                                  @{row.creator?.artistic_name || t("campaignDetail.creatorFallback")}
+                                  <ExternalLink size={11} className="ml-1 inline align-[-2px]" aria-hidden="true" />
+                                </span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExpandedIds((prev) => (prev.includes(row.id) ? prev.filter((item) => item !== row.id) : [...prev, row.id]));
+                                }}
+                                className="shrink-0 rounded-md p-1 text-slate-400 hover:text-slate-700"
+                              >
+                                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </button>
+                            </div>
                           </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="max-w-full rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold break-words text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          {row.additional_briefing?.trim() ? (
+                            <span className="max-w-full truncate rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
+                          ) : null}
+                          {demandProgress(row) ? (
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-extrabold whitespace-nowrap text-slate-600">{t("campaignDetail.demandProgress", demandProgress(row)!)}</span>
+                          ) : null}
                         </div>
                         {deliveryWhen.date ? (
                           <p className="m-0 text-[10px] font-bold text-slate-500">
@@ -1928,6 +1942,12 @@ function DetailInner() {
                             <span className="text-[8px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryStatus")}</span>
                             <span className={cn("mt-0.5 truncate font-black", deliveryClass(deliveryState))}>{deliveryLabel(deliveryState, t)}</span>
                           </div>
+                          {campaign.is_barter ? (
+                            <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/80 px-2 py-1.5">
+                              <span className="text-[8px] font-extrabold tracking-wider text-amber-700 uppercase">{t("campaignDetail.barterShipment")}</span>
+                              <BarterDeliveryBadge status={row.barter_shipment?.status} />
+                            </div>
+                          ) : null}
                         </div>
                         {expanded ? (
                           <div className="space-y-2 border-t border-slate-100 pt-2 text-[10px]">
@@ -1992,12 +2012,15 @@ function DetailInner() {
                   </button>
                 ) : null}
                 <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center">
-                  <div className="flex items-center gap-3.5">
-                    <UserAvatar src={selectedCreator.photo_url} name={selectedCreator.artistic_name || selectedCreator.full_name} size="custom" shape="rounded-2xl" className="h-12 w-12 border border-indigo-100 shadow-xs" textClassName="text-base" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-black text-slate-900">@{selectedCreator.artistic_name}</h2>
-                        <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
+                  <div className="flex min-w-0 items-center gap-3.5">
+                    <UserAvatar src={selectedCreator.photo_url} name={selectedCreator.artistic_name || selectedCreator.full_name} size="custom" shape="rounded-2xl" className="h-12 w-12 shrink-0 border border-indigo-100 shadow-xs" textClassName="text-base" />
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <h2 className="min-w-0 truncate text-base font-black text-slate-900">@{selectedCreator.artistic_name}</h2>
+                        <span className="max-w-full truncate rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
+                        {campaign.is_barter && selected.application_status === "approved" ? (
+                          <BarterDeliveryBadge status={selected.barter_shipment?.status} />
+                        ) : null}
                       </div>
                       <span className="text-xs font-semibold text-slate-400">
                         {[
@@ -2532,6 +2555,9 @@ function DetailInner() {
                             {isPending ? <Clock size={11} /> : isAppApproved ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
                             {isPending ? t("campaignDetail.pendingApproval") : isAppApproved ? t("campaignDetail.approvedCasting") : t("campaignDetail.rejectedApp")}
                           </span>
+                          {campaign.is_barter && isAppApproved ? (
+                            <BarterDeliveryBadge status={row.barter_shipment?.status} />
+                          ) : null}
                           {row.favorited ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black tracking-wider text-rose-700 uppercase">
                               <Heart size={11} className="fill-current" /> {t("campaignDetail.favorited")}

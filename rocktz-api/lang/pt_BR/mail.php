@@ -64,6 +64,12 @@ return [
             'body' => "Sua inscrição na campanha {{nome_campanha}} foi recebida e está aguardando análise.\n\nParticipar da seleção não garante aprovação. Avisaremos você assim que houver uma atualização.",
             'cta' => 'Acompanhar inscrição',
         ],
+        'barter.delivered' => [
+            'subject' => 'Sua permuta de {{nome_campanha}} foi entregue',
+            'greeting' => 'Olá, {{nome_criador}}!',
+            'body' => "A permuta da campanha {{nome_campanha}} foi entregue.\n\nO código de rastreio é {{codigo_rastreio}}.",
+            'cta' => 'Ver permutas',
+        ],
         'campaign.application_approved' => [
             'subject' => 'Você foi aprovado para a campanha {{nome_campanha}}',
             'greeting' => 'Olá, {{nome_criador}}!',

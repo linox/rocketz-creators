@@ -9,10 +9,10 @@ use App\Http\Middleware\LogActivity;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
@@ -63,6 +63,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ->name('media-preview');
         $schedule->command('mail:reminders')->hourly();
         $schedule->command('mail:admin-alerts')->dailyAt('08:00');
+        $schedule->command('barter:sync-tracking')
+            ->everyThirtyMinutes()
+            ->withoutOverlapping(25)
+            ->name('barter-tracking');
         $schedule->command('media:prune-chunks')->hourly();
     })
     ->withExceptions(function (Exceptions $exceptions): void {

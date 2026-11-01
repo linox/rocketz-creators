@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, FileSpreadsheet, Loader2, Printer, Tag } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -296,7 +297,10 @@ export function CampaignShippingPanel({
           </button>
         </div>
       </div>
-      <p className="mt-3 text-[11px] font-medium text-amber-800">{t("campaignDetail.labelsApprovedHint")}</p>
+      <p className="mt-3 text-[11px] font-medium text-amber-800">
+        {t("campaignDetail.labelsApprovedHint")}{" "}
+        <Link href="/permutas" className="font-bold text-amber-900 underline underline-offset-2">{t("campaignDetail.labelsTrack")}</Link>
+      </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600 md:col-span-2">
