@@ -75,36 +75,36 @@ class BarterShipmentController extends Controller
                 throw ValidationException::withMessages(['tracking_code' => __('barter.invalid_code')]);
             }
 
-            $attributes = [
+            $sameCode = $existing?->tracking_code === $code;
+            $saved = $this->persist($campaignCreator, [
                 'method' => $method,
                 'notes' => $notes,
                 'tracking_code' => $code,
                 'carrier_label' => null,
-            ];
-            $sameCode = $existing?->tracking_code === $code;
+            ]);
 
-            try {
-                $attributes = [
-                    ...$attributes,
-                    ...$tracking->lookup($code),
-                    'last_checked_at' => now(),
-                ];
-            } catch (CorreiosTrackingException) {
-                $attributes['last_error'] = 'unavailable';
-                $attributes['last_checked_at'] = now();
-                if (! $sameCode) {
-                    $attributes['status'] = BarterShipmentStatus::Pending;
-                    $attributes['status_label'] = null;
-                    $attributes['service_label'] = null;
-                    $attributes['events'] = null;
-                    $attributes['days_in_transit'] = null;
-                    $attributes['posted_at'] = null;
-                    $attributes['delivered_at'] = null;
-                }
+            if (! $sameCode) {
+                $saved->forceFill([
+                    'status' => BarterShipmentStatus::Pending,
+                    'status_label' => null,
+                    'service_label' => null,
+                    'events' => null,
+                    'days_in_transit' => null,
+                    'posted_at' => null,
+                    'delivered_at' => null,
+                    'notified_delivered_at' => null,
+                    'last_error' => null,
+                ])->save();
             }
 
-            $saved = $this->persist($campaignCreator, $attributes);
-            $shipments->notifyDelivered($saved);
+            try {
+                $shipments->applySnapshot($saved, $tracking->lookup($code));
+            } catch (CorreiosTrackingException) {
+                $saved->forceFill([
+                    'last_error' => 'unavailable',
+                    'last_checked_at' => now(),
+                ])->save();
+            }
 
             return response()->json(['data' => $this->present($this->reload($campaignCreator), true)]);
         }

@@ -225,6 +225,69 @@ class BarterShipmentTest extends TestCase
         Http::assertSentCount(2);
     }
 
+    public function test_a_failed_lookup_keeps_the_saved_timeline_and_a_later_status_can_change(): void
+    {
+        Http::preventStrayRequests();
+
+        [$company, $user] = $this->companyUser();
+        $campaign = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'is_barter' => true,
+        ]);
+        $participation = $this->participant($campaign, 'Eva Rastro');
+        BarterShipment::query()->create([
+            'campaign_creator_id' => $participation->id,
+            'method' => 'correios',
+            'tracking_code' => 'OY739642509BR',
+            'status' => BarterShipmentStatus::InTransit,
+            'status_label' => 'Objeto em trânsito',
+            'service_label' => 'SEDEX',
+            'events' => [[
+                'occurred_at' => '2026-08-28T17:01:11+00:00',
+                'status' => 'Objeto postado',
+                'category' => 'POSTADO',
+                'details' => null,
+                'origin' => 'Agência',
+                'destination' => null,
+            ]],
+            'posted_at' => '2026-08-28 17:01:11',
+        ]);
+
+        Http::fake([
+            'https://correios.test/api/v1/rastreio/*' => Http::sequence()
+                ->push([
+                    'sucesso' => false,
+                    'status' => 'NAO_ENCONTRADO',
+                    'eventos' => [],
+                ])
+                ->push([
+                    'sucesso' => true,
+                    'status' => 'SAIU_ENTREGA',
+                    'descricaoStatus' => 'Saiu para entrega ao destinatário',
+                    'servico' => ['descricao' => 'SEDEX'],
+                    'entregue' => false,
+                    'eventos' => [],
+                ]),
+        ]);
+
+        $this->asUser($user)
+            ->postJson("/api/campaign-creators/{$participation->id}/barter-shipment/refresh")
+            ->assertOk()
+            ->assertJsonPath('data.shipment.status', 'in_transit')
+            ->assertJsonPath('data.shipment.status_label', 'Objeto em trânsito')
+            ->assertJsonPath('data.shipment.service_label', 'SEDEX')
+            ->assertJsonPath('data.shipment.events.0.status', 'Objeto postado')
+            ->assertJsonPath('data.shipment.last_error', 'unavailable');
+
+        $this->asUser($user)
+            ->postJson("/api/campaign-creators/{$participation->id}/barter-shipment/refresh")
+            ->assertOk()
+            ->assertJsonPath('data.shipment.status', 'out_for_delivery')
+            ->assertJsonPath('data.shipment.status_label', 'Saiu para entrega ao destinatário')
+            ->assertJsonPath('data.shipment.events.0.status', 'Objeto postado')
+            ->assertJsonPath('data.shipment.last_error', null);
+    }
+
     public function test_tracking_sync_marks_delivery_once_and_campaigns_show_it(): void
     {
         Http::preventStrayRequests();

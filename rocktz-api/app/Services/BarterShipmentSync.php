@@ -13,6 +13,7 @@ use App\Models\CampaignCreator;
 use App\Models\MailMessage;
 use App\Models\User;
 use App\Services\Mail\MailNotifier;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class BarterShipmentSync
@@ -120,19 +121,78 @@ class BarterShipmentSync
         try {
             $snapshot = $tracking->lookup((string) $shipment->tracking_code);
         } catch (CorreiosTrackingException) {
-            $shipment->forceFill([
-                'last_error' => 'unavailable',
-                'last_checked_at' => now(),
-            ])->save();
-
-            return $shipment;
+            return $this->keepSnapshot($shipment);
         }
 
+        return $this->applySnapshot($shipment, $snapshot);
+    }
+
+    /**
+     * @param  array{
+     *     status: BarterShipmentStatus,
+     *     status_label: ?string,
+     *     service_label: ?string,
+     *     events: list<array<string, mixed>>,
+     *     days_in_transit: ?int,
+     *     posted_at: ?Carbon,
+     *     delivered_at: ?Carbon,
+     *     last_error: null
+     * }  $snapshot
+     */
+    public function applySnapshot(BarterShipment $shipment, array $snapshot): BarterShipment
+    {
+        $storedEvents = is_array($shipment->events) ? $shipment->events : [];
+        $incomingEvents = $snapshot['events'];
+        $incomingStatus = $snapshot['status'];
+        $incomplete = $incomingEvents === []
+            && in_array($incomingStatus, [BarterShipmentStatus::NotFound, BarterShipmentStatus::Other], true);
+
+        if ($storedEvents !== [] && $incomplete) {
+            return $this->keepSnapshot($shipment);
+        }
+
+        $fill = [
+            'last_checked_at' => now(),
+            'last_error' => null,
+        ];
+
+        if ($incomingEvents !== []) {
+            $fill['events'] = $incomingEvents;
+        }
+
+        $keepStatus = $storedEvents !== [] && $incomingStatus === BarterShipmentStatus::NotFound;
+        if (! $keepStatus) {
+            $fill['status'] = $incomingStatus;
+        }
+
+        if (filled($snapshot['status_label'])) {
+            $fill['status_label'] = $snapshot['status_label'];
+        }
+        if (filled($snapshot['service_label'])) {
+            $fill['service_label'] = $snapshot['service_label'];
+        }
+        if ($snapshot['days_in_transit'] !== null) {
+            $fill['days_in_transit'] = $snapshot['days_in_transit'];
+        }
+        if ($snapshot['posted_at']) {
+            $fill['posted_at'] = $snapshot['posted_at'];
+        }
+        if ($snapshot['delivered_at']) {
+            $fill['delivered_at'] = $snapshot['delivered_at'];
+        }
+
+        $shipment->forceFill($fill)->save();
+        $this->notifyDelivered($shipment);
+
+        return $shipment;
+    }
+
+    private function keepSnapshot(BarterShipment $shipment): BarterShipment
+    {
         $shipment->forceFill([
-            ...$snapshot,
+            'last_error' => 'unavailable',
             'last_checked_at' => now(),
         ])->save();
-        $this->notifyDelivered($shipment);
 
         return $shipment;
     }
