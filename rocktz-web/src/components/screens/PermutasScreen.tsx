@@ -63,6 +63,38 @@ function statusTone(status: BarterShipmentStatus | "pending") {
   }
 }
 
+function statusMark(status: BarterShipmentStatus | "pending") {
+  switch (status) {
+    case "delivered":
+    case "handed":
+      return "bg-emerald-500";
+    case "returned":
+    case "issue":
+    case "not_found":
+      return "bg-rose-500";
+    case "pending":
+      return "bg-slate-300";
+    default:
+      return "bg-amber-400";
+  }
+}
+
+function statusRail(status: BarterShipmentStatus | "pending") {
+  switch (status) {
+    case "delivered":
+    case "handed":
+      return "border-l-emerald-500";
+    case "returned":
+    case "issue":
+    case "not_found":
+      return "border-l-rose-500";
+    case "pending":
+      return "border-l-slate-200";
+    default:
+      return "border-l-amber-400";
+  }
+}
+
 function PermutasInner() {
   const user = useAuth();
   const { t, i18n } = useTranslation("app");
@@ -275,7 +307,7 @@ function PermutasInner() {
                       const posted = formatWhen(shipment?.posted_at, locale);
                       const delivered = formatWhen(shipment?.delivered_at, locale);
                       return (
-                        <li key={row.campaign_creator_id}>
+                        <li key={row.campaign_creator_id} className={`border-l-4 ${statusRail(currentStatus)}`}>
                           <button
                             type="button"
                             aria-expanded={open}
@@ -289,8 +321,9 @@ function PermutasInner() {
                                 {[place, shipment?.tracking_code, shipment?.carrier_label].filter(Boolean).join(" · ") || t("barterShipments.status.pending")}
                               </span>
                             </span>
-                            <span className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${statusTone(currentStatus)}`}>
-                              {t(`barterShipments.status.${currentStatus}`)}
+                            <span title={t(`barterShipments.status.${currentStatus}`)} className={`inline-flex max-w-[5.75rem] shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold sm:max-w-none sm:px-2 ${statusTone(currentStatus)}`}>
+                              <span className={`h-2 w-2 shrink-0 rounded-full ${statusMark(currentStatus)}`} aria-hidden="true" />
+                              <span className="truncate">{t(`barterShipments.status.${currentStatus}`)}</span>
                             </span>
                             <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
                           </button>

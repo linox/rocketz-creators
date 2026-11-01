@@ -17,8 +17,9 @@
 #   CPANEL_WEB_FTP_USER       padrão deploy@creatorz.digital
 #   CPANEL_API_FTP_USER       padrão deploy@api.creatorz.digital
 #
-# Cada push na main incrementa o patch em rocktz-web/package.json, faz commit
-# e publica web + API com o mesmo número. O GITHUB_TOKEN não dispara outro workflow.
+# Cada push na main incrementa rocktz-web/package.json (patch 0–99; ao passar
+# de 99 o minor sobe e o patch volta a 0; o mesmo do minor para o major), faz
+# commit e publica web + API com o mesmo número. O GITHUB_TOKEN não dispara outro workflow.
 #
 # O .env da API não é enviado.
 # vendor/ e vendor.zip NÃO sobem no git nem no FTP do Action — só publicação manual no servidor.
@@ -62,9 +63,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Patch (package.json)
-        working-directory: rocktz-web
-        run: npm version patch --no-git-tag-version
+      - name: Versão (package.json)
+        run: node ./scripts/bump-app-version.mjs
 
       - id: ver
         run: echo "version=$(node -p "require('./rocktz-web/package.json').version")" >> "$GITHUB_OUTPUT"

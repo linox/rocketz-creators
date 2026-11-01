@@ -74,8 +74,8 @@ if [[ ! -d node_modules ]]; then
 fi
 
 if [[ "$BUMP" -eq 1 ]]; then
-  echo "Incrementando versão do rodapé (patch)…"
-  npm version patch --no-git-tag-version
+  echo "Incrementando versão do rodapé…"
+  node "$SCRIPTS_DIR/bump-app-version.mjs"
 fi
 
 APP_VERSION="$(node -p "require('./package.json').version")"
