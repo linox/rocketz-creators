@@ -258,4 +258,13 @@ return [
     'coupon_earning_title' => 'Ganhos de cupom',
     'coupon_earning_ready_title' => 'Ganhos de cupom disponíveis',
     'coupon_earning_ready' => 'Os ganhos de cupom de :month em :company já podem receber a nota fiscal.',
+    'browser_alert_creator_fallback' => 'Criador',
+    'browser_alert_untitled' => 'Entrega',
+    'browser_alert_script_title' => 'Roteiro enviado',
+    'browser_alert_script' => ':creator enviou o roteiro de :title.',
+    'browser_alert_delivery_title' => 'Nova entrega recebida',
+    'browser_alert_delivery' => ':creator enviou a entrega de :title.',
+    'browser_alert_overdue_title' => 'Entrega atrasada',
+    'browser_alert_overdue' => 'A entrega de :title (:creator) passou do prazo.',
+    'browser_alert_overdue_own' => 'A entrega de :title está atrasada.',
 ];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
@@ -154,6 +154,7 @@ function DeliveriesInboxInner() {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
+  const openedFromQuery = useRef<string | null>(null);
 
   async function loadInbox() {
     setLoading(true);
@@ -389,6 +390,27 @@ function DeliveriesInboxInner() {
     ?? null;
 
   useEffect(() => {
+    if (loading || items.length === 0) return;
+    const delivery = new URLSearchParams(window.location.search).get("delivery");
+    if (!delivery || openedFromQuery.current === delivery) return;
+    const item = items.find((row) => row.id === delivery);
+    if (!item) return;
+    openedFromQuery.current = delivery;
+    setFolder("all");
+    setQuick("all");
+    setSearch("");
+    setSourceId(null);
+    setCompanyId(item.companyId);
+    setSourceFilter(item.sourceType === "recurring" ? "recurring" : "campaign");
+    openDelivery(item);
+  }, [loading, items]);
+
+  useEffect(() => {
+    const delivery = new URLSearchParams(window.location.search).get("delivery");
+    if (delivery && filtered.some((item) => item.id === delivery)) {
+      if (selectedId !== delivery) setSelectedId(delivery);
+      return;
+    }
     if (!selectedId) {
       if (filtered[0]) setSelectedId(filtered[0].id);
       return;
@@ -417,6 +439,7 @@ function DeliveriesInboxInner() {
   function openDelivery(item: DeliveryInboxItem) {
     setSelectedId(item.id);
     setMobileShowDetail(true);
+    void api.markBrowserAlertSeen({ inbox_id: item.id }).catch(() => undefined);
     if (!item.viewedAt) {
       const now = new Date().toISOString();
       persistDeliveryViewed(item.id, now);
@@ -563,6 +586,7 @@ function DeliveriesInboxInner() {
     setItems((prev) => prev.map((item) => {
       if (!selectedIds.includes(item.id)) return item;
       persistDeliveryViewed(item.id, item.viewedAt ?? now);
+      void api.markBrowserAlertSeen({ inbox_id: item.id }).catch(() => undefined);
       return {
         ...item,
         viewedAt: item.viewedAt ?? now,

@@ -108,6 +108,35 @@ class ContentPlanningItem extends Model
         return $this->belongsTo(Creator::class);
     }
 
+    /** Title used in script and video notifications. */
+    public function notificationTitle(): string
+    {
+        $title = trim((string) $this->title);
+        if ($title !== '' && ! preg_match('/\s+\d+\/\d+$/', $title)) {
+            return $title;
+        }
+
+        $type = $this->content_type instanceof ContentType
+            ? $this->content_type
+            : ContentType::tryFrom((string) $this->content_type);
+        $formats = [
+            ContentType::Reel->value => 'reels',
+            ContentType::Story->value => 'stories',
+            ContentType::Post->value => 'posts',
+            ContentType::Tiktok->value => 'tiktok',
+            ContentType::Ugc->value => 'ugc',
+            ContentType::Youtube->value => 'youtube',
+            ContentType::LiveInstagram->value => 'live_instagram',
+            ContentType::LiveTiktok->value => 'live_tiktok',
+            ContentType::LiveYoutube->value => 'live_youtube',
+        ];
+        if ($type && isset($formats[$type->value])) {
+            return __('auth.recurring_formats.'.$formats[$type->value]);
+        }
+
+        return $type?->value ?: __('auth.new_demand_title');
+    }
+
     /** Briefing text, structured fields, or a script file from the brand. */
     public function hasDefinedPauta(): bool
     {

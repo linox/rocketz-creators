@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BarterShipmentController;
+use App\Http\Controllers\Api\BrowserAlertController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
@@ -133,6 +134,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('finance-payments/{financePayment}/reject', [FinancePaymentController::class, 'reject']);
     Route::post('finance-payments/{financePayment}/pay', [FinancePaymentController::class, 'pay']);
 
+    Route::get('browser-alerts', [BrowserAlertController::class, 'index']);
+    Route::post('browser-alerts/seen', [BrowserAlertController::class, 'seen']);
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);

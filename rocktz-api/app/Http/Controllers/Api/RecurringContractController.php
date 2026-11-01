@@ -757,22 +757,7 @@ class RecurringContractController extends Controller
 
     private function itemLabel(ContentPlanningItem $item): string
     {
-        $title = trim((string) $item->title);
-        if ($title !== '' && ! preg_match('/\s+\d+\/\d+$/', $title)) {
-            return $title;
-        }
-
-        $type = $item->content_type instanceof ContentType
-            ? $item->content_type
-            : ContentType::tryFrom((string) $item->content_type);
-
-        foreach (self::DELIVERABLE_MAP as $config) {
-            if ($config['type'] === $type) {
-                return __('auth.recurring_formats.'.$config['format_key']);
-            }
-        }
-
-        return $type?->value ?: __('auth.new_demand_title');
+        return $item->notificationTitle();
     }
 
     /**

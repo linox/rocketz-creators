@@ -258,4 +258,13 @@ return [
     'coupon_earning_title' => 'Coupon earnings',
     'coupon_earning_ready_title' => 'Coupon earnings available',
     'coupon_earning_ready' => 'Coupon earnings for :month at :company are ready for the invoice.',
+    'browser_alert_creator_fallback' => 'Creator',
+    'browser_alert_untitled' => 'Delivery',
+    'browser_alert_script_title' => 'Script submitted',
+    'browser_alert_script' => ':creator submitted the script for :title.',
+    'browser_alert_delivery_title' => 'New delivery received',
+    'browser_alert_delivery' => ':creator submitted the delivery for :title.',
+    'browser_alert_overdue_title' => 'Delivery overdue',
+    'browser_alert_overdue' => 'The delivery for :title (:creator) is past the deadline.',
+    'browser_alert_overdue_own' => 'The delivery for :title is overdue.',
 ];

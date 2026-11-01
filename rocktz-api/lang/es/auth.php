@@ -258,4 +258,13 @@ return [
     'coupon_earning_title' => 'Ganancias de cupón',
     'coupon_earning_ready_title' => 'Ganancias de cupón disponibles',
     'coupon_earning_ready' => 'Las ganancias de cupón de :month en :company ya pueden recibir la factura.',
+    'browser_alert_creator_fallback' => 'Creador',
+    'browser_alert_untitled' => 'Entrega',
+    'browser_alert_script_title' => 'Guion enviado',
+    'browser_alert_script' => ':creator envió el guion de :title.',
+    'browser_alert_delivery_title' => 'Nueva entrega recibida',
+    'browser_alert_delivery' => ':creator envió la entrega de :title.',
+    'browser_alert_overdue_title' => 'Entrega atrasada',
+    'browser_alert_overdue' => 'La entrega de :title (:creator) pasó del plazo.',
+    'browser_alert_overdue_own' => 'La entrega de :title está atrasada.',
 ];

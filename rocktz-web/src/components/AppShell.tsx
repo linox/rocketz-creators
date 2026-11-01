@@ -39,6 +39,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { BrowserAlerts } from "@/components/BrowserAlerts";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
@@ -680,6 +681,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
           />
         </header>
         <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10">
+          <BrowserAlerts />
           {needsContract || needsFirstPortfolio ? (
             <div className="mb-4 flex flex-col gap-3 sm:mb-6">
               {needsContract ? <CreatorContractRequiredBanner onSign={() => setContractOpen(true)} /> : null}

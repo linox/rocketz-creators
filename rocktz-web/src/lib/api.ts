@@ -1,4 +1,5 @@
 import i18n from "@/i18n/config";
+import type { BrowserAlert } from "@/lib/browser-alerts";
 import type { PostalPlace } from "@/lib/shipping-address";
 import type { AuthUser } from "@/lib/auth";
 import { ApiError, laravelDownload, laravelFetch, laravelUpload, type UploadProgressHandler } from "@/lib/laravel";
@@ -289,6 +290,9 @@ export const api = {
   deleteRecurring: (id: number) => laravelFetch<{ message: string }>(`/recurring-contracts/${id}`, { method: "DELETE" }),
   resetRecurring: () => laravelFetch<{ message: string; deleted: number }>("/recurring-contracts/reset", { method: "POST" }),
 
+  browserAlerts: () => laravelFetch<{ data: BrowserAlert[] }>("/browser-alerts"),
+  markBrowserAlertSeen: (body: { key?: string; inbox_id?: string }) =>
+    laravelFetch<{ ok: boolean }>("/browser-alerts/seen", { method: "POST", body: JSON.stringify(body) }),
   notifications: (query = "") => laravelFetch<List<AppNotification>>(`/notifications${query}`),
   markRead: (id: number) => laravelFetch(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () => laravelFetch("/notifications/read-all", { method: "POST" }),

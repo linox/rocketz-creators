@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\DeliveryStatus;
 use App\Enums\StageApprovalStatus;
+use App\Services\DeliveryMovementNotifier;
 use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +27,15 @@ class DeliveryMovements
             'delivery_status' => $store->getAttribute('delivery_status'),
             'status' => $store->getAttribute('status'),
         ];
+
+        if (self::became($incoming, $before, 'script_status', StageApprovalStatus::Submitted->value)) {
+            app(DeliveryMovementNotifier::class)->received($store, 'script');
+        }
+        if (self::became($incoming, $before, 'video_status', StageApprovalStatus::Submitted->value)) {
+            app(DeliveryMovementNotifier::class)->received($store, 'video');
+        } elseif (self::became($incoming, $before, 'delivery_status', DeliveryStatus::Sent->value)) {
+            app(DeliveryMovementNotifier::class)->received($store, 'video');
+        }
 
         foreach ([
             'script_status' => 'script_approved',
@@ -70,6 +80,22 @@ class DeliveryMovements
         ], $payload);
 
         $model->setAttribute('movements', $history);
+    }
+
+    /**
+     * @param  array<string, mixed>  $incoming
+     * @param  array<string, mixed>  $before
+     */
+    private static function became(array $incoming, array $before, string $field, string $expected): bool
+    {
+        if (! array_key_exists($field, $incoming)) {
+            return false;
+        }
+
+        $next = NotificationService::value($incoming[$field]);
+        $previous = NotificationService::value($before[$field] ?? null);
+
+        return $next === $expected && $next !== $previous;
     }
 
     private static function supports(Model $model): bool
