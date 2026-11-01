@@ -2822,7 +2822,8 @@ function ProfileInner() {
 
 const inputClass = "h-11 w-full rounded-lg border border-[#E2E8F0] px-4 text-sm outline-none focus:border-brand-primary";
 
-function deliveryActionLabel(kind: CreatorDeliveryActionKind, tp: (key: string) => string) {
+function deliveryActionLabel(kind: CreatorDeliveryActionKind, revision: boolean, tp: (key: string) => string) {
+  if (revision) return tp("viewRequestedAdjustment");
   if (kind === "send_script") return tp("sendScriptForReview");
   if (kind === "send_video") return tp("sendVideoForReview");
   if (kind === "view_published") return tp("viewPublishedPost");
@@ -2879,7 +2880,7 @@ function CreatorWorkActions({
         : "bg-brand-primary hover:bg-indigo-600",
   );
   const ActionIcon = action?.revision
-    ? RefreshCw
+    ? AlertTriangle
     : action?.kind === "send_script"
       ? FileText
       : action?.kind === "send_video"
@@ -2896,7 +2897,7 @@ function CreatorWorkActions({
       {action?.kind === "view_published" && publishedUrl ? (
         <>
           <a href={safeHttpUrl(publishedUrl)} target="_blank" rel="noreferrer" className={actionClass}>
-            <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
+            <ActionIcon size={13} /> {deliveryActionLabel(action.kind, action.revision, tp)}
           </a>
           {!brandPosts ? (
             <button type="button" onClick={onOpen} className={briefingClass}>
@@ -2906,7 +2907,7 @@ function CreatorWorkActions({
         </>
       ) : action ? (
         <button type="button" onClick={onOpen} className={actionClass}>
-          <ActionIcon size={13} /> {deliveryActionLabel(action.kind, tp)}
+          <ActionIcon size={13} /> {deliveryActionLabel(action.kind, action.revision, tp)}
         </button>
       ) : null}
     </div>

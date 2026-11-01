@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { AlertTriangle, CheckCircle2, Link2, RefreshCw, Send, X } from "lucide-react";
@@ -42,6 +42,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
   const scriptRevision = item.script_status === "revision";
   const videoRevision = item.video_status === "revision";
   const hasRevision = scriptRevision || videoRevision;
+  const revisionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!hasRevision) return;
+    const frame = requestAnimationFrame(() => {
+      revisionRef.current?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hasRevision]);
   const awaitingScriptApproval = (staged || isLive) && scriptSubmitted && !scriptApproved;
   const awaitingVideoApproval = videoSubmitted && !videoApproved && !videoRevision;
   const canSubmitScript = (staged || isLive) && !scriptApproved && item.script_status !== "submitted";
@@ -396,7 +404,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       <div className="flex flex-col gap-3">
         {briefingBlock}
         {hasRevision ? (
-          <div className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
+          <div ref={revisionRef} className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
             <p className="m-0 text-sm font-black text-rose-900">{tp("revisionAlertTitle")}</p>
             {item.script_feedback ? (
               <p className="m-0 text-xs leading-relaxed font-semibold whitespace-pre-wrap text-slate-800">{item.script_feedback}</p>
@@ -518,7 +526,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
       </div>
 
       {hasRevision ? (
-        <div className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
+        <div ref={revisionRef} className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm">
               <AlertTriangle size={20} />

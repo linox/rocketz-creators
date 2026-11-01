@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, Link2, RefreshCw, Send, Video, X } from "lucide-react";
@@ -132,6 +132,14 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
   const videoRevision = row.video_status === "revision";
   const deliveryRevision = row.delivery_status === "revision";
   const hasRevision = scriptRevision || videoRevision || deliveryRevision;
+  const revisionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (briefingOnly || !hasRevision) return;
+    const frame = requestAnimationFrame(() => {
+      revisionRef.current?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [briefingOnly, hasRevision]);
   const awaitingScriptApproval = stagedFlow && scriptSubmitted && !scriptApproved;
   const awaitingVideoApproval = videoSubmitted && !videoApproved && !videoRevision && !deliveryRevision;
   const canSubmitScript = (stagedFlow || flow === "script_only")
@@ -471,7 +479,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
         </h5>
 
         {hasRevision ? (
-          <div className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
+          <div ref={revisionRef} className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm">
                 <AlertTriangle size={20} />
