@@ -11,7 +11,6 @@ enum Permission: string
     case CampaignsAssign = 'campaigns.assign';
     case CampaignsApproveAgency = 'campaigns.approve_agency';
     case CampaignsPublishWithoutApproval = 'campaigns.publish_without_approval';
-    case DataReset = 'data.reset';
     case MailManage = 'mail.manage';
     case LogsView = 'logs.view';
     case FinanceAccess = 'finance.access';
@@ -29,7 +28,6 @@ enum Permission: string
                 self::CompaniesModerate,
                 self::CampaignsAssign,
                 self::CampaignsApproveAgency,
-                self::DataReset,
                 self::MailManage,
                 self::LogsView,
                 self::FinanceAccess,

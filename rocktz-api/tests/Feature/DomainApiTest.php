@@ -1258,22 +1258,6 @@ class DomainApiTest extends TestCase
             ->assertJsonPath('data.rejection_reason', 'Perfil fora do nicho');
     }
 
-    public function test_admin_can_reset_recurring_contracts(): void
-    {
-        $this->seed();
-
-        $admin = User::query()->where('email', 'admin@rocketz.test')->first();
-        $token = $admin->createToken('auth')->plainTextToken;
-
-        $this->withToken($token)
-            ->postJson('/api/recurring-contracts/reset')
-            ->assertOk()
-            ->assertJsonPath('message', 'Recorrência zerada.');
-
-        $this->assertDatabaseCount('recurring_contracts', 0);
-        $this->assertDatabaseCount('content_planning_items', 0);
-    }
-
     public function test_admin_can_remove_creator_from_recurring_contract(): void
     {
         $this->seed();

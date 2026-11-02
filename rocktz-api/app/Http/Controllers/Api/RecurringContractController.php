@@ -198,14 +198,6 @@ class RecurringContractController extends Controller
         return response()->json(['data' => new RecurringContractResource($contract->load(['company', 'recurringContractCreators.creator']))], 201);
     }
 
-    public function reset(): JsonResponse
-    {
-        $deleted = RecurringContract::query()->count();
-        RecurringContract::query()->delete();
-
-        return response()->json(['message' => __('auth.recurring_reset'), 'deleted' => $deleted]);
-    }
-
     public function update(Request $request, RecurringContract $recurringContract): JsonResponse
     {
         $this->assertCanManage($request, $recurringContract);

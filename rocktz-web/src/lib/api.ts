@@ -79,7 +79,6 @@ export const api = {
   restoreCreator: (id: number) => laravelFetch<Item<Creator>>(`/creators/${id}/restore`, { method: "POST" }),
   updateCreatorPassword: (id: number, password: string) => laravelFetch<{ message: string }>(`/creators/${id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
   deleteCreator: (id: number) => laravelFetch<{ message: string }>(`/creators/${id}`, { method: "DELETE" }),
-  resetCasting: () => laravelFetch<{ message: string; deleted: number }>("/creators/reset-casting", { method: "POST" }),
   addPortfolio: (id: number, body: unknown) => laravelFetch(`/creators/${id}/portfolio`, { method: "POST", body: JSON.stringify(body) }),
   removePortfolio: (id: number, video: number) => laravelFetch(`/creators/${id}/portfolio/${video}`, { method: "DELETE" }),
   acceptContract: (id: number, body: unknown) => laravelFetch(`/creators/${id}/contract`, { method: "POST", body: JSON.stringify(body) }),
@@ -226,7 +225,6 @@ export const api = {
   deleteCompanyUser: (companyId: number, userId: number) => laravelFetch(`/companies/${companyId}/users/${userId}`, { method: "DELETE" }),
 
   campaigns: (query = "") => laravelFetch<List<Campaign>>(`/campaigns${query}`),
-  resetCampaigns: () => laravelFetch<{ message: string; deleted: number }>("/campaigns/reset", { method: "POST" }),
   availableCampaigns: () => laravelFetch<List<Campaign>>("/campaigns/available"),
   campaign: (id: number | string) => laravelFetch<Item<Campaign>>(`/campaigns/${id}`),
   createCampaign: (body: unknown) => laravelFetch<Item<Campaign>>("/campaigns", { method: "POST", body: JSON.stringify(body) }),
@@ -288,7 +286,6 @@ export const api = {
   updatePlanningItem: (id: number, body: unknown) => laravelFetch<Item<PlanningItem>>(`/content-planning-items/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deletePlanningItem: (id: number) => laravelFetch<{ message: string }>(`/content-planning-items/${id}`, { method: "DELETE" }),
   deleteRecurring: (id: number) => laravelFetch<{ message: string }>(`/recurring-contracts/${id}`, { method: "DELETE" }),
-  resetRecurring: () => laravelFetch<{ message: string; deleted: number }>("/recurring-contracts/reset", { method: "POST" }),
 
   browserAlerts: () => laravelFetch<{ data: BrowserAlert[] }>("/browser-alerts"),
   markBrowserAlertSeen: (body: { key?: string; inbox_id?: string }) =>

@@ -336,14 +336,6 @@ class CampaignController extends Controller
         return response()->json(['message' => __('auth.campaign_removed')]);
     }
 
-    public function reset(): JsonResponse
-    {
-        $deleted = Campaign::query()->count();
-        Campaign::query()->delete();
-
-        return response()->json(['message' => __('auth.campaigns_reset'), 'deleted' => $deleted]);
-    }
-
     public function apply(Request $request, Campaign $campaign): JsonResponse
     {
         $user = $request->user();

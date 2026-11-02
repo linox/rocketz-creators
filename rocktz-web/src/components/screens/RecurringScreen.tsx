@@ -550,17 +550,6 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
     }
   }
 
-  async function onReset() {
-    if (!(await alertConfirm(t("recurring.resetTitle"), t("recurring.resetText"), t("recurring.resetConfirm")))) return;
-    try {
-      await api.resetRecurring();
-      await alertSuccess(t("recurring.resetDone"));
-      load();
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
   async function onDeleteItem(item: PlanningItem) {
     if (!(await alertConfirm(t("recurring.contentDeleteTitle"), t("recurring.contentDeleteText", { title: item.title })))) return;
     try {
@@ -619,11 +608,6 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 onChange={setCompanyFilter}
               />
             </label>
-          ) : null}
-          {isAdmin ? (
-            <button type="button" onClick={onReset} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 shadow-xs transition-colors hover:bg-rose-100 sm:w-auto">
-              <Trash2 size={15} className="shrink-0" /> {t("recurring.reset")}
-            </button>
           ) : null}
           {canManage ? (
             <button type="button" onClick={() => openContentModal()} className="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:w-auto">

@@ -1101,17 +1101,6 @@ function CreatorsInner() {
     load();
   }
 
-  async function resetCasting() {
-    if (!(await alertConfirm(t("creators.resetTitle"), t("creators.resetText"), t("creators.resetConfirm")))) return;
-    try {
-      await api.resetCasting();
-      await alertSuccess(t("creators.resetSuccess"), t("creators.resetSuccessBody"));
-      load();
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
   async function onCreate(event: FormEvent) {
     event.preventDefault();
     if (!form.full_name.trim() || !form.artistic_name.trim() || !form.email.trim()) {
@@ -1203,17 +1192,6 @@ function CreatorsInner() {
               <LayoutGrid size={13} className="shrink-0" /> <span className="hidden sm:inline">{t("creators.layoutGrid")}</span>
             </button>
           </div>
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={resetCasting}
-              title={t("creators.resetHint")}
-              className="flex h-11 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-700 shadow-xs transition-all hover:bg-rose-100"
-            >
-              <Trash2 size={15} className="text-rose-600" />
-              {t("creators.reset")}
-            </button>
-          ) : null}
           {isAdmin || isCompany ? (
             <Link
               href="/creator-groups"

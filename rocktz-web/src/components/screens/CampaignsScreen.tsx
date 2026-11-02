@@ -32,7 +32,6 @@ import {
   Plus,
   Scale,
   TicketPercent,
-  Trash2,
   Users,
   Video,
 } from "lucide-react";
@@ -46,7 +45,7 @@ import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
 import { networkTierI18nKey, tierFromRange } from "@/lib/network-size";
 import { isPendingAgency } from "@/lib/agency-approval";
-import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignLocationLabel, moneyCurrency } from "@/lib/geo";
@@ -409,17 +408,6 @@ function CampaignsInner() {
     return true;
   });
 
-  async function resetCampaigns() {
-    if (!(await alertConfirm(t("campaigns.resetTitle"), t("campaigns.resetText"), t("campaigns.resetConfirm")))) return;
-    try {
-      await api.resetCampaigns();
-      await alertSuccess(t("campaigns.resetSuccess"), t("campaigns.resetSuccessBody"));
-      load();
-    } catch (err) {
-      await alertApiError(err);
-    }
-  }
-
   async function approveMaterial(row: MaterialRow) {
     setUpdatingId(row.id);
     try {
@@ -468,17 +456,6 @@ function CampaignsInner() {
         </div>
         {canManage ? (
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-            {isAdmin ? (
-              <button
-                type="button"
-                onClick={resetCampaigns}
-                title={t("campaigns.resetHint")}
-                className="flex h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-rose-300 bg-white px-4 text-xs font-bold text-rose-600 shadow-xs transition-all hover:bg-rose-50"
-              >
-                <Trash2 size={15} />
-                {t("campaigns.reset")}
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={() => setOpen(true)}

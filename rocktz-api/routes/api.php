@@ -247,11 +247,5 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::get('storefront/settings', [CreatorStorefrontController::class, 'settings']);
         Route::patch('storefront/settings', [CreatorStorefrontController::class, 'updateSettings']);
         Route::get('storefront/overview', [CreatorStorefrontController::class, 'overview']);
-
-        Route::middleware('permission:data.reset')->group(function () {
-            Route::post('creators/reset-casting', [CreatorController::class, 'resetCasting']);
-            Route::post('campaigns/reset', [CampaignController::class, 'reset']);
-            Route::post('recurring-contracts/reset', [RecurringContractController::class, 'reset']);
-        });
     });
 });

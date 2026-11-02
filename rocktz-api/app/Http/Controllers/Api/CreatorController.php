@@ -556,14 +556,6 @@ class CreatorController extends Controller
         return response()->json(['message' => __('auth.creator_account_removed')]);
     }
 
-    public function resetCasting(): JsonResponse
-    {
-        $deleted = User::query()->where('role', UserRole::Creator)->count();
-        User::query()->where('role', UserRole::Creator)->delete();
-
-        return response()->json(['message' => __('auth.casting_reset'), 'deleted' => $deleted]);
-    }
-
     public function storePortfolio(Request $request, Creator $creator): JsonResponse
     {
         $this->authorizeCreator($request, $creator);

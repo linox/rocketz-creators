@@ -25,7 +25,6 @@ const ADMIN_PERMISSIONS = [
   "companies.moderate",
   "campaigns.assign",
   "campaigns.approve_agency",
-  "data.reset",
   "mail.manage",
   "logs.view",
   "finance.access",
