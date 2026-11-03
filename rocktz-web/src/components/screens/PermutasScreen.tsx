@@ -31,8 +31,19 @@ function draftFrom(row: BarterShipmentRow): Draft {
   };
 }
 
+function creatorIdentity(creator: BarterShipmentRow["creator"]) {
+  const handle = (creator.artistic_name || "").replace(/^@+/, "").trim();
+  const name = (creator.full_name || "").trim();
+  const same = Boolean(handle && name && handle.localeCompare(name, undefined, { sensitivity: "base" }) === 0);
+  return {
+    name: name || (handle ? `@${handle}` : "—"),
+    handle: handle && name && !same ? `@${handle}` : "",
+  };
+}
+
 function personName(row: BarterShipmentRow) {
-  return row.creator.artistic_name || row.creator.full_name || "—";
+  const identity = creatorIdentity(row.creator);
+  return [identity.name, identity.handle].filter(Boolean).join(" ");
 }
 
 function formatWhen(value: string | null | undefined, locale: string) {
@@ -303,6 +314,7 @@ function PermutasInner() {
                       const open = expandedId === row.campaign_creator_id;
                       const busy = savingId === row.campaign_creator_id;
                       const place = [row.creator.city, row.creator.state].filter(Boolean).join(" · ");
+                      const identity = creatorIdentity(row.creator);
                       const checked = formatWhen(shipment?.last_checked_at, locale);
                       const posted = formatWhen(shipment?.posted_at, locale);
                       const delivered = formatWhen(shipment?.delivered_at, locale);
@@ -314,9 +326,12 @@ function PermutasInner() {
                             onClick={() => setExpandedId((current) => current === row.campaign_creator_id ? null : row.campaign_creator_id)}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50"
                           >
-                            <UserAvatar src={row.creator.photo_url} name={personName(row)} size="sm" />
+                            <UserAvatar src={row.creator.photo_url} name={identity.name} size="sm" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-bold text-slate-900">{personName(row)}</span>
+                              <span className="flex min-w-0 items-baseline gap-1.5" title={personName(row)}>
+                                <span className="min-w-0 truncate text-sm font-bold text-slate-900">{identity.name}</span>
+                                {identity.handle ? <span className="max-w-[50%] shrink-0 truncate text-xs font-semibold text-slate-500">{identity.handle}</span> : null}
+                              </span>
                               <span className="block truncate text-[11px] text-slate-400">
                                 {[place, shipment?.tracking_code, shipment?.carrier_label].filter(Boolean).join(" · ") || t("barterShipments.status.pending")}
                               </span>

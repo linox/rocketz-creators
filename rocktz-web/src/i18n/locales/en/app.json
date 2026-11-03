@@ -3019,6 +3019,10 @@
     "filterCompanyLabel": "Company",
     "filterSourceLabel": "Source",
     "filterKindLabel": "Type",
+    "filterSearchLabel": "Search",
+    "searchPlaceholder": "Search by campaign, creator, or company",
+    "clearSearch": "Clear search",
+    "emptySearch": "No events match this search.",
     "noCompany": "No company",
     "kind": {
       "delivery": "Delivery",

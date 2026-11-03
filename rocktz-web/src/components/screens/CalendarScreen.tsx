@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
@@ -22,6 +22,10 @@ function calendarCompanyKey(userId: number) {
   return `rocktz.calendar.company.${userId}`;
 }
 
+function fold(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 function CalendarScreenInner() {
   const user = useAuth();
   const { t, i18n } = useTranslation("app");
@@ -32,6 +36,7 @@ function CalendarScreenInner() {
   const [kind, setKind] = useState<KindFilter>(isCreator ? "all" : "post");
   const [source, setSource] = useState<SourceFilter>("all");
   const [companyId, setCompanyIdState] = useState("all");
+  const [query, setQuery] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,14 +111,16 @@ function CalendarScreenInner() {
     if (!companyOptions.some((option) => option.value === companyId)) setCompanyId("all");
   }, [isAgency, companyId, companies.length, companyOptions]);
 
-  const visible = useMemo(
-    () => events.filter((event) => {
+  const visible = useMemo(() => {
+    const term = fold(query.trim());
+    return events.filter((event) => {
       if (source !== "all" && event.source !== source) return false;
       if (isAgency && companyId !== "all" && String(event.company?.id ?? "") !== companyId) return false;
-      return true;
-    }),
-    [events, source, isAgency, companyId],
-  );
+      if (!term) return true;
+      const haystack = fold([event.title, event.format, event.creator?.artistic_name, event.company?.name].filter(Boolean).join(" "));
+      return haystack.includes(term);
+    });
+  }, [events, source, isAgency, companyId, query]);
 
   const agenda = useMemo(
     () => [...visible].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind)),
@@ -154,21 +161,40 @@ function CalendarScreenInner() {
             </button>
           </div>
         </div>
-        <div className={cn("grid gap-3 border-t border-slate-100 pt-4", isAgency ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-          {isAgency ? (
+        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterSearchLabel")}</span>
+            <span className="relative block">
+              <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("calendar.searchPlaceholder")}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pr-9 pl-9 text-sm font-medium text-slate-800 outline-none focus:border-brand-primary"
+              />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={t("calendar.clearSearch")}>
+                  <X size={14} />
+                </button>
+              ) : null}
+            </span>
+          </label>
+          <div className={cn("grid gap-3", isAgency ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+            {isAgency ? (
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterCompanyLabel")}</span>
+                <Select2Field searchable theme="light" value={companyId} options={companyOptions} onChange={setCompanyId} />
+              </label>
+            ) : null}
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterCompanyLabel")}</span>
-              <Select2Field searchable theme="light" value={companyId} options={companyOptions} onChange={setCompanyId} />
+              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterSourceLabel")}</span>
+              <Select2Field theme="light" value={source} options={sourceOptions} onChange={(value) => setSource(value as SourceFilter)} />
             </label>
-          ) : null}
-          <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterSourceLabel")}</span>
-            <Select2Field theme="light" value={source} options={sourceOptions} onChange={(value) => setSource(value as SourceFilter)} />
-          </label>
-          <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterKindLabel")}</span>
-            <Select2Field theme="light" value={kind} options={kindOptions} onChange={(value) => setKind(value as KindFilter)} />
-          </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("calendar.filterKindLabel")}</span>
+              <Select2Field theme="light" value={kind} options={kindOptions} onChange={(value) => setKind(value as KindFilter)} />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -184,7 +210,7 @@ function CalendarScreenInner() {
             {!agenda.length ? (
               <div className="py-10 text-center">
                 <CalendarDays size={28} className="mx-auto text-slate-300" />
-                <p className="mt-2 text-sm font-bold text-slate-700">{t("calendar.empty")}</p>
+                <p className="mt-2 text-sm font-bold text-slate-700">{query.trim() ? t("calendar.emptySearch") : t("calendar.empty")}</p>
               </div>
             ) : (
               <div className="flex flex-col gap-6">

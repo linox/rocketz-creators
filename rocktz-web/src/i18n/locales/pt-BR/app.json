@@ -3019,6 +3019,10 @@
     "filterCompanyLabel": "Empresa",
     "filterSourceLabel": "Origem",
     "filterKindLabel": "Tipo",
+    "filterSearchLabel": "Busca",
+    "searchPlaceholder": "Buscar por campanha, criador ou empresa",
+    "clearSearch": "Limpar busca",
+    "emptySearch": "Nenhum evento encontrado para essa busca.",
     "noCompany": "Sem empresa",
     "kind": {
       "delivery": "Entrega",
