@@ -129,11 +129,26 @@ class CampaignController extends Controller
             ->whereNotIn('status', [CampaignStatus::Finished, CampaignStatus::PendingAgency]);
 
         if ($user->role !== UserRole::Admin) {
-            $query->where('is_secret', false);
-        }
-
-        if ($user->role === UserRole::Creator && $user->creator) {
-            $query->forCreatorMarketplace($user->creator);
+            $creatorId = $user->role === UserRole::Creator ? (int) ($user->creator?->id ?? 0) : 0;
+            $query->where(function ($visible) use ($user, $creatorId) {
+                $visible->where(function ($open) use ($user) {
+                    $open->where('is_secret', false);
+                    if ($user->role === UserRole::Creator && $user->creator) {
+                        $open->forCreatorMarketplace($user->creator);
+                    }
+                });
+                if ($creatorId > 0) {
+                    $visible->orWhere(function ($secret) use ($creatorId) {
+                        $secret->where('is_secret', true)
+                            ->whereHas('campaignCreators', fn ($q) => $q
+                                ->where('creator_id', $creatorId)
+                                ->whereIn('application_status', [
+                                    ApplicationStatus::Invited->value,
+                                    ApplicationStatus::Declined->value,
+                                ]));
+                    });
+                }
+            });
         }
 
         return response()->json(['data' => CampaignResource::collection($query->latest()->get())]);
@@ -343,6 +358,7 @@ class CampaignController extends Controller
         abort_unless($creator, 403, __('auth.creators_only_apply'));
         abort_unless($creator->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
         abort_if($campaign->isPendingAgency(), 403, __('auth.campaign_awaiting_agency'));
+        abort_if($campaign->is_secret, 403, __('auth.campaign_invite_only'));
         abort_unless(
             $creator->contractAcceptances()->exists(),
             403,
@@ -734,6 +750,10 @@ class CampaignController extends Controller
         $creator = Creator::query()->findOrFail($data['creator_id']);
         $this->assertCreatorEligibility($campaign, $creator, true);
 
+        if ($campaign->is_secret) {
+            return $this->inviteCreator($campaign, $creator, $data);
+        }
+
         $shouldNotify = false;
         $row = DB::transaction(function () use ($campaign, $data, &$shouldNotify) {
             $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
@@ -792,6 +812,176 @@ class CampaignController extends Controller
         }
 
         return response()->json(['data' => new CampaignCreatorResource($row->load(['creator', 'demands']))], 201);
+    }
+
+    public function respondInvitation(Request $request, Campaign $campaign): JsonResponse
+    {
+        $user = $request->user();
+        $creator = $user->creator;
+        abort_unless($user->role === UserRole::Creator && $creator, 403, __('auth.forbidden'));
+        abort_unless($creator->status === CreatorStatus::Active, 403, __('auth.creator_must_be_approved'));
+        abort_unless(
+            $creator->contractAcceptances()->exists(),
+            403,
+            __('auth.creator_must_accept_contract'),
+        );
+        abort_if($campaign->isPendingAgency(), 403, __('auth.campaign_awaiting_agency'));
+
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['accept', 'decline'])],
+            'custom_contract_accepted' => ['sometimes', 'boolean'],
+        ]);
+
+        $row = CampaignCreator::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('creator_id', $creator->id)
+            ->first();
+        abort_unless(
+            $row && $row->application_status === ApplicationStatus::Invited,
+            403,
+            __('auth.campaign_invite_missing'),
+        );
+
+        if ($data['decision'] === 'decline') {
+            $row->forceFill(['application_status' => ApplicationStatus::Declined])->save();
+            $this->notifyInviteDecision($campaign, $creator, false);
+
+            return response()->json([
+                'data' => new CampaignCreatorResource($row->fresh()->load(['creator', 'campaign'])),
+            ]);
+        }
+
+        $this->assertCreatorEligibility($campaign, $creator);
+        $campaign->loadMissing('company');
+        abort_unless(
+            $creator->canAccessCompanyCountry($campaign->company),
+            403,
+            __('auth.campaign_country_restricted'),
+        );
+        $acceptedCustom = $request->boolean('custom_contract_accepted');
+        if ($campaign->requiresCustomContract()) {
+            abort_unless(
+                $row->custom_contract_accepted_at || $acceptedCustom,
+                403,
+                __('auth.creator_must_accept_campaign_contract'),
+            );
+        }
+
+        $row = DB::transaction(function () use ($campaign, $row, $acceptedCustom) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
+            $current = CampaignCreator::query()->whereKey($row->id)->lockForUpdate()->firstOrFail();
+            abort_unless($current->application_status === ApplicationStatus::Invited, 403, __('auth.campaign_invite_missing'));
+            if ($locked->approvedCreatorsLimitReached(true)) {
+                abort(422, __('auth.campaign_approved_limit_full'));
+            }
+
+            $payload = [
+                'application_status' => ApplicationStatus::Approved,
+                'amount' => $current->amount ?? $this->defaultCreatorAmount($locked),
+                'delivery_status' => $current->delivery_status ?? DeliveryStatus::Pending,
+            ];
+            if ($locked->requiresCustomContract() && ! $current->custom_contract_accepted_at) {
+                $payload['custom_contract_accepted_at'] = now();
+            }
+            $current->fill($payload)->save();
+            $current->setRelation('campaign', $locked);
+            $this->syncCampaignApprovedLimit($locked, false);
+            $this->demands->syncCreator($current->fresh());
+
+            return $current->fresh();
+        });
+
+        if ($row->application_status === ApplicationStatus::Approved) {
+            $this->barterShipments->syncParticipation($row);
+            $row->loadMissing('creator');
+            if ($row->creator) {
+                $this->coupons->issue($campaign->fresh(), $row->creator, true);
+            }
+            $this->notifyInviteDecision($campaign, $creator, true);
+        }
+
+        return response()->json([
+            'data' => new CampaignCreatorResource($row->load(['creator', 'campaign', 'demands'])),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function inviteCreator(Campaign $campaign, Creator $creator, array $data): JsonResponse
+    {
+        $row = DB::transaction(function () use ($campaign, $creator, $data) {
+            $locked = Campaign::query()->lockForUpdate()->findOrFail($campaign->id);
+            $existing = CampaignCreator::query()
+                ->where('campaign_id', $locked->id)
+                ->where('creator_id', $creator->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing?->application_status === ApplicationStatus::Approved) {
+                $existing->setRelation('campaign', $locked);
+
+                return $existing;
+            }
+
+            $created = CampaignCreator::query()->updateOrCreate(
+                ['campaign_id' => $locked->id, 'creator_id' => $creator->id],
+                [
+                    'amount' => array_key_exists('amount', $data) && $data['amount'] !== null
+                        ? $data['amount']
+                        : ($existing?->amount ?? $this->defaultCreatorAmount($locked)),
+                    'delivery_type' => $data['delivery_type'] ?? $existing?->delivery_type ?? 'ugc',
+                    'application_status' => ApplicationStatus::Invited,
+                    'delivery_status' => DeliveryStatus::Pending,
+                    'rejection_reason' => null,
+                ],
+            );
+            $created->setRelation('campaign', $locked);
+
+            return $created;
+        });
+
+        if ($row->application_status === ApplicationStatus::Invited) {
+            $this->notifications->notifyCreator((int) $creator->id, [
+                'campaign_id' => $campaign->id,
+                'title' => __('auth.campaign_invited_title'),
+                'message' => __('auth.campaign_invited', ['name' => $campaign->name]),
+                'type' => NotificationType::Application,
+                'link' => '/campaigns/'.$campaign->id,
+            ]);
+            $row->loadMissing('creator.user');
+            if ($row->creator) {
+                $this->mail->campaignInvited($campaign->loadMissing('company'), $row->creator);
+            }
+        }
+
+        return response()->json(['data' => new CampaignCreatorResource($row->load(['creator', 'demands']))], 201);
+    }
+
+    private function notifyInviteDecision(Campaign $campaign, Creator $creator, bool $accepted): void
+    {
+        $name = $creator->artistic_name ?: $creator->full_name;
+        $title = $accepted ? __('auth.campaign_invite_accepted_title') : __('auth.campaign_invite_declined_title');
+        $message = $accepted
+            ? __('auth.campaign_invite_accepted', ['creator' => $name, 'name' => $campaign->name])
+            : __('auth.campaign_invite_declined', ['creator' => $name, 'name' => $campaign->name]);
+        $type = $accepted ? NotificationType::Approval : NotificationType::Rejection;
+        $link = '/campaigns/'.$campaign->id;
+
+        $this->notifications->notifyAdmins($title, $message, $type, $link, [
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+        ]);
+        if ($campaign->company_id) {
+            $this->notifications->notifyCompany((int) $campaign->company_id, [
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+                'title' => $title,
+                'message' => $message,
+                'type' => $type,
+                'link' => $link,
+            ]);
+        }
     }
 
     /**

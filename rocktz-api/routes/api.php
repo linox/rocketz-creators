@@ -115,6 +115,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('campaigns/{campaign}/post-metrics-sync', [CampaignController::class, 'syncPostMetrics'])->middleware('throttle:metrics-sync');
     Route::get('campaigns/{campaign}/post-metrics-sync', [CampaignController::class, 'postMetricsStatus'])->middleware('throttle:metrics-sync-status');
     Route::post('campaigns/{campaign}/apply', [CampaignController::class, 'apply']);
+    Route::post('campaigns/{campaign}/invitation', [CampaignController::class, 'respondInvitation']);
     Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
     Route::get('barter-shipments', [BarterShipmentController::class, 'index']);
 

@@ -8,6 +8,7 @@ enum MailTemplateKey: string
     case CreatorApproved = 'creator.approved';
     case CreatorRejected = 'creator.rejected';
     case CampaignOpportunity = 'campaign.opportunity';
+    case CampaignInvitation = 'campaign.invitation';
     case CampaignApplicationReceived = 'campaign.application_received';
     case CampaignApplicationApproved = 'campaign.application_approved';
     case CampaignApplicationRejected = 'campaign.application_rejected';
@@ -128,6 +129,7 @@ enum MailTemplateKey: string
             self::CreatorApproved => ['link_plataforma'],
             self::CreatorRejected => ['link_cadastro'],
             self::CampaignOpportunity,
+            self::CampaignInvitation,
             self::CampaignApplicationReceived,
             self::CampaignApplicationApproved,
             self::CampaignApplicationRejected,
@@ -160,7 +162,7 @@ enum MailTemplateKey: string
     public function highlightKeys(): array
     {
         return match ($this) {
-            self::CampaignOpportunity => ['nome_empresa', 'nome_campanha', 'data_limite', 'valor_campanha'],
+            self::CampaignOpportunity, self::CampaignInvitation => ['nome_empresa', 'nome_campanha', 'data_limite', 'valor_campanha'],
             self::CampaignApplicationApproved => ['nome_campanha', 'nome_empresa', 'data_entrega'],
             self::DemandAssigned => ['nome_campanha', 'nome_empresa', 'nome_demanda', 'data_entrega', 'valor_campanha'],
             self::DemandReminder => ['nome_demanda', 'data_limite'],

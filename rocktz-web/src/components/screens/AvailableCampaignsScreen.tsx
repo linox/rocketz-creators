@@ -18,6 +18,7 @@ import {
   TicketPercent,
   Info,
   Layers,
+  Lock,
   MapPin,
   Megaphone,
   Search,
@@ -33,7 +34,7 @@ import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
-import { alertApiError, alertSuccess, alertWarning, alertWarningLink } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning, alertWarningLink } from "@/lib/alerts";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { hasCompleteShippingAddress } from "@/lib/shipping-address";
 import { cn } from "@/lib/cn";
@@ -221,6 +222,51 @@ function AvailableInner() {
     setCustomContractAccepted(false);
   }
 
+  async function respondInvite(campaign: Campaign, decision: "accept" | "decline", acceptContract = false) {
+    if (decision === "decline") {
+      const ok = await alertConfirm(t("campaignDetail.declineInviteTitle"), t("campaignDetail.declineInviteText"), t("campaignDetail.declineInvite"));
+      if (!ok) return;
+    }
+    if (decision === "accept" && campaign.has_custom_contract && !acceptContract) {
+      await alertWarning(t("available.customContractRequired"), t("available.customContractRequiredText"));
+      setBriefing(campaign);
+      return;
+    }
+    if (decision === "accept" && campaign.is_barter && user.creator?.id) {
+      try {
+        const profile = (await api.creator(user.creator.id)).data;
+        if (!hasCompleteShippingAddress(profile.shipping_address, profile.country)) {
+          await promptShippingAddress();
+          return;
+        }
+      } catch (err) {
+        await alertApiError(err);
+        return;
+      }
+    }
+    setSending(true);
+    try {
+      await api.respondCampaignInvitation(campaign.id, {
+        decision,
+        custom_contract_accepted: decision === "accept" && campaign.has_custom_contract ? true : undefined,
+      });
+      await alertSuccess(
+        decision === "accept" ? t("campaignDetail.acceptedInvite") : t("campaignDetail.declinedInvite"),
+        campaign.name,
+      );
+      setBriefing(null);
+      load();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "shipping_required") {
+        await promptShippingAddress();
+        return;
+      }
+      await alertApiError(err);
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function onApply(event: FormEvent) {
     event.preventDefault();
     if (!applying) return;
@@ -256,12 +302,24 @@ function AvailableInner() {
 
   function ApplicationActions({ campaign, compact = false }: { campaign: Campaign; compact?: boolean }) {
     const mine = myApps[campaign.id];
+    if (mine?.application_status === "invited") {
+      return (
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" disabled={sending} onClick={() => void respondInvite(campaign, "decline")} className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            <X size={13} /> {t("available.declineInvite")}
+          </button>
+          <button type="button" disabled={sending} onClick={() => void respondInvite(campaign, "accept")} className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+            <CheckCircle2 size={13} /> {t("available.acceptInvite")}
+          </button>
+        </div>
+      );
+    }
     if (mine) {
       const badge =
         mine.application_status === "approved" ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700"><CheckCircle2 size={12} /> {t("available.selected")}</span>
-        ) : mine.application_status === "rejected" ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">{t("available.notSelected")}</span>
+        ) : mine.application_status === "rejected" || mine.application_status === "declined" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">{mine.application_status === "declined" ? t("available.declined") : t("available.notSelected")}</span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700"><Clock size={12} /> {t("available.pending")}</span>
         );
@@ -575,6 +633,8 @@ function AvailableInner() {
                     <div className="text-xs font-medium text-slate-500">
                       {mine?.application_status === "approved" ? <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-100 px-3.5 py-1.5 text-xs font-black text-emerald-800"><CheckCircle2 size={14} /> {t("available.approvedLong")}</span>
                         : mine?.application_status === "rejected" ? <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-600">{t("available.rejectedLong")}</span>
+                        : mine?.application_status === "declined" ? <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-600">{t("available.declinedLong")}</span>
+                        : mine?.application_status === "invited" ? <span className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-bold text-indigo-800"><Lock size={14} /> {t("available.invitedLong")}</span>
                         : mine ? <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-100/80 px-3.5 py-1.5 text-xs font-bold text-amber-800"><Clock size={14} /> {t("available.pendingLong")}</span>
                         : !isAcceptingApplications(campaign) ? t("available.applicationsClosedHint")
                         : t("available.applyHint")}
@@ -583,7 +643,16 @@ function AvailableInner() {
                       <button type="button" onClick={() => setBriefing(campaign)} className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-xl bg-slate-100 px-4 text-xs font-bold tracking-wider text-slate-800 uppercase hover:bg-slate-200">
                         <FileText size={14} /> {t("available.seeFullBriefing")}
                       </button>
-                      {!mine && canApply && isAcceptingApplications(campaign) ? (
+                      {mine?.application_status === "invited" ? (
+                        <>
+                          <button type="button" disabled={sending} onClick={() => void respondInvite(campaign, "decline")} className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                            <X size={14} /> {t("available.declineInvite")}
+                          </button>
+                          <button type="button" disabled={sending} onClick={() => void respondInvite(campaign, "accept")} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-emerald-600 px-6 text-xs font-bold tracking-wider text-white uppercase hover:bg-emerald-700 disabled:opacity-50">
+                            <CheckCircle2 size={14} /> {t("available.acceptInvite")}
+                          </button>
+                        </>
+                      ) : !mine && canApply && isAcceptingApplications(campaign) ? (
                         <button type="button" onClick={() => openApply(campaign)} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-6 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-600/20 hover:bg-indigo-600">
                           <Send size={14} /> {t("available.applyCampaign")}
                         </button>
@@ -671,7 +740,16 @@ function AvailableInner() {
               </div>
               <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 sm:p-6">
                 <button type="button" onClick={() => setBriefing(null)} className="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200">{tc("close")}</button>
-                {!myApps[briefing.id] && canApply && isAcceptingApplications(briefing) ? (
+                {myApps[briefing.id]?.application_status === "invited" ? (
+                  <div className="flex items-center gap-2">
+                    <button type="button" disabled={sending} onClick={() => void respondInvite(briefing, "decline")} className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      <X size={13} /> {t("available.declineInvite")}
+                    </button>
+                    <button type="button" disabled={sending} onClick={() => void respondInvite(briefing, "accept", true)} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-emerald-600 px-5 text-xs font-bold tracking-wider text-white uppercase hover:bg-emerald-700 disabled:opacity-50">
+                      <CheckCircle2 size={13} /> {t("available.acceptInvite")}
+                    </button>
+                  </div>
+                ) : !myApps[briefing.id] && canApply && isAcceptingApplications(briefing) ? (
                   <button type="button" onClick={() => openApply(briefing)} className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand-primary px-5 text-xs font-bold tracking-wider text-white uppercase shadow-md shadow-indigo-600/20 hover:bg-indigo-600">
                     <Send size={13} /> {t("available.applyNow")}
                   </button>

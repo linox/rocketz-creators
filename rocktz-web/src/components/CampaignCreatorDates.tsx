@@ -60,12 +60,18 @@ export function CampaignCreatorDates({
           <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaigns.generalDeliveryDate")}</span>
           <span className="mt-0.5 block text-sm font-black text-slate-800">{formatDate(generalDate, locale)}</span>
         </div>
-        <div className="rounded-xl border border-white bg-white px-3 py-2">
-          <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">
-            {personalized ? t("campaignDetail.personalizedBadge") : t("campaignDetail.generalBadge")}
-          </span>
-          <span className="mt-0.5 block text-sm font-black text-slate-800">{formatDate(effective, locale)}</span>
-        </div>
+        {personalized ? (
+          <div className="rounded-xl border border-white bg-white px-3 py-2">
+            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.personalizedBadge")}</span>
+            <span className="mt-0.5 block text-sm font-black text-slate-800">{formatDate(effective, locale)}</span>
+          </div>
+        ) : null}
+        {postDate ? (
+          <div className="rounded-xl border border-white bg-white px-3 py-2">
+            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.postDate")}</span>
+            <span className="mt-0.5 block text-sm font-black text-slate-800">{formatDate(postDate, locale)}</span>
+          </div>
+        ) : null}
       </div>
       {canEdit ? (
         <>

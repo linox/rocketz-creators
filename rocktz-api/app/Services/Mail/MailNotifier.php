@@ -275,6 +275,19 @@ class MailNotifier
         ], $item ?? $contract, $item ? 'item:'.$item->id : 'contract');
     }
 
+    public function campaignInvited(Campaign $campaign, Creator $creator): void
+    {
+        if (! $creator->user) {
+            return;
+        }
+        $this->mail->send(MailTemplateKey::CampaignInvitation, $creator->user, $this->campaignVars($campaign, [
+            'nome_criador' => $creator->artistic_name ?: $creator->full_name,
+            'cta_url' => FrontendUrl::to('/campaigns/'.$campaign->id),
+            'link_campanha' => FrontendUrl::to('/campaigns/'.$campaign->id),
+            'creator_id' => $creator->id,
+        ]), $campaign, 'invite:'.hrtime(true));
+    }
+
     public function campaignAssigned(Campaign $campaign, Creator $creator): void
     {
         if (! $creator->user) {

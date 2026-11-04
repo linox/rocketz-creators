@@ -55,6 +55,13 @@ class CampaignCreatorFactory extends Factory
         ]);
     }
 
+    public function invited(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'application_status' => ApplicationStatus::Invited,
+        ]);
+    }
+
     public function approved(): static
     {
         return $this->state(fn (array $attributes) => [

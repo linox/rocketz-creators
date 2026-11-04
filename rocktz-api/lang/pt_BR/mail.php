@@ -58,6 +58,12 @@ return [
             'body' => 'Uma nova campanha está disponível no Creatorz by Rocketz e combina com o seu perfil. Veja os detalhes e, se fizer sentido, candidate-se.',
             'cta' => 'Ver campanha',
         ],
+        'campaign.invitation' => [
+            'subject' => 'Convite para a campanha {{nome_campanha}}',
+            'greeting' => 'Olá, {{nome_criador}}!',
+            'body' => "{{nome_empresa}} convidou você para a campanha {{nome_campanha}}.\n\nA campanha é privada e aparece só para quem foi convidado. Entre na plataforma para aceitar ou recusar a participação.",
+            'cta' => 'Ver convite',
+        ],
         'campaign.application_received' => [
             'subject' => 'Sua inscrição em {{nome_campanha}} foi recebida',
             'greeting' => 'Olá, {{nome_criador}}!',

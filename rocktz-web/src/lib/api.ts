@@ -241,6 +241,8 @@ export const api = {
     laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),
   applyCampaign: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/apply`, { method: "POST", body: JSON.stringify(body) }),
+  respondCampaignInvitation: (id: number, body: { decision: "accept" | "decline"; custom_contract_accepted?: boolean }) =>
+    laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/invitation`, { method: "POST", body: JSON.stringify(body) }),
   assignCreator: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaigns/${id}/assign`, { method: "POST", body: JSON.stringify(body) }),
   updateParticipation: (id: number, body: unknown) => laravelFetch<Item<CampaignCreator>>(`/campaign-creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteParticipation: (id: number) => laravelFetch<{ message: string }>(`/campaign-creators/${id}`, { method: "DELETE" }),

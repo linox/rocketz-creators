@@ -58,6 +58,12 @@ return [
             'body' => 'A new campaign is available on Creatorz by Rocketz and may be a fit. Open the details and apply if it makes sense.',
             'cta' => 'View campaign',
         ],
+        'campaign.invitation' => [
+            'subject' => 'Invitation to {{nome_campanha}}',
+            'greeting' => 'Hi, {{nome_criador}}!',
+            'body' => "{{nome_empresa}} invited you to the campaign {{nome_campanha}}.\n\nThis campaign is private and only appears for invited people. Open the platform to accept or decline.",
+            'cta' => 'View invitation',
+        ],
         'campaign.application_received' => [
             'subject' => 'We received your application for {{nome_campanha}}',
             'greeting' => 'Hi, {{nome_criador}}!',

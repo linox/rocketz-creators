@@ -51,6 +51,7 @@ import {
   Scale,
   ScrollText,
   Search,
+  Send,
   Sparkles,
   ThumbsUp,
   TicketPercent,
@@ -120,7 +121,7 @@ const STATUSES = ["briefing", "selection", "approval", "production", "published"
 type Tab = "entregas" | "candidaturas" | "briefing" | "financeiro" | "metricas";
 type CreatorFilter = "all" | "attention" | "owing" | "on_track" | "delivered" | "no_demand";
 type CreatorPace = "owing" | "on_track" | "delivered" | "no_demand";
-type AppFilter = "all" | "pending" | "approved" | "rejected";
+type AppFilter = "all" | "pending" | "approved" | "rejected" | "invited";
 type CreatorLayout = "split" | "grid";
 const LAYOUT_STORAGE_KEY = "rocktz.creatorLayout";
 
@@ -552,6 +553,8 @@ function DetailInner() {
   const [watchingVideoUrl, setWatchingVideoUrl] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [respondingInvite, setRespondingInvite] = useState(false);
+  const [inviteContractOk, setInviteContractOk] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerGroup, setPickerGroup] = useState("all");
   const [pickerNetwork, setPickerNetwork] = useState("all");
@@ -704,6 +707,10 @@ function DetailInner() {
     if (!isCreator || !ownCreatorId) return approvedCreators;
     return approvedCreators.filter((row) => row.creator_id === ownCreatorId);
   }, [approvedCreators, isCreator, ownCreatorId]);
+  const ownParticipation = useMemo(
+    () => (ownCreatorId ? applications.find((row) => row.creator_id === ownCreatorId) ?? null : null),
+    [applications, ownCreatorId],
+  );
   const myParticipation = useMemo(
     () => (ownCreatorId ? approvedCreators.find((row) => row.creator_id === ownCreatorId) ?? null : null),
     [approvedCreators, ownCreatorId],
@@ -847,7 +854,8 @@ function DetailInner() {
   const filteredApps = useMemo(() => {
     const term = appSearch.trim().toLowerCase();
     return reviewApps.filter((row) => {
-      if (appFilter !== "all" && row.application_status !== appFilter) return false;
+      if (appFilter === "invited" && row.application_status !== "invited" && row.application_status !== "declined") return false;
+      if (appFilter !== "all" && appFilter !== "invited" && row.application_status !== appFilter) return false;
       if (!term) return true;
       const niches = (row.creator?.categories ?? []).join(" ");
       const blob = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.creator?.city ?? ""} ${row.creator?.state ?? ""} ${niches}`.toLowerCase();
@@ -1212,7 +1220,7 @@ function DetailInner() {
     }
   }
 
-  async function assign(creator: Creator) {
+  async function assign(creator: { id: number }) {
     if (!campaign) return;
     const previous = campaign;
     try {
@@ -1223,13 +1231,38 @@ function DetailInner() {
       });
       setAddOpen(false);
       const next = await load();
-      if (previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
+      if (!campaign.is_secret && previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
         await alertSuccess(t("campaigns.approvedLimitClosedTitle"), t("campaigns.approvedLimitClosed", { count: next.max_approved_creators }));
         return;
       }
-      await alertSuccess(t("campaignDetail.added"));
+      await alertSuccess(campaign.is_secret ? t("campaignDetail.invited") : t("campaignDetail.added"));
     } catch (err) {
       await alertApiError(err);
+    }
+  }
+
+  async function respondInvite(decision: "accept" | "decline") {
+    if (!campaign) return;
+    if (decision === "accept" && campaign.has_custom_contract && !inviteContractOk) {
+      await alertWarning(t("available.customContractRequired"), t("available.customContractRequiredText"));
+      return;
+    }
+    if (decision === "decline") {
+      const ok = await alertConfirm(t("campaignDetail.declineInviteTitle"), t("campaignDetail.declineInviteText"), t("campaignDetail.declineInvite"));
+      if (!ok) return;
+    }
+    setRespondingInvite(true);
+    try {
+      await api.respondCampaignInvitation(campaign.id, {
+        decision,
+        custom_contract_accepted: decision === "accept" && campaign.has_custom_contract ? true : undefined,
+      });
+      await load();
+      await alertSuccess(decision === "accept" ? t("campaignDetail.acceptedInvite") : t("campaignDetail.declinedInvite"));
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setRespondingInvite(false);
     }
   }
 
@@ -1493,6 +1526,44 @@ function DetailInner() {
           </div>
         </div>
 
+        {isCreator && ownParticipation?.application_status === "invited" ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2 text-indigo-950">
+              <Lock size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="m-0 text-xs font-black tracking-wider uppercase">{t("campaignDetail.inviteBannerTitle")}</p>
+                <p className="m-0 mt-1 text-[11px] font-medium leading-snug">{t("campaignDetail.inviteBannerText")}</p>
+              </div>
+            </div>
+            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              {campaign.has_custom_contract ? (
+                <label className="flex max-w-sm items-start gap-2 text-[11px] font-semibold text-indigo-950">
+                  <input type="checkbox" checked={inviteContractOk} onChange={(event) => setInviteContractOk(event.target.checked)} className="mt-0.5" />
+                  <span>{t("available.customContractAccept")}</span>
+                </label>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={respondingInvite} onClick={() => void respondInvite("decline")} className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  <X size={14} /> {t("campaignDetail.declineInvite")}
+                </button>
+                <button type="button" disabled={respondingInvite} onClick={() => void respondInvite("accept")} className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50">
+                  <Check size={14} /> {t("campaignDetail.acceptInvite")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isCreator && ownParticipation?.application_status === "declined" ? (
+          <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-slate-700">
+            <X size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="m-0 text-xs font-black tracking-wider uppercase">{t("campaignDetail.inviteDeclinedTitle")}</p>
+              <p className="m-0 mt-1 text-[11px] font-medium leading-snug">{t("campaignDetail.inviteDeclinedText")}</p>
+            </div>
+          </div>
+        ) : null}
+
         {isPendingAgency(campaign.status) ? (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2 text-amber-900">
@@ -1728,7 +1799,7 @@ function DetailInner() {
                   </div>
                   {isAdmin ? (
                     <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-[11px] font-extrabold text-white shadow-xs hover:bg-indigo-600">
-                      <Plus size={13} /> {t("campaignDetail.addCreator")}
+                      <Plus size={13} /> {campaign.is_secret ? t("campaignDetail.inviteCreator") : t("campaignDetail.addCreator")}
                     </button>
                   ) : null}
                 </div>
@@ -2121,7 +2192,7 @@ function DetailInner() {
 
                 {canManage ? (
                   <CampaignCreatorDates
-                    key={selected.id}
+                    key={`dates-${selected.id}`}
                     generalDate={campaign.delivery_date || null}
                     deliveryDate={selected.delivery_date}
                     postDate={selected.post_date || null}
@@ -2141,7 +2212,7 @@ function DetailInner() {
 
                 {canManage && selected.application_status === "approved" ? (
                   <CampaignCreatorDeliverables
-                    key={selected.id}
+                    key={`deliverables-${selected.id}`}
                     campaignDefaults={campaign.deliverables}
                     value={selected.deliverables}
                     onSave={(deliverables) => saveCreatorDeliverables(selected.id, deliverables)}
@@ -2437,7 +2508,7 @@ function DetailInner() {
                 <p className="max-w-sm text-xs text-slate-500">{t("campaignDetail.selectCreatorHint")}</p>
                 {approvedCreators.length === 0 && isAdmin ? (
                   <button type="button" onClick={() => setAddOpen(true)} className="mt-2 flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600">
-                    <Plus size={14} /> {t("campaignDetail.addFirst")}
+                    <Plus size={14} /> {campaign.is_secret ? t("campaignDetail.inviteFirst") : t("campaignDetail.addFirst")}
                   </button>
                 ) : null}
               </div>
@@ -2494,12 +2565,12 @@ function DetailInner() {
               </div>
               {isAdmin ? (
                 <button type="button" onClick={() => setAddOpen(true)} className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800">
-                  <Plus size={14} /> {t("campaignDetail.addManual")}
+                  <Plus size={14} /> {campaign.is_secret ? t("campaignDetail.inviteCreator") : t("campaignDetail.addManual")}
                 </button>
               ) : null}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className={cn("grid grid-cols-2 gap-3", campaign.is_secret ? "sm:grid-cols-5" : "sm:grid-cols-4")}>
             <button type="button" onClick={() => setAppFilter("all")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "all" ? "border-brand-primary bg-indigo-50/80 ring-2 ring-brand-primary/20" : "border-slate-200 bg-white hover:border-slate-300")}>
               <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{t("campaignDetail.appsTotal")}</div>
               <div className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{reviewApps.length}</div>
@@ -2519,6 +2590,12 @@ function DetailInner() {
               <div className="text-[10px] font-black tracking-wider text-rose-600 uppercase">{t("campaignDetail.appsRejected")}</div>
               <div className="mt-1 text-xl font-black text-rose-700 sm:text-2xl">{reviewApps.filter((row) => row.application_status === "rejected").length}</div>
             </button>
+            {campaign.is_secret ? (
+              <button type="button" onClick={() => setAppFilter("invited")} className={cn("cursor-pointer rounded-2xl border p-4 text-left shadow-xs", appFilter === "invited" ? "border-indigo-400 bg-indigo-50/80 ring-2 ring-indigo-400/20" : "border-slate-200 bg-white hover:border-slate-300")}>
+                <div className="text-[10px] font-black tracking-wider text-indigo-600 uppercase">{t("campaignDetail.appsInvited")}</div>
+                <div className="mt-1 text-xl font-black text-indigo-700 sm:text-2xl">{reviewApps.filter((row) => row.application_status === "invited" || row.application_status === "declined").length}</div>
+              </button>
+            ) : null}
           </div>
           {filteredApps.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-12 text-center">
@@ -2529,6 +2606,7 @@ function DetailInner() {
                 {appFilter === "pending" ? t("campaignDetail.emptyPending")
                   : appFilter === "approved" ? t("campaignDetail.emptyApproved")
                     : appFilter === "rejected" ? t("campaignDetail.emptyRejected")
+                      : appFilter === "invited" ? t("campaignDetail.emptyInvited")
                       : t("campaignDetail.emptyAll")}
               </h4>
               <p className="max-w-md text-xs text-slate-500">
@@ -2544,6 +2622,8 @@ function DetailInner() {
             <div className="grid grid-cols-1 gap-4">
               {filteredApps.map((row) => {
                 const isPending = row.application_status === "pending";
+                const isInvited = row.application_status === "invited";
+                const isDeclined = row.application_status === "declined";
                 const isAppApproved = row.application_status === "approved";
                 const isRejected = row.application_status === "rejected";
                 const isUpdating = updatingId === row.id;
@@ -2559,7 +2639,7 @@ function DetailInner() {
                     key={row.id}
                     className={cn(
                       "flex flex-col justify-between gap-5 rounded-2xl border bg-white p-5 shadow-xs transition-all lg:flex-row lg:items-center",
-                      isPending ? "border-amber-200/90 ring-1 ring-amber-100 hover:border-amber-400" : isAppApproved ? "border-emerald-200/90 bg-emerald-50/20 hover:border-emerald-400" : "border-slate-200 opacity-80",
+                      isPending || isInvited ? "border-amber-200/90 ring-1 ring-amber-100 hover:border-amber-400" : isAppApproved ? "border-emerald-200/90 bg-emerald-50/20 hover:border-emerald-400" : "border-slate-200 opacity-80",
                     )}
                   >
                     <div className="flex min-w-0 items-start gap-4 sm:items-center">
@@ -2581,10 +2661,10 @@ function DetailInner() {
                           </Link>
                           <span className={cn(
                             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black tracking-wider uppercase",
-                            isPending ? "border border-amber-300 bg-amber-100 text-amber-800" : isAppApproved ? "border border-emerald-300 bg-emerald-100 text-emerald-800" : "border border-rose-300 bg-rose-100 text-rose-800",
+                            isPending || isInvited ? "border border-amber-300 bg-amber-100 text-amber-800" : isAppApproved ? "border border-emerald-300 bg-emerald-100 text-emerald-800" : isDeclined ? "border border-slate-300 bg-slate-100 text-slate-700" : "border border-rose-300 bg-rose-100 text-rose-800",
                           )}>
-                            {isPending ? <Clock size={11} /> : isAppApproved ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                            {isPending ? t("campaignDetail.pendingApproval") : isAppApproved ? t("campaignDetail.approvedCasting") : t("campaignDetail.rejectedApp")}
+                            {isPending || isInvited ? <Clock size={11} /> : isAppApproved ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                            {isInvited ? t("campaignDetail.awaitingInvite") : isDeclined ? t("campaignDetail.declinedInviteStatus") : isPending ? t("campaignDetail.pendingApproval") : isAppApproved ? t("campaignDetail.approvedCasting") : t("campaignDetail.rejectedApp")}
                           </span>
                           {campaign.is_barter && isAppApproved ? (
                             <BarterDeliveryBadge status={row.barter_shipment?.status} />
@@ -2699,6 +2779,11 @@ function DetailInner() {
                               <Edit3 size={14} />
                             </button>
                           </>
+                        ) : null}
+                        {isAdmin && (isInvited || isDeclined) ? (
+                          <button type="button" onClick={() => void assign({ id: row.creator_id })} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100">
+                            <Send size={13} /> {isDeclined ? t("campaignDetail.inviteAgain") : t("campaignDetail.resendInvite")}
+                          </button>
                         ) : null}
                         {canManage && isRejected ? (
                           <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, parseMoneyMask(amountMasked, moneyCurrency(campaign)))} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100 disabled:opacity-50">
@@ -3053,8 +3138,8 @@ function DetailInner() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
                 <div>
-                  <h2 className="text-xl font-bold text-[#0F172A]">{t("campaignDetail.addCreatorTitle")}</h2>
-                  <p className="text-xs text-slate-500">{t("campaignDetail.addCreatorHint")}</p>
+                  <h2 className="text-xl font-bold text-[#0F172A]">{campaign.is_secret ? t("campaignDetail.inviteCreatorTitle") : t("campaignDetail.addCreatorTitle")}</h2>
+                  <p className="text-xs text-slate-500">{campaign.is_secret ? t("campaignDetail.inviteCreatorHint") : t("campaignDetail.addCreatorHint")}</p>
                 </div>
                 <button type="button" onClick={() => setAddOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
@@ -3099,7 +3184,10 @@ function DetailInner() {
                   const matchesGroup = !group || (group.creators ?? []).some((member) => member.id === creator.id);
                   return matchesSearch && matchesNetwork && matchesGroup;
                 }).map((creator) => {
-                  const already = approvedCreators.some((row) => row.creator_id === creator.id);
+                  const participation = applications.find((row) => row.creator_id === creator.id);
+                  const already = participation?.application_status === "approved";
+                  const pendingInvite = campaign.is_secret && participation?.application_status === "invited";
+                  const declinedInvite = campaign.is_secret && participation?.application_status === "declined";
                   return (
                     <div key={creator.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                       <div className="flex items-center gap-3">
@@ -3112,9 +3200,13 @@ function DetailInner() {
                       </div>
                       {already ? (
                         <span className="text-[11px] font-bold text-slate-400">{t("campaignDetail.alreadyIn")}</span>
+                      ) : pendingInvite ? (
+                        <button type="button" onClick={() => void assign(creator)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-brand-primary">
+                          {t("campaignDetail.resendInvite")}
+                        </button>
                       ) : (
                         <button type="button" onClick={() => void assign(creator)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
-                          {t("campaignDetail.add")}
+                          {declinedInvite ? t("campaignDetail.inviteAgain") : campaign.is_secret ? t("campaignDetail.invite") : t("campaignDetail.add")}
                         </button>
                       )}
                     </div>
