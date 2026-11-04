@@ -440,6 +440,13 @@ class CampaignController extends Controller
             'video_feedback' => ['nullable', 'string'],
             'amount' => ['nullable', 'numeric'],
             'delivery_type' => ['nullable', 'string'],
+            'deliverables' => ['sometimes', 'nullable', 'array'],
+            'deliverables.reels' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'deliverables.stories' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'deliverables.tiktok' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'deliverables.ugc' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'deliverables.posts' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'deliverables.youtube' => ['nullable', 'integer', 'min:0', 'max:50'],
             'payment_status' => ['nullable', Rule::enum(PaymentStatus::class)],
             'payment_date' => ['nullable', 'date', 'required_if:payment_status,scheduled'],
             'signature_status' => ['nullable', Rule::enum(SignatureStatus::class)],
@@ -470,6 +477,14 @@ class CampaignController extends Controller
         }
         if (CreatorPrivacy::hidesCreatorValues($request->user())) {
             unset($data['amount']);
+        }
+        $updatesDeliverables = array_key_exists('deliverables', $data);
+        $normalizedDeliverables = $updatesDeliverables
+            ? $this->demands->normalizeDeliverables(is_array($data['deliverables'] ?? null) ? $data['deliverables'] : null)
+            : null;
+        unset($data['deliverables']);
+        if ($updatesDeliverables) {
+            $this->demands->assertQuota($campaignCreator, $normalizedDeliverables);
         }
         $data = SafeHttpUrl::validateFields($data, ['video_url', 'image_url', 'published_link', 'script_file_url']);
 
@@ -569,13 +584,16 @@ class CampaignController extends Controller
         $becomingApproved = $nextStatus === $approvedStatus && ! $wasApproved;
         $leavingApproved = $wasApproved && $nextStatus !== null && $nextStatus !== $approvedStatus;
 
-        DB::transaction(function () use ($campaignCreator, $data, $becomingApproved, $leavingApproved) {
+        DB::transaction(function () use ($campaignCreator, $data, $becomingApproved, $leavingApproved, $updatesDeliverables, $normalizedDeliverables) {
             $locked = Campaign::query()->lockForUpdate()->findOrFail($campaignCreator->campaign_id);
             $wasFull = $locked->approvedCreatorsLimitReached(true);
             if ($becomingApproved && $wasFull) {
                 abort(422, __('auth.campaign_approved_limit_full'));
             }
 
+            if ($updatesDeliverables) {
+                $campaignCreator->deliverables = $normalizedDeliverables;
+            }
             $campaignCreator->fill($data)->save();
             $campaignCreator->setRelation('campaign', $locked);
             if ($becomingApproved || ($leavingApproved && $wasFull)) {
@@ -595,6 +613,8 @@ class CampaignController extends Controller
             }
         } elseif ($leavingApproved) {
             $this->barterShipments->syncParticipation($campaignCreator->fresh() ?? $campaignCreator);
+        } elseif ($updatesDeliverables) {
+            $this->demands->syncCreator($campaignCreator->fresh());
         }
 
         if ($demand) {

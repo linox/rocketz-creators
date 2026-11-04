@@ -121,6 +121,7 @@ return [
     'additional_briefing' => 'The campaign ":name" has personalized direction for you.',
     'additional_briefing_requires_allocation' => 'The additional brief can only be set after the creator is allocated to the campaign.',
     'campaign_demand_required' => 'Choose which delivery you are submitting.',
+    'campaign_creator_deliverable_locked' => 'Cannot reduce this format: :locked delivery(ies) already started.',
     'campaign_demand_pauta_title' => 'Delivery brief',
     'campaign_demand_pauta' => 'The campaign ":name" has a brief for :demand.',
     'campaign_demand_formats' => [

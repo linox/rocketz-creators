@@ -345,6 +345,7 @@ class BrowserAlertService
             'source' => 'recurring',
             'participation_id' => null,
             'planning_id' => (int) $item->id,
+            'month' => $item->demandMonth(),
             'planning_status' => $item->status,
             'subject' => 'planning:'.$item->id,
             'demand_id' => null,
@@ -458,7 +459,7 @@ class BrowserAlertService
 
         if ($reviewer) {
             if ($work['source'] === 'recurring' && $work['contract_id']) {
-                return '/recurring/'.$work['contract_id'];
+                return '/recurring/'.$work['contract_id'].$this->recurringFocus($work, false);
             }
 
             return '/campaigns/'.$work['campaign_id'];
@@ -466,7 +467,25 @@ class BrowserAlertService
 
         $tab = $work['source'] === 'recurring' ? 'recurring' : 'campaigns';
 
-        return '/creators/'.$work['creator_id'].'?tab='.$tab;
+        return '/creators/'.$work['creator_id'].'?tab='.$tab.$this->recurringFocus($work, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $work
+     */
+    private function recurringFocus(array $work, bool $alreadyHasQuery): string
+    {
+        if (($work['source'] ?? null) !== 'recurring' || empty($work['planning_id'])) {
+            return '';
+        }
+
+        $params = ['item' => $work['planning_id']];
+        $month = $work['month'] ?? null;
+        if (is_string($month) && preg_match('/^\d{4}-\d{2}$/', $month) === 1) {
+            $params = ['month' => $month] + $params;
+        }
+
+        return ($alreadyHasQuery ? '&' : '?').http_build_query($params);
     }
 
     private function url(string $path, string $key): string

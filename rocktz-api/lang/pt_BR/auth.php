@@ -121,6 +121,7 @@ return [
     'additional_briefing' => 'A campanha ":name" tem um direcionamento personalizado para você.',
     'additional_briefing_requires_allocation' => 'A pauta adicional só pode ser definida depois que o criador for alocado na campanha.',
     'campaign_demand_required' => 'Escolha qual entrega você está enviando.',
+    'campaign_creator_deliverable_locked' => 'Não dá para reduzir: :locked entrega(s) deste formato já começaram.',
     'campaign_demand_pauta_title' => 'Pauta da entrega',
     'campaign_demand_pauta' => 'A campanha ":name" tem uma pauta para :demand.',
     'campaign_demand_formats' => [

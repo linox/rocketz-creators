@@ -64,6 +64,7 @@ class CampaignCreatorResource extends JsonResource
                 'currency' => $this->campaign->currency,
             ]),
             'delivery_type' => $this->delivery_type,
+            'deliverables' => $this->deliverables,
             'amount' => $hideCreatorValues ? null : ($this->amount !== null ? (float) $this->amount : null),
             'delivery_date' => $this->delivery_date?->toDateString(),
             'post_date' => $this->post_date?->toDateString(),

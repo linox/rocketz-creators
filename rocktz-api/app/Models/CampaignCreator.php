@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'campaign_id',
     'creator_id',
     'delivery_type',
+    'deliverables',
     'amount',
     'delivery_date',
     'post_date',
@@ -56,6 +57,7 @@ class CampaignCreator extends Model
     protected function casts(): array
     {
         return [
+            'deliverables' => 'array',
             'amount' => 'decimal:2',
             'delivery_date' => 'date',
             'post_date' => 'date',

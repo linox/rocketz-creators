@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Check, ScrollText } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { Check, Link2, ScrollText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
-import { promptTextarea } from "@/lib/alerts";
+import { alertWarning, promptTextarea } from "@/lib/alerts";
 import { projectDemand } from "@/lib/campaign-demands";
 import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
 import { cn } from "@/lib/cn";
@@ -83,17 +83,22 @@ function DemandCard({
   const { t } = useTranslation("app");
   const [pauta, setPauta] = useState(demand.pauta || "");
   const [savingPauta, setSavingPauta] = useState(false);
+  const [linkDraft, setLinkDraft] = useState(demand.content?.published_link || "");
+  useEffect(() => {
+    setLinkDraft(demand.content?.published_link || "");
+  }, [demand.content?.published_link]);
   const projected = projectDemand(row, demand);
   const state = campaignCreatorDeliveryState(projected, flow);
   const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
   const title = t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total });
   const script = demand.content?.script?.trim() || "";
   const videoUrl = demand.content?.video_url?.trim() || "";
-  const published = safeHttpUrl(demand.content?.published_link || "");
+  const publishedUrl = safeHttpUrl(demand.content?.published_link || "");
+  const demandPublished = demand.delivery_status === "published";
   const hasVideoMaterial = Boolean(
     videoUrl
     || demand.content?.image_url?.trim()
-    || published
+    || publishedUrl
     || demand.video_submitted_at
   );
   const canReviseScript = demand.script_status === "submitted"
@@ -110,6 +115,36 @@ function DemandCard({
     } finally {
       setSavingPauta(false);
     }
+  }
+
+  const linkUnchanged = linkDraft.trim() === (demand.content?.published_link || "").trim();
+
+  async function concludeDemand(withLink: boolean) {
+    const link = linkDraft.trim();
+    if (withLink) {
+      if (!link || !safeHttpUrl(link)) {
+        await alertWarning(t("deliveries.inbox.publishedLinkRequiredTitle"), t("deliveries.inbox.publishedLinkInvalid"));
+        return;
+      }
+      await onUpdate(demand.id, {
+        published_link: link,
+        delivery_status: "published",
+        script_status: "approved",
+        video_status: "approved",
+        script_feedback: "",
+        video_feedback: "",
+        revision_details: "",
+      });
+      return;
+    }
+    await onUpdate(demand.id, {
+      delivery_status: "published",
+      script_status: "approved",
+      video_status: "approved",
+      script_feedback: "",
+      video_feedback: "",
+      revision_details: "",
+    });
   }
 
   async function requestRevision() {
@@ -185,10 +220,70 @@ function DemandCard({
         <CampaignSubmittedVideo videoUrl={videoUrl} fileSize={demand.content?.video_file_size} compact />
       ) : null}
 
-      {published ? (
-        <a href={published} target="_blank" rel="noreferrer" className="text-xs font-bold text-brand-primary hover:underline">
-          {published}
+      {publishedUrl ? (
+        <a href={publishedUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-brand-primary hover:underline">
+          {publishedUrl}
         </a>
+      ) : null}
+
+      {canManage && !demandPublished ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+          <label className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+            <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
+          </label>
+          <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.concludeDemandHint")}</p>
+          <input
+            type="url"
+            value={linkDraft}
+            onChange={(event) => setLinkDraft(event.target.value)}
+            placeholder={t("campaignDetail.publishedLinkPh")}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={updating || !linkDraft.trim()}
+              onClick={() => void concludeDemand(true)}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider text-white uppercase hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              <Link2 size={13} /> {t("campaignDetail.approveWithPublishedLink")}
+            </button>
+            <button
+              type="button"
+              disabled={updating}
+              onClick={() => void concludeDemand(false)}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-[11px] font-black tracking-wider text-emerald-800 uppercase hover:bg-emerald-50 disabled:opacity-50"
+            >
+              <Check size={13} /> {t("campaignDetail.concludeWithoutLink")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {canManage && demandPublished ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+          <label className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+            <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
+          </label>
+          <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.publishedLinkEditHint")}</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="url"
+              value={linkDraft}
+              onChange={(event) => setLinkDraft(event.target.value)}
+              placeholder={t("campaignDetail.publishedLinkPh")}
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+            />
+            <button
+              type="button"
+              disabled={updating || !linkDraft.trim() || linkUnchanged}
+              onClick={() => void concludeDemand(true)}
+              className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider text-white uppercase hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              {t("campaignDetail.updatePublishedLink")}
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {(demand.script_feedback || demand.video_feedback || demand.revision_details) && (state === "scriptRevision" || state === "videoRevision" || state === "revision") ? (

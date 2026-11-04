@@ -79,6 +79,7 @@ import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBrief
 import { CampaignDemandsPanel } from "@/components/CampaignDemandsPanel";
 import { CreatorCampaignSubmissionPanel } from "@/components/CreatorCampaignSubmissionPanel";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
+import { CampaignCreatorDeliverables } from "@/components/CampaignCreatorDeliverables";
 import { PostingProfileCards, PostingProfileNotice } from "@/components/PostingProfileCards";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -1276,6 +1277,16 @@ function DetailInner() {
     }
   }
 
+  async function saveCreatorDeliverables(rowId: number, deliverables: Record<string, number> | null) {
+    try {
+      await api.updateParticipation(rowId, { deliverables });
+      await load();
+      await alertSuccess(t("campaignDetail.creatorDeliverablesSaved"));
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   async function saveDemandPauta(rowId: number, demandId: number, text: string | null) {
     try {
       await api.updateParticipation(rowId, { demand_id: demandId, pauta: text });
@@ -2128,6 +2139,15 @@ function DetailInner() {
                   onSave={(text) => saveAdditionalBriefing(selected.id, text)}
                 />
 
+                {canManage && selected.application_status === "approved" ? (
+                  <CampaignCreatorDeliverables
+                    key={selected.id}
+                    campaignDefaults={campaign.deliverables}
+                    value={selected.deliverables}
+                    onSave={(deliverables) => saveCreatorDeliverables(selected.id, deliverables)}
+                  />
+                ) : null}
+
                 {selected.demands?.length ? (
                   <CampaignDemandsPanel
                     row={selected}
@@ -2265,7 +2285,6 @@ function DetailInner() {
                           <span className="text-[10px] font-semibold text-slate-400">{t("campaignDetail.decisionHint")}</span>
                         </div>
                         {selected.delivery_status === "approved" || selected.delivery_status === "published" ? (
-                          selected.delivery_status === "published" || isBrandPosting(campaign.posting_profile) || isAdmin ? (
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[9px] font-bold tracking-wider text-slate-500 uppercase">{t("campaignDetail.publishedLinkLabel")}</label>
                             <input
@@ -2278,14 +2297,9 @@ function DetailInner() {
                             <p className="text-[10px] font-medium text-slate-500">
                               {t(selected.delivery_status === "published"
                                 ? "campaignDetail.publishedLinkEditHint"
-                                : (isBrandPosting(campaign.posting_profile) ? "postingProfile.publishedHintBrand" : "postingProfile.publishedHintCreator"))}
+                                : "campaignDetail.concludeDemandHint")}
                             </p>
                           </div>
-                          ) : (
-                          <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
-                            {t("postingProfile.awaitingCreator")}
-                          </p>
-                          )
                         ) : (
                           <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-1.5">
@@ -2361,10 +2375,27 @@ function DetailInner() {
                                 )}
                               </>
                             ) : null}
-                            {selected.delivery_status === "approved" && (isBrandPosting(campaign.posting_profile) || isAdmin) ? (
-                              <button type="button" disabled={updatingId !== null || !publishedLinkDraft.trim()} onClick={() => void markPublished(selected)} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
-                                <Sparkles size={12} /> {t("campaignDetail.markPublished")}
-                              </button>
+                            {selected.delivery_status === "approved" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={updatingId !== null}
+                                  onClick={() => void patch(selected, {
+                                    delivery_status: "published",
+                                    script_status: "approved",
+                                    video_status: "approved",
+                                    revision_details: "",
+                                    script_feedback: "",
+                                    video_feedback: "",
+                                  })}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-emerald-800 uppercase hover:bg-emerald-50 disabled:opacity-50"
+                                >
+                                  <CheckCircle2 size={12} /> {t("campaignDetail.concludeWithoutLink")}
+                                </button>
+                                <button type="button" disabled={updatingId !== null || !publishedLinkDraft.trim()} onClick={() => void markPublished(selected)} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-indigo-700 disabled:opacity-50">
+                                  <Sparkles size={12} /> {t("campaignDetail.markPublished")}
+                                </button>
+                              </>
                             ) : null}
                             {selected.delivery_status === "published" ? (
                               <>
@@ -2392,12 +2423,12 @@ function DetailInner() {
                       </div>
                     ) : null}
                   </div>
-                ) : (
+                ) : !selected.demands?.length ? (
                   <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-xs text-slate-400 shadow-xs">
                     <Video size={28} className="text-slate-300" />
                     <span>{t("campaignDetail.waitingVideo")}</span>
                   </div>
-                )}
+                ) : null}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-16 text-center text-slate-400 shadow-xs">

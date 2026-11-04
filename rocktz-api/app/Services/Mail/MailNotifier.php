@@ -268,8 +268,8 @@ class MailNotifier
             'nome_empresa' => $contract->company?->name,
             'nome_demanda' => $item?->title ?: $contract->title,
             'data_entrega' => optional($item?->planned_date)?->isoFormat('D MMM YYYY'),
-            'cta_url' => FrontendUrl::to('/creators/'.$creator->id.'?tab=recurring'),
-            'link_demanda' => FrontendUrl::to('/recurring/'.$contract->id),
+            'cta_url' => FrontendUrl::to($item ? $item->creatorFocusPath() : '/creators/'.$creator->id.'?tab=recurring'),
+            'link_demanda' => FrontendUrl::to($item ? $item->agencyFocusPath() : '/recurring/'.$contract->id),
             'creator_id' => $creator->id,
             'company_id' => $contract->company_id,
         ], $item ?? $contract, $item ? 'item:'.$item->id : 'contract');
@@ -372,8 +372,8 @@ class MailNotifier
             'nome_campanha' => $item->recurringContract?->title,
             'data_limite' => optional($item->planned_date)?->isoFormat('D MMM YYYY'),
             'motivo_reprovacao' => $reason,
-            'cta_url' => FrontendUrl::to('/creators/'.$item->creator_id.'?tab=recurring'),
-            'link_demanda' => FrontendUrl::to('/recurring/'.$item->recurring_contract_id),
+            'cta_url' => FrontendUrl::to($item->creatorFocusPath()),
+            'link_demanda' => FrontendUrl::to($item->agencyFocusPath()),
             'creator_id' => $item->creator_id,
             'company_id' => $item->company_id,
         ], $item, 'updated:'.($item->updated_at?->timestamp ?? time()));

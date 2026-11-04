@@ -246,10 +246,14 @@ class BrowserAlertTest extends TestCase
         $overdue = $reviewer->firstWhere('kind', 'delivery_overdue');
         $this->assertSame('overdue:planning:'.$item->id, $overdue['key']);
         $this->assertStringContainsString('/recurring/'.$contract->id, $overdue['url']);
+        $this->assertStringContainsString('month=2026-10', $overdue['url']);
+        $this->assertStringContainsString('item='.$item->id, $overdue['url']);
 
         $creatorAlerts = collect($this->alerts($creatorUser));
         $this->assertSame(['delivery_overdue'], $creatorAlerts->pluck('kind')->all());
         $this->assertStringContainsString('/creators/'.$creator->id.'?tab=recurring', $creatorAlerts->first()['url']);
+        $this->assertStringContainsString('month=2026-10', $creatorAlerts->first()['url']);
+        $this->assertStringContainsString('item='.$item->id, $creatorAlerts->first()['url']);
         $this->assertSame('A entrega de Pauta de outubro está atrasada.', $creatorAlerts->first()['body']);
     }
 

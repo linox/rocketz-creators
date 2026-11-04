@@ -70,7 +70,7 @@ class DeliveryMovementNotifier
         $label = $item->notificationTitle();
         $project = (string) ($item->recurringContract?->title ?: $label);
         [$title, $message] = $this->copy($kind, $label, $project);
-        $link = '/recurring/'.(int) $item->recurring_contract_id;
+        $link = $item->agencyFocusPath();
         $extra = [
             'creator_id' => $item->creator_id,
             'recurring_contract_id' => $item->recurring_contract_id,

@@ -120,7 +120,6 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
 
   const isApproved = row.delivery_status === "approved";
   const isPublished = row.delivery_status === "published";
-  const linkStage = isApproved || isPublished;
   const brandPosts = isBrandPosting(campaign.posting_profile);
   const flow = campaign.approval_flow || "script_and_video";
   const stagedFlow = flow === "script_and_video";
@@ -131,6 +130,8 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
   const scriptRevision = row.script_status === "revision";
   const videoRevision = row.video_status === "revision";
   const deliveryRevision = row.delivery_status === "revision";
+  const stagesDone = isApproved || isPublished || videoApproved || (flow === "script_only" && scriptApproved);
+  const linkStage = stagesDone && !scriptRevision && !videoRevision && !deliveryRevision;
   const hasRevision = scriptRevision || videoRevision || deliveryRevision;
   const revisionRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -345,6 +346,20 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
     } finally {
       setSubmitting(false);
       setUploadProgress(0);
+    }
+  }
+
+  async function concludeWithoutLink() {
+    setSubmitting(true);
+    try {
+      await api.updateParticipation(row.id, stamp({
+        delivery_status: "published",
+      }));
+      finish(tp("concludedWithoutLink"));
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -634,6 +649,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
             ) : (
             <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
               <p className="m-0 text-[11px] font-medium text-emerald-800">{isPublished ? tp("editPublishedLinkHint") : tp("approvedPublishHint")}</p>
+              {!isPublished ? <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("concludeWithoutLinkHint")}</p> : null}
               {row.content?.video_url ? (
                 <CampaignSubmittedVideo
                   videoUrl={row.content.video_url}
@@ -677,7 +693,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
               </div>
             </div>
           ) : (
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
             <button
               type="button"
               onClick={onClose}
@@ -685,6 +701,18 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
             >
               {tp("collapseBriefing")}
             </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+            {linkStage && !brandPosts && !isPublished ? (
+            <button
+              type="button"
+              disabled={submitting || isBackgroundUploading}
+              onClick={() => void concludeWithoutLink()}
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-5 text-xs font-bold tracking-wider text-emerald-800 uppercase transition-all hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCircle2 size={15} />
+              {tp("concludeWithoutLink")}
+            </button>
+            ) : null}
             {!(linkStage && brandPosts) ? (
             <button
               type="button"
@@ -715,6 +743,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
                       : tp("sendForReview")}
             </button>
             ) : null}
+            </div>
           </div>
           )}
         </div>

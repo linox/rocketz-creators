@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
-import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { futureMonthCounts, monthQueryValue, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import { isoToday, planningItemIsOverdue } from "@/lib/delivery-date";
 import { buildDeliveryMovements, isPlaceholderSubmissionTime } from "@/lib/delivery-inbox";
 import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
@@ -426,6 +426,11 @@ function DetailInner() {
   const { formatCurrency: formatCurrencyRaw, formatNumber } = usePrivacy();
   const locale = intlLocale(normalizeLocale(i18n.language));
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const focusMonth = monthQueryValue(searchParams.get("month"));
+  const focusItemId = Number(searchParams.get("item") || 0) || null;
+  const appliedDemandFocus = useRef<string | null>(null);
+  const openedDemandPanel = useRef(false);
   const id = String(numericIdFromBrowser("recurring", pathname) ?? "");
   const canManage = user.role === "admin" || user.role === "company";
   const isAdmin = user.role === "admin";
@@ -446,7 +451,7 @@ function DetailInner() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [segmentFilter, setSegmentFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedMonth, setSelectedMonth] = useState(focusMonth ?? currentMonth);
   const [showCompleted, setShowCompleted] = useState(false);
 
   const [creatorModal, setCreatorModal] = useState(false);
@@ -516,6 +521,46 @@ function DetailInner() {
     const el = document.getElementById(`pauta-view-${viewingPautaFocus}`);
     el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [viewingPauta, viewingPautaFocus]);
+
+  useEffect(() => {
+    const key = `${focusMonth ?? ""}:${focusItemId ?? ""}`;
+    if (appliedDemandFocus.current === key) return;
+    if (focusMonth) setSelectedMonth(focusMonth);
+    if (!focusItemId) {
+      appliedDemandFocus.current = key;
+      return;
+    }
+    if (!contract) return;
+    const item = contract.items?.find((row) => row.id === focusItemId);
+    if (!item) {
+      appliedDemandFocus.current = key;
+      return;
+    }
+    appliedDemandFocus.current = key;
+    const month = planningDemandMonth(item) || focusMonth;
+    if (month) setSelectedMonth(month);
+    setSelectedCreatorId(item.creator_id);
+    setExpandedIds((prev) => (prev.includes(item.creator_id) ? prev : [...prev, item.creator_id]));
+    setStatusFilter("all");
+    setSearch("");
+    setView("creators");
+    if (isPublished(item)) setShowCompleted(true);
+  }, [focusMonth, focusItemId, contract]);
+
+  useEffect(() => {
+    if (openedDemandPanel.current || !focusItemId || isCreator || creatorLayout !== "grid") return;
+    if (appliedDemandFocus.current !== `${focusMonth ?? ""}:${focusItemId}`) return;
+    openedDemandPanel.current = true;
+    setPautasModalOpen(true);
+  }, [focusItemId, focusMonth, isCreator, creatorLayout, contract]);
+
+  useEffect(() => {
+    if (!focusItemId || appliedDemandFocus.current !== `${focusMonth ?? ""}:${focusItemId}`) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`planning-item-${focusItemId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusItemId, focusMonth, selectedMonth, selectedCreatorId, showCompleted, contract]);
 
   function changeCreatorLayout(next: CreatorLayout) {
     setCreatorLayout(next);
@@ -1761,7 +1806,7 @@ function DetailInner() {
                       const slot = pautaSlot(selectedSummary?.items ?? selectedPautas, item);
                       const displayTitle = namedPautaTitle(item.title);
                       return (
-                        <div key={item.id} className={cn(
+                        <div key={item.id} id={`planning-item-${item.id}`} className={cn(
                           "flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm transition-all hover:border-indigo-200",
                           revisionRequested
                             ? "border-rose-300 bg-rose-50/40"
@@ -2969,7 +3014,13 @@ function MiniStat({ label, value, hint, icon: Icon, valueClass, labelClass, boxC
 export function RecurringDetailScreen() {
   return (
     <AuthenticatedShell>
-      <DetailInner />
+      <Suspense fallback={
+        <div className="flex h-96 items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
+        </div>
+      }>
+        <DetailInner />
+      </Suspense>
     </AuthenticatedShell>
   );
 }

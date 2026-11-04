@@ -514,6 +514,38 @@ function DeliveriesInboxInner() {
     }
   }
 
+  async function concludeWithoutLink() {
+    if (!selected || busy || selected.sourceType !== "campaign" || !selected.participationId) return;
+    if (!(await alertConfirm(
+      t("deliveries.inbox.concludeWithoutLinkTitle"),
+      t("deliveries.inbox.concludeWithoutLinkText"),
+      t("deliveries.inbox.concludeWithoutLink"),
+    ))) return;
+    setBusy(true);
+    try {
+      await api.updateParticipation(selected.participationId, participationPayload(selected, {
+        delivery_status: "published",
+        video_status: "approved",
+        script_status: "approved",
+        revision_details: "",
+        script_feedback: "",
+        video_feedback: "",
+      }));
+      const now = new Date().toISOString();
+      patchItem(selected.id, (row) => ({
+        ...row,
+        status: "approved",
+        movements: [{ id: `pub-${row.id}-${Date.now()}`, type: "published", at: now }, ...row.movements],
+      }));
+      await alertSuccess(t("deliveries.inbox.concludedWithoutLinkOk"));
+      void loadInbox();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendRevision() {
     if (!selected || !revisionText.trim()) {
       await alertWarning(t("deliveries.inbox.revisionRequiredTitle"), t("deliveries.inbox.revisionRequiredText"));
@@ -966,6 +998,7 @@ function DeliveriesInboxInner() {
                 onVersion={(id) => setVersionId(id)}
                 onApprove={() => void approveSelected(false)}
                 onConcludeWithLink={() => void approveSelected(true)}
+                onConcludeWithoutLink={() => void concludeWithoutLink()}
                 onToggleRevision={() => setRevisionOpen((v) => !v)}
                 onRevisionText={setRevisionText}
                 onSendRevision={() => void sendRevision()}
@@ -1161,6 +1194,7 @@ function ReadingPane({
   onVersion,
   onApprove,
   onConcludeWithLink,
+  onConcludeWithoutLink,
   onToggleRevision,
   onRevisionText,
   onSendRevision,
@@ -1185,6 +1219,7 @@ function ReadingPane({
   onVersion: (id: string) => void;
   onApprove: () => void;
   onConcludeWithLink: () => void;
+  onConcludeWithoutLink: () => void;
   onToggleRevision: () => void;
   onRevisionText: (value: string) => void;
   onSendRevision: () => void;
@@ -1275,7 +1310,9 @@ function ReadingPane({
           </div>
         ) : null}
 
-        {item.status !== "approved" ? (
+        {(item.sourceType === "campaign"
+          ? !item.movements.some((entry) => entry.type === "published") && !version.linkUrl?.trim()
+          : item.status !== "approved") ? (
           <div className="mt-3 flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
             <label className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">
               <Link2 size={12} /> {t("deliveries.inbox.publishedLinkLabel")}
@@ -1297,6 +1334,15 @@ function ReadingPane({
               >
                 <Link2 size={14} /> {t("deliveries.inbox.concludeWithLink")}
               </button>
+              {item.sourceType === "campaign" ? (
+                <button
+                  type="button"
+                  onClick={onConcludeWithoutLink}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-xs font-extrabold whitespace-nowrap text-emerald-800 hover:bg-emerald-50"
+                >
+                  <Check size={14} /> {t("deliveries.inbox.concludeWithoutLink")}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}

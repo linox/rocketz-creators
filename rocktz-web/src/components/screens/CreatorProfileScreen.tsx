@@ -57,7 +57,7 @@ import {
 } from "lucide-react";
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
-import { formatMonthLabel, futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { formatMonthLabel, futureMonthCounts, monthQueryValue, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
 import { effectiveCampaignDeliveryDate, effectivePlanningDueDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
@@ -194,6 +194,27 @@ function recurringDemandMonth(work: RecurringWorkRow, current: string) {
   const month = planningDemandMonth(work.item);
   if (!month || month < current) return month ? null : current;
   return month;
+}
+
+function recurringWorkInMonth(work: RecurringWorkRow, month: string, current: string) {
+  if (!work.item) return month === current;
+  if (month === current) return recurringDemandMonth(work, current) === current;
+  return planningDemandMonth(work.item) === month;
+}
+
+function selectedMonthStays(selected: string, current: string, hasDemand: boolean) {
+  if (!/^\d{4}-\d{2}$/.test(selected)) return current;
+  if (selected <= current) return selected;
+  return hasDemand ? selected : current;
+}
+
+function scrollDemandIntoView(itemId: number) {
+  const nodes = document.querySelectorAll(`[data-demand-id="${itemId}"]`);
+  const visible = [...nodes].find((node) => {
+    const box = node.getBoundingClientRect();
+    return box.width > 0 && box.height > 0;
+  });
+  (visible ?? nodes[0])?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function tallyMonths(months: Array<string | null>, current: string) {
@@ -687,10 +708,12 @@ function ProfileInner() {
   const [earningsFilter, setEarningsFilter] = useState<"all" | EarningsKind>("all");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<number | null>(null);
   const [expandedRecurringKey, setExpandedRecurringKey] = useState<string | null>(null);
-  const [demandMonth, setDemandMonth] = useState(currentYearMonth);
+  const searchParams = useSearchParams();
+  const requestedMonth = monthQueryValue(searchParams.get("month"));
+  const [demandMonth, setDemandMonth] = useState(requestedMonth ?? currentYearMonth);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
-  const searchParams = useSearchParams();
+  const appliedDemandFocus = useRef<string | null>(null);
   const fromLandingReview = searchParams.get("from") === "landing";
   const landingSignupId = Number(searchParams.get("signup") || 0);
   const landingReviews = creator?.landing_reviews?.length
@@ -1051,6 +1074,32 @@ function ProfileInner() {
     if (zipLookupTimer.current) window.clearTimeout(zipLookupTimer.current);
   }, []);
 
+  useEffect(() => {
+    const month = monthQueryValue(searchParams.get("month"));
+    const itemId = Number(searchParams.get("item") || 0);
+    const key = `${month ?? ""}:${itemId || ""}`;
+    if (appliedDemandFocus.current === key) return;
+    if (month) setDemandMonth(month);
+    if (!itemId) {
+      appliedDemandFocus.current = key;
+      return;
+    }
+    if (!recurringReady || !id) return;
+    const row = buildRecurringWorkRows(
+      recurring.filter((contract) => contract.status !== "pending_agency" && contractIncludesCreator(contract, id)),
+      id,
+    ).find((work) => work.item?.id === itemId);
+    if (!row?.item) {
+      appliedDemandFocus.current = key;
+      return;
+    }
+    appliedDemandFocus.current = key;
+    const itemMonth = planningDemandMonth(row.item);
+    if (itemMonth) setDemandMonth(itemMonth);
+    setExpandedRecurringKey(row.key);
+    window.setTimeout(() => scrollDemandIntoView(itemId), 150);
+  }, [searchParams, recurringReady, recurring, id]);
+
   function openSubmission(rowId: number) {
     setExpandedSubmissionId(rowId);
     setExpandedRecurringKey(null);
@@ -1149,11 +1198,11 @@ function ProfileInner() {
 
   const approvedCampaigns = myParticipations.filter((item) => item.row.application_status === "approved");
   const demandCurrentMonth = currentYearMonth();
-  const demandMonthActive = demandMonth === demandCurrentMonth || recurringWorkRows.some((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonth) || approvedCampaigns.some((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonth)
-    ? demandMonth
-    : demandCurrentMonth;
+  const demandHasSelection = recurringWorkRows.some((work) => recurringWorkInMonth(work, demandMonth, demandCurrentMonth))
+    || approvedCampaigns.some((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonth);
+  const demandMonthActive = selectedMonthStays(demandMonth, demandCurrentMonth, demandHasSelection);
   const campaignsForDemandMonth = approvedCampaigns.filter((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonthActive);
-  const recurringForDemandMonth = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonthActive);
+  const recurringForDemandMonth = recurringWorkRows.filter((work) => recurringWorkInMonth(work, demandMonthActive, demandCurrentMonth));
   const showRecurringOnDashboard = hasRecurringWorks && (demandMonthActive === demandCurrentMonth || recurringForDemandMonth.length > 0);
   const campaignMonthCounts = tallyMonths(approvedCampaigns.map((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth)), demandCurrentMonth);
   const recurringMonthCounts = tallyMonths(recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)), demandCurrentMonth);
@@ -1177,10 +1226,12 @@ function ProfileInner() {
   const currentRecurringOnHome = recurringMonthCounts.get(demandCurrentMonth) ?? 0;
   const currentDemandCount = currentCampaignCount + currentRecurringOnHome;
   const currentDemandDetail = demandMix(demandCurrentMonth);
-  const recurringMonthActive = demandMonth === demandCurrentMonth || recurringWorkRows.some((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandMonth)
-    ? demandMonth
-    : demandCurrentMonth;
-  const recurringRowsForTab = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === recurringMonthActive);
+  const recurringMonthActive = selectedMonthStays(
+    demandMonth,
+    demandCurrentMonth,
+    recurringWorkRows.some((work) => recurringWorkInMonth(work, demandMonth, demandCurrentMonth)),
+  );
+  const recurringRowsForTab = recurringWorkRows.filter((work) => recurringWorkInMonth(work, recurringMonthActive, demandCurrentMonth));
   const upcomingRecurringMonths = futureMonthCounts(
     recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)),
     demandCurrentMonth,
@@ -2420,6 +2471,7 @@ function ProfileInner() {
                   upcomingLabel={tp("upcomingMonthsLabel")}
                   emptyUpcomingLabel={tp("noUpcomingDemands")}
                   currentCount={currentDemandCount}
+                  selectedCount={demandMonthActive === demandCurrentMonth ? currentDemandCount : campaignsForDemandMonth.length + recurringForDemandMonth.length}
                   currentDetail={currentDemandDetail}
                   demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
                 />
@@ -2613,6 +2665,7 @@ function ProfileInner() {
                 upcomingLabel={tp("upcomingMonthsLabel")}
                 emptyUpcomingLabel={tp("noUpcomingDemands")}
                 currentCount={currentRecurringCount}
+                selectedCount={recurringRowsForTab.length}
                 demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
               />
               <ActiveRecurringWorksTable
@@ -3046,7 +3099,7 @@ function ActiveRecurringWorksTable({
         const companyName = sample.contract.company?.name || tp("partnerCompany");
         const companyId = companyFilterId(sample.contract.company_id ?? sample.contract.company?.id, companyName);
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
-        const monthItems = list.filter((work) => work.item && recurringDemandMonth(work, currentYearMonth()) === month);
+        const monthItems = list.filter((work) => recurringWorkInMonth(work, month, currentYearMonth()));
         if (monthItems.length === 0) return null;
         const monthRows = monthItems.filter((work) => statusFilter === "all" || recurringRowPace(work) === statusFilter);
         const pendingRows = monthItems.filter((work) => recurringRowPace(work) !== "done");
@@ -3143,7 +3196,7 @@ function ActiveRecurringWorksTable({
           const formatLabel = contentFormatLabel(item?.content_type, ta);
 
           return (
-            <div key={key} className={cn("p-4", isOpen && "bg-purple-50/40")}>
+            <div key={key} data-demand-id={item?.id ?? undefined} className={cn("p-4", isOpen && "bg-purple-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
@@ -3223,7 +3276,7 @@ function ActiveRecurringWorksTable({
               const formatLabel = contentFormatLabel(item?.content_type, ta);
 
               return (
-                <tr key={key} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
+                <tr key={key} data-demand-id={item?.id ?? undefined} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
                   <td className="p-3.5 pl-5">
                     <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
                   </td>

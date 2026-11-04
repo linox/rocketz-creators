@@ -302,7 +302,7 @@ class RecurringContractController extends Controller
                     'month' => $data['month'],
                 ]),
                 'type' => NotificationType::Contract,
-                'link' => '/creators/'.$row->creator_id.'?tab=recurring',
+                'link' => '/creators/'.$row->creator_id.'?tab=recurring&month='.$data['month'],
             ]);
             if ($row->creator?->user) {
                 $this->mail->demandAssignedToCreator($row->creator, $recurringContract);
@@ -963,7 +963,7 @@ class RecurringContractController extends Controller
                 'project' => $contract->title,
             ]),
             'type' => NotificationType::Contract,
-            'link' => '/creators/'.$item->creator_id.'?tab=recurring',
+            'link' => $item->creatorFocusPath(),
         ]);
         $item->loadMissing('creator.user');
         if ($item->creator?->user) {
@@ -1050,8 +1050,8 @@ class RecurringContractController extends Controller
         $companyId = (int) ($item->company_id ?: $item->recurringContract?->company_id);
         $projectTitle = $item->recurringContract?->title ?? '';
         $itemTitle = $this->itemLabel($item);
-        $companyLink = '/recurring/'.$contractId;
-        $creatorLink = '/creators/'.$creatorId.'?tab=recurring';
+        $companyLink = $item->agencyFocusPath();
+        $creatorLink = $item->creatorFocusPath();
         $script = NotificationService::value($data['script_status'] ?? null);
         $video = NotificationService::value($data['video_status'] ?? null);
         $status = NotificationService::value($data['status'] ?? null);

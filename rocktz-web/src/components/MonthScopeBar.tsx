@@ -20,6 +20,10 @@ function monthFace(month: string, locale: string) {
   };
 }
 
+export function monthQueryValue(value: string | null | undefined) {
+  return value && /^\d{4}-\d{2}$/.test(value) ? value : null;
+}
+
 export function planningDemandMonth(item: { month?: string | null; planned_date?: string | null; post_date?: string | null }) {
   const month = item.month?.match(/^(\d{4}-\d{2})/)?.[1];
   if (month) return month;
@@ -120,9 +124,22 @@ export function MonthScopeBar({
   const current = currentYearMonth();
   const currentFace = monthFace(current, locale);
 
+  const selectedFace = monthFace(selected, locale);
+  const selectedInRail = selected === current || upcoming.some((option) => option.value === selected);
+
   if (variant === "creator") {
     return (
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+        {!selectedInRail ? (
+          <MonthChip
+            active
+            label={selectedFace.name}
+            caption={selectedFace.year}
+            count={selectedCount ?? 0}
+            title={demandsLabel(selectedCount ?? 0)}
+            onClick={() => onChange(selected)}
+          />
+        ) : null}
         <MonthChip
           active={selected === current}
           mark={thisMonthLabel}
@@ -152,9 +169,6 @@ export function MonthScopeBar({
       </div>
     );
   }
-
-  const selectedFace = monthFace(selected, locale);
-  const selectedInRail = selected === current || upcoming.some((option) => option.value === selected);
 
   return (
     <div className="flex flex-wrap items-center gap-3">

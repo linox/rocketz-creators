@@ -33,6 +33,21 @@ type RoleFilter = "admin_only" | "all";
 const AGENCY_FILTERS: FilterTab[] = ["all", "unread", "applications", "deliveries", "contracts"];
 const CREATOR_FILTERS: FilterTab[] = ["all", "unread", "approvals", "changes", "contracts"];
 
+function demandFocusSuffix(link: string) {
+  try {
+    const params = new URL(link, "http://local").searchParams;
+    const kept = new URLSearchParams();
+    const month = params.get("month");
+    const item = params.get("item");
+    if (month && /^\d{4}-\d{2}$/.test(month)) kept.set("month", month);
+    if (item && /^\d+$/.test(item)) kept.set("item", item);
+    const query = kept.toString();
+    return query ? `&${query}` : "";
+  } catch {
+    return "";
+  }
+}
+
 function resolveNotificationHref(notif: AppNotification, user: AuthUser): string | null {
   let targetLink = notif.link;
 
@@ -43,7 +58,7 @@ function resolveNotificationHref(notif: AppNotification, user: AuthUser): string
 
     if (user.role === "creator" && user.creator?.id) {
       if (targetLink.includes("tab=recurring") || targetLink.startsWith("/recurring")) {
-        return `/creators/${user.creator.id}?tab=recurring`;
+        return `/creators/${user.creator.id}?tab=recurring${demandFocusSuffix(targetLink)}`;
       }
       if (targetLink.includes("tab=campaigns") || targetLink.startsWith("/campaigns")) {
         return `/creators/${user.creator.id}?tab=campaigns`;

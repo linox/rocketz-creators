@@ -171,6 +171,49 @@ class ContentPlanningItem extends Model
         return $this->hasDefinedPauta();
     }
 
+    public function demandMonth(): ?string
+    {
+        $month = is_string($this->month) ? substr($this->month, 0, 7) : '';
+        if (preg_match('/^\d{4}-\d{2}$/', $month) === 1) {
+            return $month;
+        }
+
+        foreach ([$this->planned_date, $this->post_date] as $date) {
+            if ($date instanceof \DateTimeInterface) {
+                return $date->format('Y-m');
+            }
+            if (is_string($date) && preg_match('/^(\d{4}-\d{2})/', $date, $match) === 1) {
+                return $match[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{month?: string, item: int}
+     */
+    public function focusQuery(): array
+    {
+        $query = ['item' => (int) $this->id];
+        $month = $this->demandMonth();
+        if ($month) {
+            $query = ['month' => $month] + $query;
+        }
+
+        return $query;
+    }
+
+    public function creatorFocusPath(): string
+    {
+        return '/creators/'.$this->creator_id.'?'.http_build_query(['tab' => 'recurring'] + $this->focusQuery());
+    }
+
+    public function agencyFocusPath(): string
+    {
+        return '/recurring/'.$this->recurring_contract_id.'?'.http_build_query($this->focusQuery());
+    }
+
     /**
      * @param  Builder<ContentPlanningItem>  $query
      * @return Builder<ContentPlanningItem>

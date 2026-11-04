@@ -135,9 +135,7 @@ export function creatorNextDeliveryAction(
   if (state === "published") {
     return hasPublishedUrl
       ? { kind: "view_published", revision: false }
-      : brandPosts
-        ? null
-        : { kind: "send_link", revision: false };
+      : null;
   }
   if (state === "approved") return brandPosts ? null : { kind: "send_link", revision: false };
   if (state === "scriptReview" || state === "videoReview" || state === "sent") return null;

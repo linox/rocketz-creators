@@ -476,6 +476,7 @@ export type CampaignCreator = {
   };
   campaign?: { id: number; name: string; status: string; image_url: string | null; currency?: string | null; application_question?: string | null };
   delivery_type: string | null;
+  deliverables?: Record<string, number> | null;
   amount: number | null;
   delivery_date: string | null;
   delivery_status: string | null;

@@ -13,6 +13,7 @@ use App\Support\DeliveryMovements;
 use App\Support\RevisionHistory;
 use App\Support\SubmissionVersioning;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 class CampaignDemandSync
 {
@@ -46,25 +47,21 @@ class CampaignDemandSync
         }
 
         $row->loadMissing(['campaign.deliverable', 'demands']);
-        $deliverable = $row->campaign?->deliverable;
-        if ($deliverable === null) {
+        if (! is_array($row->deliverables) && $row->campaign?->deliverable === null) {
             return 0;
         }
 
-        $demands = $row->demands;
-        $hadNone = $demands->isEmpty();
+        $quota = $this->quotaFor($row);
+        $hadNone = $row->demands->isEmpty();
         $created = 0;
+        $changed = false;
         $first = null;
 
         foreach (self::TYPES as $type) {
-            $quota = max(0, (int) ($deliverable->{$type} ?? 0));
-            if ($quota === 0) {
-                continue;
-            }
+            $target = $quota[$type];
+            $existing = $row->demands->where('content_type', $type)->sortBy('position')->values();
 
-            $existing = $demands->where('content_type', $type)->count();
-
-            for ($position = $existing + 1; $position <= $quota; $position++) {
+            for ($position = $existing->count() + 1; $position <= $target; $position++) {
                 $demand = $row->demands()->create([
                     'content_type' => $type,
                     'position' => $position,
@@ -72,17 +69,146 @@ class CampaignDemandSync
                     'video_status' => StageApprovalStatus::Pending,
                     'delivery_status' => DeliveryStatus::Pending,
                 ]);
+                $existing->push($demand);
                 $first ??= $demand;
                 $created++;
+                $changed = true;
+            }
+
+            if ($this->trimUntouched($row, $type, $existing, $target)) {
+                $changed = true;
             }
         }
 
         if ($hadNone && $first) {
             $this->absorbLegacyContent($row, $first);
             $this->rollup($row);
+        } elseif ($changed) {
+            $row->unsetRelation('demands');
+            $this->rollup($row);
         }
 
         return $created;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $custom
+     * @return array<string, int>
+     */
+    public function normalizeDeliverables(?array $custom): ?array
+    {
+        if ($custom === null) {
+            return null;
+        }
+
+        $quota = [];
+        foreach (self::TYPES as $type) {
+            $quota[$type] = max(0, (int) ($custom[$type] ?? 0));
+        }
+
+        return $quota;
+    }
+
+    /**
+     * @param  array<string, int>|null  $custom
+     */
+    public function assertQuota(CampaignCreator $row, ?array $custom): void
+    {
+        $row->loadMissing(['campaign.deliverable', 'demands']);
+        $quota = $this->quotaFrom($row, $custom);
+
+        foreach (self::TYPES as $type) {
+            $locked = $row->demands
+                ->where('content_type', $type)
+                ->reject(fn (CampaignDemand $demand) => $this->demandIsUntouched($demand))
+                ->count();
+            if ($quota[$type] < $locked) {
+                throw ValidationException::withMessages([
+                    "deliverables.{$type}" => __('auth.campaign_creator_deliverable_locked', ['locked' => $locked]),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function quotaFor(CampaignCreator $row): array
+    {
+        return $this->quotaFrom($row, is_array($row->deliverables) ? $row->deliverables : null);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $custom
+     * @return array<string, int>
+     */
+    private function quotaFrom(CampaignCreator $row, ?array $custom): array
+    {
+        $deliverable = $row->campaign?->deliverable;
+        $quota = [];
+        foreach (self::TYPES as $type) {
+            $quota[$type] = is_array($custom)
+                ? max(0, (int) ($custom[$type] ?? 0))
+                : max(0, (int) ($deliverable->{$type} ?? 0));
+        }
+
+        return $quota;
+    }
+
+    /**
+     * @param  Collection<int, CampaignDemand>  $existing
+     */
+    private function trimUntouched(CampaignCreator $row, string $type, Collection $existing, int $target): bool
+    {
+        $remove = $existing->count() - $target;
+        if ($remove <= 0) {
+            return false;
+        }
+
+        $deleted = false;
+        foreach ($existing->sortByDesc('position') as $demand) {
+            if ($remove <= 0) {
+                break;
+            }
+            if (! $this->demandIsUntouched($demand)) {
+                continue;
+            }
+            $demand->delete();
+            $remove--;
+            $deleted = true;
+        }
+
+        if ($deleted) {
+            $this->renumber($row, $type);
+        }
+
+        return $deleted;
+    }
+
+    private function renumber(CampaignCreator $row, string $type): void
+    {
+        $left = $row->demands()->where('content_type', $type)->orderBy('position')->orderBy('id')->get();
+        foreach ($left as $demand) {
+            $demand->forceFill(['position' => $demand->position + 1000])->save();
+        }
+        $position = 1;
+        foreach ($left as $demand) {
+            $demand->forceFill(['position' => $position])->save();
+            $position++;
+        }
+    }
+
+    private function demandIsUntouched(CampaignDemand $demand): bool
+    {
+        // A pauta is the brief for that slot. It does not mean the creator already
+        // has to deliver the campaign's original package.
+        if ($this->demandHasScript($demand) || $this->demandHasVideo($demand)) {
+            return false;
+        }
+
+        return $this->statusValue($demand->script_status) === StageApprovalStatus::Pending->value
+            && $this->statusValue($demand->video_status) === StageApprovalStatus::Pending->value
+            && $this->statusValue($demand->delivery_status) === DeliveryStatus::Pending->value;
     }
 
     /**

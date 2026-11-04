@@ -354,6 +354,120 @@ class CampaignDemandTest extends TestCase
         $this->assertSame('revision', $row->fresh()->video_status->value);
     }
 
+    public function test_creator_deliverables_stay_on_that_creator(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $other = CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $row->campaign_id,
+        ]);
+        app(CampaignDemandSync::class)->syncCreator($other);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => [
+                    'reels' => 1,
+                    'stories' => 3,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.deliverables.reels', 1)
+            ->assertJsonPath('data.deliverables.stories', 3)
+            ->assertJsonCount(4, 'data.demands');
+
+        $this->assertSame(2, (int) $row->campaign->deliverable->fresh()->reels);
+        $this->assertSame(0, (int) $row->campaign->deliverable->fresh()->stories);
+        $this->assertSame(2, CampaignDemand::query()->where('campaign_creator_id', $other->id)->where('content_type', 'reels')->count());
+        $this->assertSame(0, CampaignDemand::query()->where('campaign_creator_id', $other->id)->where('content_type', 'stories')->count());
+        $this->assertNull($other->fresh()->deliverables);
+    }
+
+    public function test_custom_deliverables_replace_the_campaign_package(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $row->demands()->first()->update(['pauta' => 'Pauta do reel que veio na campanha']);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => [
+                    'reels' => 0,
+                    'stories' => 0,
+                    'tiktok' => 0,
+                    'ugc' => 0,
+                    'posts' => 0,
+                    'youtube' => 1,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.demands')
+            ->assertJsonPath('data.demands.0.content_type', 'youtube');
+
+        $this->assertSame(0, CampaignDemand::query()->where('campaign_creator_id', $row->id)->where('content_type', 'reels')->count());
+        $this->assertSame(2, (int) $row->campaign->deliverable->fresh()->reels);
+    }
+
+    public function test_cannot_reduce_a_format_below_demands_already_started(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $row->demands()->first()->update([
+            'script' => 'Já enviado',
+            'script_status' => 'submitted',
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => ['reels' => 0],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['deliverables.reels']);
+
+        $this->assertSame(2, $row->demands()->count());
+        $this->assertNull($row->fresh()->deliverables);
+    }
+
+    public function test_clearing_creator_deliverables_follows_the_campaign_again(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $row->forceFill([
+            'deliverables' => [
+                'reels' => 1,
+                'stories' => 0,
+                'tiktok' => 0,
+                'ugc' => 0,
+                'posts' => 0,
+                'youtube' => 0,
+            ],
+        ])->save();
+        app(CampaignDemandSync::class)->syncCreator($row->fresh());
+        $this->assertSame(1, $row->demands()->count());
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => null,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.deliverables', null);
+
+        $this->assertSame(2, $row->demands()->count());
+    }
+
+    public function test_creator_cannot_change_own_deliverables(): void
+    {
+        $row = $this->approvedWithReels(1);
+
+        $this->withToken($row->creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => ['reels' => 4],
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(1, $row->demands()->count());
+        $this->assertNull($row->fresh()->deliverables);
+    }
+
     private function approvedWithReels(int $reels): CampaignCreator
     {
         $row = CampaignCreator::factory()->approved()->create();
