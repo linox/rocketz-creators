@@ -28,6 +28,7 @@ class CampaignInvitationTest extends TestCase
         $this->actingAs($admin, 'sanctum')
             ->postJson("/api/campaigns/{$campaign->id}/assign", [
                 'creator_id' => $creator->id,
+                'invite' => true,
             ])
             ->assertCreated()
             ->assertJsonPath('data.application_status', ApplicationStatus::Invited->value);
@@ -61,6 +62,41 @@ class CampaignInvitationTest extends TestCase
             ->assertJsonPath('data.application_status', ApplicationStatus::Approved->value);
     }
 
+    public function test_secret_campaign_can_add_a_creator_without_an_invitation(): void
+    {
+        $campaign = $this->secretCampaign();
+        $creator = $this->applicant();
+        $other = $this->applicant();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/campaigns/{$campaign->id}/assign", [
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.application_status', ApplicationStatus::Approved->value);
+
+        $this->assertSame(0, MailMessage::query()
+            ->where('template_key', MailTemplateKey::CampaignInvitation)
+            ->where('creator_id', $creator->id)
+            ->count());
+
+        $this->actingAs($creator->user, 'sanctum')
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertOk()
+            ->assertJsonPath('data.applications.0.application_status', ApplicationStatus::Approved->value);
+
+        $listed = $this->actingAs($creator->user, 'sanctum')
+            ->getJson('/api/campaigns')
+            ->assertOk()
+            ->json('data');
+        $this->assertTrue(collect($listed)->contains(fn ($row) => (int) $row['id'] === $campaign->id));
+
+        $this->actingAs($other->user, 'sanctum')
+            ->getJson("/api/campaigns/{$campaign->id}")
+            ->assertForbidden();
+    }
+
     public function test_only_the_invited_creator_sees_the_secret_campaign_and_can_answer(): void
     {
         $campaign = $this->secretCampaign();
@@ -76,6 +112,7 @@ class CampaignInvitationTest extends TestCase
         $this->actingAs($admin, 'sanctum')
             ->postJson("/api/campaigns/{$campaign->id}/assign", [
                 'creator_id' => $invited->id,
+                'invite' => true,
             ])
             ->assertCreated();
 
@@ -133,7 +170,7 @@ class CampaignInvitationTest extends TestCase
         $admin = User::factory()->admin()->create();
 
         $this->actingAs($admin, 'sanctum')
-            ->postJson("/api/campaigns/{$campaign->id}/assign", ['creator_id' => $creator->id])
+            ->postJson("/api/campaigns/{$campaign->id}/assign", ['creator_id' => $creator->id, 'invite' => true])
             ->assertCreated();
 
         $this->actingAs($creator->user, 'sanctum')
@@ -148,7 +185,7 @@ class CampaignInvitationTest extends TestCase
         $this->assertTrue(collect($visible)->contains(fn ($row) => (int) $row['id'] === $campaign->id));
 
         $this->actingAs($admin, 'sanctum')
-            ->postJson("/api/campaigns/{$campaign->id}/assign", ['creator_id' => $creator->id])
+            ->postJson("/api/campaigns/{$campaign->id}/assign", ['creator_id' => $creator->id, 'invite' => true])
             ->assertCreated()
             ->assertJsonPath('data.application_status', ApplicationStatus::Invited->value);
 

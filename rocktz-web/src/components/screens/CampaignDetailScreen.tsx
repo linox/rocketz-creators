@@ -1220,22 +1220,23 @@ function DetailInner() {
     }
   }
 
-  async function assign(creator: { id: number }) {
+  async function assign(creator: { id: number }, invite = false) {
     if (!campaign) return;
     const previous = campaign;
     try {
       await api.assignCreator(campaign.id, {
         creator_id: creator.id,
         delivery_type: formatDeliverablesSummary(campaign.deliverables) || "Reel",
+        invite,
         ...(hideCreatorValues ? {} : { amount: effectiveCreatorFee(null, campaign) }),
       });
       setAddOpen(false);
       const next = await load();
-      if (!campaign.is_secret && previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
+      if (!invite && previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
         await alertSuccess(t("campaigns.approvedLimitClosedTitle"), t("campaigns.approvedLimitClosed", { count: next.max_approved_creators }));
         return;
       }
-      await alertSuccess(campaign.is_secret ? t("campaignDetail.invited") : t("campaignDetail.added"));
+      await alertSuccess(invite ? t("campaignDetail.invited") : t("campaignDetail.added"));
     } catch (err) {
       await alertApiError(err);
     }
@@ -1799,7 +1800,7 @@ function DetailInner() {
                   </div>
                   {isAdmin ? (
                     <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-[11px] font-extrabold text-white shadow-xs hover:bg-indigo-600">
-                      <Plus size={13} /> {campaign.is_secret ? t("campaignDetail.inviteCreator") : t("campaignDetail.addCreator")}
+                      <Plus size={13} /> {t("campaignDetail.addCreator")}
                     </button>
                   ) : null}
                 </div>
@@ -2508,7 +2509,7 @@ function DetailInner() {
                 <p className="max-w-sm text-xs text-slate-500">{t("campaignDetail.selectCreatorHint")}</p>
                 {approvedCreators.length === 0 && isAdmin ? (
                   <button type="button" onClick={() => setAddOpen(true)} className="mt-2 flex items-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600">
-                    <Plus size={14} /> {campaign.is_secret ? t("campaignDetail.inviteFirst") : t("campaignDetail.addFirst")}
+                    <Plus size={14} /> {t("campaignDetail.addFirst")}
                   </button>
                 ) : null}
               </div>
@@ -2565,7 +2566,7 @@ function DetailInner() {
               </div>
               {isAdmin ? (
                 <button type="button" onClick={() => setAddOpen(true)} className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800">
-                  <Plus size={14} /> {campaign.is_secret ? t("campaignDetail.inviteCreator") : t("campaignDetail.addManual")}
+                  <Plus size={14} /> {campaign.is_secret ? t("campaignDetail.addOrInvite") : t("campaignDetail.addManual")}
                 </button>
               ) : null}
             </div>
@@ -2781,9 +2782,14 @@ function DetailInner() {
                           </>
                         ) : null}
                         {isAdmin && (isInvited || isDeclined) ? (
-                          <button type="button" onClick={() => void assign({ id: row.creator_id })} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100">
-                            <Send size={13} /> {isDeclined ? t("campaignDetail.inviteAgain") : t("campaignDetail.resendInvite")}
-                          </button>
+                          <>
+                            <button type="button" onClick={() => void assign({ id: row.creator_id }, false)} className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-brand-primary px-3.5 py-2 text-xs font-bold text-white transition hover:bg-indigo-600">
+                              <Plus size={13} /> {t("campaignDetail.add")}
+                            </button>
+                            <button type="button" onClick={() => void assign({ id: row.creator_id }, true)} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100">
+                              <Send size={13} /> {isDeclined ? t("campaignDetail.inviteAgain") : t("campaignDetail.resendInvite")}
+                            </button>
+                          </>
                         ) : null}
                         {canManage && isRejected ? (
                           <button type="button" disabled={isUpdating} onClick={() => void approveApplication(row, parseMoneyMask(amountMasked, moneyCurrency(campaign)))} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-brand-primary transition hover:bg-indigo-100 disabled:opacity-50">
@@ -3138,8 +3144,8 @@ function DetailInner() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="app-modal-panel relative z-10 my-auto flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] p-5 sm:p-6">
                 <div>
-                  <h2 className="text-xl font-bold text-[#0F172A]">{campaign.is_secret ? t("campaignDetail.inviteCreatorTitle") : t("campaignDetail.addCreatorTitle")}</h2>
-                  <p className="text-xs text-slate-500">{campaign.is_secret ? t("campaignDetail.inviteCreatorHint") : t("campaignDetail.addCreatorHint")}</p>
+                  <h2 className="text-xl font-bold text-[#0F172A]">{campaign.is_secret ? t("campaignDetail.addOrInviteTitle") : t("campaignDetail.addCreatorTitle")}</h2>
+                  <p className="text-xs text-slate-500">{campaign.is_secret ? t("campaignDetail.addOrInviteHint") : t("campaignDetail.addCreatorHint")}</p>
                 </div>
                 <button type="button" onClick={() => setAddOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
@@ -3200,13 +3206,18 @@ function DetailInner() {
                       </div>
                       {already ? (
                         <span className="text-[11px] font-bold text-slate-400">{t("campaignDetail.alreadyIn")}</span>
-                      ) : pendingInvite ? (
-                        <button type="button" onClick={() => void assign(creator)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-brand-primary">
-                          {t("campaignDetail.resendInvite")}
-                        </button>
+                      ) : campaign.is_secret ? (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => void assign(creator, false)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
+                            {t("campaignDetail.add")}
+                          </button>
+                          <button type="button" onClick={() => void assign(creator, true)} className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary">
+                            {pendingInvite ? t("campaignDetail.resendInvite") : declinedInvite ? t("campaignDetail.inviteAgain") : t("campaignDetail.invite")}
+                          </button>
+                        </div>
                       ) : (
-                        <button type="button" onClick={() => void assign(creator)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
-                          {declinedInvite ? t("campaignDetail.inviteAgain") : campaign.is_secret ? t("campaignDetail.invite") : t("campaignDetail.add")}
+                        <button type="button" onClick={() => void assign(creator, false)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
+                          {t("campaignDetail.add")}
                         </button>
                       )}
                     </div>

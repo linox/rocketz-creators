@@ -741,6 +741,7 @@ class CampaignController extends Controller
             'creator_id' => ['required', 'exists:creators,id'],
             'amount' => ['nullable', 'numeric'],
             'delivery_type' => ['nullable', 'string'],
+            'invite' => ['sometimes', 'boolean'],
         ]);
 
         if (CreatorPrivacy::hidesCreatorValues($request->user())) {
@@ -750,7 +751,7 @@ class CampaignController extends Controller
         $creator = Creator::query()->findOrFail($data['creator_id']);
         $this->assertCreatorEligibility($campaign, $creator, true);
 
-        if ($campaign->is_secret) {
+        if ($request->boolean('invite')) {
             return $this->inviteCreator($campaign, $creator, $data);
         }
 
