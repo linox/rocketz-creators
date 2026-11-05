@@ -21,6 +21,7 @@ class FinancePaymentSync
     {
         $this->syncCampaigns($companyId, $creatorId);
         $this->syncRecurring($companyId, $creatorId);
+        $this->realignInvoiceDates($companyId, $creatorId);
     }
 
     public function ensureCampaignPayment(CampaignCreator $participation): ?FinancePayment
@@ -89,13 +90,61 @@ class FinancePaymentSync
     }
 
     /**
+     * Due days belong to the competence month shown on the payment.
+     * Payment rolls to the next month only when its day is on or before the invoice day.
+     *
      * @return array{invoice_due_date: string, payment_due_date: string}
      */
     public function datesFor(?Company $company, Carbon $referenceMonth): array
     {
+        return $this->schedule($company, $referenceMonth, 0);
+    }
+
+    /**
+     * Notes created before the competence month was used as the due month
+     * still have the invoice one month later. Move those back, and leave dates a manager edited.
+     */
+    private function realignInvoiceDates(?int $companyId, ?int $creatorId): void
+    {
+        $query = FinancePayment::query()->with('company');
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+        if ($creatorId) {
+            $query->where('creator_id', $creatorId);
+        }
+
+        $query->orderBy('id')->each(function (FinancePayment $payment) {
+            if (! $payment->reference_month || ! $payment->invoice_due_date || ! $payment->payment_due_date) {
+                return;
+            }
+
+            $month = $payment->reference_month->copy()->startOfMonth();
+            $shifted = $this->schedule($payment->company, $month, 1);
+            if ($payment->invoice_due_date->toDateString() !== $shifted['invoice_due_date']
+                || $payment->payment_due_date->toDateString() !== $shifted['payment_due_date']) {
+                return;
+            }
+
+            $correct = $this->datesFor($payment->company, $month);
+            $payment->invoice_due_date = $correct['invoice_due_date'];
+            $payment->payment_due_date = $correct['payment_due_date'];
+            $payment->save();
+
+            if ($payment->status === FinancePaymentStatus::Released) {
+                $this->mirrorCampaign($payment);
+            }
+        });
+    }
+
+    /**
+     * @return array{invoice_due_date: string, payment_due_date: string}
+     */
+    private function schedule(?Company $company, Carbon $referenceMonth, int $extraMonths): array
+    {
         $invoiceDay = $this->day($company?->invoice_due_day, 5);
         $paymentDay = $this->day($company?->payment_due_day, 15);
-        $invoiceMonth = $referenceMonth->copy()->startOfMonth()->addMonth();
+        $invoiceMonth = $referenceMonth->copy()->startOfMonth()->addMonths($extraMonths);
         $paymentMonth = $invoiceMonth->copy();
         if ($paymentDay <= $invoiceDay) {
             $paymentMonth->addMonth();

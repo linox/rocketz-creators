@@ -95,8 +95,11 @@ class FinancePaymentTest extends TestCase
         $this->assertNotNull($campaignRow);
         $this->assertSame('awaiting_invoice', $campaignRow['status']);
         $this->assertEquals(1500, $campaignRow['amount']);
-        $this->assertSame('2026-11-05', $campaignRow['invoice_due_date']);
-        $this->assertSame('2026-11-15', $campaignRow['payment_due_date']);
+        $this->assertSame('2026-10-01', $campaignRow['reference_month']);
+        $this->assertSame('2026-10-05', $campaignRow['invoice_due_date']);
+        $this->assertSame('2026-10-15', $campaignRow['payment_due_date']);
+        $this->assertSame('2026-10-05', $recurringRow['invoice_due_date']);
+        $this->assertSame('2026-10-15', $recurringRow['payment_due_date']);
         $this->assertSame($participation->id, $campaignRow['campaign_creator_id']);
         $this->assertSame('2026-10-01', $recurringRow['reference_month']);
         $this->assertEquals(800, $recurringRow['amount']);
@@ -302,7 +305,7 @@ class FinancePaymentTest extends TestCase
         [, , $creator] = $this->scene(deliveryDate: '2026-09-10');
         $this->asUser($creator->user)->getJson('/api/finance-payments')->assertOk();
         $payment = FinancePayment::query()->firstOrFail();
-        $this->assertSame('2026-10-05', $payment->invoice_due_date->toDateString());
+        $this->assertSame('2026-09-05', $payment->invoice_due_date->toDateString());
         $this->assertTrue($payment->invoice_due_date->lt(now()->startOfDay()));
 
         $this->artisan('mail:reminders')->assertSuccessful();
@@ -327,6 +330,41 @@ class FinancePaymentTest extends TestCase
         $this->travelTo('2026-10-30');
         $this->artisan('mail:reminders')->assertSuccessful();
         $this->assertSame(2, MailMessage::query()->where('template_key', MailTemplateKey::InvoiceOverdue)->count());
+    }
+
+    public function test_shifted_invoice_dates_move_back_to_the_reference_month_and_edited_dates_stay(): void
+    {
+        $this->travelTo('2026-10-28');
+        [$company, $manager] = $this->scene();
+
+        $paymentId = $this->asUser($manager)
+            ->getJson('/api/finance-payments?company_id='.$company->id)
+            ->assertOk()
+            ->json('data.0.id');
+
+        FinancePayment::query()->whereKey($paymentId)->update([
+            'invoice_due_date' => '2026-11-05',
+            'payment_due_date' => '2026-11-15',
+        ]);
+
+        $corrected = $this->asUser($manager)
+            ->getJson('/api/finance-payments?company_id='.$company->id)
+            ->assertOk();
+        $row = collect($corrected->json('data'))->firstWhere('id', $paymentId);
+        $this->assertSame('2026-10-05', $row['invoice_due_date']);
+        $this->assertSame('2026-10-15', $row['payment_due_date']);
+
+        FinancePayment::query()->whereKey($paymentId)->update([
+            'invoice_due_date' => '2026-12-01',
+            'payment_due_date' => '2026-12-20',
+        ]);
+
+        $kept = $this->asUser($manager)
+            ->getJson('/api/finance-payments?company_id='.$company->id)
+            ->assertOk();
+        $custom = collect($kept->json('data'))->firstWhere('id', $paymentId);
+        $this->assertSame('2026-12-01', $custom['invoice_due_date']);
+        $this->assertSame('2026-12-20', $custom['payment_due_date']);
     }
 
     public function test_company_defines_the_invoice_and_payment_days(): void

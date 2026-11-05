@@ -70,8 +70,8 @@ class CouponEarningTest extends TestCase
             ->assertJsonPath('data.0.status', 'awaiting_invoice')
             ->assertJsonPath('data.0.amount', 180.5)
             ->assertJsonPath('data.0.campaign_id', null)
-            ->assertJsonPath('data.0.invoice_due_date', '2026-10-05')
-            ->assertJsonPath('data.0.payment_due_date', '2026-10-15');
+            ->assertJsonPath('data.0.invoice_due_date', '2026-09-05')
+            ->assertJsonPath('data.0.payment_due_date', '2026-09-15');
 
         $this->asUser($user)
             ->postJson('/api/coupon-earnings', [
