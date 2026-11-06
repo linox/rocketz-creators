@@ -42,6 +42,12 @@ enum MailTemplateKey: string
     case PaymentReleased = 'finance.payment_released';
     case BarterDelivered = 'barter.delivered';
 
+    /**
+     * Convites e oportunidades de campanha. O cron drena essa fila com teto próprio,
+     * separado de push e dos demais e-mails.
+     */
+    public const CAMPAIGN_QUEUE = 'mail';
+
     public function audience(): MailTemplateAudience
     {
         return match ($this) {
@@ -114,7 +120,14 @@ enum MailTemplateKey: string
 
     public function queueName(): string
     {
-        return $this->isAuthPriority() ? 'high' : 'default';
+        if ($this->isAuthPriority()) {
+            return 'high';
+        }
+
+        return match ($this) {
+            self::CampaignOpportunity, self::CampaignInvitation => self::CAMPAIGN_QUEUE,
+            default => 'default',
+        };
     }
 
     /**

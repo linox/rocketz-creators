@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -625,6 +625,10 @@ function DetailInner() {
     guidelines: "",
   });
   const [creatorEdit, setCreatorEdit] = useState({ amount: "", delivery_type: "", delivery_date: "", post_date: "", video_url: "", published_link: "" });
+  const demandPautaDrafts = useRef<Record<number, string>>({});
+  const rememberDemandPauta = useCallback((demandId: number, text: string) => {
+    demandPautaDrafts.current[demandId] = text;
+  }, []);
 
   async function load() {
     if (!id || id === "_") return null;
@@ -702,6 +706,10 @@ function DetailInner() {
   }
 
   const applications = campaign?.applications ?? [];
+  const invitedPeople = useMemo(
+    () => applications.filter((row) => row.application_status === "invited" || row.application_status === "declined"),
+    [applications],
+  );
   const approvedCreators = useMemo(() => applications.filter(isApproved), [applications]);
   const displayCreators = useMemo(() => {
     if (!isCreator || !ownCreatorId) return approvedCreators;
@@ -1230,7 +1238,7 @@ function DetailInner() {
         invite,
         ...(hideCreatorValues ? {} : { amount: effectiveCreatorFee(null, campaign) }),
       });
-      setAddOpen(false);
+      if (!invite) setAddOpen(false);
       const next = await load();
       if (!invite && previous.status !== "finished" && next?.status === "finished" && next.max_approved_creators != null) {
         await alertSuccess(t("campaigns.approvedLimitClosedTitle"), t("campaigns.approvedLimitClosed", { count: next.max_approved_creators }));
@@ -1312,8 +1320,20 @@ function DetailInner() {
   }
 
   async function saveCreatorDeliverables(rowId: number, deliverables: Record<string, number> | null) {
+    const row = applications.find((item) => item.id === rowId);
+    const demandPautas = (row?.demands ?? []).flatMap((demand) => {
+      const draft = demandPautaDrafts.current[demand.id];
+      if (draft === undefined) return [];
+      const next = draft.trim() || null;
+      const current = demand.pauta?.trim() || null;
+      if (next === current) return [];
+      return [{ id: demand.id, pauta: next }];
+    });
     try {
-      await api.updateParticipation(rowId, { deliverables });
+      await api.updateParticipation(rowId, {
+        deliverables,
+        ...(demandPautas.length ? { demand_pautas: demandPautas } : {}),
+      });
       await load();
       await alertSuccess(t("campaignDetail.creatorDeliverablesSaved"));
     } catch (err) {
@@ -2075,6 +2095,46 @@ function DetailInner() {
                 )}
               </div>
             </div>
+            {campaign.is_secret && invitedPeople.length > 0 ? (
+              <div className="flex flex-col gap-2.5 rounded-2xl border border-indigo-200 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-1.5 text-xs font-black tracking-wider text-indigo-800 uppercase">
+                    <Send size={14} /> {t("campaignDetail.invitedListTitle")}
+                  </h3>
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">{invitedPeople.length}</span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500">{t("campaignDetail.invitedListHint")}</p>
+                <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+                  {invitedPeople.map((row) => {
+                    const declined = row.application_status === "declined";
+                    const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.creatorFallback");
+                    return (
+                      <div key={row.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2">
+                        <Link href={`/creators/${row.creator_id}`} className="flex min-w-0 items-center gap-2">
+                          <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="rounded-xl" className="h-8 w-8 shrink-0 border border-slate-200" textClassName="text-[10px]" />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black text-slate-900">@{row.creator?.artistic_name || name}</p>
+                            <p className={cn("text-[10px] font-bold", declined ? "text-slate-500" : "text-indigo-700")}>
+                              {declined ? t("campaignDetail.declinedInviteStatus") : t("campaignDetail.awaitingInvite")}
+                            </p>
+                          </div>
+                        </Link>
+                        {isAdmin ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <button type="button" onClick={() => void assign({ id: row.creator_id }, false)} className="rounded-lg bg-brand-primary px-2 py-1 text-[10px] font-bold text-white">
+                              {t("campaignDetail.add")}
+                            </button>
+                            <button type="button" onClick={() => void assign({ id: row.creator_id }, true)} className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-[10px] font-bold text-brand-primary">
+                              {declined ? t("campaignDetail.inviteAgain") : t("campaignDetail.resendInvite")}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
           ) : null}
 
@@ -2227,6 +2287,7 @@ function DetailInner() {
                     canManage={canManage}
                     updating={updatingId === selected.id}
                     onSavePauta={(demandId, text) => saveDemandPauta(selected.id, demandId, text)}
+                    onPautaChange={rememberDemandPauta}
                     onUpdate={async (demandId, body) => {
                       await patch(selected, { demand_id: demandId, ...body });
                     }}
@@ -3150,6 +3211,57 @@ function DetailInner() {
                 <button type="button" onClick={() => setAddOpen(false)} className="p-1 font-bold text-slate-400">✕</button>
               </div>
               <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5 sm:p-6">
+                {campaign.is_secret ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-[11px] font-black tracking-wider text-indigo-700 uppercase">{t("campaignDetail.invitedListTitle")}</h3>
+                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">{invitedPeople.length}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">{t("campaignDetail.invitedListHint")}</p>
+                    {(() => {
+                      const term = pickerSearch.trim().toLowerCase();
+                      const visibleInvited = invitedPeople.filter((row) => {
+                        if (!term) return true;
+                        return (row.creator?.artistic_name || "").toLowerCase().includes(term) || (row.creator?.full_name || "").toLowerCase().includes(term);
+                      });
+                      if (invitedPeople.length === 0) {
+                        return <p className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 px-3 py-4 text-center text-xs font-semibold text-slate-500">{t("campaignDetail.invitedListEmpty")}</p>;
+                      }
+                      if (visibleInvited.length === 0) {
+                        return <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs font-semibold text-slate-500">{t("campaignDetail.noCreatorFound")}</p>;
+                      }
+                      return visibleInvited.map((row) => {
+                          const declined = row.application_status === "declined";
+                          const name = row.creator?.artistic_name || row.creator?.full_name || t("campaignDetail.creatorFallback");
+                          return (
+                            <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <UserAvatar src={row.creator?.photo_url} name={name} size="custom" shape="rounded-xl" className="h-10 w-10 shrink-0 border border-slate-200" textClassName="text-xs" />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-black text-slate-900">@{row.creator?.artistic_name || name}</p>
+                                  {row.creator?.full_name ? <p className="truncate text-xs text-slate-500">{row.creator.full_name}</p> : null}
+                                  <span className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase", declined ? "border-slate-200 bg-white text-slate-600" : "border-indigo-200 bg-white text-indigo-700")}>
+                                    {declined ? t("campaignDetail.declinedInviteStatus") : t("campaignDetail.awaitingInvite")}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <button type="button" onClick={() => void assign({ id: row.creator_id }, false)} className="rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white">
+                                  {t("campaignDetail.add")}
+                                </button>
+                                <button type="button" onClick={() => void assign({ id: row.creator_id }, true)} className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-primary">
+                                  {declined ? t("campaignDetail.inviteAgain") : t("campaignDetail.resendInvite")}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                      });
+                    })()}
+                  </div>
+                ) : null}
+                {campaign.is_secret ? (
+                  <h3 className="pt-1 text-[11px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.inviteOthersTitle")}</h3>
+                ) : null}
                 <div className="grid gap-2 sm:grid-cols-[1fr_180px_180px]">
                   <input
                     value={pickerSearch}
@@ -3188,7 +3300,8 @@ function DetailInner() {
                   const matchesSearch = !term || (creator.artistic_name || "").toLowerCase().includes(term) || (creator.full_name || "").toLowerCase().includes(term);
                   const matchesNetwork = !bounds || matchesNetworkRange(networkSize(creator.metrics), bounds.min, bounds.max);
                   const matchesGroup = !group || (group.creators ?? []).some((member) => member.id === creator.id);
-                  return matchesSearch && matchesNetwork && matchesGroup;
+                  const listedAsInvited = campaign.is_secret && invitedPeople.some((row) => row.creator_id === creator.id);
+                  return matchesSearch && matchesNetwork && matchesGroup && !listedAsInvited;
                 }).map((creator) => {
                   const participation = applications.find((row) => row.creator_id === creator.id);
                   const already = participation?.application_status === "approved";

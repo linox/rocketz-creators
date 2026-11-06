@@ -97,6 +97,42 @@ class TransactionalMailTest extends TestCase
         $this->flushHeaders();
     }
 
+    public function test_campaign_invite_and_opportunity_use_the_capped_mail_queue(): void
+    {
+        Queue::fake();
+        $creator = Creator::factory()->active()->create();
+        $mail = app(TransactionalMailService::class);
+        $context = [
+            'cta_url' => 'https://example.test/campaigns/1',
+            'link_campanha' => 'https://example.test/campaigns/1',
+            'nome_campanha' => 'Campanha',
+            'nome_empresa' => 'Marca',
+        ];
+
+        $this->assertNotNull($mail->send(
+            MailTemplateKey::CampaignInvitation,
+            $creator->user,
+            $context,
+            null,
+            'invite:test',
+        ));
+        $this->assertNotNull($mail->send(
+            MailTemplateKey::CampaignOpportunity,
+            $creator->user,
+            $context,
+            null,
+            'opportunity:'.$creator->id,
+        ));
+
+        $pushed = Queue::pushed(SendTransactionalMailJob::class);
+        $this->assertCount(2, $pushed);
+        foreach ($pushed as $job) {
+            $this->assertSame(MailTemplateKey::CAMPAIGN_QUEUE, $job->queue);
+        }
+        $this->assertSame('default', MailTemplateKey::CreatorApproved->queueName());
+        $this->assertSame('high', MailTemplateKey::PasswordReset->queueName());
+    }
+
     public function test_company_registration_sends_email_immediately(): void
     {
         Mail::fake();

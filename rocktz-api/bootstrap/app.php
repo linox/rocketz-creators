@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\MailTemplateKey;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserHasRole;
@@ -44,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule): void {
         // cPanel: um cron "* * * * *" em schedule:run. Sem daemon de queue.
+        // Push e e-mails operacionais. Convite e oportunidade de campanha ficam na fila mail.
         $schedule->command('queue:work', [
             '--stop-when-empty' => true,
             '--max-time' => 50,
@@ -54,6 +56,17 @@ return Application::configure(basePath: dirname(__DIR__))
             ->everyMinute()
             ->withoutOverlapping(5)
             ->name('queue-mail-push');
+        $schedule->command('queue:work', [
+            '--stop-when-empty' => true,
+            '--max-jobs' => 30,
+            '--max-time' => 40,
+            '--timeout' => 30,
+            '--tries' => 3,
+            '--queue' => MailTemplateKey::CAMPAIGN_QUEUE,
+        ])
+            ->everyMinute()
+            ->withoutOverlapping(5)
+            ->name('queue-campaign-mail');
         $schedule->command('media:make-playable', [
             '--pending' => true,
             '--limit' => 1,

@@ -70,7 +70,7 @@ Com `APP_ENV=local` ou `MAIL_MAILER=log` o reset de senha não chega na caixa de
 
 O domínio do `MAIL_FROM_ADDRESS` precisa estar verificado no Resend. Sem a chave, `POST /auth/forgot-password` responde 503.
 
-Código 2FA e reset de senha são prioridade: saem **na hora** da requisição (não entram na fila). Os demais e-mails transacionais vão para a fila `default`. Preview de `.mov` vai para a fila `media` (o cron processa via `media:make-playable`, sem worker).
+Código 2FA e reset de senha são prioridade: saem **na hora** da requisição (não entram na fila). Convite e oportunidade de campanha vão para a fila `mail`, drenada à parte com teto de 30 envios ou 40 segundos por minuto. Os demais e-mails transacionais vão para a fila `default`. Preview de `.mov` vai para a fila `media` (o cron processa via `media:make-playable`, sem worker).
 
 ### Cron no cPanel (produção)
 
@@ -83,7 +83,7 @@ Não dá para deixar `queue:work` ligado o tempo todo. Crie **um** cron na conta
 /opt/cpanel/ea-php84/root/usr/bin/php /home/apicreatorzdig/public_html/artisan schedule:run >> /home/apicreatorzdig/public_html/storage/logs/cron.log 2>&1
 ```
 
-Isso dispara, a cada minuto: e-mails/push (`queue:work --stop-when-empty` nas filas `high,default`) e um preview `.mov` pendente (`media:make-playable --pending --limit=1`). Os dois usam `withoutOverlapping`, então o ffmpeg longo não abre outro processo em cima.
+Isso dispara, a cada minuto: push e e-mails operacionais (`queue:work` nas filas `high,default`), convites de campanha (`queue:work --queue=mail --max-jobs=30 --max-time=40`) e um preview `.mov` pendente (`media:make-playable --pending --limit=1`). Os workers usam `withoutOverlapping`, então o ffmpeg longo não abre outro processo em cima e o lote de campanha não ocupa o worker do site.
 
 Para converter **todos** os `.mov` que ainda não têm MP4 de uma vez (SSH/Terminal da API):
 
@@ -95,7 +95,7 @@ Local (daemon ok):
 
 ```bash
 cd rocktz-api
-php artisan queue:work --queue=high,default,media
+php artisan queue:work --queue=high,default,mail,media
 php artisan schedule:work
 ```
 

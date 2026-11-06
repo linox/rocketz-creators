@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\CampaignStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\LandingSignupStatus;
 use App\Enums\NotificationTargetRole;
@@ -42,7 +44,11 @@ class CreatorController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Creator::query()->with(['user', 'invitedByCompany:id,name']);
+        $query = Creator::query()->with([
+            'user',
+            'invitedByCompany:id,name',
+            'campaignCreators' => $this->activeCampaignConstraint($user),
+        ]);
         if ($user->role !== UserRole::Company) {
             $query->with('latestContractAcceptance');
         }
@@ -631,6 +637,27 @@ class CreatorController extends Controller
         }
 
         return $page;
+    }
+
+    /**
+     * Approved participations on campaigns that are still running.
+     * Companies only see campaigns of the company they are acting as.
+     */
+    private function activeCampaignConstraint(User $user): \Closure
+    {
+        $companyId = $user->role === UserRole::Company ? (int) $user->actingCompanyId() : 0;
+
+        return function ($query) use ($companyId) {
+            $query->where('application_status', ApplicationStatus::Approved)
+                ->whereHas('campaign', function ($campaign) use ($companyId) {
+                    $campaign->where('status', '!=', CampaignStatus::Finished);
+                    if ($companyId > 0) {
+                        $campaign->where('company_id', $companyId);
+                    }
+                })
+                ->with('campaign:id,name,status')
+                ->latest('updated_at');
+        };
     }
 
     private function landingOriginRelations(): array

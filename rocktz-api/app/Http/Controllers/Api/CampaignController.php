@@ -471,6 +471,9 @@ class CampaignController extends Controller
             'additional_briefing' => ['nullable', 'string', 'max:5000'],
             'demand_id' => ['nullable', 'integer'],
             'pauta' => ['nullable', 'string', 'max:5000'],
+            'demand_pautas' => ['sometimes', 'array'],
+            'demand_pautas.*.id' => ['required', 'integer'],
+            'demand_pautas.*.pauta' => ['nullable', 'string', 'max:5000'],
             'script' => ['nullable', 'string'],
             'script_file_url' => ['nullable', 'string', 'max:2048'],
             'script_file_name' => ['nullable', 'string', 'max:255'],
@@ -483,6 +486,16 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing('campaign');
         abort_unless($campaignCreator->campaign, 404);
         $data = $this->authorizeParticipationUpdate($request, $campaignCreator, $data);
+        $demandPautas = is_array($data['demand_pautas'] ?? null) ? $data['demand_pautas'] : null;
+        unset($data['demand_pautas']);
+        if ($demandPautas) {
+            $this->applyDemandPautas($campaignCreator, $demandPautas);
+        } elseif (array_key_exists('pauta', $data) && ! empty($data['demand_id'])) {
+            $this->applyDemandPautas($campaignCreator, [[
+                'id' => $data['demand_id'],
+                'pauta' => $data['pauta'],
+            ]]);
+        }
         if (array_keys($data) === ['favorited']) {
             abort_unless(in_array($request->user()?->role, [UserRole::Admin, UserRole::Company], true), 403);
             $campaignCreator->forceFill(['favorited' => (bool) $data['favorited']])->save();
@@ -1747,6 +1760,33 @@ class CampaignController extends Controller
             'type' => NotificationType::General,
             'link' => '/creators/'.$campaignCreator->creator_id.'?tab=campaigns',
         ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function applyDemandPautas(CampaignCreator $campaignCreator, array $items): void
+    {
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $demand = CampaignDemand::query()
+                ->where('campaign_creator_id', $campaignCreator->id)
+                ->find((int) ($item['id'] ?? 0));
+            if (! $demand) {
+                continue;
+            }
+            $previous = trim((string) ($demand->pauta ?? ''));
+            $next = trim((string) ($item['pauta'] ?? '')) ?: null;
+            if (($next ?? '') === $previous) {
+                continue;
+            }
+            $demand->forceFill(['pauta' => $next])->save();
+            $this->notifyDemandPauta($campaignCreator, $demand, ['pauta' => $next ?? ''], $previous);
+        }
+
+        $campaignCreator->unsetRelation('demands');
     }
 
     /**

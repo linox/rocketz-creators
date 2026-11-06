@@ -19,6 +19,7 @@ type Props = {
   updating: boolean;
   onUpdate: (demandId: number, body: Record<string, unknown>) => Promise<unknown>;
   onSavePauta: (demandId: number, text: string | null) => Promise<void>;
+  onPautaChange?: (demandId: number, text: string) => void;
 };
 
 function statusLabel(state: string, t: (key: string) => string) {
@@ -34,7 +35,7 @@ function statusLabel(state: string, t: (key: string) => string) {
   return t("campaignDetail.waiting");
 }
 
-export function CampaignDemandsPanel({ row, flow, canManage, updating, onUpdate, onSavePauta }: Props) {
+export function CampaignDemandsPanel({ row, flow, canManage, updating, onUpdate, onSavePauta, onPautaChange }: Props) {
   const { t } = useTranslation("app");
   const demands = row.demands ?? [];
   if (!demands.length) return null;
@@ -56,6 +57,7 @@ export function CampaignDemandsPanel({ row, flow, canManage, updating, onUpdate,
             updating={updating}
             onUpdate={onUpdate}
             onSavePauta={onSavePauta}
+            onPautaChange={onPautaChange}
           />
         ))}
       </div>
@@ -71,6 +73,7 @@ function DemandCard({
   updating,
   onUpdate,
   onSavePauta,
+  onPautaChange,
 }: {
   row: CampaignCreator;
   demand: CampaignDemand;
@@ -79,6 +82,7 @@ function DemandCard({
   updating: boolean;
   onUpdate: (demandId: number, body: Record<string, unknown>) => Promise<unknown>;
   onSavePauta: (demandId: number, text: string | null) => Promise<void>;
+  onPautaChange?: (demandId: number, text: string) => void;
 }) {
   const { t } = useTranslation("app");
   const [pauta, setPauta] = useState(demand.pauta || "");
@@ -87,6 +91,12 @@ function DemandCard({
   useEffect(() => {
     setLinkDraft(demand.content?.published_link || "");
   }, [demand.content?.published_link]);
+  useEffect(() => {
+    setPauta(demand.pauta || "");
+  }, [demand.id, demand.pauta]);
+  useEffect(() => {
+    onPautaChange?.(demand.id, pauta);
+  }, [demand.id, onPautaChange, pauta]);
   const projected = projectDemand(row, demand);
   const state = campaignCreatorDeliveryState(projected, flow);
   const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });

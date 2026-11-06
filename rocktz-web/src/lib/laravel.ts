@@ -639,7 +639,7 @@ const GET_CACHE_MAX = 40;
 type GetCacheEntry = { at: number; data: unknown };
 
 const getResponseCache = new Map<string, GetCacheEntry>();
-const getInflight = new Map<string, Promise<unknown>>();
+const getInflight = new Map<string, { generation: number; promise: Promise<unknown> }>();
 let getCacheGeneration = 0;
 
 function getCacheKey(path: string): string {
@@ -690,7 +690,7 @@ export function clearLaravelGetCache() {
   getResponseCache.clear();
 }
 
-export async function laravelFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function laravelFetch<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
   const isGet = method === "GET" && !init.body && !init.signal;
   const generation = getCacheGeneration;
@@ -698,15 +698,21 @@ export async function laravelFetch<T>(path: string, init: RequestInit = {}): Pro
 
   if (isGet) {
     const pending = getInflight.get(cacheKey);
-    if (pending) return pending as Promise<T>;
+    if (pending && pending.generation === generation) return pending.promise as Promise<T>;
   }
 
-  const run = requestLaravel<T>(path, init, method, generation);
+  const run = requestLaravel<T>(path, init, method, generation).then((data) => {
+    if (isGet && generation !== getCacheGeneration && attempt < 2) {
+      return laravelFetch<T>(path, init, attempt + 1);
+    }
+    return data;
+  });
   if (!isGet) return run;
 
-  getInflight.set(cacheKey, run);
+  getInflight.set(cacheKey, { generation, promise: run });
   void run.finally(() => {
-    if (getInflight.get(cacheKey) === run) getInflight.delete(cacheKey);
+    const current = getInflight.get(cacheKey);
+    if (current?.promise === run) getInflight.delete(cacheKey);
   });
   return run;
 }

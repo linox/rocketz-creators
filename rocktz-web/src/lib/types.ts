@@ -53,6 +53,11 @@ export type Creator = {
   can_restore?: boolean;
   invited_by_company_id?: number | null;
   invited_by_company?: { id: number; name: string } | null;
+  active_campaigns?: {
+    id: number;
+    name: string;
+    status: string;
+  }[];
   landing_origins?: {
     id: number;
     landing?: { id: number; display_name: string; slug: string } | null;

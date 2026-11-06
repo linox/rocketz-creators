@@ -166,7 +166,17 @@ class CampaignDemandSync
         }
 
         $deleted = false;
-        foreach ($existing->sortByDesc('position') as $demand) {
+        $ordered = $existing->sort(function (CampaignDemand $left, CampaignDemand $right) {
+            $leftHasPauta = filled($left->pauta) ? 1 : 0;
+            $rightHasPauta = filled($right->pauta) ? 1 : 0;
+            if ($leftHasPauta !== $rightHasPauta) {
+                return $leftHasPauta <=> $rightHasPauta;
+            }
+
+            return $right->position <=> $left->position;
+        })->values();
+
+        foreach ($ordered as $demand) {
             if ($remove <= 0) {
                 break;
             }

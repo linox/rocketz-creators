@@ -382,6 +382,53 @@ class CampaignDemandTest extends TestCase
         $this->assertNull($other->fresh()->deliverables);
     }
 
+    public function test_saved_pauta_survives_reloading_the_campaign(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->firstOrFail();
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'pauta' => 'Comece pelo unboxing.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.pauta', 'Comece pelo unboxing.');
+
+        $this->withToken($token)
+            ->getJson("/api/campaigns/{$row->campaign_id}")
+            ->assertOk()
+            ->assertJsonPath('data.applications.0.demands.0.pauta', 'Comece pelo unboxing.');
+    }
+
+    public function test_saving_the_demand_keeps_a_pauta_written_on_a_slot_that_stays(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(2);
+        $second = $row->demands()->orderBy('id')->skip(1)->firstOrFail();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'deliverables' => [
+                    'reels' => 1,
+                    'stories' => 0,
+                    'tiktok' => 0,
+                    'ugc' => 0,
+                    'posts' => 0,
+                    'youtube' => 0,
+                ],
+                'demand_pautas' => [
+                    ['id' => $second->id, 'pauta' => 'Comece pelo unboxing.'],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.demands')
+            ->assertJsonPath('data.demands.0.content_type', 'reels')
+            ->assertJsonPath('data.demands.0.pauta', 'Comece pelo unboxing.');
+    }
+
     public function test_custom_deliverables_replace_the_campaign_package(): void
     {
         $admin = User::factory()->admin()->create();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\CampaignCreator;
 use App\Models\CompanyLandingSignup;
 use App\Models\CreatorContractAcceptance;
 use App\Services\CreatorStorefrontService;
@@ -69,6 +70,14 @@ class CreatorResource extends JsonResource
                 'id' => $this->invitedByCompany->id,
                 'name' => $this->invitedByCompany->name,
             ] : null),
+            'active_campaigns' => $this->whenLoaded('campaignCreators', fn () => $this->campaignCreators
+                ->filter(fn (CampaignCreator $row) => $row->relationLoaded('campaign') && $row->campaign)
+                ->map(fn (CampaignCreator $row) => [
+                    'id' => $row->campaign->id,
+                    'name' => $row->campaign->name,
+                    'status' => $row->campaign->status?->value,
+                ])
+                ->values()),
             'landing_origins' => $this->whenLoaded('landingSignups', fn () => $this->landingSignups
                 ->map(fn (CompanyLandingSignup $signup) => [
                     'id' => $signup->id,

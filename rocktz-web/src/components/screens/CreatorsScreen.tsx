@@ -242,6 +242,59 @@ function CreatorFollowerNetworks({ creator, compact = false }: { creator: Creato
   );
 }
 
+const CAMPAIGN_STATUS_DOT: Record<string, string> = {
+  pending_agency: "bg-amber-400",
+  briefing: "bg-slate-400",
+  selection: "bg-amber-500",
+  approval: "bg-violet-500",
+  production: "bg-indigo-500",
+  published: "bg-emerald-500",
+};
+
+function CreatorCampaignChips({ creator, variant }: { creator: Creator; variant: "card" | "list" }) {
+  const { t } = useTranslation("app");
+  const campaigns = creator.active_campaigns ?? [];
+  if (campaigns.length === 0) return null;
+
+  const chips = (
+    <div className="flex h-5 min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {campaigns.map((campaign) => {
+        const status = t(`status.${campaign.status}`, { defaultValue: "" });
+
+        return (
+          <Link
+            key={campaign.id}
+            href={`/campaigns/${campaign.id}`}
+            title={status ? `${campaign.name} · ${status}` : campaign.name}
+            aria-label={t("creators.openCampaign", { name: campaign.name })}
+            className="inline-flex h-5 max-w-[7.5rem] shrink-0 items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/90 px-1.5 text-[10px] font-bold text-indigo-900 hover:border-brand-primary hover:bg-white"
+          >
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", CAMPAIGN_STATUS_DOT[campaign.status] ?? "bg-indigo-400")} />
+            <span className="truncate">{campaign.name}</span>
+            <ExternalLink size={9} className="shrink-0 opacity-60" />
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  if (variant === "card") {
+    return (
+      <div className="mb-3 flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colCampaigns")}</span>
+        <div className="min-w-0 flex-1">{chips}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 max-w-[240px] flex-1">
+      <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colCampaigns")}</span>
+      {chips}
+    </div>
+  );
+}
+
 function creatorRecurringContracts(creator: Creator, recurringContracts: RecurringContract[]) {
   return recurringContracts.filter(
     (contract) => contract.status === "active" && contract.creators?.some((row) => row.creator_id === creator.id),
@@ -535,6 +588,8 @@ function CreatorCard({
           </div>
         </div>
 
+        <CreatorCampaignChips creator={creator} variant="card" />
+
         {creatorContracts.length > 0 ? (
           <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-purple-100 bg-purple-50/80 p-2.5 text-xs font-bold text-purple-900">
             <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-purple-800">
@@ -712,6 +767,7 @@ function CreatorListRow({
               <span className="block text-[13px] font-bold text-[#0F172A]">{avgViews}</span>
             </div>
           </div>
+          <CreatorCampaignChips creator={creator} variant="list" />
           <div className="min-w-0">
             <span className="text-[9px] font-bold tracking-wider text-[#64748B] uppercase">{t("creators.colRecurring")}</span>
             {creatorContracts.length > 0 ? (

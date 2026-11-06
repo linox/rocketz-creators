@@ -13,6 +13,10 @@ class ScheduleTest extends TestCase
         $output = Artisan::output();
 
         $this->assertStringContainsString('queue:work', $output);
+        $this->assertStringContainsString("--queue='high,default'", $output);
+        $this->assertStringContainsString("--queue='mail'", $output);
+        $this->assertStringContainsString('--max-jobs=30', $output);
+        $this->assertStringContainsString('--max-time=40', $output);
         $this->assertStringContainsString('media:make-playable', $output);
         $this->assertStringContainsString('pending', $output);
     }
