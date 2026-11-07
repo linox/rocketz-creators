@@ -126,6 +126,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'updateItem']);
 
     Route::get('coupons', [CreatorCouponController::class, 'index']);
+    Route::post('coupons/{creatorCoupon}/change-request', [CreatorCouponController::class, 'requestChange']);
+    Route::delete('coupons/{creatorCoupon}/change-request', [CreatorCouponController::class, 'cancelChange']);
 
     Route::get('finance-payments', [FinancePaymentController::class, 'index']);
     Route::patch('finance-payments/settings', [FinancePaymentController::class, 'updateSettings']);
@@ -151,6 +153,8 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::post('coupons', [CreatorCouponController::class, 'store']);
         Route::patch('coupons/{creatorCoupon}', [CreatorCouponController::class, 'update']);
         Route::delete('coupons/{creatorCoupon}', [CreatorCouponController::class, 'destroy']);
+        Route::post('coupons/{creatorCoupon}/change-request/approve', [CreatorCouponController::class, 'approveChange']);
+        Route::post('coupons/{creatorCoupon}/change-request/reject', [CreatorCouponController::class, 'rejectChange']);
         Route::get('creator-groups', [CreatorGroupController::class, 'index']);
         Route::post('creator-groups', [CreatorGroupController::class, 'store']);
         Route::patch('creator-groups/{creatorGroup}', [CreatorGroupController::class, 'update']);

@@ -1,18 +1,190 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Coins, Copy, TicketPercent, Trash2 } from "lucide-react";
+import { Check, Coins, Copy, PencilLine, TicketPercent, Trash2, X } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
-import { alertApiError, alertConfirm, alertError, alertSuccess } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { formatBenefitPercent } from "@/lib/benefit-coupon";
 import { useAuth } from "@/lib/use-auth";
 import type { Company, CreatorCoupon, CreatorCouponCampaignOption } from "@/lib/types";
 
 const fieldClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition-colors focus:border-purple-600";
+const areaClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-purple-600";
+
+function CouponChangePanel({
+  coupon,
+  isCreator,
+  isManager,
+  onChanged,
+}: {
+  coupon: CreatorCoupon;
+  isCreator: boolean;
+  isManager: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const { t } = useTranslation("app");
+  const request = coupon.change_request;
+  const [open, setOpen] = useState(false);
+  const [suggestedCode, setSuggestedCode] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function sendRequest(event: FormEvent) {
+    event.preventDefault();
+    const code = suggestedCode.trim().replace(/\s+/g, "").replace(/^@+/, "").toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code)) {
+      await alertWarning(t("coupons.suggestionRequired"));
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.requestCouponChange(coupon.id, { suggested_code: code, note: note.trim() || undefined });
+      setOpen(false);
+      setSuggestedCode("");
+      setNote("");
+      await alertSuccess(t("coupons.requestSent"), t("coupons.requestSentText"));
+      await onChanged();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelRequest() {
+    setBusy(true);
+    try {
+      await api.cancelCouponChange(coupon.id);
+      await alertSuccess(t("coupons.requestCancelled"));
+      await onChanged();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve() {
+    if (!request) return;
+    const confirmed = await alertConfirm(
+      t("coupons.approveTitle"),
+      t("coupons.approveText", { from: coupon.code, to: request.suggested_code }),
+      t("coupons.approveChange"),
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      await api.approveCouponChange(coupon.id);
+      await alertSuccess(t("coupons.changeApproved"));
+      await onChanged();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject() {
+    if (!request) return;
+    const confirmed = await alertConfirm(
+      t("coupons.rejectTitle"),
+      t("coupons.rejectText", { code: coupon.code, suggested: request.suggested_code }),
+      t("coupons.rejectChange"),
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      await api.rejectCouponChange(coupon.id);
+      await alertSuccess(t("coupons.changeRejected"));
+      await onChanged();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (isManager && request?.status === "pending") {
+    return (
+      <div className="mt-auto rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <p className="m-0 text-[10px] font-bold tracking-wider text-amber-800 uppercase">{t("coupons.pendingChange")}</p>
+        <p className="mt-1 mb-0 font-mono text-sm font-black tracking-wide text-slate-900">{request.suggested_code}</p>
+        {request.note ? <p className="mt-1 mb-0 text-xs text-amber-950">{request.note}</p> : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => void approve()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">
+            <Check size={14} /> {t("coupons.approveChange")}
+          </button>
+          <button type="button" disabled={busy} onClick={() => void reject()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+            <X size={14} /> {t("coupons.rejectChange")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isCreator) return null;
+
+  if (request?.status === "pending") {
+    return (
+      <div className="mt-auto rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <p className="m-0 text-[10px] font-bold tracking-wider text-amber-800 uppercase">{t("coupons.pendingChange")}</p>
+        <p className="mt-1 mb-0 text-xs text-amber-950">{t("coupons.pendingHint", { code: request.suggested_code })}</p>
+        {request.note ? <p className="mt-1 mb-0 text-xs text-amber-950">{request.note}</p> : null}
+        <button type="button" disabled={busy} onClick={() => void cancelRequest()} className="mt-3 inline-flex h-9 items-center rounded-lg border border-amber-300 bg-white px-3 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+          {t("coupons.cancelRequest")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-auto pt-4">
+      {request?.status === "rejected" ? (
+        <p className="mb-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          <span className="font-bold">{t("coupons.rejectedChange")}. </span>
+          {t("coupons.rejectedHint", { code: coupon.code })}
+        </p>
+      ) : null}
+      {open ? (
+        <form noValidate onSubmit={(event) => void sendRequest(event)} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("coupons.suggestedCode")}</label>
+          <input
+            value={suggestedCode}
+            onChange={(event) => setSuggestedCode(event.target.value.toUpperCase())}
+            placeholder={t("coupons.suggestedCodePh")}
+            maxLength={40}
+            className={fieldClass}
+          />
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("coupons.changeNote")}</label>
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={t("coupons.changeNotePh")}
+            maxLength={500}
+            rows={2}
+            className={areaClass}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={busy} className="inline-flex h-9 items-center rounded-lg bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">
+              {t("coupons.sendRequest")}
+            </button>
+            <button type="button" disabled={busy} onClick={() => setOpen(false)} className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              {t("coupons.closeRequest")}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50">
+          <PencilLine size={14} /> {t("coupons.requestChange")}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function creatorName(creator?: { artistic_name?: string | null; full_name?: string | null } | null) {
   return creator?.artistic_name || creator?.full_name || "—";
@@ -95,7 +267,7 @@ function CouponsInner() {
     if (campaignFilter && String(coupon.campaign_id) !== campaignFilter) return false;
     const query = search.trim().toLowerCase();
     if (!query) return true;
-    const blob = [coupon.code, creatorName(coupon.creator), coupon.campaign?.name, coupon.company?.name]
+    const blob = [coupon.code, coupon.change_request?.suggested_code, creatorName(coupon.creator), coupon.campaign?.name, coupon.company?.name]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -217,9 +389,16 @@ function CouponsInner() {
                 <article key={coupon.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <p className="m-0 font-mono text-lg font-black tracking-wide text-slate-900">{coupon.code}</p>
-                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${coupon.is_active ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
-                      {coupon.is_active ? t("coupons.active") : t("coupons.paused")}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${coupon.is_active ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
+                        {coupon.is_active ? t("coupons.active") : t("coupons.paused")}
+                      </span>
+                      {coupon.change_request?.status === "pending" ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-800 uppercase">
+                          {t("coupons.pendingChange")}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <p className="mt-2 mb-0 text-sm font-semibold text-violet-700">
                     {t("coupons.line", {
@@ -246,6 +425,7 @@ function CouponsInner() {
                       </>
                     ) : null}
                   </div>
+                  <CouponChangePanel coupon={coupon} isCreator={isCreator} isManager={isManager} onChanged={reload} />
                 </article>
               ))}
             </div>

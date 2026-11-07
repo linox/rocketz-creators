@@ -104,7 +104,7 @@ class CreatorCouponIssuer
     {
         $extra = strtoupper((string) preg_replace('/[^A-Z0-9-]/', '', strtoupper(trim((string) $suffix))));
 
-        return substr('@'.$this->handle($creator).$extra, 0, 64);
+        return substr(ltrim($this->handle($creator), '@').$extra, 0, 64);
     }
 
     private function handle(Creator $creator): string

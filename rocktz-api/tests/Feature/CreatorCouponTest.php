@@ -9,6 +9,7 @@ use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
 use App\Models\User;
+use App\Services\CreatorCouponIssuer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -190,6 +191,115 @@ class CreatorCouponTest extends TestCase
         $ids = collect($row['creators'])->pluck('id')->all();
         $this->assertContains($creator->id, $ids);
         $this->assertNotContains($pending->id, $ids);
+    }
+
+    public function test_creator_suggests_a_new_code_and_the_company_approval_replaces_it(): void
+    {
+        [$company, $user, $campaign, $creator] = $this->couponScene();
+        $coupon = CreatorCoupon::query()->create([
+            'company_id' => $company->id,
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'code' => 'ana.ugcAURORA',
+            'discount_percent' => 15,
+            'commission_percent' => 10,
+            'is_active' => true,
+            'is_auto' => true,
+        ]);
+
+        $this->asUser($user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request', [
+                'suggested_code' => 'ANA15',
+            ])
+            ->assertForbidden();
+
+        $this->asUser($creator->user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request', [
+                'suggested_code' => 'ana.ugcAURORA',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.suggested_code.0', 'A sugestão precisa ser diferente do código atual.');
+
+        $this->asUser($creator->user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request', [
+                'suggested_code' => '@ana 15',
+                'note' => 'Fica mais curto para a bio.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.code', 'ana.ugcAURORA')
+            ->assertJsonPath('data.change_request.status', 'pending')
+            ->assertJsonPath('data.change_request.suggested_code', 'ANA15')
+            ->assertJsonPath('data.change_request.note', 'Fica mais curto para a bio.');
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $user->id,
+            'title' => 'Alteração de cupom',
+            'link' => '/coupons',
+        ]);
+
+        $other = Creator::factory()->active()->create();
+        $this->asUser($other->user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request', [
+                'suggested_code' => 'OUTRO',
+            ])
+            ->assertForbidden();
+
+        $this->asUser($user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request/approve')
+            ->assertOk()
+            ->assertJsonPath('data.code', 'ANA15')
+            ->assertJsonPath('data.change_request', null);
+
+        $coupon->refresh();
+        $this->assertFalse($coupon->is_auto);
+        $this->assertSame('ANA15', $coupon->code);
+
+        app(CreatorCouponIssuer::class)->issue($campaign->fresh(), $creator->fresh(), false);
+        $this->assertSame('ANA15', $coupon->fresh()->code);
+
+        $this->assertDatabaseHas('notifications', [
+            'creator_id' => $creator->id,
+            'title' => 'Cupom atualizado',
+        ]);
+    }
+
+    public function test_rejected_coupon_change_keeps_the_current_code(): void
+    {
+        [, $user, $campaign, $creator] = $this->couponScene();
+        $coupon = CreatorCoupon::query()->create([
+            'company_id' => $campaign->company_id,
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'code' => 'AURORA10',
+            'discount_percent' => 10,
+            'commission_percent' => 5,
+            'is_active' => true,
+            'is_auto' => true,
+        ]);
+
+        $this->asUser($creator->user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request', [
+                'suggested_code' => 'ANA20',
+            ])
+            ->assertOk();
+
+        $this->asUser($user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request/reject')
+            ->assertOk()
+            ->assertJsonPath('data.code', 'AURORA10')
+            ->assertJsonPath('data.change_request.status', 'rejected')
+            ->assertJsonPath('data.change_request.suggested_code', 'ANA20');
+
+        $this->asUser($user)
+            ->postJson('/api/coupons/'.$coupon->id.'/change-request/approve')
+            ->assertUnprocessable();
+
+        $this->asUser($creator->user)
+            ->deleteJson('/api/coupons/'.$coupon->id.'/change-request')
+            ->assertOk()
+            ->assertJsonPath('data.change_request', null);
+
+        $this->assertSame('AURORA10', $coupon->fresh()->code);
     }
 
     /**

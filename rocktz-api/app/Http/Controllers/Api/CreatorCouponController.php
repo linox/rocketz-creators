@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\CouponChangeStatus;
 use App\Enums\NotificationType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -168,6 +169,106 @@ class CreatorCouponController extends Controller
         ]);
     }
 
+    public function requestChange(Request $request, CreatorCoupon $creatorCoupon): JsonResponse
+    {
+        $this->assertCreatorOwns($request, $creatorCoupon);
+
+        $data = $request->validate([
+            'suggested_code' => ['required', 'string', 'max:64'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $loose = strtoupper((string) preg_replace('/\s+/', '', trim((string) $data['suggested_code'])));
+        $loose = ltrim($loose, '@');
+        $current = strtoupper((string) preg_replace('/\s+/', '', ltrim((string) $creatorCoupon->code, '@')));
+        if ($loose !== '' && $loose === $current) {
+            throw ValidationException::withMessages([
+                'suggested_code' => __('auth.creator_coupon_change_same'),
+            ]);
+        }
+
+        $code = $this->normalizeCode($data['suggested_code'], 'suggested_code');
+
+        $this->assertUniqueCode((int) $creatorCoupon->company_id, $code, $creatorCoupon->id, 'suggested_code');
+        $this->assertSuggestedAvailable((int) $creatorCoupon->company_id, $code, $creatorCoupon->id);
+
+        $note = trim((string) ($data['note'] ?? ''));
+        $creatorCoupon->update([
+            'suggested_code' => $code,
+            'change_note' => $note !== '' ? $note : null,
+            'change_status' => CouponChangeStatus::Pending,
+            'change_requested_at' => now(),
+        ]);
+
+        $creatorCoupon = $this->present($creatorCoupon);
+        $this->notifyChangeRequested($creatorCoupon);
+
+        return response()->json([
+            'message' => __('auth.creator_coupon_change_sent'),
+            'data' => new CreatorCouponResource($creatorCoupon),
+        ]);
+    }
+
+    public function cancelChange(Request $request, CreatorCoupon $creatorCoupon): JsonResponse
+    {
+        $this->assertCreatorOwns($request, $creatorCoupon);
+        if ($creatorCoupon->change_status === null) {
+            throw ValidationException::withMessages([
+                'suggested_code' => __('auth.creator_coupon_change_missing'),
+            ]);
+        }
+
+        $this->clearChange($creatorCoupon);
+
+        return response()->json([
+            'message' => __('auth.creator_coupon_change_cancelled'),
+            'data' => new CreatorCouponResource($this->present($creatorCoupon)),
+        ]);
+    }
+
+    public function approveChange(Request $request, CreatorCoupon $creatorCoupon): JsonResponse
+    {
+        $this->assertCanManage($request, $creatorCoupon);
+        $this->assertPending($creatorCoupon);
+        $code = (string) $creatorCoupon->suggested_code;
+        $this->assertUniqueCode((int) $creatorCoupon->company_id, $code, $creatorCoupon->id, 'suggested_code');
+
+        $creatorCoupon->update([
+            'code' => $code,
+            'is_auto' => false,
+            'suggested_code' => null,
+            'change_note' => null,
+            'change_status' => null,
+            'change_requested_at' => null,
+        ]);
+
+        $creatorCoupon = $this->present($creatorCoupon);
+        $this->notifyChangeDecision($creatorCoupon, true, $code);
+
+        return response()->json([
+            'message' => __('auth.creator_coupon_change_approved_msg'),
+            'data' => new CreatorCouponResource($creatorCoupon),
+        ]);
+    }
+
+    public function rejectChange(Request $request, CreatorCoupon $creatorCoupon): JsonResponse
+    {
+        $this->assertCanManage($request, $creatorCoupon);
+        $this->assertPending($creatorCoupon);
+        $suggested = (string) $creatorCoupon->suggested_code;
+        $creatorCoupon->update([
+            'change_status' => CouponChangeStatus::Rejected,
+        ]);
+
+        $creatorCoupon = $this->present($creatorCoupon);
+        $this->notifyChangeDecision($creatorCoupon, false, $suggested);
+
+        return response()->json([
+            'message' => __('auth.creator_coupon_change_rejected_msg'),
+            'data' => new CreatorCouponResource($creatorCoupon),
+        ]);
+    }
+
     private function companyId(Request $request): int
     {
         $user = $request->user();
@@ -196,6 +297,53 @@ class CreatorCouponController extends Controller
             403,
             __('auth.forbidden'),
         );
+    }
+
+    private function assertCreatorOwns(Request $request, CreatorCoupon $coupon): void
+    {
+        $user = $request->user();
+        $creatorId = (int) ($user->creator?->id ?? 0);
+
+        abort_unless(
+            $user->role === UserRole::Creator && $creatorId === (int) $coupon->creator_id,
+            403,
+            __('auth.forbidden'),
+        );
+    }
+
+    private function assertPending(CreatorCoupon $coupon): void
+    {
+        if ($coupon->change_status !== CouponChangeStatus::Pending || ! $coupon->suggested_code) {
+            throw ValidationException::withMessages([
+                'suggested_code' => __('auth.creator_coupon_change_pending'),
+            ]);
+        }
+    }
+
+    private function assertSuggestedAvailable(int $companyId, string $code, int $ignoreId): void
+    {
+        $taken = CreatorCoupon::query()
+            ->where('company_id', $companyId)
+            ->where('change_status', CouponChangeStatus::Pending)
+            ->where('suggested_code', $code)
+            ->whereKeyNot($ignoreId)
+            ->exists();
+
+        if ($taken) {
+            throw ValidationException::withMessages([
+                'suggested_code' => __('auth.creator_coupon_code_taken'),
+            ]);
+        }
+    }
+
+    private function clearChange(CreatorCoupon $coupon): void
+    {
+        $coupon->update([
+            'suggested_code' => null,
+            'change_note' => null,
+            'change_status' => null,
+            'change_requested_at' => null,
+        ]);
     }
 
     /**
@@ -285,7 +433,7 @@ class CreatorCouponController extends Controller
         }
     }
 
-    private function assertUniqueCode(int $companyId, string $code, ?int $ignoreId): void
+    private function assertUniqueCode(int $companyId, string $code, ?int $ignoreId, string $field = 'code'): void
     {
         $taken = CreatorCoupon::query()
             ->where('company_id', $companyId)
@@ -295,17 +443,18 @@ class CreatorCouponController extends Controller
 
         if ($taken) {
             throw ValidationException::withMessages([
-                'code' => __('auth.creator_coupon_code_taken'),
+                $field => __('auth.creator_coupon_code_taken'),
             ]);
         }
     }
 
-    private function normalizeCode(mixed $raw): string
+    private function normalizeCode(mixed $raw, string $field = 'code'): string
     {
         $code = strtoupper((string) preg_replace('/\s+/', '', trim((string) $raw)));
+        $code = ltrim($code, '@');
         if (! preg_match('/^[A-Z0-9][A-Z0-9-]{1,39}$/', $code)) {
             throw ValidationException::withMessages([
-                'code' => __('auth.creator_coupon_code'),
+                $field => __('auth.creator_coupon_code'),
             ]);
         }
 
@@ -357,6 +506,46 @@ class CreatorCouponController extends Controller
                 'code' => $coupon->code,
             ]),
             'type' => NotificationType::General,
+            'link' => '/coupons',
+        ]);
+    }
+
+    private function notifyChangeRequested(CreatorCoupon $coupon): void
+    {
+        $creator = $coupon->creator?->artistic_name ?: $coupon->creator?->full_name ?: '';
+        $this->notifications->notifyCompany((int) $coupon->company_id, [
+            'campaign_id' => $coupon->campaign_id,
+            'creator_id' => $coupon->creator_id,
+            'title' => __('auth.creator_coupon_change_requested_title'),
+            'message' => __('auth.creator_coupon_change_requested', [
+                'creator' => $creator,
+                'code' => $coupon->code,
+                'suggested' => $coupon->suggested_code,
+                'campaign' => $coupon->campaign?->name ?? '',
+            ]),
+            'type' => NotificationType::General,
+            'link' => '/coupons',
+        ]);
+    }
+
+    private function notifyChangeDecision(CreatorCoupon $coupon, bool $approved, string $suggested): void
+    {
+        $this->notifications->notifyCreator((int) $coupon->creator_id, [
+            'campaign_id' => $coupon->campaign_id,
+            'title' => $approved
+                ? __('auth.creator_coupon_change_approved_title')
+                : __('auth.creator_coupon_change_rejected_title'),
+            'message' => $approved
+                ? __('auth.creator_coupon_change_approved', [
+                    'campaign' => $coupon->campaign?->name ?? '',
+                    'code' => $coupon->code,
+                ])
+                : __('auth.creator_coupon_change_rejected', [
+                    'campaign' => $coupon->campaign?->name ?? '',
+                    'code' => $coupon->code,
+                    'suggested' => $suggested,
+                ]),
+            'type' => $approved ? NotificationType::Approval : NotificationType::Rejection,
             'link' => '/coupons',
         ]);
     }

@@ -216,12 +216,20 @@ export type CreatorCouponCreator = {
   coupon_id?: number | null;
 };
 
+export type CreatorCouponChangeRequest = {
+  status: "pending" | "rejected";
+  suggested_code: string;
+  note: string | null;
+  requested_at: string | null;
+};
+
 export type CreatorCoupon = {
   id: number;
   company_id: number;
   campaign_id: number;
   creator_id: number;
   code: string;
+  change_request?: CreatorCouponChangeRequest | null;
   discount_percent: number | null;
   commission_percent: number | null;
   is_active: boolean;

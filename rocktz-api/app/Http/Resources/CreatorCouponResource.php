@@ -19,6 +19,12 @@ class CreatorCouponResource extends JsonResource
             'campaign_id' => (int) $this->campaign_id,
             'creator_id' => (int) $this->creator_id,
             'code' => $this->code,
+            'change_request' => $this->change_status ? [
+                'status' => $this->change_status->value,
+                'suggested_code' => $this->suggested_code,
+                'note' => $this->change_note,
+                'requested_at' => $this->change_requested_at?->toIso8601String(),
+            ] : null,
             'discount_percent' => $this->discount_percent !== null ? (float) $this->discount_percent : null,
             'commission_percent' => $this->commission_percent !== null ? (float) $this->commission_percent : null,
             'is_active' => (bool) $this->is_active,

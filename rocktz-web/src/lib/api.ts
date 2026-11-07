@@ -128,6 +128,11 @@ export const api = {
   createCoupon: (body: unknown) => laravelFetch<Item<CreatorCoupon>>("/coupons", { method: "POST", body: JSON.stringify(body) }),
   updateCoupon: (id: number, body: unknown) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCoupon: (id: number) => laravelFetch<{ message: string }>(`/coupons/${id}`, { method: "DELETE" }),
+  requestCouponChange: (id: number, body: { suggested_code: string; note?: string }) =>
+    laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}/change-request`, { method: "POST", body: JSON.stringify(body) }),
+  cancelCouponChange: (id: number) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}/change-request`, { method: "DELETE" }),
+  approveCouponChange: (id: number) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}/change-request/approve`, { method: "POST" }),
+  rejectCouponChange: (id: number) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}/change-request/reject`, { method: "POST" }),
   couponEarnings: (query = "") => laravelFetch<{ data: CouponEarningSheet }>(`/coupon-earnings${query}`),
   saveCouponEarnings: (body: { company_id?: number; month: string; entries: { creator_id: number; amount: number | null }[] }) =>
     laravelFetch<{ message: string; data: CouponEarningSheet }>("/coupon-earnings", { method: "POST", body: JSON.stringify(body) }),

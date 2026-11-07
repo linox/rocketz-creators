@@ -164,7 +164,7 @@ class CampaignBenefitCouponTest extends TestCase
 
         $coupon = CreatorCoupon::query()->where('campaign_id', $created->json('data.id'))->first();
         $this->assertNotNull($coupon);
-        $this->assertSame('@ana.ugcBLACK', $coupon->code);
+        $this->assertSame('ana.ugcBLACK', $coupon->code);
         $this->assertSame($company->id, $coupon->company_id);
         $this->assertTrue($coupon->is_auto);
         $this->assertEquals(15, (float) $coupon->discount_percent);
@@ -172,7 +172,7 @@ class CampaignBenefitCouponTest extends TestCase
         $this->actingAs($creator->user, 'sanctum')
             ->getJson('/api/coupons')
             ->assertOk()
-            ->assertJsonPath('data.0.code', '@ana.ugcBLACK');
+            ->assertJsonPath('data.0.code', 'ana.ugcBLACK');
     }
 
     public function test_benefit_coupon_can_be_created_with_percentages_only(): void

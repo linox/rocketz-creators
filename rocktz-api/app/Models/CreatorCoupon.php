@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CouponChangeStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'campaign_id',
     'creator_id',
     'code',
+    'suggested_code',
+    'change_note',
+    'change_status',
+    'change_requested_at',
     'discount_percent',
     'commission_percent',
     'is_active',
@@ -26,6 +31,8 @@ class CreatorCoupon extends Model
             'commission_percent' => 'decimal:2',
             'is_active' => 'boolean',
             'is_auto' => 'boolean',
+            'change_status' => CouponChangeStatus::class,
+            'change_requested_at' => 'datetime',
         ];
     }
 
