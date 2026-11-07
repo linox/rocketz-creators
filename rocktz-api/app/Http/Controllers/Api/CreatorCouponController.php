@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\CouponChangeStatus;
+use App\Enums\CreatorStatus;
 use App\Enums\NotificationType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -11,6 +12,7 @@ use App\Http\Resources\CreatorCouponResource;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
+use App\Models\Creator;
 use App\Models\CreatorCoupon;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
@@ -81,8 +83,23 @@ class CreatorCouponController extends Controller
             ->get(['id', 'campaign_id', 'creator_id'])
             ->keyBy(fn (CreatorCoupon $coupon) => $coupon->campaign_id.':'.$coupon->creator_id);
 
+        $creators = Creator::query()
+            ->where('status', CreatorStatus::Active)
+            ->when(
+                $request->user()->role !== UserRole::Admin,
+                fn ($query) => $query->inCompanyPool($companyId),
+            )
+            ->orderBy('artistic_name')
+            ->orderBy('full_name')
+            ->get(['id', 'artistic_name', 'full_name']);
+
         return response()->json([
             'data' => [
+                'creators' => $creators->map(fn (Creator $creator) => [
+                    'id' => $creator->id,
+                    'artistic_name' => $creator->artistic_name,
+                    'full_name' => $creator->full_name,
+                ])->values(),
                 'campaigns' => $campaigns->map(function (Campaign $campaign) use ($participants, $assigned) {
                     $creators = $participants
                         ->where('campaign_id', $campaign->id)
@@ -119,7 +136,9 @@ class CreatorCouponController extends Controller
         Company::assertApproved($companyId);
 
         $coupon = CreatorCoupon::query()->create([
-            ...$this->attributes($request, $companyId),
+            ...($request->boolean('manual')
+                ? $this->manualAttributes($request, $companyId)
+                : $this->attributes($request, $companyId)),
             'company_id' => $companyId,
             'created_by' => $request->user()->id,
             'is_active' => $request->exists('is_active') ? $request->boolean('is_active') : true,
@@ -347,6 +366,52 @@ class CreatorCouponController extends Controller
     }
 
     /**
+     * @return array{campaign_id: null, creator_id: int, code: string, discount_percent: string, commission_percent: string, is_auto: false}
+     */
+    private function manualAttributes(Request $request, int $companyId): array
+    {
+        $request->validate([
+            'creator_id' => ['required', 'integer'],
+            'code' => ['required', 'string', 'max:64'],
+            'discount_percent' => ['required', 'numeric'],
+            'commission_percent' => ['required', 'numeric'],
+        ]);
+
+        $creatorId = (int) $request->input('creator_id');
+        $this->assertManualCreator($request, $companyId, $creatorId);
+        $code = $this->normalizeCode($request->input('code'));
+        $this->assertUniqueCode($companyId, $code, null);
+
+        return [
+            'campaign_id' => null,
+            'creator_id' => $creatorId,
+            'code' => $code,
+            'discount_percent' => $this->percent($request->input('discount_percent'), null, 'discount_percent'),
+            'commission_percent' => $this->percent($request->input('commission_percent'), null, 'commission_percent'),
+            'is_auto' => false,
+        ];
+    }
+
+    private function assertManualCreator(Request $request, int $companyId, int $creatorId): void
+    {
+        $creator = Creator::query()
+            ->whereKey($creatorId)
+            ->where('status', CreatorStatus::Active)
+            ->first();
+
+        $allowed = $creator && (
+            $request->user()->role === UserRole::Admin
+            || $creator->isInCompanyPool($companyId)
+        );
+
+        if (! $allowed) {
+            throw ValidationException::withMessages([
+                'creator_id' => __('auth.creator_coupon_manual_creator'),
+            ]);
+        }
+    }
+
+    /**
      * @return array{campaign_id: int, creator_id: int, code: string, discount_percent: string, commission_percent: string}
      */
     private function attributes(Request $request, int $companyId, ?CreatorCoupon $current = null): array
@@ -501,10 +566,15 @@ class CreatorCouponController extends Controller
         $this->notifications->notifyCreator((int) $coupon->creator_id, [
             'campaign_id' => $coupon->campaign_id,
             'title' => __('auth.creator_coupon_assigned_title'),
-            'message' => __('auth.creator_coupon_assigned', [
-                'campaign' => $coupon->campaign?->name ?? '',
-                'code' => $coupon->code,
-            ]),
+            'message' => $coupon->campaign
+                ? __('auth.creator_coupon_assigned', [
+                    'campaign' => $coupon->campaign->name,
+                    'code' => $coupon->code,
+                ])
+                : __('auth.creator_coupon_assigned_manual', [
+                    'company' => $coupon->company?->name ?? '',
+                    'code' => $coupon->code,
+                ]),
             'type' => NotificationType::General,
             'link' => '/coupons',
         ]);

@@ -16,7 +16,7 @@ class CreatorCouponResource extends JsonResource
         return [
             'id' => $this->id,
             'company_id' => (int) $this->company_id,
-            'campaign_id' => (int) $this->campaign_id,
+            'campaign_id' => $this->campaign_id !== null ? (int) $this->campaign_id : null,
             'creator_id' => (int) $this->creator_id,
             'code' => $this->code,
             'change_request' => $this->change_status ? [

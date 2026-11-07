@@ -134,8 +134,10 @@ class CreatorCouponIssuer
             ->where('company_id', $campaign->company_id)
             ->where('code', $base)
             ->where(function ($query) use ($campaign, $creator) {
-                $query->where('campaign_id', '!=', $campaign->id)
-                    ->orWhere('creator_id', '!=', $creator->id);
+                $query->where(function ($query) use ($campaign, $creator) {
+                    $query->where('campaign_id', '!=', $campaign->id)
+                        ->orWhere('creator_id', '!=', $creator->id);
+                })->orWhereNull('campaign_id');
             })
             ->exists();
 

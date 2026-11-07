@@ -217,6 +217,8 @@ return [
     'creator_coupon_deleted' => 'Coupon deleted.',
     'creator_coupon_assigned_title' => 'You received a coupon',
     'creator_coupon_assigned' => 'Your code on the campaign ":campaign" is :code.',
+    'creator_coupon_assigned_manual' => 'You received the coupon :code at :company.',
+    'creator_coupon_manual_creator' => 'Choose an active creator available to this company.',
     'creator_coupon_change_same' => 'The suggestion has to be different from the current code.',
     'creator_coupon_change_missing' => 'There is no change request on this coupon.',
     'creator_coupon_change_pending' => 'There is no pending change on this coupon.',

@@ -217,6 +217,8 @@ return [
     'creator_coupon_deleted' => 'Cupom excluído.',
     'creator_coupon_assigned_title' => 'Você recebeu um cupom',
     'creator_coupon_assigned' => 'Seu código na campanha ":campaign" é :code.',
+    'creator_coupon_assigned_manual' => 'Você recebeu o cupom :code em :company.',
+    'creator_coupon_manual_creator' => 'Escolha um criador ativo disponível para esta empresa.',
     'creator_coupon_change_same' => 'A sugestão precisa ser diferente do código atual.',
     'creator_coupon_change_missing' => 'Não há um pedido de alteração neste cupom.',
     'creator_coupon_change_pending' => 'Não há uma alteração pendente neste cupom.',

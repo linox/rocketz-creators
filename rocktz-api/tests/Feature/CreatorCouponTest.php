@@ -193,6 +193,88 @@ class CreatorCouponTest extends TestCase
         $this->assertNotContains($pending->id, $ids);
     }
 
+    public function test_company_and_agency_can_create_a_manual_coupon_without_a_campaign(): void
+    {
+        [$company, $user, , $creator] = $this->couponScene();
+        $outside = Creator::factory()->active()->create();
+
+        $this->asUser($creator->user)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'creator_id' => $creator->id,
+                'code' => 'LIVRE10',
+                'discount_percent' => 10,
+                'commission_percent' => 5,
+            ])
+            ->assertForbidden();
+
+        $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'creator_id' => $outside->id,
+                'code' => 'FORA10',
+                'discount_percent' => 10,
+                'commission_percent' => 5,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.creator_id.0', 'Escolha um criador ativo disponível para esta empresa.');
+
+        $created = $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'creator_id' => $creator->id,
+                'code' => 'livre 10',
+                'discount_percent' => 12,
+                'commission_percent' => 6,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.code', 'LIVRE10')
+            ->assertJsonPath('data.campaign_id', null)
+            ->assertJsonPath('data.discount_percent', 12)
+            ->assertJsonPath('data.commission_percent', 6);
+
+        $this->assertDatabaseHas('creator_coupons', [
+            'id' => $created->json('data.id'),
+            'creator_id' => $creator->id,
+            'code' => 'LIVRE10',
+            'campaign_id' => null,
+            'is_auto' => false,
+        ]);
+
+        $this->assertDatabaseHas('notifications', [
+            'creator_id' => $creator->id,
+            'title' => 'Você recebeu um cupom',
+            'link' => '/coupons',
+        ]);
+
+        $this->asUser($creator->user)
+            ->getJson('/api/coupons')
+            ->assertOk()
+            ->assertJsonFragment(['code' => 'LIVRE10']);
+
+        $options = $this->asUser($user)
+            ->getJson('/api/coupons/options?company_id='.$company->id)
+            ->assertOk()
+            ->json('data.creators');
+        $this->assertContains($creator->id, collect($options)->pluck('id')->all());
+        $this->assertNotContains($outside->id, collect($options)->pluck('id')->all());
+
+        $admin = User::factory()->admin()->create();
+        $this->asUser($admin)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'company_id' => $company->id,
+                'creator_id' => $outside->id,
+                'code' => 'AGENCIA20',
+                'discount_percent' => 20,
+                'commission_percent' => 8,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.campaign_id', null)
+            ->assertJsonPath('data.code', 'AGENCIA20')
+            ->assertJsonPath('data.creator_id', $outside->id);
+    }
+
     public function test_creator_suggests_a_new_code_and_the_company_approval_replaces_it(): void
     {
         [$company, $user, $campaign, $creator] = $this->couponScene();

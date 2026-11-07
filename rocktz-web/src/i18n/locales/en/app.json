@@ -477,7 +477,7 @@
   "coupons": {
     "title": "Coupons",
     "myTitle": "My coupons",
-    "subtitle": "Coupons are created when a creator is approved on the campaign. The code joins their name with the code set on the campaign.",
+    "subtitle": "Coupons are created when a creator is approved on the campaign, or when the agency and the company register a manual coupon.",
     "mySubtitle": "Codes from the coupon campaigns you were approved on. Customers use your code for a discount and you earn the commission.",
     "new": "New coupon",
     "edit": "Edit coupon",
@@ -541,7 +541,13 @@
     "rejectedChange": "Suggestion declined",
     "rejectedHint": "The company kept {{code}}. You can send another suggestion.",
     "suggestionRequired": "Enter a code with letters, numbers or a hyphen (at least 2 characters).",
-    "closeRequest": "Close"
+    "closeRequest": "Close",
+    "manual": "Manual",
+    "manualTitle": "Manual coupon",
+    "manualHint": "The creator does not need to be on a campaign. The code applies only to them at this company.",
+    "manualCreatorPh": "Choose the creator",
+    "manualRequired": "Choose the creator and enter the code, the discount and the commission.",
+    "noManualCreators": "No active creator is available for this company."
   },
   "couponEarnings": {
     "title": "Coupon earnings",

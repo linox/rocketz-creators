@@ -13,6 +13,7 @@ import type {
   CreatorGroup,
   CreatorCoupon,
   CreatorCouponCampaignOption,
+  CreatorCouponCreator,
   CouponEarningSheet,
   FinancePayment,
   FinancePaymentList,
@@ -124,7 +125,7 @@ export const api = {
     laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members/${creatorId}`, { method: "DELETE" }),
   coupons: (query = "") => laravelFetch<List<CreatorCoupon>>(`/coupons${query}`),
   couponOptions: (companyId: number) =>
-    laravelFetch<{ data: { campaigns: CreatorCouponCampaignOption[] } }>(`/coupons/options?company_id=${companyId}`),
+    laravelFetch<{ data: { campaigns: CreatorCouponCampaignOption[]; creators: CreatorCouponCreator[] } }>(`/coupons/options?company_id=${companyId}`),
   createCoupon: (body: unknown) => laravelFetch<Item<CreatorCoupon>>("/coupons", { method: "POST", body: JSON.stringify(body) }),
   updateCoupon: (id: number, body: unknown) => laravelFetch<Item<CreatorCoupon>>(`/coupons/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCoupon: (id: number) => laravelFetch<{ message: string }>(`/coupons/${id}`, { method: "DELETE" }),

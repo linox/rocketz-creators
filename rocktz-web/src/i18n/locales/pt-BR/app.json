@@ -477,7 +477,7 @@
   "coupons": {
     "title": "Cupons",
     "myTitle": "Meus cupons",
-    "subtitle": "Os cupons nascem quando o criador é aprovado na campanha. O código junta o nome dele com o código definido na campanha.",
+    "subtitle": "Os cupons nascem quando o criador é aprovado na campanha, ou quando a agência e a empresa cadastram um cupom manual.",
     "mySubtitle": "Códigos das campanhas de cupom em que você foi aprovado. O cliente usa o seu código para ganhar desconto e você recebe a comissão.",
     "new": "Novo cupom",
     "edit": "Editar cupom",
@@ -541,7 +541,13 @@
     "rejectedChange": "Sugestão recusada",
     "rejectedHint": "A empresa manteve {{code}}. Você pode enviar outra sugestão.",
     "suggestionRequired": "Informe um código com letras, números ou hífen (mínimo de 2 caracteres).",
-    "closeRequest": "Fechar"
+    "closeRequest": "Fechar",
+    "manual": "Manual",
+    "manualTitle": "Cupom manual",
+    "manualHint": "O criador não precisa estar em uma campanha. O código vale só para ele nesta empresa.",
+    "manualCreatorPh": "Escolha o criador",
+    "manualRequired": "Escolha o criador e informe o código, o desconto e a comissão.",
+    "noManualCreators": "Nenhum criador ativo disponível para esta empresa."
   },
   "couponEarnings": {
     "title": "Ganhos de cupom",

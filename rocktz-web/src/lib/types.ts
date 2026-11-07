@@ -226,7 +226,7 @@ export type CreatorCouponChangeRequest = {
 export type CreatorCoupon = {
   id: number;
   company_id: number;
-  campaign_id: number;
+  campaign_id: number | null;
   creator_id: number;
   code: string;
   change_request?: CreatorCouponChangeRequest | null;

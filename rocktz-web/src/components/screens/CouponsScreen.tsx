@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Coins, Copy, PencilLine, TicketPercent, Trash2, X } from "lucide-react";
+import { Check, Coins, Copy, PencilLine, Plus, TicketPercent, Trash2, X } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertError, alertSuccess, alertWarning } from "@/lib/alerts";
-import { formatBenefitPercent } from "@/lib/benefit-coupon";
+import { formatBenefitPercent, parseBenefitPercent } from "@/lib/benefit-coupon";
 import { useAuth } from "@/lib/use-auth";
-import type { Company, CreatorCoupon, CreatorCouponCampaignOption } from "@/lib/types";
+import type { Company, CreatorCoupon, CreatorCouponCampaignOption, CreatorCouponCreator } from "@/lib/types";
 
 const fieldClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition-colors focus:border-purple-600";
 const areaClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-purple-600";
@@ -200,6 +200,13 @@ function CouponsInner() {
   const [companyId, setCompanyId] = useState(isAdmin ? "" : String(user.company?.id || ""));
   const [coupons, setCoupons] = useState<CreatorCoupon[]>([]);
   const [campaigns, setCampaigns] = useState<CreatorCouponCampaignOption[]>([]);
+  const [manualCreators, setManualCreators] = useState<CreatorCouponCreator[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [manualCreatorId, setManualCreatorId] = useState("");
+  const [manualCode, setManualCode] = useState("");
+  const [manualDiscount, setManualDiscount] = useState("");
+  const [manualCommission, setManualCommission] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
@@ -227,6 +234,7 @@ function CouponsInner() {
     if (isManager && !companyId) {
       setCoupons([]);
       setCampaigns([]);
+      setManualCreators([]);
       setLoading(false);
       return;
     }
@@ -239,7 +247,10 @@ function CouponsInner() {
         setCoupons(res.data);
         if (!isManager) return;
         const options = await api.couponOptions(Number(companyId));
-        if (!cancelled) setCampaigns(options.data.campaigns);
+        if (!cancelled) {
+          setCampaigns(options.data.campaigns);
+          setManualCreators(options.data.creators);
+        }
       })
       .catch((err) => {
         if (!cancelled) void alertApiError(err);
@@ -253,17 +264,14 @@ function CouponsInner() {
   }, [companyId, isManager]);
 
   const filterCampaigns = useMemo(() => {
-    if (isManager) {
-      return campaigns.map((campaign) => ({ value: String(campaign.id), label: campaign.name }));
-    }
-    const seen = new Map<number, string>();
-    coupons.forEach((coupon) => {
-      if (coupon.campaign?.name) seen.set(coupon.campaign_id, coupon.campaign.name);
-    });
-    return [...seen.entries()].map(([id, label]) => ({ value: String(id), label }));
-  }, [campaigns, coupons, isManager]);
+    const rows = isManager
+      ? campaigns.map((campaign) => ({ value: String(campaign.id), label: campaign.name }))
+      : [...new Map(coupons.flatMap((coupon) => (coupon.campaign_id && coupon.campaign?.name ? [[coupon.campaign_id, coupon.campaign.name] as const] : []))).entries()].map(([id, label]) => ({ value: String(id), label }));
+    return coupons.some((coupon) => coupon.campaign_id == null) ? [{ value: "manual", label: t("coupons.manual") }, ...rows] : rows;
+  }, [campaigns, coupons, isManager, t]);
 
   const visible = coupons.filter((coupon) => {
+    if (campaignFilter === "manual") return coupon.campaign_id == null;
     if (campaignFilter && String(coupon.campaign_id) !== campaignFilter) return false;
     const query = search.trim().toLowerCase();
     if (!query) return true;
@@ -281,6 +289,40 @@ function CouponsInner() {
     if (isManager && companyId) {
       const options = await api.couponOptions(Number(companyId));
       setCampaigns(options.data.campaigns);
+      setManualCreators(options.data.creators);
+    }
+  }
+
+  async function createManual(event: FormEvent) {
+    event.preventDefault();
+    const code = manualCode.trim().replace(/\s+/g, "").replace(/^@+/, "").toUpperCase();
+    const discount = parseBenefitPercent(manualDiscount);
+    const commission = parseBenefitPercent(manualCommission);
+    if (!manualCreatorId || !/^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code) || discount == null || commission == null) {
+      await alertWarning(t("coupons.manualRequired"));
+      return;
+    }
+    setSavingManual(true);
+    try {
+      await api.createCoupon({
+        manual: true,
+        company_id: Number(companyId),
+        creator_id: Number(manualCreatorId),
+        code,
+        discount_percent: discount,
+        commission_percent: commission,
+      });
+      setCreating(false);
+      setManualCreatorId("");
+      setManualCode("");
+      setManualDiscount("");
+      setManualCommission("");
+      await alertSuccess(t("coupons.created"));
+      await reload();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSavingManual(false);
     }
   }
 
@@ -328,13 +370,24 @@ function CouponsInner() {
           <p className="mt-1 max-w-2xl text-[14px] text-[#64748B]">{isCreator ? t("coupons.mySubtitle") : t("coupons.subtitle")}</p>
         </div>
         {isManager ? (
-          <Link
-            href={companyId ? `/coupon-earnings?company=${companyId}` : "/coupon-earnings"}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800"
-          >
-            <Coins size={16} />
-            {t("coupons.earnings")}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!companyId}
+              onClick={() => setCreating((open) => !open)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-extrabold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              <Plus size={16} />
+              {t("coupons.new")}
+            </button>
+            <Link
+              href={companyId ? `/coupon-earnings?company=${companyId}` : "/coupon-earnings"}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800"
+            >
+              <Coins size={16} />
+              {t("coupons.earnings")}
+            </Link>
+          </div>
         ) : null}
       </header>
 
@@ -348,6 +401,7 @@ function CouponsInner() {
             onChange={(value) => {
               setCompanyId(value);
               setCampaignFilter("");
+              setCreating(false);
             }}
           />
         </div>
@@ -357,6 +411,59 @@ function CouponsInner() {
         <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-sm text-slate-500">{t("coupons.pickCompany")}</p>
       ) : (
         <>
+          {isManager && creating ? (
+            <form noValidate onSubmit={(event) => void createManual(event)} className="flex flex-col gap-4 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
+              <div>
+                <h2 className="m-0 text-base font-extrabold text-slate-900">{t("coupons.manualTitle")}</h2>
+                <p className="mt-1 mb-0 text-sm text-slate-500">{t("coupons.manualHint")}</p>
+              </div>
+              {manualCreators.length === 0 ? (
+                <p className="m-0 text-sm text-slate-500">{t("coupons.noManualCreators")}</p>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Select2Field
+                    theme="light"
+                    placeholder={t("coupons.manualCreatorPh")}
+                    value={manualCreatorId}
+                    options={manualCreators.map((creator) => ({
+                      value: String(creator.id),
+                      label: creator.artistic_name || creator.full_name || "—",
+                    }))}
+                    onChange={setManualCreatorId}
+                  />
+                  <input
+                    value={manualCode}
+                    onChange={(event) => setManualCode(event.target.value.toUpperCase())}
+                    placeholder={t("coupons.codePh")}
+                    maxLength={40}
+                    className={fieldClass}
+                  />
+                  <input
+                    inputMode="decimal"
+                    value={manualDiscount}
+                    onChange={(event) => setManualDiscount(event.target.value)}
+                    placeholder={t("coupons.discount")}
+                    className={fieldClass}
+                  />
+                  <input
+                    inputMode="decimal"
+                    value={manualCommission}
+                    onChange={(event) => setManualCommission(event.target.value)}
+                    placeholder={t("coupons.commission")}
+                    className={fieldClass}
+                  />
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" disabled={savingManual || manualCreators.length === 0} className="inline-flex h-11 items-center rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">
+                  {t("coupons.save")}
+                </button>
+                <button type="button" disabled={savingManual} onClick={() => setCreating(false)} className="inline-flex h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {t("coupons.closeRequest")}
+                </button>
+              </div>
+            </form>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
             <input
               value={search}
@@ -393,6 +500,11 @@ function CouponsInner() {
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${coupon.is_active ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
                         {coupon.is_active ? t("coupons.active") : t("coupons.paused")}
                       </span>
+                      {coupon.campaign_id == null ? (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold tracking-wider text-slate-600 uppercase">
+                          {t("coupons.manual")}
+                        </span>
+                      ) : null}
                       {coupon.change_request?.status === "pending" ? (
                         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-800 uppercase">
                           {t("coupons.pendingChange")}
