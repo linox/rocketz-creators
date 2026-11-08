@@ -156,16 +156,16 @@ function DeliveriesInboxInner() {
   const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
   const openedFromQuery = useRef<string | null>(null);
 
-  async function loadInbox() {
-    setLoading(true);
+  async function loadInbox(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const [campaignsRes, recurringRes] = await Promise.all([api.campaigns("?include=content"), api.recurring("?include=items")]);
       setItems(buildDeliveryInboxFromApi(campaignsRes.data, recurringRes.data));
     } catch (err) {
       await alertApiError(err);
-      setItems([]);
+      if (!silent) setItems([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -506,7 +506,7 @@ function DeliveriesInboxInner() {
       const idx = filtered.findIndex((item) => item.id === selected.id);
       const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
       if (next) openDelivery(next);
-      void loadInbox();
+      void loadInbox(true);
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -538,7 +538,7 @@ function DeliveriesInboxInner() {
         movements: [{ id: `pub-${row.id}-${Date.now()}`, type: "published", at: now }, ...row.movements],
       }));
       await alertSuccess(t("deliveries.inbox.concludedWithoutLinkOk"));
-      void loadInbox();
+      void loadInbox(true);
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -582,7 +582,7 @@ function DeliveriesInboxInner() {
       setRevisionText("");
       setRevisionOpen(false);
       await alertSuccess(t("deliveries.inbox.revisionSent"));
-      void loadInbox();
+      void loadInbox(true);
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -664,7 +664,7 @@ function DeliveriesInboxInner() {
       )));
       setSelectedIds([]);
       await alertSuccess(t("deliveries.inbox.approvedOk"));
-      void loadInbox();
+      void loadInbox(true);
     } catch (err) {
       await alertApiError(err);
     } finally {
