@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Coins, Copy, PencilLine, Plus, TicketPercent, Trash2, X } from "lucide-react";
+import { Check, Coins, Copy, Download, PencilLine, Plus, TicketPercent, Trash2, X } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
@@ -211,6 +211,7 @@ function CouponsInner() {
   const [search, setSearch] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -353,6 +354,25 @@ function CouponsInner() {
     }
   }
 
+  async function exportCsv() {
+    if (isManager && !companyId) return;
+    setExporting(true);
+    try {
+      const query = isManager ? `?company_id=${companyId}` : "";
+      const file = await api.downloadCoupons(query);
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function copyCode(code: string) {
     try {
       await navigator.clipboard.writeText(code);
@@ -369,26 +389,37 @@ function CouponsInner() {
           <h1 className="m-0 text-xl font-bold text-[#0F172A] sm:text-[28px]">{isCreator ? t("coupons.myTitle") : t("coupons.title")}</h1>
           <p className="mt-1 max-w-2xl text-[14px] text-[#64748B]">{isCreator ? t("coupons.mySubtitle") : t("coupons.subtitle")}</p>
         </div>
-        {isManager ? (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={!companyId}
-              onClick={() => setCreating((open) => !open)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-extrabold text-white hover:bg-violet-700 disabled:opacity-50"
-            >
-              <Plus size={16} />
-              {t("coupons.new")}
-            </button>
-            <Link
-              href={companyId ? `/coupon-earnings?company=${companyId}` : "/coupon-earnings"}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800"
-            >
-              <Coins size={16} />
-              {t("coupons.earnings")}
-            </Link>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {isManager ? (
+            <>
+              <button
+                type="button"
+                disabled={!companyId}
+                onClick={() => setCreating((open) => !open)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-extrabold text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                <Plus size={16} />
+                {t("coupons.new")}
+              </button>
+              <Link
+                href={companyId ? `/coupon-earnings?company=${companyId}` : "/coupon-earnings"}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800"
+              >
+                <Coins size={16} />
+                {t("coupons.earnings")}
+              </Link>
+            </>
+          ) : null}
+          <button
+            type="button"
+            disabled={exporting || loading || coupons.length === 0 || (isManager && !companyId)}
+            onClick={() => void exportCsv()}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Download size={16} />
+            {exporting ? t("coupons.exporting") : t("coupons.export")}
+          </button>
+        </div>
       </header>
 
       {isAdmin ? (

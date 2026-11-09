@@ -124,6 +124,7 @@ export const api = {
   detachCreatorGroupMember: (groupId: number, creatorId: number) =>
     laravelFetch<Item<CreatorGroup>>(`/creator-groups/${groupId}/members/${creatorId}`, { method: "DELETE" }),
   coupons: (query = "") => laravelFetch<List<CreatorCoupon>>(`/coupons${query}`),
+  downloadCoupons: (query = "") => laravelDownload(`/coupons/export${query}`),
   couponOptions: (companyId: number) =>
     laravelFetch<{ data: { campaigns: CreatorCouponCampaignOption[]; creators: CreatorCouponCreator[] } }>(`/coupons/options?company_id=${companyId}`),
   createCoupon: (body: unknown) => laravelFetch<Item<CreatorCoupon>>("/coupons", { method: "POST", body: JSON.stringify(body) }),

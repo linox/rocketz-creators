@@ -15,8 +15,11 @@ use App\Models\Company;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
 use App\Services\NotificationService;
+use App\Support\CreatorCouponExport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
 
 class CreatorCouponController extends Controller
@@ -25,33 +28,20 @@ class CreatorCouponController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $query = CreatorCoupon::query()
-            ->with([
-                'company:id,name',
-                'campaign:id,name',
-                'creator:id,artistic_name,full_name,photo_url',
-            ])
-            ->latest('id');
-
-        if ($user->role === UserRole::Creator) {
-            $creatorId = (int) ($user->creator?->id ?? 0);
-            abort_unless($creatorId, 403, __('auth.forbidden'));
-            $query->where('creator_id', $creatorId);
-        } elseif ($user->role === UserRole::Company) {
-            $companyId = (int) $user->actingCompanyId();
-            abort_unless($companyId, 403, __('auth.company_not_linked'));
-            $query->where('company_id', $companyId);
-        } elseif ($request->filled('company_id')) {
-            $query->where('company_id', $request->integer('company_id'));
-        }
-
-        if ($request->filled('campaign_id')) {
-            $query->where('campaign_id', $request->integer('campaign_id'));
-        }
-
         return response()->json([
-            'data' => CreatorCouponResource::collection($query->get()),
+            'data' => CreatorCouponResource::collection(
+                $this->visibleCoupons($request)->latest('id')->get()
+            ),
+        ]);
+    }
+
+    public function export(Request $request): Response
+    {
+        $coupons = $this->visibleCoupons($request)->orderBy('code')->get();
+
+        return response(CreatorCouponExport::csv($coupons), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.__('coupons.csv.filename').'"',
         ]);
     }
 
@@ -286,6 +276,38 @@ class CreatorCouponController extends Controller
             'message' => __('auth.creator_coupon_change_rejected_msg'),
             'data' => new CreatorCouponResource($creatorCoupon),
         ]);
+    }
+
+    /**
+     * @return Builder<CreatorCoupon>
+     */
+    private function visibleCoupons(Request $request): Builder
+    {
+        $user = $request->user();
+        $query = CreatorCoupon::query()
+            ->with([
+                'company:id,name',
+                'campaign:id,name',
+                'creator:id,artistic_name,full_name,photo_url',
+            ]);
+
+        if ($user->role === UserRole::Creator) {
+            $creatorId = (int) ($user->creator?->id ?? 0);
+            abort_unless($creatorId, 403, __('auth.forbidden'));
+            $query->where('creator_id', $creatorId);
+        } elseif ($user->role === UserRole::Company) {
+            $companyId = (int) $user->actingCompanyId();
+            abort_unless($companyId, 403, __('auth.company_not_linked'));
+            $query->where('company_id', $companyId);
+        } elseif ($request->filled('company_id')) {
+            $query->where('company_id', $request->integer('company_id'));
+        }
+
+        if ($request->filled('campaign_id')) {
+            $query->where('campaign_id', $request->integer('campaign_id'));
+        }
+
+        return $query;
     }
 
     private function companyId(Request $request): int

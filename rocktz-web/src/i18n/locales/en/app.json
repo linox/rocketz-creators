@@ -547,7 +547,9 @@
     "manualHint": "The creator does not need to be on a campaign. The code applies only to them at this company.",
     "manualCreatorPh": "Choose the creator",
     "manualRequired": "Choose the creator and enter the code, the discount and the commission.",
-    "noManualCreators": "No active creator is available for this company."
+    "noManualCreators": "No active creator is available for this company.",
+    "export": "Download CSV",
+    "exporting": "Downloading..."
   },
   "couponEarnings": {
     "title": "Coupon earnings",

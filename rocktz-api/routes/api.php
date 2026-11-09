@@ -126,6 +126,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('content-planning-items/{contentPlanningItem}', [RecurringContractController::class, 'updateItem']);
 
     Route::get('coupons', [CreatorCouponController::class, 'index']);
+    Route::get('coupons/export', [CreatorCouponController::class, 'export']);
     Route::post('coupons/{creatorCoupon}/change-request', [CreatorCouponController::class, 'requestChange']);
     Route::delete('coupons/{creatorCoupon}/change-request', [CreatorCouponController::class, 'cancelChange']);
 

@@ -384,6 +384,78 @@ class CreatorCouponTest extends TestCase
         $this->assertSame('AURORA10', $coupon->fresh()->code);
     }
 
+    public function test_export_downloads_every_coupon_the_account_can_see(): void
+    {
+        [$company, $user, $campaign, $creator] = $this->couponScene();
+        $company->forceFill(['name' => 'Loja Aurora'])->save();
+        $other = Creator::factory()->active()->create([
+            'artistic_name' => 'Zoe Cupom',
+            'full_name' => 'Zoe Cupom',
+            'invited_by_company_id' => $company->id,
+        ]);
+        CreatorCoupon::query()->create([
+            'company_id' => $company->id,
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'code' => 'ANA15',
+            'discount_percent' => 15,
+            'commission_percent' => 10,
+            'is_active' => true,
+        ]);
+        CreatorCoupon::query()->create([
+            'company_id' => $company->id,
+            'campaign_id' => null,
+            'creator_id' => $other->id,
+            'code' => 'MANUAL20',
+            'discount_percent' => 10.5,
+            'commission_percent' => 4,
+            'is_active' => false,
+            'suggested_code' => 'ZOE20',
+            'change_status' => 'pending',
+        ]);
+
+        $otherCompany = Company::factory()->active()->create(['name' => 'Outra Loja']);
+        $stranger = Creator::factory()->active()->create();
+        CreatorCoupon::query()->create([
+            'company_id' => $otherCompany->id,
+            'creator_id' => $stranger->id,
+            'code' => 'SEGREDO',
+            'discount_percent' => 5,
+            'commission_percent' => 1,
+            'is_active' => true,
+        ]);
+
+        $csv = $this->asUser($user)
+            ->get('/api/coupons/export')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8')
+            ->assertHeader('content-disposition', 'attachment; filename="cupons.csv"');
+
+        $text = $csv->getContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $text);
+        $this->assertStringContainsString('codigo;criador;empresa;campanha;desconto;comissao;status;codigo_sugerido;criado_em', $text);
+        $this->assertStringContainsString('ANA15;"Ana Cupom";"Loja Aurora";"Cupom Aurora";15;10;Ativo;;', $text);
+        $this->assertStringContainsString('MANUAL20;"Zoe Cupom";"Loja Aurora";Manual;10,50;4;Pausado;ZOE20;', $text);
+        $this->assertStringNotContainsString('SEGREDO', $text);
+
+        $own = $this->asUser($creator->user)
+            ->get('/api/coupons/export')
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString('ANA15', $own);
+        $this->assertStringNotContainsString('MANUAL20', $own);
+        $this->assertStringNotContainsString('SEGREDO', $own);
+
+        $admin = User::factory()->admin()->create();
+        $scoped = $this->asUser($admin)
+            ->get('/api/coupons/export?company_id='.$company->id)
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString('ANA15', $scoped);
+        $this->assertStringContainsString('MANUAL20', $scoped);
+        $this->assertStringNotContainsString('SEGREDO', $scoped);
+    }
+
     /**
      * @return array{0: Company, 1: User, 2: Campaign, 3: Creator}
      */
