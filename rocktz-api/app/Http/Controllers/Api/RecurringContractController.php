@@ -23,6 +23,7 @@ use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorPrivacy;
 use App\Support\DeliveryMovements;
+use App\Support\PublicationRevert;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
 use App\Support\RevisionHistory;
@@ -425,6 +426,7 @@ class RecurringContractController extends Controller
             'video_status' => ['nullable', Rule::enum(StageApprovalStatus::class)],
             'script_feedback' => ['nullable', 'string'],
             'video_feedback' => ['nullable', 'string'],
+            'revert_publication' => ['sometimes', 'boolean'],
         ]);
         $this->normalizeBriefingPayload($data);
         $data = SafeHttpUrl::validateFields($data, [
@@ -454,6 +456,20 @@ class RecurringContractController extends Controller
                 }
             }
         }
+
+        if ($request->boolean('revert_publication')) {
+            abort_if($actorIsCreator, 403, __('auth.forbidden'));
+            $contentPlanningItem->loadMissing('recurringContract');
+            abort_unless($contentPlanningItem->recurringContract, 404);
+            $this->assertCanManage($request, $contentPlanningItem->recurringContract);
+            abort_unless(PublicationRevert::planningIsConcluded($contentPlanningItem), 422, __('auth.publication_not_concluded'));
+            PublicationRevert::planning($contentPlanningItem);
+
+            return response()->json([
+                'data' => new ContentPlanningItemResource($contentPlanningItem->fresh()->load(['creator', 'company'])),
+            ]);
+        }
+        unset($data['revert_publication']);
 
         if (isset($data['content_type']) && $this->isLiveContentType($data['content_type'])) {
             $data['approval_flow'] = ApprovalFlowType::LiveLink;

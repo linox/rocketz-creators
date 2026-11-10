@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchPlaybackSource, playbackCandidate } from "@/lib/media-playback";
+import { fetchPlaybackSource, mediaPosterUrl, playbackCandidate } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -14,7 +14,8 @@ type Props = {
 
 export function VideoPoster({ src, className, lite = false }: Props) {
   const { t } = useTranslation("app");
-  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [posterUrl, setPosterUrl] = useState<string | null>(() => mediaPosterUrl(src));
+  const [posterFailed, setPosterFailed] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -22,7 +23,8 @@ export function VideoPoster({ src, className, lite = false }: Props) {
 
   useEffect(() => {
     setRejected([]);
-    setPosterUrl(null);
+    setPosterUrl(mediaPosterUrl(src));
+    setPosterFailed(false);
     setPlaybackUrl(null);
     setFrameReady(false);
     setPreparing(false);
@@ -38,7 +40,8 @@ export function VideoPoster({ src, className, lite = false }: Props) {
       const data = await fetchPlaybackSource(src);
       if (cancelled) return;
       const nextPlay = playbackCandidate(data, rejected);
-      setPosterUrl(data.poster);
+      if (data.poster) setPosterFailed(false);
+      setPosterUrl((current) => data.poster || current || mediaPosterUrl(src));
       setPlaybackUrl(nextPlay);
       const waiting = !data.poster && !nextPlay;
       setPreparing(Boolean(data.preparing) && waiting);
@@ -76,15 +79,25 @@ export function VideoPoster({ src, className, lite = false }: Props) {
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden bg-slate-900", className)}>
-      {posterUrl ? (
+      {posterUrl && !posterFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={posterUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-      ) : playbackUrl ? (
+        <img
+          src={posterUrl}
+          alt=""
+          decoding="async"
+          fetchPriority="high"
+          className="h-full w-full object-cover"
+          onError={() => {
+            setPosterFailed(true);
+            setPosterUrl(null);
+          }}
+        />
+      ) : playbackUrl && !lite ? (
         <video
           src={playbackUrl.includes("#") ? playbackUrl : `${playbackUrl}#t=0.4`}
           muted
           playsInline
-          preload={lite ? "metadata" : "auto"}
+          preload="metadata"
           className={cn("h-full w-full object-cover transition-opacity duration-200", frameReady ? "opacity-100" : "opacity-0")}
           onLoadedData={(event) => revealFrame(event.currentTarget)}
           onSeeked={() => setFrameReady(true)}

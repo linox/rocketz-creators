@@ -1018,6 +1018,21 @@ function DetailInner() {
     }
   }
 
+  async function onRevertPublication(item: PlanningItem) {
+    if (!(await alertConfirm(
+      t("campaignDetail.revertConclusionTitle"),
+      t("campaignDetail.revertConclusionText"),
+      t("campaignDetail.revertConclusion"),
+    ))) return;
+    try {
+      await api.updatePlanningItem(item.id, { revert_publication: true });
+      await alertSuccess(t("campaignDetail.revertConclusionOk"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   async function onToggleDone(item: PlanningItem) {
     try {
       if (isDone(item.status)) {
@@ -1778,6 +1793,7 @@ function DetailInner() {
                       const style = TYPE_STYLE[item.content_type] || TYPE_STYLE.other;
                       const Icon = style.icon;
                       const done = isDone(item.status);
+                      const concludedWithLink = item.status === "published" || Boolean(item.published_url?.trim());
                       const briefing = itemHasPautaBriefing(item);
                       const live = isLivePauta(item.content_type);
                       const videoUrl = pautaVideoUrl(item);
@@ -1892,7 +1908,13 @@ function DetailInner() {
                             </div>
                             {canManage ? (
                               <div className="flex shrink-0 items-center gap-1">
-                                <button type="button" onClick={() => onToggleDone(item)} className={cn("rounded-lg border px-2.5 py-1 text-xs font-bold whitespace-nowrap", done ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>{done ? t("recurringDetail.reopen") : t("recurringDetail.markDone")}</button>
+                                <button
+                                  type="button"
+                                  onClick={() => void (concludedWithLink ? onRevertPublication(item) : onToggleDone(item))}
+                                  className={cn("rounded-lg border px-2.5 py-1 text-xs font-bold whitespace-nowrap", concludedWithLink ? "border-amber-300 bg-amber-50 text-amber-950" : done ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-emerald-200 bg-emerald-50 text-emerald-700")}
+                                >
+                                  {concludedWithLink ? t("campaignDetail.revertConclusion") : done ? t("recurringDetail.reopen") : t("recurringDetail.markDone")}
+                                </button>
                                 <button type="button" onClick={() => openPautaModal(selectedRow.creator_id, item)} className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700"><Edit3 size={13} /></button>
                                 <button type="button" onClick={() => onDeletePauta(item)} className="rounded-lg p-1.5 text-slate-400 hover:text-rose-600"><Trash2 size={13} /></button>
                               </div>

@@ -56,6 +56,7 @@ import {
   ThumbsUp,
   TicketPercent,
   Trash2,
+  Undo2,
   TrendingUp,
   UserCheck,
   Users,
@@ -1376,6 +1377,17 @@ function DetailInner() {
     }
   }
 
+  async function revertPublication(row: CampaignCreator) {
+    if (!(await alertConfirm(
+      t("campaignDetail.revertConclusionTitle"),
+      t("campaignDetail.revertConclusionText"),
+      t("campaignDetail.revertConclusion"),
+    ))) return;
+    if (await patch(row, { revert_publication: true })) {
+      await alertSuccess(t("campaignDetail.revertConclusionOk"));
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -2289,7 +2301,7 @@ function DetailInner() {
                     onSavePauta={(demandId, text) => saveDemandPauta(selected.id, demandId, text)}
                     onPautaChange={rememberDemandPauta}
                     onUpdate={async (demandId, body) => {
-                      await patch(selected, { demand_id: demandId, ...body });
+                      return patch(selected, { demand_id: demandId, ...body });
                     }}
                   />
                 ) : null}
@@ -2543,6 +2555,14 @@ function DetailInner() {
                                 <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[11px] font-black tracking-wider text-emerald-800 uppercase">
                                   <CheckCircle2 size={12} /> {t("campaignDetail.publishedDone")}
                                 </span>
+                                <button
+                                  type="button"
+                                  disabled={updatingId !== null}
+                                  onClick={() => void revertPublication(selected)}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-amber-950 uppercase hover:bg-amber-100 disabled:opacity-50"
+                                >
+                                  <Undo2 size={12} /> {t("campaignDetail.revertConclusion")}
+                                </button>
                               </>
                             ) : null}
                           </div>

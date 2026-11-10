@@ -70,6 +70,19 @@ export function mediaDownloadUrl(url: string): string {
   return `${mediaOrigin()}/downloads/${relative}`;
 }
 
+/** Sibling JPEG the API stores next to the playable file. Image only — no video request. */
+export function mediaPosterUrl(url?: string | null): string | null {
+  if (!url?.trim()) return null;
+  const relative = objectKeyFromUrl(url.trim());
+  if (!relative) return null;
+  const path = relative.split(/[?#]/)[0] ?? "";
+  if (!path) return null;
+  const playable = path.replace(/\.(mov|qt|m4v)$/i, ".mp4");
+  const poster = playable.replace(/\.[^.]+$/i, ".jpg");
+  if (!poster || poster === playable) return null;
+  return `${mediaOrigin()}/stream/${poster}`;
+}
+
 export type PlaybackSource = {
   src: string | null;
   original: string | null;

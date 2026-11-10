@@ -242,6 +242,154 @@ class CampaignDemandTest extends TestCase
         $this->assertSame(['script_approved', 'video_approved', 'published'], $types);
     }
 
+    public function test_reverting_a_link_conclusion_stays_open_for_everyone(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update([
+            'script' => 'Roteiro aprovado antes',
+            'script_status' => 'approved',
+            'script_submitted_at' => now()->subDay(),
+            'movements' => [[
+                'type' => 'script_approved',
+                'at' => now()->subDay()->toIso8601String(),
+            ]],
+        ]);
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'published_link' => 'https://instagram.com/p/abc',
+                'delivery_status' => 'published',
+                'video_status' => 'approved',
+                'script_status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'published');
+
+        $notifications = \Illuminate\Support\Facades\DB::table('notifications')->count();
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'revert_publication' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'pending')
+            ->assertJsonPath('data.demands.0.video_status', 'pending')
+            ->assertJsonPath('data.demands.0.script_status', 'approved')
+            ->assertJsonPath('data.demands.0.content.published_link', null)
+            ->assertJsonPath('data.delivery_status', 'pending');
+
+        $this->assertSame(['script_approved'], array_column($demand->fresh()->movements, 'type'));
+        $this->assertSame($notifications, \Illuminate\Support\Facades\DB::table('notifications')->count());
+
+        $this->flushHeaders();
+        auth()->forgetGuards();
+
+        $this->withToken($row->creator->user->createToken('creator')->plainTextToken)
+            ->getJson("/api/campaigns/{$row->campaign_id}")
+            ->assertOk()
+            ->assertJsonPath('data.applications.0.demands.0.delivery_status', 'pending')
+            ->assertJsonPath('data.applications.0.demands.0.script_status', 'approved')
+            ->assertJsonPath('data.applications.0.demands.0.content.published_link', null);
+    }
+
+    public function test_reverting_a_link_only_conclusion_clears_the_forced_approvals(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'published_link' => 'https://instagram.com/p/direct',
+                'delivery_status' => 'published',
+                'video_status' => 'approved',
+                'script_status' => 'approved',
+            ])
+            ->assertOk();
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'revert_publication' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'pending')
+            ->assertJsonPath('data.demands.0.script_status', 'pending')
+            ->assertJsonPath('data.demands.0.video_status', 'pending')
+            ->assertJsonPath('data.demands.0.content.published_link', null)
+            ->assertJsonPath('data.demands.0.content.movements', []);
+    }
+
+    public function test_reverting_publication_keeps_a_video_that_was_already_approved(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update([
+            'script' => 'Roteiro',
+            'script_status' => 'approved',
+            'script_submitted_at' => now()->subDays(3),
+            'video_url' => 'https://files.example/video.mp4',
+            'video_status' => 'approved',
+            'video_submitted_at' => now()->subDays(2),
+            'movements' => [
+                ['type' => 'script_approved', 'at' => now()->subDays(3)->toIso8601String()],
+                ['type' => 'video_approved', 'at' => now()->subDays(2)->toIso8601String()],
+            ],
+        ]);
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'published_link' => 'https://instagram.com/p/after-approval',
+                'delivery_status' => 'published',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'published');
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'revert_publication' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.demands.0.delivery_status', 'approved')
+            ->assertJsonPath('data.demands.0.video_status', 'approved')
+            ->assertJsonPath('data.demands.0.content.published_link', null);
+
+        $this->assertSame(
+            ['script_approved', 'video_approved'],
+            array_column($demand->fresh()->movements, 'type'),
+        );
+    }
+
+    public function test_creator_cannot_revert_a_publication(): void
+    {
+        $row = $this->approvedWithReels(1);
+        $demand = $row->demands()->first();
+        $demand->update([
+            'delivery_status' => 'published',
+            'published_link' => 'https://instagram.com/p/abc',
+        ]);
+
+        $this->withToken($row->creator->user->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'demand_id' => $demand->id,
+                'revert_publication' => true,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame('published', $demand->fresh()->delivery_status->value);
+        $this->assertSame('https://instagram.com/p/abc', $demand->fresh()->published_link);
+    }
+
     public function test_note_without_a_submitted_video_is_stored_as_pauta(): void
     {
         $admin = User::factory()->admin()->create();

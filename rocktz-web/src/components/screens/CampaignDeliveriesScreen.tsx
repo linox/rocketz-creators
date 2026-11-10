@@ -18,6 +18,7 @@ import {
   LayoutList,
   Link2,
   Maximize2,
+  Undo2,
   MessageSquare,
   Play,
   Search,
@@ -36,7 +37,7 @@ import { VideoPoster } from "@/components/VideoPoster";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { mediaDownloadUrl } from "@/lib/media-playback";
+import { mediaDownloadUrl, mediaPosterUrl } from "@/lib/media-playback";
 import {
   buildDeliveryInboxFromApi,
   countByFolder,
@@ -72,26 +73,30 @@ const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
 const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
 
 function GalleryCardPreview({ src, still }: { src: string; still: string | null }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  const poster = mediaPosterUrl(src);
+  const [posterFailed, setPosterFailed] = useState(false);
 
   useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      setVisible(entry.isIntersecting);
-    }, { rootMargin: "80px" });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    setPosterFailed(false);
+  }, [poster]);
 
   return (
-    <div ref={ref} className="absolute inset-0 bg-slate-900">
+    <div className="absolute inset-0 bg-slate-900">
       {still ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={still} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={still} alt="" decoding="async" fetchPriority="high" className="absolute inset-0 h-full w-full object-cover" />
       ) : null}
-      {visible ? <VideoPoster lite src={src} className="absolute inset-0 h-full w-full bg-transparent" /> : null}
+      {poster && !posterFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={poster}
+          alt=""
+          decoding="async"
+          fetchPriority="high"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setPosterFailed(true)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -630,6 +635,31 @@ function DeliveriesInboxInner() {
     }
   }
 
+  async function revertConclusion() {
+    if (!selected || busy) return;
+    if (!(await alertConfirm(
+      t("campaignDetail.revertConclusionTitle"),
+      t("campaignDetail.revertConclusionText"),
+      t("campaignDetail.revertConclusion"),
+    ))) return;
+    setBusy(true);
+    try {
+      if (selected.planningItemId) {
+        await api.updatePlanningItem(selected.planningItemId, { revert_publication: true });
+      } else if (selected.participationId) {
+        await api.updateParticipation(selected.participationId, participationPayload(selected, { revert_publication: true }));
+      } else {
+        return;
+      }
+      await alertSuccess(t("campaignDetail.revertConclusionOk"));
+      void loadInbox(true);
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendRevision() {
     if (!selected || !revisionText.trim()) {
       await alertWarning(t("deliveries.inbox.revisionRequiredTitle"), t("deliveries.inbox.revisionRequiredText"));
@@ -1102,6 +1132,7 @@ function DeliveriesInboxInner() {
                 onApprove={() => void approveSelected(false)}
                 onConcludeWithLink={() => void approveSelected(true)}
                 onConcludeWithoutLink={() => void concludeWithoutLink()}
+                onRevertConclusion={() => void revertConclusion()}
                 onToggleRevision={() => setRevisionOpen((v) => !v)}
                 onRevisionText={setRevisionText}
                 onSendRevision={() => void sendRevision()}
@@ -1298,6 +1329,7 @@ function ReadingPane({
   onApprove,
   onConcludeWithLink,
   onConcludeWithoutLink,
+  onRevertConclusion,
   onToggleRevision,
   onRevisionText,
   onSendRevision,
@@ -1323,6 +1355,7 @@ function ReadingPane({
   onApprove: () => void;
   onConcludeWithLink: () => void;
   onConcludeWithoutLink: () => void;
+  onRevertConclusion: () => void;
   onToggleRevision: () => void;
   onRevisionText: (value: string) => void;
   onSendRevision: () => void;
@@ -1346,6 +1379,7 @@ function ReadingPane({
   const period = formatInboxPeriod(item.period, locale);
   const formatName = inboxFormatLabel(item, t);
   const origin = campaignOrigin(item, t);
+  const concluded = item.movements.some((entry) => entry.type === "published");
 
   return (
     <>
@@ -1399,6 +1433,11 @@ function ReadingPane({
           <button type="button" onClick={() => document.getElementById("delivery-comment")?.focus()} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">
             <MessageSquare size={14} /> {t("deliveries.inbox.comment")}
           </button>
+          {concluded ? (
+            <button type="button" onClick={onRevertConclusion} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-extrabold text-amber-950 hover:bg-amber-100">
+              <Undo2 size={14} /> {t("campaignDetail.revertConclusion")}
+            </button>
+          ) : null}
           {item.status === "approved" ? (
             <button type="button" onClick={onNext} className="ml-auto inline-flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-xs font-extrabold text-indigo-700">
               {t("deliveries.inbox.nextDelivery")} <ChevronRight size={14} />

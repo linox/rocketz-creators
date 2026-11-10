@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Link2, ScrollText } from "lucide-react";
+import { Check, Link2, ScrollText, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
-import { alertWarning, promptTextarea } from "@/lib/alerts";
+import { alertConfirm, alertSuccess, alertWarning, promptTextarea } from "@/lib/alerts";
 import { projectDemand } from "@/lib/campaign-demands";
 import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
 import { cn } from "@/lib/cn";
@@ -157,6 +157,16 @@ function DemandCard({
     });
   }
 
+  async function revertConclusion() {
+    if (!(await alertConfirm(
+      t("campaignDetail.revertConclusionTitle"),
+      t("campaignDetail.revertConclusionText"),
+      t("campaignDetail.revertConclusion"),
+    ))) return;
+    const saved = await onUpdate(demand.id, { revert_publication: true });
+    if (saved) await alertSuccess(t("campaignDetail.revertConclusionOk"));
+  }
+
   async function requestRevision() {
     const note = await promptTextarea({
       title: t("campaignDetail.requestRevision"),
@@ -276,7 +286,7 @@ function DemandCard({
             <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
           </label>
           <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.publishedLinkEditHint")}</p>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <input
               type="url"
               value={linkDraft}
@@ -291,6 +301,14 @@ function DemandCard({
               className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider text-white uppercase hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
             >
               {t("campaignDetail.updatePublishedLink")}
+            </button>
+            <button
+              type="button"
+              disabled={updating}
+              onClick={() => void revertConclusion()}
+              className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-2 text-[11px] font-black tracking-wider text-amber-950 uppercase hover:bg-amber-50 disabled:opacity-50"
+            >
+              <Undo2 size={13} /> {t("campaignDetail.revertConclusion")}
             </button>
           </div>
         </div>

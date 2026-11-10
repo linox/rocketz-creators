@@ -11,6 +11,7 @@ use App\Models\Creator;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -178,5 +179,70 @@ class LivePautaTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.published_url', 'https://instagram.com/live/aurora')
             ->assertJsonPath('data.status', 'published');
+    }
+
+    public function test_reverting_a_published_link_stays_open_for_the_creator(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->active()->create();
+        $item = ContentPlanningItem::factory()->create([
+            'creator_id' => $creator->id,
+            'content_type' => ContentType::Reel,
+            'approval_flow' => ApprovalFlowType::ScriptAndVideo,
+            'status' => ContentPlanningStatus::InProduction,
+            'script' => 'Roteiro já aprovado',
+            'script_status' => StageApprovalStatus::Approved,
+            'script_submitted_at' => now()->subDay(),
+            'video_status' => StageApprovalStatus::Pending,
+            'published_url' => null,
+            'movements' => [[
+                'type' => 'script_approved',
+                'at' => now()->subDay()->toIso8601String(),
+            ]],
+        ]);
+        RecurringContractCreator::factory()->create([
+            'recurring_contract_id' => $item->recurring_contract_id,
+            'creator_id' => $creator->id,
+        ]);
+        $adminToken = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'published_url' => 'https://instagram.com/reel/direct',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'published')
+            ->assertJsonPath('data.video_status', 'approved');
+
+        $notifications = DB::table('notifications')->count();
+
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'revert_publication' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'in_production')
+            ->assertJsonPath('data.script_status', 'approved')
+            ->assertJsonPath('data.video_status', 'pending')
+            ->assertJsonPath('data.published_url', null);
+
+        $this->assertSame($notifications, DB::table('notifications')->count());
+
+        $this->withToken($adminToken)
+            ->patchJson("/api/content-planning-items/{$item->id}", [
+                'title' => 'Pauta ainda aberta',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'in_production')
+            ->assertJsonPath('data.published_url', null);
+
+        $this->app['auth']->forgetGuards();
+        $items = $this->withToken($creator->user->createToken('creator')->plainTextToken)
+            ->getJson("/api/recurring-contracts/{$item->recurring_contract_id}")
+            ->assertOk()
+            ->json('data.items');
+        $seen = collect($items)->firstWhere('id', $item->id);
+        $this->assertSame('in_production', $seen['status']);
+        $this->assertNull($seen['published_url']);
     }
 }

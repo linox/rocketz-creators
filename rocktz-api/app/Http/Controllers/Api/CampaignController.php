@@ -36,6 +36,7 @@ use App\Support\CreatorPrivacy;
 use App\Support\DeliveryMovements;
 use App\Support\Geo;
 use App\Support\MetricsSyncStatus;
+use App\Support\PublicationRevert;
 use App\Support\RevisionHistory;
 use App\Support\SafeHttpUrl;
 use App\Support\SubmissionVersioning;
@@ -481,6 +482,7 @@ class CampaignController extends Controller
             'video_file_size' => ['nullable', 'integer', 'min:0'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'published_link' => ['nullable', 'string', 'max:2048'],
+            'revert_publication' => ['sometimes', 'boolean'],
         ]);
 
         $campaignCreator->loadMissing('campaign');
@@ -529,6 +531,30 @@ class CampaignController extends Controller
                 ->where('campaign_creator_id', $campaignCreator->id)
                 ->findOrFail($demandId);
         }
+
+        if ($request->boolean('revert_publication')) {
+            if ($campaignCreator->demands()->exists() && ! $demand) {
+                throw ValidationException::withMessages([
+                    'demand_id' => __('auth.campaign_demand_required'),
+                ]);
+            }
+            if ($demand) {
+                abort_unless(PublicationRevert::demandIsConcluded($demand), 422, __('auth.publication_not_concluded'));
+                PublicationRevert::demand($demand);
+                $demand->loadMissing('campaignCreator');
+                if ($demand->campaignCreator) {
+                    $this->demands->rollup($demand->campaignCreator);
+                }
+            } else {
+                abort_unless(PublicationRevert::creatorIsConcluded($campaignCreator), 422, __('auth.publication_not_concluded'));
+                PublicationRevert::creator($campaignCreator);
+            }
+
+            return response()->json([
+                'data' => new CampaignCreatorResource($campaignCreator->fresh()->load(['creator', 'content', 'campaign', 'demands'])),
+            ]);
+        }
+        unset($data['revert_publication']);
 
         $touchesSubmission = $contentFields !== []
             || array_key_exists('pauta', $data)

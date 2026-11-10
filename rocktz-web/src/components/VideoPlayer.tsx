@@ -6,6 +6,7 @@ import { Download } from "lucide-react";
 import {
   fetchPlaybackSource,
   mediaDownloadUrl,
+  mediaPosterUrl,
   playbackCandidate,
 } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
@@ -65,14 +66,14 @@ export function VideoPlayer({
   const retryTimers = useRef<number[]>([]);
   const downloadUrl = mediaDownloadUrl(src);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
-  const [poster, setPoster] = useState<string | null>(null);
+  const [poster, setPoster] = useState<string | null>(() => mediaPosterUrl(src));
   const [preparing, setPreparing] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
 
   useEffect(() => {
     setRejected([]);
-    setPoster(null);
+    setPoster(mediaPosterUrl(src));
     loadedRef.current = false;
     urlRef.current = null;
     attemptsRef.current = {};
@@ -96,7 +97,7 @@ export function VideoPlayer({
         return;
       }
       const playable = playbackCandidate(data, rejected);
-      setPoster(data.poster);
+      setPoster((current) => data.poster || current || mediaPosterUrl(src));
       if (playable) {
         if (urlRef.current !== playable) loadedRef.current = false;
         urlRef.current = playable;
@@ -209,6 +210,7 @@ export function VideoPlayer({
         playsInline
         disablePictureInPicture
         controlsList="nofullscreen"
+        poster={poster ?? undefined}
         preload={preload ?? "auto"}
         onPlay={keepInline}
         onLoadedData={(event) => {
