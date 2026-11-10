@@ -41,6 +41,7 @@ import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignMo
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
+import { creatorDeliveryLabel } from "@/lib/campaign-demands";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
@@ -398,6 +399,7 @@ function CampaignsInner() {
       items.flatMap((campaign) =>
         (campaign.applications ?? []).map((row) => ({
           ...row,
+          delivery_type: creatorDeliveryLabel(row, campaign.deliverables) || row.delivery_type,
           campaignName: campaign.name,
           companyName: campaign.company?.name || t("campaigns.client"),
           companyLogo: campaign.company?.logo_url ?? null,

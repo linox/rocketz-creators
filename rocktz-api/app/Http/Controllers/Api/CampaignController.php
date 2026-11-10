@@ -651,6 +651,9 @@ class CampaignController extends Controller
 
             if ($updatesDeliverables) {
                 $campaignCreator->deliverables = $normalizedDeliverables;
+                $campaignCreator->loadMissing('campaign.deliverable');
+                $label = $this->demands->deliveryTypeLabel($normalizedDeliverables, $campaignCreator->campaign?->deliverable);
+                $campaignCreator->delivery_type = $label !== '' ? $label : null;
             }
             $campaignCreator->fill($data)->save();
             $campaignCreator->setRelation('campaign', $locked);

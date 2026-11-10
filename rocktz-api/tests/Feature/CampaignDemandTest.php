@@ -643,6 +643,7 @@ class CampaignDemandTest extends TestCase
 
         $this->assertSame(0, CampaignDemand::query()->where('campaign_creator_id', $row->id)->where('content_type', 'reels')->count());
         $this->assertSame(2, (int) $row->campaign->deliverable->fresh()->reels);
+        $this->assertSame('1x YouTube', $row->fresh()->delivery_type);
     }
 
     public function test_cannot_reduce_a_format_below_demands_already_started(): void
@@ -690,6 +691,7 @@ class CampaignDemandTest extends TestCase
             ->assertJsonPath('data.deliverables', null);
 
         $this->assertSame(2, $row->demands()->count());
+        $this->assertSame('2x Reels', $row->fresh()->delivery_type);
     }
 
     public function test_creator_cannot_change_own_deliverables(): void

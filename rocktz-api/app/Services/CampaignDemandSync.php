@@ -8,6 +8,7 @@ use App\Enums\DeliveryStatus;
 use App\Enums\StageApprovalStatus;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\CampaignDeliverable;
 use App\Models\CampaignDemand;
 use App\Support\DeliveryMovements;
 use App\Support\RevisionHistory;
@@ -156,6 +157,55 @@ class CampaignDemandSync
         }
 
         return $quota;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $custom
+     */
+    public function deliveryTypeLabel(?array $custom, ?CampaignDeliverable $deliverable): string
+    {
+        if ($custom !== null) {
+            return $this->formatQuota($this->normalizeDeliverables($custom) ?? []);
+        }
+
+        $summary = trim((string) ($deliverable?->summary ?? ''));
+        if ($summary !== '') {
+            return mb_substr($summary, 0, 255);
+        }
+
+        $quota = [];
+        foreach (self::TYPES as $type) {
+            $quota[$type] = max(0, (int) ($deliverable?->{$type} ?? 0));
+        }
+
+        return $this->formatQuota($quota);
+    }
+
+    /**
+     * @param  array<string, int>  $quota
+     */
+    private function formatQuota(array $quota): string
+    {
+        $parts = [];
+        $labels = [
+            'reels' => fn (int $count) => $count.'x Reel'.($count > 1 ? 's' : ''),
+            'stories' => fn (int $count) => $count.'x Stories',
+            'tiktok' => fn (int $count) => $count.'x TikTok',
+            'ugc' => fn (int $count) => $count.'x UGC',
+            'posts' => fn (int $count) => $count.'x Post'.($count > 1 ? 's' : ''),
+            'youtube' => fn (int $count) => $count.'x YouTube',
+            'live_instagram' => fn (int $count) => $count.'x Live Instagram',
+            'live_tiktok' => fn (int $count) => $count.'x Live TikTok',
+            'live_youtube' => fn (int $count) => $count.'x Live YouTube',
+        ];
+        foreach ($labels as $type => $label) {
+            $count = (int) ($quota[$type] ?? 0);
+            if ($count > 0) {
+                $parts[] = $label($count);
+            }
+        }
+
+        return mb_substr(implode(' + ', $parts), 0, 255);
     }
 
     /**

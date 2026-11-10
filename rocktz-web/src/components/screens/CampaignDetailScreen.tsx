@@ -99,7 +99,7 @@ import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
 import { benefitCouponLine, parseBenefitPercent, parseBenefitSuffix } from "@/lib/benefit-coupon";
-import { demandProgress } from "@/lib/campaign-demands";
+import { creatorDeliveryLabel, demandProgress } from "@/lib/campaign-demands";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatShippingLines } from "@/lib/shipping-address";
 import { maskShippingPreview } from "@/lib/mask-sensitive";
@@ -816,7 +816,7 @@ function DetailInner() {
     };
     return displayCreators
       .filter((row) => {
-        const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${row.delivery_type ?? ""}`.toLowerCase();
+        const name = `${row.creator?.artistic_name ?? ""} ${row.creator?.full_name ?? ""} ${Object.values(row.creator?.socials ?? {}).join(" ")} ${creatorDeliveryLabel(row, campaign?.deliverables)}`.toLowerCase();
         if (term && !name.includes(term)) return false;
         if (!campaign) return creatorFilter === "all";
         const pace = creatorPace(row, campaign);
@@ -920,7 +920,7 @@ function DetailInner() {
 
   async function approveApplication(row: CampaignCreator, amount: number) {
     if (!campaign) return;
-    const deliveryType = row.delivery_type || formatDeliverablesSummary(campaign.deliverables) || "ugc";
+    const deliveryType = creatorDeliveryLabel(row, campaign.deliverables) || "ugc";
     const next = await patch(row, {
       application_status: "approved",
       ...(hideCreatorValues ? {} : { amount }),
@@ -1953,7 +1953,7 @@ function DetailInner() {
                           {followers > 0 ? (
                             <p className="mt-0.5 text-[9px] font-semibold text-slate-500">{t("campaignDetail.followersCount", { count: formatNumber(followers) })}</p>
                           ) : null}
-                          <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          <span className="mt-1 max-w-full truncate rounded-md border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[8px] font-extrabold text-brand-primary">{creatorDeliveryLabel(row, campaign.deliverables) || t("campaignDetail.delivery")}</span>
                           {row.additional_briefing?.trim() ? (
                             <span className="mt-1 max-w-full truncate rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
                           ) : null}
@@ -2048,7 +2048,7 @@ function DetailInner() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1">
-                          <span className="max-w-full rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold break-words text-brand-primary">{row.delivery_type || t("campaignDetail.delivery")}</span>
+                          <span className="max-w-full rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[9px] font-extrabold break-words text-brand-primary">{creatorDeliveryLabel(row, campaign.deliverables) || t("campaignDetail.delivery")}</span>
                           {row.additional_briefing?.trim() ? (
                             <span className="max-w-full truncate rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-extrabold text-amber-800">{t("campaignDetail.additionalBriefingBadge")}</span>
                           ) : null}
@@ -2095,7 +2095,7 @@ function DetailInner() {
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                    setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: creatorDeliveryLabel(row, campaign.deliverables), delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                     setEditing(row);
                                   }}
                                   className="text-[10px] font-extrabold text-brand-primary hover:underline"
@@ -2187,7 +2187,7 @@ function DetailInner() {
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                         <h2 className="min-w-0 truncate text-base font-black text-slate-900">@{selectedCreator.artistic_name}</h2>
-                        <span className="max-w-full truncate rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{selected.delivery_type}</span>
+                        <span className="max-w-full truncate rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-brand-primary">{creatorDeliveryLabel(selected, campaign.deliverables) || t("campaignDetail.delivery")}</span>
                         {campaign.is_barter && selected.application_status === "approved" ? (
                           <BarterDeliveryBadge status={selected.barter_shipment?.status} />
                         ) : null}
@@ -2209,7 +2209,7 @@ function DetailInner() {
                       <button
                         type="button"
                         onClick={() => {
-                          setCreatorEdit({ amount: moneyToMask(selected.amount, moneyCurrency(campaign)), delivery_type: selected.delivery_type || "", delivery_date: selected.delivery_date || "", post_date: selected.post_date || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
+                          setCreatorEdit({ amount: moneyToMask(selected.amount, moneyCurrency(campaign)), delivery_type: creatorDeliveryLabel(selected, campaign.deliverables), delivery_date: selected.delivery_date || "", post_date: selected.post_date || "", video_url: selected.content?.video_url || "", published_link: selected.content?.published_link || "" });
                           setEditing(selected);
                         }}
                         className="flex items-center gap-1 rounded-xl bg-brand-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-600"
@@ -2240,7 +2240,7 @@ function DetailInner() {
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryFormat")}</span>
-                    <span className="mt-1 truncate text-sm font-black text-slate-800">{selected.delivery_type}</span>
+                    <span className="mt-1 text-sm font-black text-slate-800">{creatorDeliveryLabel(selected, campaign.deliverables) || t("campaignDetail.delivery")}</span>
                   </div>
                   <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                     <span className="text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("campaignDetail.deliveryDate")}</span>
@@ -3166,7 +3166,7 @@ function DetailInner() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 font-medium text-slate-600">{row.delivery_type}</td>
+                      <td className="px-4 py-3.5 font-medium text-slate-600">{creatorDeliveryLabel(row, campaign.deliverables) || t("campaignDetail.delivery")}</td>
                       <td className="px-4 py-3.5">
                         <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", contentOk ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
                           {deliveryLabel(deliveryState, t)}
@@ -3203,7 +3203,7 @@ function DetailInner() {
                             <button
                               type="button"
                               onClick={() => {
-                                setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: row.delivery_type || "", delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
+                                setCreatorEdit({ amount: moneyToMask(row.amount, moneyCurrency(campaign)), delivery_type: creatorDeliveryLabel(row, campaign.deliverables), delivery_date: row.delivery_date || "", post_date: row.post_date || "", video_url: row.content?.video_url || "", published_link: row.content?.published_link || "" });
                                 setEditing(row);
                               }}
                               className="font-bold text-brand-primary hover:underline"
