@@ -71,6 +71,12 @@ const ALL_COMPANIES = "all";
 const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
 const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
 
+function galleryVersion(item: DeliveryInboxItem) {
+  return item.versions.find((entry) => entry.versionNumber === item.currentVersion)
+    ?? item.versions[0]
+    ?? null;
+}
+
 function galleryVideoSrc(item: DeliveryInboxItem) {
   if (
     item.approvalStage === "script"
@@ -82,9 +88,7 @@ function galleryVideoSrc(item: DeliveryInboxItem) {
   ) {
     return null;
   }
-  const version = item.versions.find((entry) => entry.versionNumber === item.currentVersion)
-    ?? item.versions[item.versions.length - 1];
-  const url = version?.fileUrl?.trim();
+  const url = galleryVersion(item)?.fileUrl?.trim();
   if (!url || GALLERY_IMAGE_FILE.test(url)) return null;
   if (item.contentType === "video" || item.contentType === "story") return url;
   if (GALLERY_VIDEO_FILE.test(url)) return url;
@@ -94,9 +98,7 @@ function galleryVideoSrc(item: DeliveryInboxItem) {
 function galleryMedia(item: DeliveryInboxItem) {
   const src = galleryVideoSrc(item);
   if (!src) return null;
-  const version = item.versions.find((entry) => entry.versionNumber === item.currentVersion)
-    ?? item.versions[item.versions.length - 1];
-  const thumb = version?.thumbnailUrl?.trim() || "";
+  const thumb = galleryVersion(item)?.thumbnailUrl?.trim() || "";
   const still = thumb && thumb !== src && !GALLERY_VIDEO_FILE.test(thumb) ? thumb : null;
   return { src, still };
 }
@@ -1868,7 +1870,7 @@ function GalleryView({
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={still} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <VideoPoster src={src} className="h-full w-full" />
+                          <span className="block h-full w-full bg-slate-900" />
                         )}
                         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
@@ -1914,6 +1916,7 @@ function GalleryView({
 
       {watching ? (
         <VideoLightbox
+          key={watching.src}
           src={watching.src}
           onClose={() => setWatching(null)}
           className={watching.vertical ? "w-full max-w-md" : "w-full max-w-4xl"}

@@ -61,17 +61,29 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadedRef = useRef(false);
   const urlRef = useRef<string | null>(null);
+  const attemptsRef = useRef<Record<string, number>>({});
+  const retryTimers = useRef<number[]>([]);
   const downloadUrl = mediaDownloadUrl(src);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [poster, setPoster] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
 
   useEffect(() => {
     setRejected([]);
+    setPoster(null);
     loadedRef.current = false;
     urlRef.current = null;
+    attemptsRef.current = {};
   }, [src]);
+
+  useEffect(() => {
+    return () => {
+      retryTimers.current.forEach((id) => window.clearTimeout(id));
+      retryTimers.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +96,7 @@ export function VideoPlayer({
         return;
       }
       const playable = playbackCandidate(data, rejected);
+      setPoster(data.poster);
       if (playable) {
         if (urlRef.current !== playable) loadedRef.current = false;
         urlRef.current = playable;
@@ -163,8 +176,12 @@ export function VideoPlayer({
 
   if (preparing || !playbackUrl) {
     return (
-      <div className={cn("relative flex min-h-[12rem] items-center justify-center bg-black", className)}>
-        <div className="flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
+      <div className={cn("relative flex min-h-[12rem] items-center justify-center overflow-hidden bg-black", className)}>
+        {poster ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={poster} alt="" className="absolute inset-0 h-full w-full object-contain" />
+        ) : null}
+        <div className="relative z-10 flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
           <p className="text-sm font-semibold">{t("campaignDetail.videoPreparing")}</p>
           {controls ? (
             <a
@@ -200,11 +217,20 @@ export function VideoPlayer({
         }}
         onError={() => {
           if (!playbackUrl) return;
+          const failed = playbackUrl;
           loadedRef.current = false;
           urlRef.current = null;
           setPlaybackUrl(null);
           setPreparing(true);
-          setRejected((current) => (current.includes(playbackUrl) ? current : [...current, playbackUrl]));
+          const attempts = (attemptsRef.current[failed] ?? 0) + 1;
+          attemptsRef.current[failed] = attempts;
+          setRejected((current) => (current.includes(failed) ? current : [...current, failed]));
+          if (attempts < 6) {
+            const timer = window.setTimeout(() => {
+              setRejected((current) => current.filter((url) => url !== failed));
+            }, 2000);
+            retryTimers.current.push(timer);
+          }
         }}
       />
       {buffering ? (
