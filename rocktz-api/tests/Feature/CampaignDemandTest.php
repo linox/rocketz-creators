@@ -34,6 +34,49 @@ class CampaignDemandTest extends TestCase
         $this->assertSame(2, CampaignDemand::query()->where('campaign_creator_id', $row->id)->where('content_type', 'stories')->count());
     }
 
+    public function test_live_formats_create_one_demand_each_and_wait_for_the_link(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = CampaignCreator::factory()->pendingApplication()->create();
+        $row->campaign->deliverable()->create([
+            'live_instagram' => 1,
+            'live_tiktok' => 1,
+            'live_youtube' => 1,
+        ]);
+
+        $this->withToken($admin->createToken('auth')->plainTextToken)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonCount(3, 'data.demands');
+
+        $live = CampaignDemand::query()
+            ->where('campaign_creator_id', $row->id)
+            ->where('content_type', 'live_instagram')
+            ->firstOrFail();
+        $live->update([
+            'script' => 'Abertura, produto e Q&A',
+            'script_status' => 'approved',
+        ]);
+
+        $this->assertFalse(app(CampaignDemandSync::class)->contentReady($row->fresh()));
+
+        $live->update([
+            'published_link' => 'https://instagram.com/live/aurora',
+            'delivery_status' => 'published',
+        ]);
+
+        $this->assertFalse(app(CampaignDemandSync::class)->contentReady($row->fresh()));
+
+        CampaignDemand::query()
+            ->where('campaign_creator_id', $row->id)
+            ->whereIn('content_type', ['live_tiktok', 'live_youtube'])
+            ->update(['delivery_status' => 'published']);
+
+        $this->assertTrue(app(CampaignDemandSync::class)->contentReady($row->fresh()));
+    }
+
     public function test_creator_submits_each_demand_without_a_pauta(): void
     {
         $row = $this->approvedWithReels(5);

@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'ugc',
     'posts',
     'youtube',
+    'live_instagram',
+    'live_tiktok',
+    'live_youtube',
     'deadline_days',
     'guidelines',
 ])]
@@ -37,6 +40,9 @@ class CampaignDeliverable extends Model
             'ugc' => 'integer',
             'posts' => 'integer',
             'youtube' => 'integer',
+            'live_instagram' => 'integer',
+            'live_tiktok' => 'integer',
+            'live_youtube' => 'integer',
             'deadline_days' => 'integer',
         ];
     }

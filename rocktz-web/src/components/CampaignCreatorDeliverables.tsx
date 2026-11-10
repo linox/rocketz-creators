@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-const TYPES = ["reels", "stories", "tiktok", "ugc", "posts", "youtube"] as const;
+const TYPES = ["reels", "stories", "live_instagram", "tiktok", "live_tiktok", "ugc", "posts", "youtube", "live_youtube"] as const;
 
 type Counts = Record<(typeof TYPES)[number], string>;
 
@@ -22,6 +22,9 @@ function countsFrom(source?: Record<string, string | number | null> | null): Cou
     ugc: String(source?.ugc ?? 0),
     posts: String(source?.posts ?? 0),
     youtube: String(source?.youtube ?? 0),
+    live_instagram: String(source?.live_instagram ?? 0),
+    live_tiktok: String(source?.live_tiktok ?? 0),
+    live_youtube: String(source?.live_youtube ?? 0),
   };
 }
 
@@ -33,6 +36,9 @@ function asNumbers(counts: Counts): Record<string, number> {
     ugc: Number(counts.ugc) || 0,
     posts: Number(counts.posts) || 0,
     youtube: Number(counts.youtube) || 0,
+    live_instagram: Number(counts.live_instagram) || 0,
+    live_tiktok: Number(counts.live_tiktok) || 0,
+    live_youtube: Number(counts.live_youtube) || 0,
   };
 }
 

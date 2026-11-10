@@ -8,6 +8,7 @@ import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { alertConfirm, alertSuccess, alertWarning, promptTextarea } from "@/lib/alerts";
 import { projectDemand } from "@/lib/campaign-demands";
 import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
+import { isLivePautaType } from "@/lib/pauta-briefing";
 import { cn } from "@/lib/cn";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import type { CampaignCreator, CampaignDemand } from "@/lib/types";
@@ -98,7 +99,8 @@ function DemandCard({
     onPautaChange?.(demand.id, pauta);
   }, [demand.id, onPautaChange, pauta]);
   const projected = projectDemand(row, demand);
-  const state = campaignCreatorDeliveryState(projected, flow);
+  const live = isLivePautaType(demand.content_type);
+  const state = campaignCreatorDeliveryState(projected, live ? "script_and_video" : flow);
   const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
   const title = t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total });
   const script = demand.content?.script?.trim() || "";
@@ -249,14 +251,14 @@ function DemandCard({
       {canManage && !demandPublished ? (
         <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
           <label className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
-            <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
+            <Link2 size={11} /> {t(live ? "recurringDetail.liveLinkLabel" : "campaignDetail.publishedLinkLabel")}
           </label>
-          <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.concludeDemandHint")}</p>
+          <p className="m-0 text-[11px] font-medium text-emerald-900">{t(live ? "recurringDetail.liveLinkHint" : "campaignDetail.concludeDemandHint")}</p>
           <input
             type="url"
             value={linkDraft}
             onChange={(event) => setLinkDraft(event.target.value)}
-            placeholder={t("campaignDetail.publishedLinkPh")}
+            placeholder={t(live ? "recurringDetail.liveLinkPh" : "campaignDetail.publishedLinkPh")}
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
           />
           <div className="flex flex-wrap gap-2">
@@ -283,7 +285,7 @@ function DemandCard({
       {canManage && demandPublished ? (
         <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
           <label className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
-            <Link2 size={11} /> {t("campaignDetail.publishedLinkLabel")}
+            <Link2 size={11} /> {t(live ? "recurringDetail.liveLinkLabel" : "campaignDetail.publishedLinkLabel")}
           </label>
           <p className="m-0 text-[11px] font-medium text-emerald-900">{t("campaignDetail.publishedLinkEditHint")}</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

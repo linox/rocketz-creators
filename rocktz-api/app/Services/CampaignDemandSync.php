@@ -18,7 +18,10 @@ use Illuminate\Validation\ValidationException;
 class CampaignDemandSync
 {
     /** @var list<string> */
-    public const TYPES = ['reels', 'stories', 'tiktok', 'ugc', 'posts', 'youtube'];
+    public const TYPES = ['reels', 'stories', 'tiktok', 'ugc', 'posts', 'youtube', 'live_instagram', 'live_tiktok', 'live_youtube'];
+
+    /** @var list<string> */
+    public const LIVE_TYPES = ['live', 'live_instagram', 'live_tiktok', 'live_youtube'];
 
     public function syncCampaign(Campaign $campaign): void
     {
@@ -432,6 +435,10 @@ class CampaignDemandSync
             : (string) $demand->delivery_status;
         if (in_array($delivery, [DeliveryStatus::Approved->value, DeliveryStatus::Published->value], true)) {
             return true;
+        }
+
+        if (in_array((string) $demand->content_type, self::LIVE_TYPES, true)) {
+            return false;
         }
 
         $flow = $row->campaign?->approval_flow;

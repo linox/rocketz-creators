@@ -176,6 +176,9 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
       'ugc' => 'fmtUgc',
       'posts' => 'fmtPosts',
       'youtube' => 'fmtYoutube',
+      'live_instagram' => 'fmtLiveInstagram',
+      'live_tiktok' => 'fmtLiveTiktok',
+      'live_youtube' => 'fmtLiveYoutube',
       _ => '',
     };
     final format = formatKey.isEmpty ? type : t(formatKey);
@@ -330,6 +333,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                       for (final demand in _demands) ...[
                         _DemandFields(
                           title: _demandTitle(demand, t),
+                          live: (demand['content_type'] as String? ?? '').startsWith('live'),
                           pauta: (demand['pauta'] as String?)?.trim(),
                           pautaLabel: t('demandPauta'),
                           emptyPauta: t('demandPautaEmpty'),
@@ -337,7 +341,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                           published: demandLinks[demand['id'] as int] ?? published,
                           scriptLabel: t('script'),
                           videoLabel: t('submitVideo'),
-                          linkLabel: t('publishedLink'),
+                          linkLabel: (demand['content_type'] as String? ?? '').startsWith('live') ? t('liveLink') : t('publishedLink'),
                           submitScriptLabel: t('submitScript'),
                           submitLinkLabel: t('submitLink'),
                           busy: busy,
@@ -400,6 +404,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
 class _DemandFields extends StatelessWidget {
   const _DemandFields({
     required this.title,
+    required this.live,
     required this.pauta,
     required this.pautaLabel,
     required this.emptyPauta,
@@ -418,6 +423,7 @@ class _DemandFields extends StatelessWidget {
   });
 
   final String title;
+  final bool live;
   final String? pauta;
   final String pautaLabel;
   final String emptyPauta;
@@ -458,15 +464,17 @@ class _DemandFields extends StatelessWidget {
           TextField(controller: script, maxLines: 4, decoration: softField(scriptLabel)),
           const SizedBox(height: 12),
           DarkPillButton(label: submitScriptLabel, busy: busy, onPressed: onScript),
-          if (busy && uploadPercent > 0) ...[
+          if (!live && busy && uploadPercent > 0) ...[
             const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(99),
               child: LinearProgressIndicator(value: uploadPercent / 100, minHeight: 8),
             ),
           ],
-          const SizedBox(height: 12),
-          DarkPillButton(label: videoLabel, busy: busy, onPressed: onVideo),
+          if (!live) ...[
+            const SizedBox(height: 12),
+            DarkPillButton(label: videoLabel, busy: busy, onPressed: onVideo),
+          ],
           const SizedBox(height: 12),
           TextField(controller: published, decoration: softField(linkLabel)),
           const SizedBox(height: 12),

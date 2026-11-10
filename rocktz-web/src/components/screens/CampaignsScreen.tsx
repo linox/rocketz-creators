@@ -33,6 +33,7 @@ import {
   Scale,
   TicketPercent,
   Users,
+  Radio,
   Video,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -81,12 +82,18 @@ function formatDeliverablesSummary(deliverables?: Campaign["deliverables"]) {
   const ugc = countValue(deliverables.ugc);
   const posts = countValue(deliverables.posts);
   const youtube = countValue(deliverables.youtube);
+  const liveInstagram = countValue(deliverables.live_instagram);
+  const liveTiktok = countValue(deliverables.live_tiktok);
+  const liveYoutube = countValue(deliverables.live_youtube);
   if (reels) parts.push(`${reels}x Reel${reels > 1 ? "s" : ""}`);
   if (stories) parts.push(`${stories}x Stories`);
   if (tiktok) parts.push(`${tiktok}x TikTok`);
   if (ugc) parts.push(`${ugc}x UGC`);
   if (posts) parts.push(`${posts}x Feed/Post${posts > 1 ? "s" : ""}`);
   if (youtube) parts.push(`${youtube}x YouTube`);
+  if (liveInstagram) parts.push(`${liveInstagram}x Live Instagram`);
+  if (liveTiktok) parts.push(`${liveTiktok}x Live TikTok`);
+  if (liveYoutube) parts.push(`${liveYoutube}x Live YouTube`);
   return parts.join(" + ");
 }
 
@@ -99,6 +106,7 @@ function formatRange(start: string | null | undefined, end: string | null | unde
 
 function getFormatBadge(deliveryType = "") {
   const dt = deliveryType.toLowerCase();
+  if (dt.includes("live")) return { label: "Live", icon: Radio, color: "bg-purple-50 text-purple-700 border-purple-200" };
   if (dt.includes("reel")) return { label: "Reel", icon: Clapperboard, color: "bg-indigo-50 text-indigo-700 border-indigo-200" };
   if (dt.includes("storie") || dt.includes("story")) return { label: "Stories", icon: Instagram, color: "bg-amber-50 text-amber-700 border-amber-200" };
   if (dt.includes("tiktok")) return { label: "TikTok", icon: Clapperboard, color: "bg-rose-50 text-rose-700 border-rose-200" };

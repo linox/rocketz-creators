@@ -168,12 +168,18 @@ function formatDeliverablesSummary(deliverables?: Campaign["deliverables"]) {
   const ugc = countValue(deliverables.ugc);
   const posts = countValue(deliverables.posts);
   const youtube = countValue(deliverables.youtube);
+  const liveInstagram = countValue(deliverables.live_instagram);
+  const liveTiktok = countValue(deliverables.live_tiktok);
+  const liveYoutube = countValue(deliverables.live_youtube);
   if (reels) parts.push(`${reels}x Reel${reels > 1 ? "s" : ""}`);
   if (stories) parts.push(`${stories}x Stories`);
   if (tiktok) parts.push(`${tiktok}x TikTok`);
   if (ugc) parts.push(`${ugc}x UGC`);
   if (posts) parts.push(`${posts}x Post${posts > 1 ? "s" : ""}`);
   if (youtube) parts.push(`${youtube}x YouTube`);
+  if (liveInstagram) parts.push(`${liveInstagram}x Live Instagram`);
+  if (liveTiktok) parts.push(`${liveTiktok}x Live TikTok`);
+  if (liveYoutube) parts.push(`${liveYoutube}x Live YouTube`);
   return parts.join(" + ");
 }
 
@@ -621,6 +627,9 @@ function DetailInner() {
     ugc: "0",
     posts: "0",
     youtube: "0",
+    live_instagram: "0",
+    live_tiktok: "0",
+    live_youtube: "0",
     deadline_days: "5",
     summary: "",
     guidelines: "",
@@ -1074,6 +1083,9 @@ function DetailInner() {
       ugc: String(campaign.deliverables?.ugc ?? 0),
       posts: String(campaign.deliverables?.posts ?? 0),
       youtube: String(campaign.deliverables?.youtube ?? 0),
+      live_instagram: String(campaign.deliverables?.live_instagram ?? 0),
+      live_tiktok: String(campaign.deliverables?.live_tiktok ?? 0),
+      live_youtube: String(campaign.deliverables?.live_youtube ?? 0),
       deadline_days: String(campaign.deliverables?.deadline_days ?? 5),
       summary: String(campaign.deliverables?.summary ?? ""),
       guidelines: String(campaign.deliverables?.guidelines ?? ""),
@@ -1204,6 +1216,9 @@ function DetailInner() {
           ugc: Number(editForm.ugc) || 0,
           posts: Number(editForm.posts) || 0,
           youtube: Number(editForm.youtube) || 0,
+          live_instagram: Number(editForm.live_instagram) || 0,
+          live_tiktok: Number(editForm.live_tiktok) || 0,
+          live_youtube: Number(editForm.live_youtube) || 0,
           deadline_days: Number(editForm.deadline_days) || 5,
           summary: editForm.summary,
           guidelines: editForm.guidelines,
@@ -3631,8 +3646,8 @@ function DetailInner() {
                   maxApproved={editForm.max_approved_creators}
                   onMaxApprovedChange={(value) => setEditForm({ ...editForm, max_approved_creators: value })}
                 />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {(["reels", "stories", "tiktok", "ugc", "posts", "youtube"] as const).map((key) => (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {(["reels", "stories", "live_instagram", "tiktok", "live_tiktok", "ugc", "posts", "youtube", "live_youtube"] as const).map((key) => (
                     <div key={key} className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">{t(`campaignDetail.${key}`)}</label>
                       <input type="number" min="0" className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold" value={editForm[key]} onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })} />

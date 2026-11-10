@@ -25,6 +25,9 @@ class CampaignDeliverableFactory extends Factory
             'ugc' => fake()->numberBetween(0, 2),
             'posts' => fake()->numberBetween(0, 3),
             'youtube' => fake()->numberBetween(0, 1),
+            'live_instagram' => fake()->numberBetween(0, 1),
+            'live_tiktok' => fake()->numberBetween(0, 1),
+            'live_youtube' => fake()->numberBetween(0, 1),
             'deadline_days' => fake()->numberBetween(7, 30),
             'guidelines' => fake()->optional()->paragraph(),
         ];

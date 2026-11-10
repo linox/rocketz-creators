@@ -12,6 +12,7 @@ import {
   Lock,
   Megaphone,
   Package,
+  Radio,
   Scale,
   Sparkles,
   Video,
@@ -58,6 +59,9 @@ function formatSummary(counts: Record<string, number>) {
   if (counts.ugc) parts.push(`${counts.ugc}x UGC`);
   if (counts.posts) parts.push(`${counts.posts}x Feed/Post${counts.posts > 1 ? "s" : ""}`);
   if (counts.youtube) parts.push(`${counts.youtube}x YouTube`);
+  if (counts.live_instagram) parts.push(`${counts.live_instagram}x Live Instagram`);
+  if (counts.live_tiktok) parts.push(`${counts.live_tiktok}x Live TikTok`);
+  if (counts.live_youtube) parts.push(`${counts.live_youtube}x Live YouTube`);
   return parts.join(" + ");
 }
 
@@ -164,6 +168,9 @@ export function CreateCampaignModal({
   const [ugc, setUgc] = useState(0);
   const [posts, setPosts] = useState(0);
   const [youtube, setYoutube] = useState(0);
+  const [liveInstagram, setLiveInstagram] = useState(0);
+  const [liveTiktok, setLiveTiktok] = useState(0);
+  const [liveYoutube, setLiveYoutube] = useState(0);
   const [summary, setSummary] = useState("");
   const [deadlineDays, setDeadlineDays] = useState(5);
   const [guidelines, setGuidelines] = useState("");
@@ -185,7 +192,7 @@ export function CreateCampaignModal({
 
   if (!open) return null;
 
-  const counts = { reels, stories, tiktok, ugc, posts, youtube };
+  const counts = { reels, stories, tiktok, ugc, posts, youtube, live_instagram: liveInstagram, live_tiktok: liveTiktok, live_youtube: liveYoutube };
   const autoSummary = formatSummary(counts);
 
   function goToTab(id: Tab) {
@@ -236,6 +243,9 @@ export function CreateCampaignModal({
     setUgc(0);
     setPosts(0);
     setYoutube(0);
+    setLiveInstagram(0);
+    setLiveTiktok(0);
+    setLiveYoutube(0);
     setSummary("");
     setDeadlineDays(5);
     setGuidelines("");
@@ -394,6 +404,9 @@ export function CreateCampaignModal({
           ugc,
           posts,
           youtube,
+          live_instagram: liveInstagram,
+          live_tiktok: liveTiktok,
+          live_youtube: liveYoutube,
           summary: summary.trim() || autoSummary || null,
           deadline_days: deadlineDays,
           guidelines: guidelines || null,
@@ -471,7 +484,7 @@ export function CreateCampaignModal({
 
         <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-4 pt-2 hide-scrollbar sm:px-6">
           {tabBtn("geral", Megaphone, t("campaigns.stepGeneral"))}
-          {tabBtn("entregas", Package, t("campaigns.stepDeliverables"), reels + stories + tiktok + ugc + posts + youtube > 0)}
+          {tabBtn("entregas", Package, t("campaigns.stepDeliverables"), reels + stories + tiktok + ugc + posts + youtube + liveInstagram + liveTiktok + liveYoutube > 0)}
           {tabBtn("briefing", FileText, t("campaigns.stepBriefing"))}
         </div>
 
@@ -698,10 +711,13 @@ export function CreateCampaignModal({
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <QtyCard icon={Clapperboard} iconClass="bg-indigo-50 text-indigo-600" title={t("campaigns.fmtReels")} hint={t("campaigns.fmtReelsHint")} value={reels} onChange={setReels} />
                     <QtyCard icon={Instagram} iconClass="bg-amber-50 text-amber-600" title={t("campaigns.fmtStories")} hint={t("campaigns.fmtStoriesHint")} value={stories} onChange={setStories} />
+                    <QtyCard icon={Radio} iconClass="bg-purple-50 text-purple-600" title={t("campaigns.fmtLiveInstagram")} hint={t("campaigns.fmtLiveInstagramHint")} value={liveInstagram} onChange={setLiveInstagram} />
                     <QtyCard icon={Clapperboard} iconClass="bg-rose-50 text-rose-600" title={t("campaigns.fmtTiktok")} hint={t("campaigns.fmtTiktokHint")} value={tiktok} onChange={setTiktok} />
+                    <QtyCard icon={Radio} iconClass="bg-purple-50 text-purple-600" title={t("campaigns.fmtLiveTiktok")} hint={t("campaigns.fmtLiveTiktokHint")} value={liveTiktok} onChange={setLiveTiktok} />
                     <QtyCard icon={Camera} iconClass="bg-teal-50 text-teal-600" title={t("campaigns.fmtUgc")} hint={t("campaigns.fmtUgcHint")} value={ugc} onChange={setUgc} />
                     <QtyCard icon={Layers} iconClass="bg-emerald-50 text-emerald-600" title={t("campaigns.fmtPosts")} hint={t("campaigns.fmtPostsHint")} value={posts} onChange={setPosts} />
                     <QtyCard icon={Video} iconClass="bg-red-50 text-red-600" title={t("campaigns.fmtYoutube")} hint={t("campaigns.fmtYoutubeHint")} value={youtube} onChange={setYoutube} />
+                    <QtyCard icon={Radio} iconClass="bg-purple-50 text-purple-600" title={t("campaigns.fmtLiveYoutube")} hint={t("campaigns.fmtLiveYoutubeHint")} value={liveYoutube} onChange={setLiveYoutube} />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">

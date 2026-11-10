@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import { projectDemand } from "@/lib/campaign-demands";
+import { isLivePautaType } from "@/lib/pauta-briefing";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
 import { CampaignCreatorDates } from "@/components/CampaignCreatorDates";
@@ -84,6 +85,15 @@ function CreatorCampaignDemandList({ campaign, row, onClose, onSubmitted, showBr
               ) : (
                 <p className="m-0 text-[11px] font-medium text-slate-400">{tp("demandPautaEmpty")}</p>
               )}
+              {isLivePautaType(demand.content_type) ? (
+                <CreatorLiveDemandForm
+                  key={`${demand.id}-${demand.script_status}-${demand.delivery_status}-${demand.content?.published_link ?? ""}-${demand.content?.script ?? ""}`}
+                  row={projectDemand(row, demand)}
+                  demandId={demand.id}
+                  brandPosts={isBrandPosting(campaign.posting_profile)}
+                  onSubmitted={onSubmitted}
+                />
+              ) : (
               <CreatorCampaignSubmissionForm
                 key={`${demand.id}-${demand.script_status}-${demand.video_status}-${demand.delivery_status}-${demand.content?.video_url ?? ""}-${demand.content?.script ?? ""}`}
                 campaign={campaign}
@@ -95,10 +105,180 @@ function CreatorCampaignDemandList({ campaign, row, onClose, onSubmitted, showBr
                 onSubmitted={onSubmitted}
                 showBriefingToggle={false}
               />
+              )}
             </section>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function CreatorLiveDemandForm({
+  row,
+  demandId,
+  brandPosts,
+  onSubmitted,
+}: {
+  row: CampaignCreator;
+  demandId: number;
+  brandPosts: boolean;
+  onSubmitted: () => void;
+}) {
+  const { t } = useTranslation("app");
+  const { t: tp } = useTranslation("profile");
+  const [script, setScript] = useState(row.content?.script || "");
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
+  const [clearedScriptFile, setClearedScriptFile] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState(row.content?.published_link || "");
+  const [submitting, setSubmitting] = useState(false);
+
+  const scriptApproved = row.script_status === "approved";
+  const scriptSubmitted = row.script_status === "submitted";
+  const scriptRevision = row.script_status === "revision";
+  const isPublished = row.delivery_status === "published";
+  const existingScriptFile = clearedScriptFile ? null : parseScriptDocument(row.content?.script_file_url, row.content?.script_file_name);
+  const scriptChanged = script.trim() !== (row.content?.script || "").trim() || Boolean(scriptFile) || clearedScriptFile;
+  const liveScriptReady = Boolean(script.trim() || scriptFile || existingScriptFile);
+  const savedLink = (row.content?.published_link || "").trim();
+
+  function stamp(body: Record<string, unknown>) {
+    return { demand_id: demandId, ...body };
+  }
+
+  async function submitScript() {
+    if (!liveScriptReady) {
+      await alertWarning(tp("materialRequiredTitle"), tp("scriptRequired"));
+      return;
+    }
+    if (scriptRevision && !scriptChanged) {
+      await alertWarning(tp("materialRequiredTitle"), tp("scriptChangeRequired"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const body: Record<string, unknown> = {
+        script: script.trim() || null,
+        script_status: "submitted",
+        delivery_status: "sent",
+      };
+      if (scriptFile) {
+        const uploaded = await uploadScriptDocument(scriptFile);
+        body.script_file_url = uploaded.url;
+        body.script_file_name = uploaded.filename;
+      } else if (existingScriptFile) {
+        body.script_file_url = existingScriptFile.url;
+        body.script_file_name = existingScriptFile.filename;
+      }
+      await api.updateParticipation(row.id, stamp(body));
+      setScriptFile(null);
+      onSubmitted();
+      void alertSuccess(tp("liveScriptSentWaiting"), undefined, { timerMs: 2000 });
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitLink() {
+    const link = publishedUrl.trim();
+    if (!link || !safeHttpUrl(link)) {
+      await alertWarning(tp("materialRequiredTitle"), t("recurringDetail.liveLinkRequired"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.updateParticipation(row.id, stamp({
+        published_link: link,
+        delivery_status: "published",
+      }));
+      onSubmitted();
+      void alertSuccess(isPublished ? tp("publishedLinkUpdated") : t("recurringDetail.liveLinkSaved"), undefined, { timerMs: 2000 });
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {scriptRevision ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+          <p className="m-0 text-xs font-black text-rose-900">{tp("revisionAlertTitle")}</p>
+          {row.script_feedback ? <p className="m-0 mt-1 whitespace-pre-wrap text-xs font-semibold text-slate-800">{row.script_feedback}</p> : null}
+        </div>
+      ) : null}
+
+      {scriptApproved ? (
+        brandPosts ? (
+          <PostingProfileNotice profile="brand" audience="creator" />
+        ) : (
+          <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <p className="m-0 text-[11px] font-medium text-emerald-800">{t("recurringDetail.liveLinkHint")}</p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{t("recurringDetail.liveLinkLabel")}</label>
+              <input
+                type="url"
+                placeholder={t("recurringDetail.liveLinkPh")}
+                value={publishedUrl}
+                onChange={(event) => setPublishedUrl(event.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs outline-none focus:border-brand-primary"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={submitting || !publishedUrl.trim() || publishedUrl.trim() === savedLink}
+              onClick={() => void submitLink()}
+              className={cn(
+                "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+                submitting || !publishedUrl.trim() || publishedUrl.trim() === savedLink ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
+              )}
+            >
+              <Link2 size={14} /> {t("recurringDetail.saveLiveLink")}
+            </button>
+          </div>
+        )
+      ) : scriptSubmitted ? (
+        <p className="m-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-900">
+          {tp("waitingLiveScriptApproval")}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+          <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">{tp("liveScriptLabel")}</label>
+          <textarea
+            rows={4}
+            value={script}
+            onChange={(event) => setScript(event.target.value)}
+            placeholder={tp("liveScriptPh")}
+            className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-brand-primary"
+          />
+          <ScriptDocumentField
+            compact
+            label={tp("scriptFileLabel")}
+            hint={tp("scriptFileHint")}
+            file={scriptFile}
+            existing={existingScriptFile}
+            onFileSelect={(next) => {
+              setScriptFile(next);
+              if (next) setClearedScriptFile(false);
+            }}
+            onClearExisting={() => setClearedScriptFile(true)}
+          />
+          <button
+            type="button"
+            disabled={submitting || !liveScriptReady || (scriptRevision && !scriptChanged)}
+            onClick={() => void submitScript()}
+            className={cn(
+              "inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 text-[11px] font-bold tracking-wider uppercase transition-all disabled:cursor-not-allowed",
+              submitting || !liveScriptReady || (scriptRevision && !scriptChanged) ? "bg-slate-100 text-slate-400" : "bg-brand-primary text-white hover:bg-indigo-600",
+            )}
+          >
+            <Send size={14} /> {scriptRevision ? tp("sendNewVersionNumbered", { n: (row.content?.script_version ?? 0) + 1 }) : tp("sendScriptForReview")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

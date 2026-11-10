@@ -882,6 +882,12 @@
     "fmtPostsHint": "Foto ou carrossel",
     "fmtYoutube": "YouTube",
     "fmtYoutubeHint": "Vídeo dedicado/integração",
+    "fmtLiveInstagram": "Live Instagram",
+    "fmtLiveInstagramHint": "Transmissão ao vivo",
+    "fmtLiveTiktok": "Live TikTok",
+    "fmtLiveTiktokHint": "Transmissão ao vivo",
+    "fmtLiveYoutube": "Live YouTube",
+    "fmtLiveYoutubeHint": "Transmissão ao vivo",
     "summaryLabel": "Resumo Descritivo das Entregas",
     "summaryAuto": "Gerar automaticamente pelos seletores",
     "summaryPh": "Ex: 1 Reel no feed + 3 Stories com link do produto",
@@ -2482,6 +2488,9 @@
     "ugc": "UGC",
     "posts": "Posts",
     "youtube": "YouTube",
+    "live_instagram": "Live Instagram",
+    "live_tiktok": "Live TikTok",
+    "live_youtube": "Live YouTube",
     "saveChanges": "Salvar Alterações"
   },
   "recurringDetail": {
