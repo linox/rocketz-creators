@@ -8,9 +8,11 @@ import { cn } from "@/lib/cn";
 type Props = {
   src: string;
   className?: string;
+  /** Thumbnail only: metadata preload and a slower retry, for grids. */
+  lite?: boolean;
 };
 
-export function VideoPoster({ src, className }: Props) {
+export function VideoPoster({ src, className, lite = false }: Props) {
   const { t } = useTranslation("app");
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -30,6 +32,8 @@ export function VideoPoster({ src, className }: Props) {
     let cancelled = false;
     let timer: number | undefined;
 
+    let attempts = 0;
+
     async function resolve() {
       const data = await fetchPlaybackSource(src);
       if (cancelled) return;
@@ -38,10 +42,11 @@ export function VideoPoster({ src, className }: Props) {
       setPlaybackUrl(nextPlay);
       const waiting = !data.poster && !nextPlay;
       setPreparing(Boolean(data.preparing) && waiting);
-      if (waiting) {
+      if (waiting && (!lite || attempts < 3)) {
+        attempts += 1;
         timer = window.setTimeout(() => {
           void resolve();
-        }, 2500);
+        }, lite ? 4000 : 2500);
       }
     }
 
@@ -50,7 +55,7 @@ export function VideoPoster({ src, className }: Props) {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [src, rejected]);
+  }, [src, rejected, lite]);
 
   useEffect(() => {
     if (posterUrl || !playbackUrl || frameReady) return;
@@ -79,7 +84,7 @@ export function VideoPoster({ src, className }: Props) {
           src={playbackUrl.includes("#") ? playbackUrl : `${playbackUrl}#t=0.4`}
           muted
           playsInline
-          preload="auto"
+          preload={lite ? "metadata" : "auto"}
           className={cn("h-full w-full object-cover transition-opacity duration-200", frameReady ? "opacity-100" : "opacity-0")}
           onLoadedData={(event) => revealFrame(event.currentTarget)}
           onSeeked={() => setFrameReady(true)}

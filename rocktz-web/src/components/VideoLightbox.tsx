@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { Download } from "lucide-react";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -40,6 +42,14 @@ export function VideoLightbox({ src, onClose, className, closeLabel }: Props) {
       <button type="button" className="absolute inset-0 cursor-pointer" aria-label={label} onClick={onClose} />
       <div className={cn("relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-black shadow-2xl", className)}>
         <VideoPlayer src={src} autoPlay className="max-h-[80vh] w-full object-contain" />
+        <a
+          href={mediaDownloadUrl(src)}
+          download
+          className="absolute top-3 left-3 z-20 inline-flex cursor-pointer items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-slate-800"
+        >
+          <Download size={12} />
+          {t("deliveries.inbox.galleryDownload")}
+        </a>
         <button
           type="button"
           onClick={onClose}

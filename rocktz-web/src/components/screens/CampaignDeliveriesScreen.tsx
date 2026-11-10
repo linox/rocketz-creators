@@ -71,6 +71,31 @@ const ALL_COMPANIES = "all";
 const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
 const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
 
+function GalleryCardPreview({ src, still }: { src: string; still: string | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setVisible(entry.isIntersecting);
+    }, { rootMargin: "80px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="absolute inset-0 bg-slate-900">
+      {still ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={still} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      ) : null}
+      {visible ? <VideoPoster lite src={src} className="absolute inset-0 h-full w-full bg-transparent" /> : null}
+    </div>
+  );
+}
+
 function galleryVersion(item: DeliveryInboxItem) {
   return item.versions.find((entry) => entry.versionNumber === item.currentVersion)
     ?? item.versions[0]
@@ -1866,11 +1891,8 @@ function GalleryView({
                             <ExternalLink size={22} />
                             <span className="text-[10px] font-bold uppercase">{t("deliveries.inbox.galleryDrive")}</span>
                           </span>
-                        ) : still ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={still} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <span className="block h-full w-full bg-slate-900" />
+                          <GalleryCardPreview src={src} still={still} />
                         )}
                         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
@@ -1896,13 +1918,25 @@ function GalleryView({
                             {sentAt}
                             {item.currentVersion > 1 ? ` · V${item.currentVersion}` : ""}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => onOpen(item)}
-                            className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
-                          >
-                            {t("deliveries.inbox.galleryOpen")}
-                          </button>
+                          <span className="flex shrink-0 items-center gap-1">
+                            {drive ? null : (
+                              <a
+                                href={mediaDownloadUrl(src)}
+                                download
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"
+                              >
+                                <Download size={10} />
+                                {t("deliveries.inbox.galleryDownload")}
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onOpen(item)}
+                              className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
+                            >
+                              {t("deliveries.inbox.galleryOpen")}
+                            </button>
+                          </span>
                         </div>
                       </div>
                     </article>

@@ -1491,6 +1491,7 @@
       "galleryVideos": "{{count}} vídeos",
       "galleryVideosOne": "{{count}} vídeo",
       "galleryOpen": "Abrir",
+      "galleryDownload": "Baixar",
       "galleryDrive": "Drive",
       "galleryNoDate": "Sem data de envio",
       "statusShort": {
