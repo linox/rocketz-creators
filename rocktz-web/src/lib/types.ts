@@ -233,6 +233,8 @@ export type CreatorCoupon = {
   discount_percent: number | null;
   commission_percent: number | null;
   is_active: boolean;
+  inactive_reason?: string | null;
+  name_complete?: boolean;
   company?: { id: number; name: string } | null;
   campaign?: { id: number; name: string } | null;
   creator?: CreatorCouponCreator | null;

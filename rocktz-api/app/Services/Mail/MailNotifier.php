@@ -12,6 +12,7 @@ use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
+use App\Models\CreatorCoupon;
 use App\Models\MailMessage;
 use App\Models\RecurringContract;
 use App\Models\User;
@@ -51,6 +52,30 @@ class MailNotifier
             'link_plataforma' => FrontendUrl::to('/available-campaigns'),
             'creator_id' => $creator->id,
         ], $creator);
+    }
+
+    public function couponIncompleteName(CreatorCoupon $coupon): void
+    {
+        $coupon->unsetRelation('creator');
+        $coupon->load(['creator.user', 'campaign:id,name', 'company:id,name']);
+        $user = $coupon->creator?->user;
+        if (! $user) {
+            return;
+        }
+
+        $profile = FrontendUrl::to('/creators/'.$coupon->creator_id);
+        $this->mail->send(MailTemplateKey::CouponIncompleteName, $user, [
+            'nome_criador' => $coupon->creator->full_name ?: $coupon->creator->artistic_name,
+            'codigo' => $coupon->code,
+            'nome_campanha' => $coupon->campaign?->name,
+            'nome_empresa' => $coupon->company?->name,
+            'motivo_reprovacao' => $coupon->inactive_reason,
+            'cta_url' => $profile,
+            'link_cadastro' => $profile,
+            'creator_id' => $coupon->creator_id,
+            'campaign_id' => $coupon->campaign_id,
+            'company_id' => $coupon->company_id,
+        ], $coupon, 'incomplete-'.uniqid('', true));
     }
 
     public function creatorRejected(Creator $creator, ?string $reason): void

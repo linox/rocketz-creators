@@ -14,8 +14,10 @@ use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
+use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
 use App\Support\CreatorCouponExport;
+use App\Support\PersonName;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +26,10 @@ use Illuminate\Validation\ValidationException;
 
 class CreatorCouponController extends Controller
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly MailNotifier $mail,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -125,20 +130,39 @@ class CreatorCouponController extends Controller
         $companyId = $this->companyId($request);
         Company::assertApproved($companyId);
 
+        $attributes = $request->boolean('manual')
+            ? $this->manualAttributes($request, $companyId)
+            : $this->attributes($request, $companyId);
+        $creator = Creator::query()->find($attributes['creator_id']);
+        $complete = PersonName::isComplete($creator?->full_name);
+        $active = $request->exists('is_active') ? $request->boolean('is_active') : true;
+        $inactiveReason = null;
+        if (! $active) {
+            $inactiveReason = $this->inactiveReason($request);
+        } elseif (! $complete) {
+            $active = false;
+            $inactiveReason = __('auth.creator_coupon_incomplete_name_reason');
+        }
+
         $coupon = CreatorCoupon::query()->create([
-            ...($request->boolean('manual')
-                ? $this->manualAttributes($request, $companyId)
-                : $this->attributes($request, $companyId)),
+            ...$attributes,
             'company_id' => $companyId,
             'created_by' => $request->user()->id,
-            'is_active' => $request->exists('is_active') ? $request->boolean('is_active') : true,
+            'is_active' => $active,
+            'inactive_reason' => $inactiveReason,
         ]);
 
         $coupon = $this->present($coupon);
-        $this->notifyCreator($coupon);
+        if ($coupon->is_active) {
+            $this->notifyCreator($coupon);
+        } elseif (! $complete) {
+            $this->mail->couponIncompleteName($coupon);
+        }
 
         return response()->json([
-            'message' => __('auth.creator_coupon_created'),
+            'message' => $complete
+                ? __('auth.creator_coupon_created')
+                : __('auth.creator_coupon_created_inactive'),
             'data' => new CreatorCouponResource($coupon),
         ], 201);
     }
@@ -148,8 +172,22 @@ class CreatorCouponController extends Controller
         $this->assertCanManage($request, $creatorCoupon);
 
         $data = [];
+        $notifyIncomplete = false;
         if ($request->exists('is_active')) {
-            $data['is_active'] = $request->boolean('is_active');
+            $creatorCoupon->loadMissing('creator:id,full_name');
+            if ($request->boolean('is_active')) {
+                if (! PersonName::isComplete($creatorCoupon->creator?->full_name)) {
+                    throw ValidationException::withMessages([
+                        'is_active' => __('auth.creator_coupon_name_required'),
+                    ]);
+                }
+                $data['is_active'] = true;
+                $data['inactive_reason'] = null;
+            } else {
+                $data['is_active'] = false;
+                $data['inactive_reason'] = $this->inactiveReason($request);
+                $notifyIncomplete = ! PersonName::isComplete($creatorCoupon->creator?->full_name);
+            }
         }
         if ($request->exists('campaign_id') || $request->exists('creator_id') || $request->exists('code') || $request->exists('discount_percent') || $request->exists('commission_percent')) {
             $data = [
@@ -162,9 +200,14 @@ class CreatorCouponController extends Controller
             $creatorCoupon->update($data);
         }
 
+        $creatorCoupon = $this->present($creatorCoupon);
+        if ($notifyIncomplete) {
+            $this->mail->couponIncompleteName($creatorCoupon);
+        }
+
         return response()->json([
             'message' => __('auth.creator_coupon_updated'),
-            'data' => new CreatorCouponResource($this->present($creatorCoupon)),
+            'data' => new CreatorCouponResource($creatorCoupon),
         ]);
     }
 
@@ -546,6 +589,18 @@ class CreatorCouponController extends Controller
         }
 
         return $code;
+    }
+
+    private function inactiveReason(Request $request): string
+    {
+        $reason = trim((string) $request->input('inactive_reason', ''));
+        if ($reason === '' || mb_strlen($reason) > 500) {
+            throw ValidationException::withMessages([
+                'inactive_reason' => __('auth.creator_coupon_inactive_reason'),
+            ]);
+        }
+
+        return $reason;
     }
 
     private function percent(mixed $value, mixed $fallback, string $field): string

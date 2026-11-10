@@ -7,8 +7,9 @@ import { Check, Coins, Copy, Download, PencilLine, Plus, TicketPercent, Trash2, 
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
-import { alertApiError, alertConfirm, alertError, alertSuccess, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertError, alertSuccess, alertWarning, promptTextarea } from "@/lib/alerts";
 import { formatBenefitPercent, parseBenefitPercent } from "@/lib/benefit-coupon";
+import { isCompletePersonName } from "@/lib/person-name";
 import { useAuth } from "@/lib/use-auth";
 import type { Company, CreatorCoupon, CreatorCouponCampaignOption, CreatorCouponCreator } from "@/lib/types";
 
@@ -209,6 +210,7 @@ function CouponsInner() {
   const [savingManual, setSavingManual] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   const [campaignFilter, setCampaignFilter] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -271,12 +273,15 @@ function CouponsInner() {
     return coupons.some((coupon) => coupon.campaign_id == null) ? [{ value: "manual", label: t("coupons.manual") }, ...rows] : rows;
   }, [campaigns, coupons, isManager, t]);
 
+  const incompleteCount = coupons.filter((coupon) => coupon.name_complete === false).length;
+
   const visible = coupons.filter((coupon) => {
+    if (onlyIncomplete && coupon.name_complete !== false) return false;
     if (campaignFilter === "manual") return coupon.campaign_id == null;
     if (campaignFilter && String(coupon.campaign_id) !== campaignFilter) return false;
     const query = search.trim().toLowerCase();
     if (!query) return true;
-    const blob = [coupon.code, coupon.change_request?.suggested_code, creatorName(coupon.creator), coupon.campaign?.name, coupon.company?.name]
+    const blob = [coupon.code, coupon.change_request?.suggested_code, creatorName(coupon.creator), coupon.creator?.full_name, coupon.inactive_reason, coupon.campaign?.name, coupon.company?.name]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -305,7 +310,7 @@ function CouponsInner() {
     }
     setSavingManual(true);
     try {
-      await api.createCoupon({
+      const created = await api.createCoupon({
         manual: true,
         company_id: Number(companyId),
         creator_id: Number(manualCreatorId),
@@ -318,7 +323,11 @@ function CouponsInner() {
       setManualCode("");
       setManualDiscount("");
       setManualCommission("");
-      await alertSuccess(t("coupons.created"));
+      if (created.data.name_complete === false) {
+        await alertWarning(t("coupons.createdInactive"), t("coupons.createdInactiveText"));
+      } else {
+        await alertSuccess(t("coupons.created"));
+      }
       await reload();
     } catch (err) {
       await alertApiError(err);
@@ -327,10 +336,38 @@ function CouponsInner() {
     }
   }
 
-  async function toggleActive(coupon: CreatorCoupon) {
+  async function inactivate(coupon: CreatorCoupon) {
+    const reason = await promptTextarea({
+      title: t("coupons.pauseTitle"),
+      text: coupon.name_complete === false ? t("coupons.pauseIncompleteText") : t("coupons.pauseText"),
+      placeholder: t("coupons.inactiveReasonPh"),
+      value: coupon.name_complete === false ? coupon.inactive_reason || t("coupons.incompleteNameReason") : coupon.inactive_reason || "",
+      confirmText: t("coupons.pause"),
+      requiredMessage: t("coupons.inactiveReasonRequired"),
+    });
+    if (!reason) return;
     setBusyId(coupon.id);
     try {
-      await api.updateCoupon(coupon.id, { is_active: !coupon.is_active });
+      await api.updateCoupon(coupon.id, { is_active: false, inactive_reason: reason });
+      if (coupon.name_complete === false) {
+        await alertSuccess(t("coupons.pausedNotified"), t("coupons.pausedNotifiedText"));
+      }
+      await reload();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function activate(coupon: CreatorCoupon) {
+    if (coupon.name_complete === false) {
+      await alertWarning(t("coupons.cannotActivateTitle"), t("coupons.cannotActivateText"));
+      return;
+    }
+    setBusyId(coupon.id);
+    try {
+      await api.updateCoupon(coupon.id, { is_active: true });
       await reload();
     } catch (err) {
       await alertApiError(err);
@@ -485,6 +522,9 @@ function CouponsInner() {
                   />
                 </div>
               )}
+              {manualCreators.some((creator) => String(creator.id) === manualCreatorId && !isCompletePersonName(creator.full_name)) ? (
+                <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{t("coupons.incompleteNameHint")}</p>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <button type="submit" disabled={savingManual || manualCreators.length === 0} className="inline-flex h-11 items-center rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">
                   {t("coupons.save")}
@@ -511,6 +551,15 @@ function CouponsInner() {
               onChange={setCampaignFilter}
             />
           </div>
+          {incompleteCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setOnlyIncomplete((current) => !current)}
+              className={`inline-flex h-9 w-fit items-center rounded-full px-3 text-xs font-bold ${onlyIncomplete ? "bg-amber-500 text-white" : "border border-amber-200 bg-amber-50 text-amber-900"}`}
+            >
+              {t("coupons.onlyIncomplete", { count: incompleteCount })}
+            </button>
+          ) : null}
 
           {loading ? (
             <p className="text-sm text-slate-500">{t("coupons.loading")}</p>
@@ -536,6 +585,11 @@ function CouponsInner() {
                           {t("coupons.manual")}
                         </span>
                       ) : null}
+                      {coupon.name_complete === false ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-800 uppercase">
+                          {t("coupons.incompleteName")}
+                        </span>
+                      ) : null}
                       {coupon.change_request?.status === "pending" ? (
                         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-800 uppercase">
                           {t("coupons.pendingChange")}
@@ -549,19 +603,41 @@ function CouponsInner() {
                       commission: formatBenefitPercent(coupon.commission_percent),
                     })}
                   </p>
-                  {!isCreator ? <p className="mt-3 mb-0 text-sm font-semibold text-slate-800">{creatorName(coupon.creator)}</p> : null}
+                  {!isCreator ? (
+                    <>
+                      <p className="mt-3 mb-0 text-sm font-semibold text-slate-800">{creatorName(coupon.creator)}</p>
+                      <p className="mt-1 mb-0 text-xs text-slate-500">{t("coupons.legalName")}: {coupon.creator?.full_name?.trim() || "—"}</p>
+                    </>
+                  ) : null}
                   <p className="mt-1 mb-0 text-sm text-slate-500">
                     {[coupon.campaign?.name, coupon.company?.name].filter(Boolean).join(" · ")}
                   </p>
+                  {coupon.name_complete === false ? (
+                    <p className="mt-3 mb-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                      <span className="font-bold">{t("coupons.incompleteName")}. </span>
+                      {isCreator ? t("coupons.completeNameText") : t("coupons.incompleteNameHint")}
+                      {isCreator && user.creator?.id ? (
+                        <Link href={`/creators/${user.creator.id}`} className="mt-2 block font-bold text-amber-900 underline">{t("coupons.completeName")}</Link>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {!coupon.is_active && coupon.inactive_reason ? (
+                    <p className="mt-2 mb-0 text-xs text-slate-600"><span className="font-bold">{t("coupons.inactiveReason")}: </span>{coupon.inactive_reason}</p>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" onClick={() => void copyCode(coupon.code)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                       <Copy size={14} /> {t("coupons.copy")}
                     </button>
                     {isManager ? (
                       <>
-                        <button type="button" disabled={busyId === coupon.id} onClick={() => void toggleActive(coupon)} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                        <button type="button" disabled={busyId === coupon.id} onClick={() => void (coupon.is_active ? inactivate(coupon) : activate(coupon))} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                           {coupon.is_active ? t("coupons.pause") : t("coupons.activate")}
                         </button>
+                        {!coupon.is_active && coupon.name_complete === false ? (
+                          <button type="button" disabled={busyId === coupon.id} onClick={() => void inactivate(coupon)} className="inline-flex h-9 items-center rounded-lg border border-amber-200 px-3 text-xs font-bold text-amber-900 hover:bg-amber-50 disabled:opacity-50">
+                            {t("coupons.resendEmail")}
+                          </button>
+                        ) : null}
                         <button type="button" disabled={busyId === coupon.id} onClick={() => void remove(coupon)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
                           <Trash2 size={14} /> {t("coupons.delete")}
                         </button>

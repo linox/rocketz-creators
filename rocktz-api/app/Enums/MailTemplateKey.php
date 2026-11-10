@@ -41,6 +41,7 @@ enum MailTemplateKey: string
     case InvoiceRejected = 'finance.invoice_rejected';
     case PaymentReleased = 'finance.payment_released';
     case BarterDelivered = 'barter.delivered';
+    case CouponIncompleteName = 'coupon.incomplete_name';
 
     /**
      * Convites e oportunidades de campanha. O cron drena essa fila com teto próprio,
@@ -165,6 +166,7 @@ enum MailTemplateKey: string
             self::InvoiceRejected => ['link_plataforma', 'motivo_reprovacao'],
             self::PaymentReleased => ['link_plataforma', 'data_pagamento'],
             self::BarterDelivered => ['nome_campanha', 'codigo_rastreio', 'link_campanha'],
+            self::CouponIncompleteName => ['codigo'],
             default => ['link_plataforma'],
         };
     }
@@ -193,6 +195,7 @@ enum MailTemplateKey: string
             self::InvoiceRejected => ['nome_campanha', 'motivo_reprovacao'],
             self::PaymentReleased => ['nome_campanha', 'valor_campanha', 'data_pagamento'],
             self::BarterDelivered => ['nome_criador', 'nome_campanha', 'codigo_rastreio'],
+            self::CouponIncompleteName => ['codigo', 'motivo_reprovacao'],
             default => [],
         };
     }

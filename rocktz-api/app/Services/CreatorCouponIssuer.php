@@ -8,11 +8,16 @@ use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
+use App\Services\Mail\MailNotifier;
+use App\Support\PersonName;
 use App\Support\SocialHandle;
 
 class CreatorCouponIssuer
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly MailNotifier $mail,
+    ) {}
 
     public function syncCampaign(Campaign $campaign, bool $reactivate = false): void
     {
@@ -54,11 +59,13 @@ class CreatorCouponIssuer
             'commission_percent' => $campaign->benefit_commission_percent,
         ];
 
+        $complete = PersonName::isComplete($creator->full_name);
+
         if ($existing) {
             $existing->update([
                 ...$amounts,
                 'code' => $existing->is_auto ? $code : $existing->code,
-                ...($reactivate && $existing->is_auto ? ['is_active' => true] : []),
+                ...($reactivate && $existing->is_auto && $complete ? ['is_active' => true, 'inactive_reason' => null] : []),
             ]);
 
             return $existing->fresh();
@@ -70,9 +77,16 @@ class CreatorCouponIssuer
             'campaign_id' => $campaign->id,
             'creator_id' => $creator->id,
             'code' => $code,
-            'is_active' => true,
+            'is_active' => $complete,
+            'inactive_reason' => $complete ? null : __('auth.creator_coupon_incomplete_name_reason'),
             'is_auto' => true,
         ]);
+
+        if (! $complete) {
+            $this->mail->couponIncompleteName($coupon);
+
+            return $coupon;
+        }
 
         if ($notify) {
             $coupon->loadMissing('campaign:id,name');

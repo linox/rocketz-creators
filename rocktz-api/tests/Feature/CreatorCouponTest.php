@@ -8,6 +8,8 @@ use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
+use App\Enums\MailTemplateKey;
+use App\Models\MailMessage;
 use App\Models\User;
 use App\Services\CreatorCouponIssuer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -161,9 +163,14 @@ class CreatorCouponTest extends TestCase
             ->assertForbidden();
 
         $this->asUser($user)
-            ->patchJson('/api/coupons/'.$coupon->id, ['is_active' => false])
+            ->patchJson('/api/coupons/'.$coupon->id, [
+                'is_active' => false,
+                'inactive_reason' => 'Campanha encerrada',
+            ])
             ->assertOk()
-            ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('data.inactive_reason', 'Campanha encerrada')
+            ->assertJsonPath('data.name_complete', true);
 
         $this->asUser($creator->user)
             ->getJson('/api/coupons')
@@ -433,7 +440,7 @@ class CreatorCouponTest extends TestCase
 
         $text = $csv->getContent();
         $this->assertStringStartsWith("\xEF\xBB\xBF", $text);
-        $this->assertStringContainsString('codigo;criador;empresa;campanha;desconto;comissao;status;codigo_sugerido;criado_em', $text);
+        $this->assertStringContainsString('codigo;criador;empresa;campanha;desconto;comissao;status;codigo_sugerido;criado_em;razao', $text);
         $this->assertStringContainsString('ANA15;"Ana Cupom";"Loja Aurora";"Cupom Aurora";15;10;Ativo;;', $text);
         $this->assertStringContainsString('MANUAL20;"Zoe Cupom";"Loja Aurora";Manual;10,50;4;Pausado;ZOE20;', $text);
         $this->assertStringNotContainsString('SEGREDO', $text);
@@ -454,6 +461,91 @@ class CreatorCouponTest extends TestCase
         $this->assertStringContainsString('ANA15', $scoped);
         $this->assertStringContainsString('MANUAL20', $scoped);
         $this->assertStringNotContainsString('SEGREDO', $scoped);
+    }
+
+    public function test_incomplete_name_blocks_activation_and_emails_the_creator(): void
+    {
+        [$company, $user, $campaign] = $this->couponScene();
+        $creator = Creator::factory()->active()->create([
+            'artistic_name' => 'Ana',
+            'full_name' => 'Ana',
+            'invited_by_company_id' => $company->id,
+        ]);
+        CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+        ]);
+
+        $created = $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+                'code' => 'ANA15',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('data.name_complete', false)
+            ->assertJsonPath('data.inactive_reason', 'Nome incompleto. O cadastro precisa ter nome e pelo menos um sobrenome para participar.');
+
+        $this->assertDatabaseMissing('notifications', [
+            'creator_id' => $creator->id,
+            'title' => 'Você recebeu um cupom',
+        ]);
+        $this->assertSame(1, MailMessage::query()->where('template_key', MailTemplateKey::CouponIncompleteName)->count());
+
+        $couponId = $created->json('data.id');
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$couponId, ['is_active' => true])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.is_active.0', 'O cupom só pode ser ativado com nome e pelo menos um sobrenome no cadastro.');
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$couponId, ['is_active' => false])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.inactive_reason.0', 'Informe o motivo da inativação, com até 500 caracteres.');
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$couponId, [
+                'is_active' => false,
+                'inactive_reason' => 'Falta o sobrenome para participar',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.inactive_reason', 'Falta o sobrenome para participar');
+
+        $this->assertSame(2, MailMessage::query()->where('template_key', MailTemplateKey::CouponIncompleteName)->count());
+        $this->assertSame(
+            $creator->user->email,
+            MailMessage::query()->where('template_key', MailTemplateKey::CouponIncompleteName)->latest('id')->value('email'),
+        );
+
+        $creator->update(['full_name' => 'Ana Silva']);
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$couponId, ['is_active' => true])
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('data.name_complete', true)
+            ->assertJsonPath('data.inactive_reason', null);
+
+        $issued = app(CreatorCouponIssuer::class)->issue($campaign->fresh(), $creator->fresh(['user']), false);
+        $this->assertTrue($issued->is_active);
+
+        $solo = Creator::factory()->active()->create([
+            'full_name' => 'Zoe',
+            'artistic_name' => 'Zoe',
+        ]);
+        CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $solo->id,
+        ]);
+        $inactive = app(CreatorCouponIssuer::class)->issue($campaign->fresh(), $solo->fresh(['user']));
+        $this->assertFalse($inactive->is_active);
+        $this->assertSame(
+            'Nome incompleto. O cadastro precisa ter nome e pelo menos um sobrenome para participar.',
+            $inactive->inactive_reason,
+        );
+        $this->assertSame(3, MailMessage::query()->where('template_key', MailTemplateKey::CouponIncompleteName)->count());
     }
 
     /**
@@ -482,6 +574,7 @@ class CreatorCouponTest extends TestCase
         ]);
         $creator = Creator::factory()->active()->create([
             'artistic_name' => 'Ana Cupom',
+            'full_name' => 'Ana Cupom',
             'invited_by_company_id' => $company->id,
         ]);
         CampaignCreator::factory()->approved()->create([

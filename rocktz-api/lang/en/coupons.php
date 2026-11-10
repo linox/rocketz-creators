@@ -12,6 +12,7 @@ return [
         'status' => 'status',
         'suggested_code' => 'suggested_code',
         'created_at' => 'created_at',
+        'inactive_reason' => 'inactive_reason',
         'active' => 'Active',
         'paused' => 'Paused',
         'manual' => 'Manual',

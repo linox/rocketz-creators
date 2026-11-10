@@ -172,6 +172,7 @@ export async function promptTextarea(options: {
   title: string;
   text?: string;
   placeholder?: string;
+  value?: string;
   confirmText?: string;
   requiredMessage?: string;
 }): Promise<string | null> {
@@ -181,6 +182,7 @@ export async function promptTextarea(options: {
     title: options.title,
     text: options.text,
     input: "textarea",
+    inputValue: options.value ?? "",
     inputPlaceholder: options.placeholder ?? "",
     showCancelButton: true,
     confirmButtonText: options.confirmText ?? i18n.t("common:confirm"),

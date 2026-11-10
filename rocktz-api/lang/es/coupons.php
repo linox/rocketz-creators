@@ -12,6 +12,7 @@ return [
         'status' => 'estado',
         'suggested_code' => 'codigo_sugerido',
         'created_at' => 'creado_en',
+        'inactive_reason' => 'motivo',
         'active' => 'Activo',
         'paused' => 'Pausado',
         'manual' => 'Manual',

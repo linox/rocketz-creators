@@ -256,5 +256,11 @@ return [
             'body' => "La factura de {{nome_campanha}} fue aprobada y el pago fue liberado.\n\nSe pagará hasta {{data_pagamento}}.",
             'cta' => 'Ver financiero',
         ],
+        'coupon.incomplete_name' => [
+            'subject' => 'Completa tu nombre para participar del cupón {{codigo}}',
+            'greeting' => 'Hola, {{nome_criador}}!',
+            'body' => "Tu cupón {{codigo}} está inactivo porque el nombre del registro está incompleto.\n\nPara participar, el nombre necesita nombre y al menos un apellido. Actualiza el registro para que el equipo pueda activar el cupón.\n\nMotivo: {{motivo_reprovacao}}",
+            'cta' => 'Completar mi nombre',
+        ],
     ],
 ];

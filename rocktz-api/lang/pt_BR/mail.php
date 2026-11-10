@@ -256,5 +256,11 @@ return [
             'body' => "A nota fiscal de {{nome_campanha}} foi aprovada e o pagamento foi liberado.\n\nEle será pago até {{data_pagamento}}.",
             'cta' => 'Ver financeiro',
         ],
+        'coupon.incomplete_name' => [
+            'subject' => 'Complete seu nome para participar do cupom {{codigo}}',
+            'greeting' => 'Olá, {{nome_criador}}!',
+            'body' => "Seu cupom {{codigo}} está inativo porque o nome no cadastro está incompleto.\n\nPara participar, o nome precisa ter nome e pelo menos um sobrenome. Atualize o cadastro para a equipe poder ativar o cupom.\n\nMotivo: {{motivo_reprovacao}}",
+            'cta' => 'Completar meu nome',
+        ],
     ],
 ];

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\MediaUrl;
+use App\Support\PersonName;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -28,6 +29,8 @@ class CreatorCouponResource extends JsonResource
             'discount_percent' => $this->discount_percent !== null ? (float) $this->discount_percent : null,
             'commission_percent' => $this->commission_percent !== null ? (float) $this->commission_percent : null,
             'is_active' => (bool) $this->is_active,
+            'inactive_reason' => $this->inactive_reason,
+            'name_complete' => PersonName::isComplete($this->creator?->full_name),
             'company' => $this->whenLoaded('company', fn () => $this->company ? [
                 'id' => $this->company->id,
                 'name' => $this->company->name,

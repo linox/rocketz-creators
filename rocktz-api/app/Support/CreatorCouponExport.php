@@ -19,7 +19,7 @@ class CreatorCouponExport
         }
 
         fwrite($handle, "\xEF\xBB\xBF");
-        $headers = ['code', 'creator', 'company', 'campaign', 'discount', 'commission', 'status', 'suggested_code', 'created_at'];
+        $headers = ['code', 'creator', 'company', 'campaign', 'discount', 'commission', 'status', 'suggested_code', 'created_at', 'inactive_reason'];
         fputcsv($handle, array_map(fn (string $key) => __('coupons.csv.'.$key), $headers), ';');
 
         foreach ($coupons as $coupon) {
@@ -37,6 +37,7 @@ class CreatorCouponExport
                 self::cell($coupon->created_at?->timezone(config('app.timezone'))->format(
                     app()->getLocale() === 'en' ? 'Y-m-d H:i' : 'd/m/Y H:i'
                 )),
+                self::cell($coupon->inactive_reason),
             ], ';');
         }
 

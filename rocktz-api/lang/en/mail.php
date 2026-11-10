@@ -256,5 +256,11 @@ return [
             'body' => "The invoice for {{nome_campanha}} was approved and payment was released.\n\nIt will be paid by {{data_pagamento}}.",
             'cta' => 'Open finance',
         ],
+        'coupon.incomplete_name' => [
+            'subject' => 'Complete your name to take part in coupon {{codigo}}',
+            'greeting' => 'Hi, {{nome_criador}}!',
+            'body' => "Your coupon {{codigo}} is inactive because the name on your profile is incomplete.\n\nTo take part, the name needs a first name and at least one last name. Update your profile so the team can activate the coupon.\n\nReason: {{motivo_reprovacao}}",
+            'cta' => 'Complete my name',
+        ],
     ],
 ];

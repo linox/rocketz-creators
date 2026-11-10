@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'discount_percent',
     'commission_percent',
     'is_active',
+    'inactive_reason',
     'is_auto',
     'created_by',
 ])]
