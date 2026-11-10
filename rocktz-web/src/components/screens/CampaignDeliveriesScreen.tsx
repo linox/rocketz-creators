@@ -11,8 +11,10 @@ import {
   Download,
   ExternalLink,
   Filter,
+  Calendar,
   History,
   Inbox,
+  LayoutGrid,
   LayoutList,
   Link2,
   Maximize2,
@@ -60,11 +62,63 @@ import {
   type InboxViewMode,
 } from "@/lib/delivery-inbox";
 import { intlLocale, normalizeLocale } from "@/i18n/locales";
+import { calendarDateKey, isoToday } from "@/lib/delivery-date";
 import type { Company } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
 const AGENCY_COMPANY_KEY = "rocktz.deliveries.agencyCompany";
 const ALL_COMPANIES = "all";
+const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
+const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
+
+function galleryVideoSrc(item: DeliveryInboxItem) {
+  if (
+    item.approvalStage === "script"
+    || item.contentType === "script"
+    || item.contentType === "caption"
+    || item.contentType === "image"
+    || item.contentType === "carousel"
+    || item.contentType === "link"
+  ) {
+    return null;
+  }
+  const version = item.versions.find((entry) => entry.versionNumber === item.currentVersion)
+    ?? item.versions[item.versions.length - 1];
+  const url = version?.fileUrl?.trim();
+  if (!url || GALLERY_IMAGE_FILE.test(url)) return null;
+  if (item.contentType === "video" || item.contentType === "story") return url;
+  if (GALLERY_VIDEO_FILE.test(url)) return url;
+  return null;
+}
+
+function galleryMedia(item: DeliveryInboxItem) {
+  const src = galleryVideoSrc(item);
+  if (!src) return null;
+  const version = item.versions.find((entry) => entry.versionNumber === item.currentVersion)
+    ?? item.versions[item.versions.length - 1];
+  const thumb = version?.thumbnailUrl?.trim() || "";
+  const still = thumb && thumb !== src && !GALLERY_VIDEO_FILE.test(thumb) ? thumb : null;
+  return { src, still };
+}
+
+function galleryDayKey(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(+date)) return "";
+  return isoToday(date);
+}
+
+function galleryItemDay(item: DeliveryInboxItem) {
+  if (!isPlaceholderSubmissionTime(item.createdAt)) return galleryDayKey(item.createdAt);
+  return calendarDateKey(item.approvalDeadline)
+    || calendarDateKey(item.publicationDate)
+    || (item.period && /^\d{4}-\d{2}$/.test(item.period) ? `${item.period}-01` : "");
+}
+
+function shiftIsoDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return isoToday(date);
+}
 
 function agencyCompanyKey(userId: number) {
   return `${AGENCY_COMPANY_KEY}:${userId}`;
@@ -141,6 +195,8 @@ function DeliveriesInboxInner() {
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<InboxQuickFilter>("all");
   const [viewMode, setViewMode] = useState<InboxViewMode>("inbox");
+  const [galleryFrom, setGalleryFrom] = useState("");
+  const [galleryTo, setGalleryTo] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [versionId, setVersionId] = useState<string | null>(null);
@@ -375,12 +431,13 @@ function DeliveriesInboxInner() {
           return !isOnSchedule(item) && ["pending_approval", "new_version", "unread", "revision_requested", "overdue"].includes(item.status);
         }
         if (quick === "on_track") return isOnSchedule(item);
+        if (viewMode === "gallery") return true;
         if (quick === "today") return created >= startToday;
         if (quick === "week") return created >= weekAgo;
         return true;
       })
       .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-  }, [items, folder, sourceFilter, companyId, sourceId, search, quick]);
+  }, [items, folder, sourceFilter, companyId, sourceId, search, quick, viewMode]);
 
   const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
   const activeVersion =
@@ -814,6 +871,9 @@ function DeliveriesInboxInner() {
             <button type="button" onClick={() => setViewMode("table")} className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold", viewMode === "table" ? "bg-white text-brand-primary shadow-sm" : "text-slate-500")}>
               <Table2 size={12} /> {t("deliveries.inbox.modeTable")}
             </button>
+            <button type="button" onClick={() => setViewMode("gallery")} className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold", viewMode === "gallery" ? "bg-white text-brand-primary shadow-sm" : "text-slate-500")}>
+              <LayoutGrid size={12} /> {t("deliveries.inbox.modeGallery")}
+            </button>
           </div>
         </div>
 
@@ -942,6 +1002,22 @@ function DeliveriesInboxInner() {
             locale={locale}
             onOpen={openDelivery}
             onToggle={toggleSelect}
+            t={t}
+          />
+        </div>
+      ) : viewMode === "gallery" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <GalleryView
+            items={filtered}
+            locale={locale}
+            from={galleryFrom}
+            to={galleryTo}
+            onFrom={setGalleryFrom}
+            onTo={setGalleryTo}
+            onOpen={(item) => {
+              setViewMode("inbox");
+              openDelivery(item);
+            }}
             t={t}
           />
         </div>
@@ -1596,6 +1672,253 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div>
       <span className="block text-[10px] font-bold tracking-wider text-slate-400 uppercase">{label}</span>
       <span className="font-semibold text-slate-800">{value}</span>
+    </div>
+  );
+}
+
+function GalleryView({
+  items,
+  locale,
+  from,
+  to,
+  onFrom,
+  onTo,
+  onOpen,
+  t,
+}: {
+  items: DeliveryInboxItem[];
+  locale: string;
+  from: string;
+  to: string;
+  onFrom: (value: string) => void;
+  onTo: (value: string) => void;
+  onOpen: (item: DeliveryInboxItem) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const [watching, setWatching] = useState<{ src: string; vertical: boolean } | null>(null);
+  const today = isoToday();
+  const weekFrom = shiftIsoDays(-6);
+  const monthFrom = `${today.slice(0, 7)}-01`;
+  const activePreset = !from && !to
+    ? "all"
+    : from === today && to === today
+      ? "today"
+      : from === weekFrom && to === today
+        ? "week"
+        : from === monthFrom && to === today
+          ? "month"
+          : null;
+
+  const videos = useMemo(() => {
+    return items.flatMap((item) => {
+      const media = galleryMedia(item);
+      const day = galleryItemDay(item);
+      if (!media) return [];
+      if (from || to) {
+        if (!day) return [];
+        if (from && day < from) return [];
+        if (to && day > to) return [];
+      }
+      return [{ item, src: media.src, still: media.still, day, drive: isGoogleDriveUrl(media.src) }];
+    });
+  }, [items, from, to]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof videos>();
+    for (const row of videos) {
+      const list = map.get(row.day) ?? [];
+      list.push(row);
+      map.set(row.day, list);
+    }
+    return [...map.entries()].sort((a, b) => {
+      if (!a[0]) return 1;
+      if (!b[0]) return -1;
+      return a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0;
+    });
+  }, [videos]);
+
+  function dayLabel(day: string) {
+    if (!day) return t("deliveries.inbox.galleryNoDate");
+    if (day === today) return t("deliveries.inbox.group.today");
+    if (day === shiftIsoDays(-1)) return t("deliveries.inbox.group.yesterday");
+    return new Date(`${day}T12:00:00`).toLocaleDateString(locale, {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function watch(item: DeliveryInboxItem, src: string, drive: boolean) {
+    if (drive) {
+      const href = safeHttpUrl(src);
+      if (href) window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setWatching({
+      src,
+      vertical: item.contentType === "video" || item.contentType === "story",
+    });
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex shrink-0 flex-wrap items-end gap-2 border-b border-slate-100 px-3 py-2">
+        <div className="flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
+          <Calendar size={12} />
+          {t("deliveries.inbox.colSent")}
+        </div>
+        {([
+          ["all", t("deliveries.inbox.galleryAllDates"), "", ""],
+          ["today", t("deliveries.inbox.galleryToday"), today, today],
+          ["week", t("deliveries.inbox.galleryWeek"), weekFrom, today],
+          ["month", t("deliveries.inbox.galleryMonth"), monthFrom, today],
+        ] as const).map(([key, label, start, end]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              onFrom(start);
+              onTo(end);
+            }}
+            className={cn(
+              "rounded-md px-2 py-1 text-[10px] font-bold whitespace-nowrap",
+              activePreset === key ? "bg-indigo-100 text-indigo-700" : "text-slate-500 hover:bg-slate-100",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+        <label className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+          {t("deliveries.inbox.galleryFrom")}
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(event) => onFrom(event.target.value)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-primary"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+          {t("deliveries.inbox.galleryTo")}
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(event) => onTo(event.target.value)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-primary"
+          />
+        </label>
+        {from || to ? (
+          <button
+            type="button"
+            onClick={() => {
+              onFrom("");
+              onTo("");
+            }}
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-indigo-600"
+          >
+            <X size={11} /> {t("deliveries.inbox.galleryClearDates")}
+          </button>
+        ) : null}
+        <span className="ml-auto text-[10px] font-extrabold text-slate-400">
+          {videos.length === 1
+            ? t("deliveries.inbox.galleryVideosOne", { count: videos.length })
+            : t("deliveries.inbox.galleryVideos", { count: videos.length })}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {videos.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
+            <Play size={28} className="text-slate-300" />
+            <p className="m-0 text-sm font-bold text-slate-700">{t("deliveries.inbox.galleryEmptyTitle")}</p>
+            <p className="m-0 max-w-sm text-xs text-slate-400">{t("deliveries.inbox.galleryEmptyHint")}</p>
+          </div>
+        ) : (
+          groups.map(([day, rows]) => (
+            <section key={day}>
+              <div className="sticky top-0 z-10 border-b border-slate-100 bg-slate-50/95 px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase backdrop-blur">
+                {dayLabel(day)}
+                <span className="ml-2 font-black normal-case tracking-normal text-slate-400">· {rows.length}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                {rows.map(({ item, src, still, drive }) => {
+                  const status = inboxStatusKey(item);
+                  const heading = inboxHeading(item, t);
+                  const sentAt = isPlaceholderSubmissionTime(item.createdAt)
+                    ? (day
+                      ? new Date(`${day}T12:00:00`).toLocaleDateString(locale, { day: "2-digit", month: "short" })
+                      : "—")
+                    : new Date(item.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <article key={item.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => watch(item, src, drive)}
+                        aria-label={t("deliveries.inbox.watch")}
+                        className="relative block aspect-[3/4] w-full cursor-pointer bg-slate-950"
+                      >
+                        {drive ? (
+                          <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-800 text-white">
+                            <ExternalLink size={22} />
+                            <span className="text-[10px] font-bold uppercase">{t("deliveries.inbox.galleryDrive")}</span>
+                          </span>
+                        ) : still ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={still} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <VideoPoster src={src} className="h-full w-full" />
+                        )}
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
+                            <Play size={16} className="ml-0.5" />
+                          </span>
+                        </span>
+                        <span
+                          title={t(`deliveries.inbox.status.${status}`)}
+                          className={cn(
+                            "pointer-events-none absolute top-2 left-2 z-10 inline-flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-extrabold tracking-wide uppercase",
+                            statusTone(status),
+                          )}
+                        >
+                          {status === "approved" ? <Check size={10} /> : null}
+                          <span className="truncate">{t(`deliveries.inbox.statusShort.${status}`)}</span>
+                        </span>
+                      </button>
+                      <div className="space-y-1 p-2.5">
+                        <p className="m-0 truncate text-xs font-bold text-slate-900">{item.creatorName}</p>
+                        <p className="m-0 truncate text-[10px] font-semibold text-slate-500">{heading}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[10px] font-semibold text-slate-400">
+                            {sentAt}
+                            {item.currentVersion > 1 ? ` · V${item.currentVersion}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onOpen(item)}
+                            className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
+                          >
+                            {t("deliveries.inbox.galleryOpen")}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
+
+      {watching ? (
+        <VideoLightbox
+          src={watching.src}
+          onClose={() => setWatching(null)}
+          className={watching.vertical ? "w-full max-w-md" : "w-full max-w-4xl"}
+        />
+      ) : null}
     </div>
   );
 }

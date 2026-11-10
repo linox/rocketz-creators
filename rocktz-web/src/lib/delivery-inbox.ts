@@ -130,7 +130,7 @@ export type InboxFolder =
 
 export type InboxQuickFilter = "all" | "pending" | "on_track" | "today" | "week";
 export type InboxSourceFilter = "all" | "campaign" | "recurring";
-export type InboxViewMode = "inbox" | "table";
+export type InboxViewMode = "inbox" | "table" | "gallery";
 
 const VIEWED_KEY = "rocketz:delivery-viewed";
 const ARCHIVED_KEY = "rocketz:delivery-archived";
