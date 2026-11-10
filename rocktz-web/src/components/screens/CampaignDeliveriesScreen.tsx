@@ -38,6 +38,7 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { mediaDownloadUrl, mediaPosterUrl } from "@/lib/media-playback";
+import { useLoadedImage } from "@/lib/use-loaded-image";
 import {
   buildDeliveryInboxFromApi,
   countByFolder,
@@ -73,12 +74,7 @@ const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
 const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
 
 function GalleryCardPreview({ src, still }: { src: string; still: string | null }) {
-  const poster = mediaPosterUrl(src);
-  const [posterFailed, setPosterFailed] = useState(false);
-
-  useEffect(() => {
-    setPosterFailed(false);
-  }, [poster]);
+  const poster = useLoadedImage(mediaPosterUrl(src)).url;
 
   return (
     <div className="absolute inset-0 bg-slate-900">
@@ -86,16 +82,9 @@ function GalleryCardPreview({ src, still }: { src: string; still: string | null 
         // eslint-disable-next-line @next/next/no-img-element
         <img src={still} alt="" decoding="async" fetchPriority="high" className="absolute inset-0 h-full w-full object-cover" />
       ) : null}
-      {poster && !posterFailed ? (
+      {poster ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={poster}
-          alt=""
-          decoding="async"
-          fetchPriority="high"
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={() => setPosterFailed(true)}
-        />
+        <img src={poster} alt="" decoding="async" fetchPriority="high" className="absolute inset-0 h-full w-full object-cover" />
       ) : null}
     </div>
   );

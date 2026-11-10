@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchPlaybackSource, mediaPosterUrl, playbackCandidate } from "@/lib/media-playback";
+import { useLoadedImage } from "@/lib/use-loaded-image";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -15,7 +16,8 @@ type Props = {
 export function VideoPoster({ src, className, lite = false }: Props) {
   const { t } = useTranslation("app");
   const [posterUrl, setPosterUrl] = useState<string | null>(() => mediaPosterUrl(src));
-  const [posterFailed, setPosterFailed] = useState(false);
+  const loadedPoster = useLoadedImage(posterUrl);
+  const visiblePoster = loadedPoster.url;
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -24,7 +26,6 @@ export function VideoPoster({ src, className, lite = false }: Props) {
   useEffect(() => {
     setRejected([]);
     setPosterUrl(mediaPosterUrl(src));
-    setPosterFailed(false);
     setPlaybackUrl(null);
     setFrameReady(false);
     setPreparing(false);
@@ -40,8 +41,7 @@ export function VideoPoster({ src, className, lite = false }: Props) {
       const data = await fetchPlaybackSource(src);
       if (cancelled) return;
       const nextPlay = playbackCandidate(data, rejected);
-      if (data.poster) setPosterFailed(false);
-      setPosterUrl((current) => data.poster || current || mediaPosterUrl(src));
+      setPosterUrl(data.poster || mediaPosterUrl(src));
       setPlaybackUrl(nextPlay);
       const waiting = !data.poster && !nextPlay;
       setPreparing(Boolean(data.preparing) && waiting);
@@ -61,10 +61,10 @@ export function VideoPoster({ src, className, lite = false }: Props) {
   }, [src, rejected, lite]);
 
   useEffect(() => {
-    if (posterUrl || !playbackUrl || frameReady) return;
+    if (loadedPoster.status === "loading" || visiblePoster || !playbackUrl || frameReady) return;
     const timer = window.setTimeout(() => setFrameReady(true), 1200);
     return () => window.clearTimeout(timer);
-  }, [posterUrl, playbackUrl, frameReady]);
+  }, [loadedPoster.status, visiblePoster, playbackUrl, frameReady]);
 
   function revealFrame(video: HTMLVideoElement) {
     const mark = Number.isFinite(video.duration) && video.duration > 0
@@ -79,20 +79,10 @@ export function VideoPoster({ src, className, lite = false }: Props) {
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden bg-slate-900", className)}>
-      {posterUrl && !posterFailed ? (
+      {visiblePoster ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={posterUrl}
-          alt=""
-          decoding="async"
-          fetchPriority="high"
-          className="h-full w-full object-cover"
-          onError={() => {
-            setPosterFailed(true);
-            setPosterUrl(null);
-          }}
-        />
-      ) : playbackUrl && !lite ? (
+        <img src={visiblePoster} alt="" decoding="async" fetchPriority="high" className="h-full w-full object-cover" />
+      ) : playbackUrl && !lite && loadedPoster.status !== "loading" ? (
         <video
           src={playbackUrl.includes("#") ? playbackUrl : `${playbackUrl}#t=0.4`}
           muted
@@ -110,7 +100,7 @@ export function VideoPoster({ src, className, lite = false }: Props) {
           }}
         />
       ) : null}
-      {preparing && !posterUrl && !frameReady ? (
+      {preparing && !visiblePoster && !frameReady ? (
         <span className="absolute inset-x-2 bottom-2 text-center text-[10px] font-bold text-white/80">
           {t("campaignDetail.videoPreparing")}
         </span>

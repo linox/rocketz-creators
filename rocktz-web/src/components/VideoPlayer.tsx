@@ -9,6 +9,7 @@ import {
   mediaPosterUrl,
   playbackCandidate,
 } from "@/lib/media-playback";
+import { useLoadedImage } from "@/lib/use-loaded-image";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -67,6 +68,7 @@ export function VideoPlayer({
   const downloadUrl = mediaDownloadUrl(src);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [poster, setPoster] = useState<string | null>(() => mediaPosterUrl(src));
+  const visiblePoster = useLoadedImage(poster).url;
   const [preparing, setPreparing] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -178,9 +180,9 @@ export function VideoPlayer({
   if (preparing || !playbackUrl) {
     return (
       <div className={cn("relative flex min-h-[12rem] items-center justify-center overflow-hidden bg-black", className)}>
-        {poster ? (
+        {visiblePoster ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={poster} alt="" className="absolute inset-0 h-full w-full object-contain" />
+          <img src={visiblePoster} alt="" className="absolute inset-0 h-full w-full object-contain" />
         ) : null}
         <div className="relative z-10 flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
           <p className="text-sm font-semibold">{t("campaignDetail.videoPreparing")}</p>
@@ -210,7 +212,7 @@ export function VideoPlayer({
         playsInline
         disablePictureInPicture
         controlsList="nofullscreen"
-        poster={poster ?? undefined}
+        poster={visiblePoster ?? undefined}
         preload={preload ?? "auto"}
         onPlay={keepInline}
         onLoadedData={(event) => {
