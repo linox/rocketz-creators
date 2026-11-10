@@ -209,6 +209,7 @@ class MediaStorageService
         $payload = $this->record($disk, $path, $allocated['filename'], $mime, $size, $user, $kind);
         if ($kind === 'video' && BrowserVideo::needsTranscode($path)) {
             MakeVideoPlayableJob::dispatch($path);
+            BrowserVideo::kick($path);
         }
 
         return $payload;

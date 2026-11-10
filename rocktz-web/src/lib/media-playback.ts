@@ -82,15 +82,8 @@ function isQuickTimePath(url: string): boolean {
   return path.endsWith(".mov") || path.endsWith(".qt") || path.endsWith(".m4v");
 }
 
-/** True only when the browser can demux a QuickTime container. HEVC-in-MP4 is not enough. */
-export function canPlayNativeMov(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.createElement("video").canPlayType("video/quicktime") !== "";
-}
-
 export function playbackCandidate(data: PlaybackSource, rejected: readonly string[] = []): string | null {
-  const native = canPlayNativeMov() ? data.original : null;
-  for (const url of [data.src, native]) {
+  for (const url of [data.src, data.original]) {
     if (url && !rejected.includes(url)) return url;
   }
   return null;

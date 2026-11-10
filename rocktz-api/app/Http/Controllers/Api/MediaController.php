@@ -438,6 +438,7 @@ class MediaController extends Controller
 
             if (BrowserVideo::needsTranscode($key)) {
                 MakeVideoPlayableJob::dispatch($key);
+                BrowserVideo::kick($key);
             }
 
             $submission = is_array($meta['submission'] ?? null) ? $meta['submission'] : null;
@@ -582,6 +583,7 @@ class MediaController extends Controller
         if ($original !== null && $this->objectExists($original)) {
             if (BrowserVideo::needsTranscode($original)) {
                 MakeVideoPlayableJob::dispatch($original);
+                BrowserVideo::kick($original);
             }
 
             return $this->sourceJson(null, $this->publicPlaybackSrc($original), true, $this->posterSrc($original));
@@ -632,12 +634,26 @@ class MediaController extends Controller
 
     private function publicPlaybackSrc(string $path): string
     {
-        $signed = MediaUrl::signedGet($path, false);
-        if (is_string($signed) && str_starts_with($signed, 'http')) {
-            return $signed;
+        if ($this->remoteExists($path)) {
+            $signed = MediaUrl::signedGet($path, false);
+            if (is_string($signed) && str_starts_with($signed, 'http')) {
+                return $signed;
+            }
         }
 
         return MediaUrl::playback($path);
+    }
+
+    private function remoteExists(string $path): bool
+    {
+        if (! MediaDisk::r2Configured()) {
+            return false;
+        }
+        try {
+            return Storage::disk('r2')->exists($path);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

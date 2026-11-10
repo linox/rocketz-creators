@@ -59,6 +59,8 @@ export function VideoPlayer({
 }: Props) {
   const { t } = useTranslation("app");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const loadedRef = useRef(false);
+  const urlRef = useRef<string | null>(null);
   const downloadUrl = mediaDownloadUrl(src);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(true);
@@ -67,6 +69,8 @@ export function VideoPlayer({
 
   useEffect(() => {
     setRejected([]);
+    loadedRef.current = false;
+    urlRef.current = null;
   }, [src]);
 
   useEffect(() => {
@@ -76,12 +80,24 @@ export function VideoPlayer({
     async function resolveSource() {
       const data = await fetchPlaybackSource(src);
       if (cancelled) return;
-      const playable = playbackCandidate(data, rejected);
-      if (playable) {
-        setPlaybackUrl(playable);
-        setPreparing(false);
+      if (loadedRef.current && urlRef.current && !rejected.includes(urlRef.current)) {
         return;
       }
+      const playable = playbackCandidate(data, rejected);
+      if (playable) {
+        if (urlRef.current !== playable) loadedRef.current = false;
+        urlRef.current = playable;
+        setPlaybackUrl(playable);
+        setPreparing(false);
+        if (!data.src && data.preparing) {
+          timer = window.setTimeout(() => {
+            void resolveSource();
+          }, 4000);
+        }
+        return;
+      }
+      urlRef.current = null;
+      loadedRef.current = false;
       setPlaybackUrl(null);
       setPreparing(true);
       if (autoPlay || controls) {
@@ -91,8 +107,6 @@ export function VideoPlayer({
       }
     }
 
-    setPreparing(true);
-    setPlaybackUrl(null);
     void resolveSource();
 
     return () => {
@@ -180,9 +194,14 @@ export function VideoPlayer({
         controlsList="nofullscreen"
         preload={preload ?? "auto"}
         onPlay={keepInline}
-        onLoadedData={keepInline}
+        onLoadedData={(event) => {
+          loadedRef.current = true;
+          keepInline(event);
+        }}
         onError={() => {
           if (!playbackUrl) return;
+          loadedRef.current = false;
+          urlRef.current = null;
           setPlaybackUrl(null);
           setPreparing(true);
           setRejected((current) => (current.includes(playbackUrl) ? current : [...current, playbackUrl]));

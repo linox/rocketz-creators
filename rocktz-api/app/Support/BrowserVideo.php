@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -38,6 +39,62 @@ class BrowserVideo
     public static function needsTranscode(string $key): bool
     {
         return (bool) preg_match('/\.(mov|qt|m4v)$/i', $key);
+    }
+
+    /**
+     * Start a preview conversion without blocking the request that opened the video.
+     * The media queue is not consumed by the scheduler, so the player cannot wait on it.
+     */
+    public static function kick(string $key): void
+    {
+        if (! self::needsTranscode($key) || app()->runningUnitTests() || ! self::ffmpegBinary()) {
+            return;
+        }
+        if (Cache::has(self::previewLock($key)) || Cache::has(self::previewFail($key))) {
+            return;
+        }
+        if (! Cache::add(self::previewSpawn($key), 1, 45)) {
+            return;
+        }
+
+        $php = PHP_BINARY;
+        if ($php === '' || ! is_file($php)) {
+            $php = 'php';
+        }
+        $command = escapeshellarg($php).' '.escapeshellarg(base_path('artisan')).' media:make-playable '.escapeshellarg($key);
+        $log = storage_path('logs/media-preview.log');
+        exec($command.' >> '.escapeshellarg($log).' 2>&1 &');
+    }
+
+    public static function holdPreview(string $key): bool
+    {
+        return Cache::add(self::previewLock($key), 1, 1800);
+    }
+
+    public static function releasePreview(string $key): void
+    {
+        Cache::forget(self::previewLock($key));
+        Cache::forget(self::previewSpawn($key));
+    }
+
+    public static function markPreviewFailed(string $key): void
+    {
+        Cache::put(self::previewFail($key), self::lastError() ?: 'failed', now()->addMinutes(2));
+    }
+
+    private static function previewLock(string $key): string
+    {
+        return 'media-preview:'.sha1($key);
+    }
+
+    private static function previewSpawn(string $key): string
+    {
+        return 'media-preview-spawn:'.sha1($key);
+    }
+
+    private static function previewFail(string $key): string
+    {
+        return 'media-preview-fail:'.sha1($key);
     }
 
     /**
