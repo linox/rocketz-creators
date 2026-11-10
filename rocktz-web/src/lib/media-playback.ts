@@ -70,20 +70,31 @@ export function mediaDownloadUrl(url: string): string {
   return `${mediaOrigin()}/downloads/${relative}`;
 }
 
-export function canPlayNativeMov(): boolean {
-  if (typeof document === "undefined") return false;
-  const video = document.createElement("video");
-  return ["video/mp4; codecs=\"hvc1\"", "video/mp4; codecs=\"hev1\"", "video/quicktime"].some(
-    (type) => video.canPlayType(type) !== "",
-  );
-}
-
 export type PlaybackSource = {
   src: string | null;
   original: string | null;
   preparing: boolean;
   poster: string | null;
 };
+
+function isQuickTimePath(url: string): boolean {
+  const path = url.split(/[?#]/)[0]?.toLowerCase() ?? "";
+  return path.endsWith(".mov") || path.endsWith(".qt") || path.endsWith(".m4v");
+}
+
+/** True only when the browser can demux a QuickTime container. HEVC-in-MP4 is not enough. */
+export function canPlayNativeMov(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.createElement("video").canPlayType("video/quicktime") !== "";
+}
+
+export function playbackCandidate(data: PlaybackSource, rejected: readonly string[] = []): string | null {
+  const native = canPlayNativeMov() ? data.original : null;
+  for (const url of [data.src, native]) {
+    if (url && !rejected.includes(url)) return url;
+  }
+  return null;
+}
 
 export async function fetchPlaybackSource(url: string): Promise<PlaybackSource> {
   const stream = mediaStreamUrl(url);
@@ -108,6 +119,12 @@ export async function fetchPlaybackSource(url: string): Promise<PlaybackSource> 
       poster: data.poster || null,
     };
   } catch {
-    return { src: stream, original: fallbackOriginal, preparing: false, poster: null };
+    const quickTime = isQuickTimePath(fallbackOriginal || url);
+    return {
+      src: quickTime ? null : stream,
+      original: fallbackOriginal,
+      preparing: quickTime,
+      poster: null,
+    };
   }
 }

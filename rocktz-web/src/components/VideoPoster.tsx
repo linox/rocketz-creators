@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchPlaybackSource } from "@/lib/media-playback";
+import { useTranslation } from "react-i18next";
+import { fetchPlaybackSource, playbackCandidate } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -10,24 +11,46 @@ type Props = {
 };
 
 export function VideoPoster({ src, className }: Props) {
+  const { t } = useTranslation("app");
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [rejected, setRejected] = useState<string[]>([]);
 
   useEffect(() => {
-    let cancelled = false;
+    setRejected([]);
     setPosterUrl(null);
     setPlaybackUrl(null);
     setFrameReady(false);
-    void fetchPlaybackSource(src).then((data) => {
+    setPreparing(false);
+  }, [src]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function resolve() {
+      const data = await fetchPlaybackSource(src);
       if (cancelled) return;
+      const nextPlay = playbackCandidate(data, rejected);
       setPosterUrl(data.poster);
-      setPlaybackUrl(data.src || data.original);
-    });
+      setPlaybackUrl(nextPlay);
+      const waiting = !data.poster && !nextPlay;
+      setPreparing(Boolean(data.preparing) && waiting);
+      if (waiting) {
+        timer = window.setTimeout(() => {
+          void resolve();
+        }, 2500);
+      }
+    }
+
+    void resolve();
     return () => {
       cancelled = true;
+      if (timer) window.clearTimeout(timer);
     };
-  }, [src]);
+  }, [src, rejected]);
 
   useEffect(() => {
     if (posterUrl || !playbackUrl || frameReady) return;
@@ -60,7 +83,19 @@ export function VideoPoster({ src, className }: Props) {
           className={cn("h-full w-full object-cover transition-opacity duration-200", frameReady ? "opacity-100" : "opacity-0")}
           onLoadedData={(event) => revealFrame(event.currentTarget)}
           onSeeked={() => setFrameReady(true)}
+          onError={() => {
+            if (!playbackUrl) return;
+            setPlaybackUrl(null);
+            setFrameReady(false);
+            setPreparing(true);
+            setRejected((current) => (current.includes(playbackUrl) ? current : [...current, playbackUrl]));
+          }}
         />
+      ) : null}
+      {preparing && !posterUrl && !frameReady ? (
+        <span className="absolute inset-x-2 bottom-2 text-center text-[10px] font-bold text-white/80">
+          {t("campaignDetail.videoPreparing")}
+        </span>
       ) : null}
     </div>
   );

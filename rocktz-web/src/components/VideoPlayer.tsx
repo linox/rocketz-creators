@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
 import {
-  canPlayNativeMov,
   fetchPlaybackSource,
   mediaDownloadUrl,
+  playbackCandidate,
 } from "@/lib/media-playback";
 import { cn } from "@/lib/cn";
 
@@ -63,6 +63,11 @@ export function VideoPlayer({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(true);
   const [buffering, setBuffering] = useState(false);
+  const [rejected, setRejected] = useState<string[]>([]);
+
+  useEffect(() => {
+    setRejected([]);
+  }, [src]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +76,7 @@ export function VideoPlayer({
     async function resolveSource() {
       const data = await fetchPlaybackSource(src);
       if (cancelled) return;
-      const playable = data.src || (canPlayNativeMov() ? data.original : null);
+      const playable = playbackCandidate(data, rejected);
       if (playable) {
         setPlaybackUrl(playable);
         setPreparing(false);
@@ -94,7 +99,7 @@ export function VideoPlayer({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [src, autoPlay, controls]);
+  }, [src, autoPlay, controls, rejected]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -176,6 +181,12 @@ export function VideoPlayer({
         preload={preload ?? "auto"}
         onPlay={keepInline}
         onLoadedData={keepInline}
+        onError={() => {
+          if (!playbackUrl) return;
+          setPlaybackUrl(null);
+          setPreparing(true);
+          setRejected((current) => (current.includes(playbackUrl) ? current : [...current, playbackUrl]));
+        }}
       />
       {buffering ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45">
