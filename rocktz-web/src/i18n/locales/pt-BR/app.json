@@ -50,7 +50,16 @@
     "deliveredAt": "Entregue em {{time}}",
     "days": "{{count}} dias em trânsito",
     "noEvents": "Ainda não há movimentações.",
-    "codeInvalid": "Informe um código dos Correios com 13 caracteres, como AA123456789BR."
+    "codeInvalid": "Informe um código dos Correios com 13 caracteres, como AA123456789BR.",
+    "newStandalone": "Nova permuta avulsa",
+    "standaloneHint": "Registre um envio fora de campanha. Ele entra em Envios avulsos para você acompanhar o rastreio.",
+    "standaloneGroup": "Envios avulsos",
+    "creator": "Criador",
+    "creatorPlaceholder": "Selecione o criador",
+    "description": "O que está sendo enviado",
+    "creatorRequired": "Selecione o criador.",
+    "descriptionRequired": "Informe o que está sendo enviado.",
+    "cancel": "Cancelar"
   },
   "postingProfile": {
     "label": "Onde o vídeo será publicado",

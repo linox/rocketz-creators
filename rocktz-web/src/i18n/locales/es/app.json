@@ -50,7 +50,16 @@
     "deliveredAt": "Entregado el {{time}}",
     "days": "{{count}} días en tránsito",
     "noEvents": "Todavía no hay movimientos.",
-    "codeInvalid": "Indica un código de Correios de 13 caracteres, como AA123456789BR."
+    "codeInvalid": "Indica un código de Correios de 13 caracteres, como AA123456789BR.",
+    "newStandalone": "Nueva permuta suelta",
+    "standaloneHint": "Registra un envío fuera de una campaña. Aparece en Envíos sueltos para seguir el rastreo.",
+    "standaloneGroup": "Envíos sueltos",
+    "creator": "Creador",
+    "creatorPlaceholder": "Selecciona el creador",
+    "description": "Qué se está enviando",
+    "creatorRequired": "Selecciona el creador.",
+    "descriptionRequired": "Indica qué se está enviando.",
+    "cancel": "Cancelar"
   },
   "postingProfile": {
     "label": "Dónde se publicará el video",

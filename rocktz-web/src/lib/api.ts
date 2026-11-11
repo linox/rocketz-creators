@@ -244,6 +244,12 @@ export const api = {
     laravelFetch<Item<BarterShipmentRow>>(`/campaign-creators/${id}/barter-shipment`, { method: "PUT", body: JSON.stringify(body) }),
   refreshBarterShipment: (id: number) =>
     laravelFetch<Item<BarterShipmentRow>>(`/campaign-creators/${id}/barter-shipment/refresh`, { method: "POST" }),
+  createStandaloneBarterShipment: (body: { creator_id: number; description: string; method: string; tracking_code?: string; carrier_label?: string; notes?: string }) =>
+    laravelFetch<Item<BarterShipmentRow>>("/barter-shipments", { method: "POST", body: JSON.stringify(body) }),
+  saveStandaloneBarterShipment: (id: number, body: { creator_id: number; description: string; method: string; tracking_code?: string; carrier_label?: string; notes?: string }) =>
+    laravelFetch<Item<BarterShipmentRow>>(`/barter-shipments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  refreshStandaloneBarterShipment: (id: number) =>
+    laravelFetch<Item<BarterShipmentRow>>(`/barter-shipments/${id}/refresh`, { method: "POST" }),
   approveCampaignAgency: (id: number, body?: { agency_fee_percent?: number }) =>
     laravelFetch<Item<Campaign>>(`/campaigns/${id}/approve-agency`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   deleteCampaign: (id: number) => laravelFetch<{ message: string }>(`/campaigns/${id}`, { method: "DELETE" }),

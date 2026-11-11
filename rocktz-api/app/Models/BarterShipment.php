@@ -11,6 +11,9 @@ class BarterShipment extends Model
 {
     protected $fillable = [
         'campaign_creator_id',
+        'creator_id',
+        'company_id',
+        'description',
         'method',
         'tracking_code',
         'carrier_label',
@@ -47,5 +50,15 @@ class BarterShipment extends Model
     public function campaignCreator(): BelongsTo
     {
         return $this->belongsTo(CampaignCreator::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(Creator::class);
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }

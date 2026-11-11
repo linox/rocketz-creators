@@ -344,24 +344,27 @@ class MailNotifier
 
     public function barterDelivered(BarterShipment $shipment): ?MailMessage
     {
-        $shipment->loadMissing('campaignCreator.creator.user', 'campaignCreator.campaign.company');
+        $shipment->loadMissing('creator.user', 'company', 'campaignCreator.creator.user', 'campaignCreator.campaign.company');
         $participation = $shipment->campaignCreator;
-        $creator = $participation?->creator;
+        $creator = $participation?->creator ?? $shipment->creator;
         $user = $creator?->user;
         $campaign = $participation?->campaign;
-        if (! $user || ! $campaign) {
+        $campaignName = $campaign?->name ?: $shipment->description;
+        if (! $user || ! filled($campaignName)) {
             return null;
         }
 
         return $this->mail->send(MailTemplateKey::BarterDelivered, $user, [
             'nome_criador' => $creator->artistic_name ?: $creator->full_name ?: $user->name,
-            'nome_campanha' => $campaign->name,
-            'nome_empresa' => $campaign->company?->name,
+            'nome_campanha' => $campaignName,
+            'nome_empresa' => $campaign?->company?->name ?? $shipment->company?->name,
             'codigo_rastreio' => $shipment->tracking_code,
             'cta_url' => FrontendUrl::to('/permutas'),
-            'link_campanha' => FrontendUrl::to('/campaigns/'.$campaign->id),
-            'campaign_id' => $campaign->id,
-            'company_id' => $campaign->company_id,
+            'link_campanha' => $campaign
+                ? FrontendUrl::to('/campaigns/'.$campaign->id)
+                : FrontendUrl::to('/permutas'),
+            'campaign_id' => $campaign?->id,
+            'company_id' => $campaign?->company_id ?? $shipment->company_id,
             'creator_id' => $creator->id,
         ], $shipment, 'delivered');
     }

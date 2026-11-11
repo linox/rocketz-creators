@@ -938,7 +938,9 @@ export type BarterShipment = {
 };
 
 export type BarterShipmentRow = {
-  campaign_creator_id: number;
+  id: number | null;
+  standalone: boolean;
+  campaign_creator_id: number | null;
   can_manage: boolean;
   campaign: {
     id: number | null;

@@ -203,8 +203,8 @@ class BarterShipmentSync
             return;
         }
 
-        $shipment->loadMissing('campaignCreator.creator.user', 'campaignCreator.campaign.company');
-        $user = $shipment->campaignCreator?->creator?->user;
+        $shipment->loadMissing('creator.user', 'company', 'campaignCreator.creator.user', 'campaignCreator.campaign.company');
+        $user = $shipment->campaignCreator?->creator?->user ?? $shipment->creator?->user;
         $message = $user ? $this->mail->barterDelivered($shipment) : null;
         $recorded = $message || MailMessage::query()
             ->where('template_key', MailTemplateKey::BarterDelivered)

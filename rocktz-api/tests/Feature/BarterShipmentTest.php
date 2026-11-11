@@ -332,6 +332,127 @@ class BarterShipmentTest extends TestCase
             ->assertJsonPath('data.applications.0.barter_shipment.status', 'delivered');
     }
 
+    public function test_a_company_can_track_a_standalone_shipment_outside_a_campaign(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://correios.test/api/v1/rastreio/*' => Http::response($this->trackingPayload()),
+        ]);
+
+        [$company, $user] = $this->companyUser();
+        $creator = Creator::factory()->active()->create([
+            'full_name' => 'Lia Avulsa',
+            'artistic_name' => 'Lia Avulsa',
+            'invited_by_company_id' => $company->id,
+        ]);
+        $outsider = Creator::factory()->active()->create([
+            'artistic_name' => 'Fora da empresa',
+        ]);
+        [$otherCompany, $otherUser] = $this->companyUser();
+
+        $this->asUser($user)
+            ->postJson('/api/barter-shipments', [
+                'creator_id' => $creator->id,
+                'description' => 'Kit de skincare',
+                'method' => 'correios',
+                'tracking_code' => 'oy 739642509 br',
+                'notes' => 'Envio fora de campanha',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.standalone', true)
+            ->assertJsonPath('data.campaign_creator_id', null)
+            ->assertJsonPath('data.can_manage', true)
+            ->assertJsonPath('data.campaign.name', null)
+            ->assertJsonPath('data.campaign.company_name', $company->name)
+            ->assertJsonPath('data.campaign.barter_details', 'Kit de skincare')
+            ->assertJsonPath('data.creator.id', $creator->id)
+            ->assertJsonPath('data.shipment.tracking_code', 'OY739642509BR')
+            ->assertJsonPath('data.shipment.status', 'delivered')
+            ->assertJsonPath('data.shipment.notes', 'Envio fora de campanha');
+
+        $shipment = BarterShipment::query()->whereNull('campaign_creator_id')->first();
+        $this->assertNotNull($shipment);
+        $this->assertSame($company->id, $shipment->company_id);
+        $this->assertNotNull($shipment->notified_delivered_at);
+        $this->assertSame(1, MailMessage::query()->where('template_key', MailTemplateKey::BarterDelivered)->count());
+
+        $this->asUser($user)
+            ->getJson('/api/barter-shipments')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.standalone', true)
+            ->assertJsonPath('data.0.id', $shipment->id);
+
+        $this->asUser($creator->user)
+            ->getJson('/api/barter-shipments')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.can_manage', false)
+            ->assertJsonPath('data.0.shipment.tracking_code', 'OY739642509BR');
+
+        $this->asUser($creator->user)
+            ->putJson("/api/barter-shipments/{$shipment->id}", [
+                'creator_id' => $creator->id,
+                'description' => 'Kit de skincare',
+                'method' => 'hand',
+            ])
+            ->assertForbidden();
+
+        $this->asUser($otherUser)
+            ->getJson('/api/barter-shipments')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->asUser($otherUser)
+            ->putJson("/api/barter-shipments/{$shipment->id}", [
+                'creator_id' => $creator->id,
+                'description' => 'Outro',
+                'method' => 'hand',
+            ])
+            ->assertForbidden();
+
+        $this->asUser($user)
+            ->postJson('/api/barter-shipments', [
+                'creator_id' => $outsider->id,
+                'description' => 'Não deveria',
+                'method' => 'hand',
+            ])
+            ->assertStatus(422);
+
+        $this->asUser($user)
+            ->putJson("/api/barter-shipments/{$shipment->id}", [
+                'creator_id' => $creator->id,
+                'description' => 'Kit atualizado',
+                'method' => 'other',
+                'carrier_label' => 'Motoboy',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.campaign.barter_details', 'Kit atualizado')
+            ->assertJsonPath('data.shipment.method', 'other')
+            ->assertJsonPath('data.shipment.status', 'sent')
+            ->assertJsonPath('data.shipment.carrier_label', 'Motoboy')
+            ->assertJsonPath('data.shipment.tracking_code', null);
+
+        $campaign = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'is_barter' => true,
+        ]);
+        $participation = $this->participant($campaign, 'Na campanha');
+        $this->asUser($user)->getJson('/api/barter-shipments')->assertOk();
+        $campaignShipment = BarterShipment::query()->where('campaign_creator_id', $participation->id)->first();
+        $this->assertNotNull($campaignShipment);
+
+        $this->asUser($user)
+            ->putJson("/api/barter-shipments/{$campaignShipment->id}", [
+                'creator_id' => $creator->id,
+                'description' => 'Não é avulso',
+                'method' => 'hand',
+            ])
+            ->assertNotFound();
+
+        $this->assertNotSame($otherCompany->id, $company->id);
+    }
+
     /**
      * @return array{0: Company, 1: User}
      */

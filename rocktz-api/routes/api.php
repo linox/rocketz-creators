@@ -168,6 +168,9 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
         Route::get('shipping-senders', [ShippingLabelController::class, 'index']);
         Route::put('campaigns/{campaign}/shipping-sender', [ShippingLabelController::class, 'update']);
         Route::get('campaigns/{campaign}/shipping-labels', [ShippingLabelController::class, 'download']);
+        Route::post('barter-shipments', [BarterShipmentController::class, 'store']);
+        Route::put('barter-shipments/{barterShipment}', [BarterShipmentController::class, 'updateStandalone']);
+        Route::post('barter-shipments/{barterShipment}/refresh', [BarterShipmentController::class, 'refreshStandalone'])->middleware('throttle:30,1');
         Route::put('campaign-creators/{campaignCreator}/barter-shipment', [BarterShipmentController::class, 'update']);
         Route::post('campaign-creators/{campaignCreator}/barter-shipment/refresh', [BarterShipmentController::class, 'refresh'])->middleware('throttle:30,1');
         Route::post('recurring-contracts', [RecurringContractController::class, 'store']);

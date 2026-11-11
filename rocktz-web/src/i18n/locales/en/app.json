@@ -50,7 +50,16 @@
     "deliveredAt": "Delivered on {{time}}",
     "days": "{{count}} days in transit",
     "noEvents": "No tracking events yet.",
-    "codeInvalid": "Enter a 13-character Correios code, such as AA123456789BR."
+    "codeInvalid": "Enter a 13-character Correios code, such as AA123456789BR.",
+    "newStandalone": "New standalone shipment",
+    "standaloneHint": "Register a shipment outside a campaign. It shows up under Standalone shipments so you can track it.",
+    "standaloneGroup": "Standalone shipments",
+    "creator": "Creator",
+    "creatorPlaceholder": "Select a creator",
+    "description": "What is being sent",
+    "creatorRequired": "Select a creator.",
+    "descriptionRequired": "Describe what is being sent.",
+    "cancel": "Cancel"
   },
   "postingProfile": {
     "label": "Where the video will be published",
