@@ -959,3 +959,51 @@ export type BarterShipmentRow = {
   shipment: BarterShipment | null;
 };
 
+export type CreatorVideoUsageKind = "posted" | "ad";
+
+export type CreatorVideoStatus = "unused" | "posted" | "ad" | "posted_and_ad";
+
+export type CreatorVideoUsage = {
+  id: number;
+  kind: CreatorVideoUsageKind;
+  url: string | null;
+  note: string | null;
+  occurred_at: string | null;
+  source: "auto" | "manual";
+  recorded_by: string | null;
+};
+
+export type CreatorVideo = {
+  id: number;
+  title: string;
+  format: string;
+  video_url: string | null;
+  video_file_size: number | null;
+  received_at: string | null;
+  source: "campaign" | "recurring";
+  status: CreatorVideoStatus;
+  can_manage: boolean;
+  campaign_id: number | null;
+  campaign_name: string | null;
+  recurring_contract_id: number | null;
+  contract_name: string | null;
+  company_name: string | null;
+  creator: {
+    id: number | null;
+    artistic_name: string | null;
+    full_name: string | null;
+    photo_url: string | null;
+  };
+  usages: CreatorVideoUsage[];
+};
+
+export type CreatorVideoList = {
+  data: CreatorVideo[];
+  meta: {
+    total: number;
+    unused: number;
+    posted: number;
+    ad: number;
+  };
+};
+

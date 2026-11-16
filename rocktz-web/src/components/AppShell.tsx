@@ -13,6 +13,7 @@ import {
   Coins,
   Eye,
   EyeOff,
+  Film,
   Gift,
   Globe,
   Home,
@@ -410,6 +411,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns"), badge: pendingCampaigns },
             showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
             { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+            { href: "/videos", label: t("videos"), icon: Film, active: isActive("/videos") },
             { href: "/permutas", label: t("permutas"), icon: Gift, active: isActive("/permutas") },
             { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
           ]),
@@ -443,6 +445,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               { href: "/campaigns", label: t("campaigns"), icon: Megaphone, active: isActive("/campaigns") },
               showRecurringNav ? { href: "/recurring", label: t("recurring"), icon: Repeat, active: isActive("/recurring") } : null,
               { href: "/campaign-deliveries", label: t("deliveries"), icon: Video, active: isActive("/campaign-deliveries") },
+              { href: "/videos", label: t("videos"), icon: Film, active: isActive("/videos") },
               { href: "/permutas", label: t("permutas"), icon: Gift, active: isActive("/permutas") },
               { href: "/calendar", label: t("postingAgenda"), icon: CalendarDays, active: isActive("/calendar") },
             ]),
@@ -468,6 +471,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         : [
             sidebarSection("content", t("groupContent"), Layers, [
               { href: "/available-campaigns", label: t("availableCampaigns"), icon: Sparkles, active: isAvailableCampaignsActive },
+              { href: "/videos", label: t("videos"), icon: Film, active: isActive("/videos") },
               creatorProfileBase ? { href: `${creatorProfileBase}?tab=campaigns`, label: t("myCampaigns"), icon: Megaphone, active: isCreatorCampaignsActive } : null,
               showRecurringNav && creatorProfileBase
                 ? { href: `${creatorProfileBase}?tab=recurring`, label: t("recurring"), icon: Repeat, active: isCreatorRecurringActive }

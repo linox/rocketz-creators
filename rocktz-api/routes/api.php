@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\CreatorController;
 use App\Http\Controllers\Api\CreatorCouponController;
 use App\Http\Controllers\Api\CreatorGroupController;
 use App\Http\Controllers\Api\CreatorStorefrontController;
+use App\Http\Controllers\Api\CreatorVideoController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\FinancePaymentController;
@@ -118,6 +119,9 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('campaigns/{campaign}/invitation', [CampaignController::class, 'respondInvitation']);
     Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
     Route::get('barter-shipments', [BarterShipmentController::class, 'index']);
+    Route::get('creator-videos', [CreatorVideoController::class, 'index']);
+    Route::post('creator-videos/{creatorVideo}/usages', [CreatorVideoController::class, 'storeUsage']);
+    Route::delete('creator-videos/{creatorVideo}/usages/{creatorVideoUsage}', [CreatorVideoController::class, 'destroyUsage']);
 
     Route::get('recurring-contracts', [RecurringContractController::class, 'index']);
     Route::get('recurring-contracts/{recurringContract}', [RecurringContractController::class, 'show']);

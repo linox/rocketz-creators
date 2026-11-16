@@ -6,6 +6,8 @@ import { ApiError, laravelDownload, laravelFetch, laravelUpload, type UploadProg
 import type {
   AppNotification,
   BarterShipmentRow,
+  CreatorVideoList,
+  CreatorVideo,
   Campaign,
   CampaignCreator,
   ShippingSender,
@@ -240,6 +242,11 @@ export const api = {
   saveCampaignSender: (id: number, body: unknown) => laravelFetch<Item<Campaign>>(`/campaigns/${id}/shipping-sender`, { method: "PUT", body: JSON.stringify(body) }),
   downloadShippingLabels: (id: number, format: "pdf" | "csv") => laravelDownload(`/campaigns/${id}/shipping-labels?format=${format}`),
   barterShipments: () => laravelFetch<List<BarterShipmentRow>>("/barter-shipments"),
+  creatorVideos: () => laravelFetch<CreatorVideoList>("/creator-videos"),
+  addCreatorVideoUsage: (id: number, body: { kind: "posted" | "ad"; url?: string | null; note?: string | null; occurred_at?: string | null }) =>
+    laravelFetch<Item<CreatorVideo>>(`/creator-videos/${id}/usages`, { method: "POST", body: JSON.stringify(body) }),
+  removeCreatorVideoUsage: (id: number, usageId: number) =>
+    laravelFetch<Item<CreatorVideo>>(`/creator-videos/${id}/usages/${usageId}`, { method: "DELETE" }),
   saveBarterShipment: (id: number, body: { method: string; tracking_code?: string; carrier_label?: string; notes?: string }) =>
     laravelFetch<Item<BarterShipmentRow>>(`/campaign-creators/${id}/barter-shipment`, { method: "PUT", body: JSON.stringify(body) }),
   refreshBarterShipment: (id: number) =>
