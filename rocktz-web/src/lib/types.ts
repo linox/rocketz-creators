@@ -976,6 +976,7 @@ export type CreatorVideoUsage = {
 export type CreatorVideo = {
   id: number;
   title: string;
+  content_type: string | null;
   format: string;
   video_url: string | null;
   video_file_size: number | null;

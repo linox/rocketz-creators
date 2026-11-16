@@ -13,6 +13,7 @@ import { intlLocale, normalizeLocale } from "@/i18n/locales";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import type { CreatorVideo, CreatorVideoStatus, CreatorVideoUsageKind } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -63,6 +64,12 @@ function badgeTone(kind: "unused" | "posted" | "ad") {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+function isPortrait(contentType: string | null | undefined) {
+  const type = (contentType || "").toLowerCase();
+  if (!type) return true;
+  return !(type.startsWith("live") || type.includes("youtube") || type === "blog" || type === "podcast" || type === "pinterest");
+}
+
 export function VideoLibraryScreen() {
   return (
     <AuthenticatedShell>
@@ -80,7 +87,7 @@ function VideoLibraryInner() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<UsageFilter>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<{ src: string; portrait: boolean } | null>(null);
   const [kind, setKind] = useState<CreatorVideoUsageKind>("posted");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
@@ -140,6 +147,15 @@ function VideoLibraryInner() {
 
   function replaceVideo(next: CreatorVideo) {
     setVideos((current) => current.map((video) => (video.id === next.id ? next : video)));
+  }
+
+  function watchVideo(src: string, contentType: string | null | undefined) {
+    if (isGoogleDriveUrl(src)) {
+      const href = safeHttpUrl(src);
+      if (href) window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setPlaying({ src, portrait: isPortrait(contentType) });
   }
 
   async function registerUsage(event: FormEvent) {
@@ -241,36 +257,44 @@ function VideoLibraryInner() {
           </div>
         ) : (
           <div className={cn("grid items-start gap-4", selected && "lg:grid-cols-[minmax(0,1fr)_22rem]")}>
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {visible.map((video) => {
                 const identity = creatorIdentity(video.creator);
                 const active = video.id === selectedId;
                 const src = video.video_url;
+                const drive = isGoogleDriveUrl(src);
+                const portrait = isPortrait(video.content_type);
                 return (
                   <li key={video.id}>
                     <article className={cn("overflow-hidden rounded-3xl border bg-white shadow-sm", active ? "border-violet-400 ring-2 ring-violet-200" : "border-slate-200")}>
-                      <div className="relative aspect-video bg-slate-900">
-                        {src ? <VideoPoster src={src} lite /> : null}
-                        {src ? (
-                          <button
-                            type="button"
-                            onClick={() => setPlaying(src)}
-                            aria-label={t("videoLibrary.watch")}
-                            className="absolute inset-0 z-10"
-                          >
-                            <span className="absolute bottom-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-900">
-                              <Play size={14} />
+                      {src ? (
+                        <button
+                          type="button"
+                          onClick={() => watchVideo(src, video.content_type)}
+                          aria-label={t("videoLibrary.watch")}
+                          className={cn("relative block w-full cursor-pointer overflow-hidden bg-slate-950", portrait ? "aspect-[3/4]" : "aspect-video")}
+                        >
+                          {drive ? (
+                            <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-800 text-white">
+                              <ExternalLink size={22} />
                             </span>
-                          </button>
-                        ) : null}
-                        <span className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-1">
-                          {badgeKeys(video.status).map((badge) => (
-                            <span key={badge} className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", badgeTone(badge))}>
-                              {t(`videoLibrary.badge.${badge}`)}
+                          ) : (
+                            <VideoPoster src={src} className="absolute inset-0 h-full w-full" />
+                          )}
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
+                              <Play size={16} className="ml-0.5" />
                             </span>
-                          ))}
-                        </span>
-                      </div>
+                          </span>
+                          <span className="pointer-events-none absolute top-2 left-2 z-10 flex flex-wrap gap-1">
+                            {badgeKeys(video.status).map((badge) => (
+                              <span key={badge} className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", badgeTone(badge))}>
+                                {t(`videoLibrary.badge.${badge}`)}
+                              </span>
+                            ))}
+                          </span>
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setSelectedId(video.id)}
@@ -305,7 +329,7 @@ function VideoLibraryInner() {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selected.video_url ? (
-                    <button type="button" onClick={() => setPlaying(selected.video_url)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                    <button type="button" onClick={() => watchVideo(selected.video_url as string, selected.content_type)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
                       <Play size={12} /> {t("videoLibrary.watch")}
                     </button>
                   ) : null}
@@ -395,7 +419,13 @@ function VideoLibraryInner() {
           </div>
         )}
       </div>
-      {playing ? <VideoLightbox src={playing} onClose={() => setPlaying(null)} /> : null}
+      {playing ? (
+        <VideoLightbox
+          src={playing.src}
+          onClose={() => setPlaying(null)}
+          className={playing.portrait ? "w-full max-w-md" : "w-full max-w-4xl"}
+        />
+      ) : null}
     </>
   );
 }

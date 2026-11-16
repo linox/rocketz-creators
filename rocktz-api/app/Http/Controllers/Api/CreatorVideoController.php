@@ -173,6 +173,7 @@ class CreatorVideoController extends Controller
         return [
             'id' => $video->id,
             'title' => $video->title,
+            'content_type' => $video->content_type,
             'format' => $library->formatLabel($video->content_type, $video->source === CreatorVideoSource::Campaign ? $video->position : null),
             'video_url' => MediaUrl::publicAbsolute($video->video_url),
             'video_file_size' => $video->video_file_size,
