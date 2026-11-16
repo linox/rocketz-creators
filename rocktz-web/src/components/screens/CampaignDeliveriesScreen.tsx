@@ -37,8 +37,8 @@ import { VideoPoster } from "@/components/VideoPoster";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { mediaDownloadUrl, mediaPosterUrl } from "@/lib/media-playback";
-import { useLoadedImage } from "@/lib/use-loaded-image";
+import { mediaDownloadUrl } from "@/lib/media-playback";
+import { useVideoCover } from "@/lib/use-video-cover";
 import {
   buildDeliveryInboxFromApi,
   countByFolder,
@@ -74,7 +74,7 @@ const GALLERY_IMAGE_FILE = /\.(jpe?g|png|gif|webp|avif|heic|svg)(\?|#|$)/i;
 const GALLERY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|mkv|qt)(\?|#|$)/i;
 
 function GalleryCardPreview({ src, still }: { src: string; still: string | null }) {
-  const poster = useLoadedImage(mediaPosterUrl(src)).url;
+  const poster = useVideoCover(src).url;
 
   return (
     <div className="absolute inset-0 bg-slate-900">

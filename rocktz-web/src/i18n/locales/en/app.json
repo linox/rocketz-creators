@@ -497,6 +497,8 @@
     "pickCompany": "Choose the company to register coupons for its creators.",
     "campaign": "Campaign",
     "campaignPh": "Choose the coupon campaign",
+    "kindPh": "Coupon type",
+    "allHaveCoupon": "Every approved creator already has a coupon. Delete one to add it again.",
     "allCampaigns": "All campaigns",
     "creator": "Creator",
     "creatorPh": "Choose the approved creator",

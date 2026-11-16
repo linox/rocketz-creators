@@ -62,10 +62,14 @@ class CreatorCouponIssuer
         $complete = PersonName::isComplete($creator->full_name);
 
         if ($existing) {
+            if (! $existing->is_auto) {
+                return $existing;
+            }
+
             $existing->update([
                 ...$amounts,
-                'code' => $existing->is_auto ? $code : $existing->code,
-                ...($reactivate && $existing->is_auto && $complete ? ['is_active' => true, 'inactive_reason' => null] : []),
+                'code' => $code,
+                ...($reactivate && $complete ? ['is_active' => true, 'inactive_reason' => null] : []),
             ]);
 
             return $existing->fresh();
@@ -144,9 +148,32 @@ class CreatorCouponIssuer
 
     private function uniqueCode(Campaign $campaign, Creator $creator, string $base): string
     {
-        $taken = CreatorCoupon::query()
+        if (! $this->codeTaken($campaign, $creator, $base)) {
+            return $base;
+        }
+
+        $mark = (string) $campaign->id;
+        $withCampaign = substr($base, 0, 64 - strlen($mark)).$mark;
+        if (! $this->codeTaken($campaign, $creator, $withCampaign)) {
+            return $withCampaign;
+        }
+
+        for ($suffix = 2; $suffix <= 30; $suffix++) {
+            $extra = $mark.'-'.$suffix;
+            $candidate = substr($base, 0, 64 - strlen($extra)).$extra;
+            if (! $this->codeTaken($campaign, $creator, $candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $withCampaign;
+    }
+
+    private function codeTaken(Campaign $campaign, Creator $creator, string $code): bool
+    {
+        return CreatorCoupon::query()
             ->where('company_id', $campaign->company_id)
-            ->where('code', $base)
+            ->where('code', $code)
             ->where(function ($query) use ($campaign, $creator) {
                 $query->where(function ($query) use ($campaign, $creator) {
                     $query->where('campaign_id', '!=', $campaign->id)
@@ -154,13 +181,5 @@ class CreatorCouponIssuer
                 })->orWhereNull('campaign_id');
             })
             ->exists();
-
-        if (! $taken) {
-            return $base;
-        }
-
-        $mark = (string) $campaign->id;
-
-        return substr($base, 0, 64 - strlen($mark)).$mark;
     }
 }

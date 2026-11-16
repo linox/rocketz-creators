@@ -497,6 +497,8 @@
     "pickCompany": "Elige la empresa para registrar los cupones de sus creadores.",
     "campaign": "Campaña",
     "campaignPh": "Elige la campaña de cupón",
+    "kindPh": "Tipo de cupón",
+    "allHaveCoupon": "Todos los creadores aprobados ya tienen cupón. Elimina uno para poder añadirlo de nuevo.",
     "allCampaigns": "Todas las campañas",
     "creator": "Creador",
     "creatorPh": "Elige el creador aprobado",

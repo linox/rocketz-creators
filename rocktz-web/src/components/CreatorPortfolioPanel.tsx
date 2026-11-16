@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Download, Eye, Play, RectangleHorizontal, RectangleVertical, Trash2, UploadCloud, Video, X } from "lucide-react";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { VideoLightbox } from "@/components/VideoLightbox";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoPoster } from "@/components/VideoPoster";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
@@ -288,7 +288,7 @@ function OrientationGrid({
             return (
               <article key={video.id} className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-[#F1F5F9] bg-slate-50 transition-all hover:border-brand-primary hover:shadow-md">
                 <button type="button" onClick={() => onPlay(video)} className={cn("relative flex cursor-pointer items-center justify-center overflow-hidden bg-slate-900", vertical ? "aspect-[9/16] max-h-[320px]" : "aspect-video")}>
-                  <VideoPlayer src={video.url} muted preload="none" controls={false} className="h-full w-full object-cover opacity-70 transition-all group-hover:scale-105" />
+                  <VideoPoster src={video.url} className="absolute inset-0 h-full w-full opacity-70 transition-all group-hover:scale-105" />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all group-hover:bg-black/45">
                     <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/20 text-white shadow-lg backdrop-blur-md">
                       <Play size={24} fill="currentColor" className="translate-x-0.5" />

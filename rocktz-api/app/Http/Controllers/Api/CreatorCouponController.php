@@ -130,9 +130,17 @@ class CreatorCouponController extends Controller
         $companyId = $this->companyId($request);
         Company::assertApproved($companyId);
 
-        $attributes = $request->boolean('manual')
-            ? $this->manualAttributes($request, $companyId)
-            : $this->attributes($request, $companyId);
+        $existing = null;
+        if ($request->boolean('manual')) {
+            $attributes = $this->manualAttributes($request, $companyId);
+        } else {
+            $existing = CreatorCoupon::query()
+                ->where('company_id', $companyId)
+                ->where('campaign_id', $request->integer('campaign_id'))
+                ->where('creator_id', $request->integer('creator_id'))
+                ->first();
+            $attributes = $this->attributes($request, $companyId, $existing);
+        }
         $creator = Creator::query()->find($attributes['creator_id']);
         $complete = PersonName::isComplete($creator?->full_name);
         $active = $request->exists('is_active') ? $request->boolean('is_active') : true;
@@ -142,6 +150,31 @@ class CreatorCouponController extends Controller
         } elseif (! $complete) {
             $active = false;
             $inactiveReason = __('auth.creator_coupon_incomplete_name_reason');
+        }
+
+        if ($existing) {
+            if (! $complete) {
+                $active = false;
+                $inactiveReason = __('auth.creator_coupon_incomplete_name_reason');
+            } elseif ($existing->is_active) {
+                $active = true;
+                $inactiveReason = null;
+            } else {
+                $active = false;
+                $inactiveReason = $existing->inactive_reason;
+            }
+
+            $existing->update([
+                ...$attributes,
+                'is_auto' => false,
+                'is_active' => $active,
+                'inactive_reason' => $inactiveReason,
+            ]);
+
+            return response()->json([
+                'message' => __('auth.creator_coupon_updated'),
+                'data' => new CreatorCouponResource($this->present($existing)),
+            ]);
         }
 
         $coupon = CreatorCoupon::query()->create([
@@ -190,9 +223,14 @@ class CreatorCouponController extends Controller
             }
         }
         if ($request->exists('campaign_id') || $request->exists('creator_id') || $request->exists('code') || $request->exists('discount_percent') || $request->exists('commission_percent')) {
+            $detach = $request->exists('campaign_id') && ! $request->filled('campaign_id');
+            $manual = $detach || (! $request->filled('campaign_id') && $creatorCoupon->campaign_id === null);
             $data = [
                 ...$data,
-                ...$this->attributes($request, (int) $creatorCoupon->company_id, $creatorCoupon),
+                ...($manual
+                    ? $this->manualUpdateAttributes($request, $creatorCoupon)
+                    : $this->attributes($request, (int) $creatorCoupon->company_id, $creatorCoupon)),
+                'is_auto' => false,
             ];
         }
 
@@ -457,6 +495,40 @@ class CreatorCouponController extends Controller
         ];
     }
 
+    /**
+     * @return array{campaign_id: null, creator_id: int, code: string, discount_percent: string, commission_percent: string, is_auto: false}
+     */
+    private function manualUpdateAttributes(Request $request, CreatorCoupon $current): array
+    {
+        $creatorId = $request->exists('creator_id') ? (int) $request->input('creator_id') : (int) $current->creator_id;
+        if ($creatorId !== (int) $current->creator_id) {
+            $this->assertManualCreator($request, (int) $current->company_id, $creatorId);
+        }
+
+        $rawCode = $request->exists('code') ? $request->input('code') : $current->code;
+        $code = $this->codesMatch($rawCode, (string) $current->code)
+            ? (string) $current->code
+            : $this->normalizeCode($rawCode);
+        $this->assertUniqueCode((int) $current->company_id, $code, $current->id);
+
+        return [
+            'campaign_id' => null,
+            'creator_id' => $creatorId,
+            'code' => $code,
+            'discount_percent' => $this->percent(
+                $request->exists('discount_percent') ? $request->input('discount_percent') : $current->discount_percent,
+                null,
+                'discount_percent',
+            ),
+            'commission_percent' => $this->percent(
+                $request->exists('commission_percent') ? $request->input('commission_percent') : $current->commission_percent,
+                null,
+                'commission_percent',
+            ),
+            'is_auto' => false,
+        ];
+    }
+
     private function assertManualCreator(Request $request, int $companyId, int $creatorId): void
     {
         $creator = Creator::query()
@@ -494,10 +566,21 @@ class CreatorCouponController extends Controller
         $creatorId = $request->exists('creator_id') ? (int) $request->input('creator_id') : (int) $current?->creator_id;
         $campaign = $this->campaignFor($companyId, $campaignId);
         $this->assertCreatorEligible($campaign, $creatorId);
+        if ($current) {
+            $placeholder = CreatorCoupon::query()
+                ->where('campaign_id', $campaign->id)
+                ->where('creator_id', $creatorId)
+                ->where('is_auto', true)
+                ->whereKeyNot($current->id)
+                ->first();
+            $placeholder?->delete();
+        }
         $this->assertUniquePair($campaign->id, $creatorId, $current?->id);
 
         $rawCode = $request->exists('code') ? $request->input('code') : $current?->code;
-        $code = $this->normalizeCode($rawCode);
+        $code = $current && $this->codesMatch($rawCode, (string) $current->code)
+            ? (string) $current->code
+            : $this->normalizeCode($rawCode);
         $this->assertUniqueCode($companyId, $code, $current?->id);
 
         return [
@@ -576,6 +659,15 @@ class CreatorCouponController extends Controller
                 $field => __('auth.creator_coupon_code_taken'),
             ]);
         }
+    }
+
+    private function codesMatch(mixed $raw, string $current): bool
+    {
+        $loose = strtoupper((string) preg_replace('/\s+/', '', trim((string) $raw)));
+        $loose = ltrim($loose, '@');
+        $now = strtoupper((string) preg_replace('/\s+/', '', ltrim($current, '@')));
+
+        return $loose !== '' && $loose === $now;
     }
 
     private function normalizeCode(mixed $raw, string $field = 'code'): string

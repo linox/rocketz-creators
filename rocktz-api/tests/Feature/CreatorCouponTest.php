@@ -106,8 +106,12 @@ class CreatorCouponTest extends TestCase
                 'creator_id' => $creator->id,
                 'code' => 'ANA16',
             ])
-            ->assertUnprocessable()
-            ->assertJsonPath('errors.creator_id.0', 'Esse criador já tem um cupom nesta campanha.');
+            ->assertOk()
+            ->assertJsonPath('data.code', 'ANA16')
+            ->assertJsonPath('data.discount_percent', 20)
+            ->assertJsonPath('message', 'Cupom atualizado.');
+
+        $this->assertSame(1, CreatorCoupon::query()->where('campaign_id', $campaign->id)->where('creator_id', $creator->id)->count());
 
         $other = Creator::factory()->active()->create();
         CampaignCreator::factory()->approved()->create([
@@ -119,7 +123,7 @@ class CreatorCouponTest extends TestCase
             ->postJson('/api/coupons', [
                 'campaign_id' => $campaign->id,
                 'creator_id' => $other->id,
-                'code' => 'ana15',
+                'code' => 'ana16',
             ])
             ->assertUnprocessable()
             ->assertJsonPath('errors.code.0', 'Esta empresa já usa esse código em outro cupom.');
@@ -461,6 +465,127 @@ class CreatorCouponTest extends TestCase
         $this->assertStringContainsString('ANA15', $scoped);
         $this->assertStringContainsString('MANUAL20', $scoped);
         $this->assertStringNotContainsString('SEGREDO', $scoped);
+    }
+
+    public function test_manager_can_edit_a_manual_coupon_and_recreate_it_after_delete(): void
+    {
+        [$company, $user, $campaign, $creator] = $this->couponScene();
+
+        $created = $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'creator_id' => $creator->id,
+                'code' => 'LIVRE10',
+                'discount_percent' => 10,
+                'commission_percent' => 5,
+            ])
+            ->assertCreated();
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$created->json('data.id'), [
+                'code' => 'LIVRE20',
+                'discount_percent' => 20,
+                'commission_percent' => 8,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.code', 'LIVRE20')
+            ->assertJsonPath('data.discount_percent', 20)
+            ->assertJsonPath('data.campaign_id', null);
+
+        $this->asUser($user)
+            ->deleteJson('/api/coupons/'.$created->json('data.id'))
+            ->assertOk();
+
+        $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'manual' => true,
+                'creator_id' => $creator->id,
+                'code' => 'LIVRE20',
+                'discount_percent' => 20,
+                'commission_percent' => 8,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.code', 'LIVRE20');
+    }
+
+    public function test_deleted_campaign_coupon_can_be_created_again(): void
+    {
+        [, $user, $campaign, $creator] = $this->couponScene();
+
+        $created = $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+                'code' => 'ANA15',
+            ])
+            ->assertCreated();
+
+        $this->asUser($user)
+            ->deleteJson('/api/coupons/'.$created->json('data.id'))
+            ->assertOk();
+
+        $this->asUser($user)
+            ->postJson('/api/coupons', [
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+                'code' => 'ANA15',
+                'discount_percent' => 12,
+                'commission_percent' => 6,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.code', 'ANA15')
+            ->assertJsonPath('data.discount_percent', 12);
+    }
+
+    public function test_manager_can_edit_an_automatic_coupon_code(): void
+    {
+        [, $user, $campaign, $creator] = $this->couponScene();
+        $coupon = CreatorCoupon::query()->create([
+            'company_id' => $campaign->company_id,
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'code' => 'ana.ugcAURORA',
+            'discount_percent' => 15,
+            'commission_percent' => 10,
+            'is_active' => true,
+            'is_auto' => true,
+        ]);
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$coupon->id, [
+                'discount_percent' => 18,
+                'commission_percent' => 7,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.code', 'ana.ugcAURORA')
+            ->assertJsonPath('data.discount_percent', 18);
+
+        $this->assertFalse($coupon->fresh()->is_auto);
+        app(CreatorCouponIssuer::class)->issue($campaign->fresh(), $creator->fresh(), false);
+        $coupon->refresh();
+        $this->assertSame('ana.ugcAURORA', $coupon->code);
+        $this->assertEquals(18, (float) $coupon->discount_percent);
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$coupon->id, ['campaign_id' => null])
+            ->assertOk()
+            ->assertJsonPath('data.campaign_id', null)
+            ->assertJsonPath('data.code', 'ana.ugcAURORA');
+
+        app(CreatorCouponIssuer::class)->issue($campaign->fresh(), $creator->fresh(), false);
+        $this->assertSame(2, CreatorCoupon::query()->where('creator_id', $creator->id)->count());
+
+        $this->asUser($user)
+            ->patchJson('/api/coupons/'.$coupon->id, [
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.campaign_id', $campaign->id)
+            ->assertJsonPath('data.code', 'ana.ugcAURORA')
+            ->assertJsonPath('data.discount_percent', 18);
+
+        $this->assertSame(1, CreatorCoupon::query()->where('creator_id', $creator->id)->count());
     }
 
     public function test_incomplete_name_blocks_activation_and_emails_the_creator(): void

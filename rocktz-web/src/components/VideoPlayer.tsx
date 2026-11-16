@@ -6,10 +6,9 @@ import { Download } from "lucide-react";
 import {
   fetchPlaybackSource,
   mediaDownloadUrl,
-  mediaPosterUrl,
   playbackCandidate,
 } from "@/lib/media-playback";
-import { useLoadedImage } from "@/lib/use-loaded-image";
+import { useVideoCover } from "@/lib/use-video-cover";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -67,15 +66,13 @@ export function VideoPlayer({
   const retryTimers = useRef<number[]>([]);
   const downloadUrl = mediaDownloadUrl(src);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
-  const [poster, setPoster] = useState<string | null>(() => mediaPosterUrl(src));
-  const visiblePoster = useLoadedImage(poster).url;
+  const cover = useVideoCover(src);
   const [preparing, setPreparing] = useState(true);
   const [buffering, setBuffering] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
 
   useEffect(() => {
     setRejected([]);
-    setPoster(mediaPosterUrl(src));
     loadedRef.current = false;
     urlRef.current = null;
     attemptsRef.current = {};
@@ -99,7 +96,6 @@ export function VideoPlayer({
         return;
       }
       const playable = playbackCandidate(data, rejected);
-      setPoster((current) => data.poster || current || mediaPosterUrl(src));
       if (playable) {
         if (urlRef.current !== playable) loadedRef.current = false;
         urlRef.current = playable;
@@ -180,9 +176,9 @@ export function VideoPlayer({
   if (preparing || !playbackUrl) {
     return (
       <div className={cn("relative flex min-h-[12rem] items-center justify-center overflow-hidden bg-black", className)}>
-        {visiblePoster ? (
+        {cover.url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={visiblePoster} alt="" className="absolute inset-0 h-full w-full object-contain" />
+          <img src={cover.url} alt="" className="absolute inset-0 h-full w-full object-contain" />
         ) : null}
         <div className="relative z-10 flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-white">
           <p className="text-sm font-semibold">{t("campaignDetail.videoPreparing")}</p>
@@ -212,7 +208,7 @@ export function VideoPlayer({
         playsInline
         disablePictureInPicture
         controlsList="nofullscreen"
-        poster={visiblePoster ?? undefined}
+        poster={cover.url ?? undefined}
         preload={preload ?? "auto"}
         onPlay={keepInline}
         onLoadedData={(event) => {

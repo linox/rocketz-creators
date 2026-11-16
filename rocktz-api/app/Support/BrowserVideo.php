@@ -77,6 +77,100 @@ class BrowserVideo
         Cache::forget(self::previewSpawn($key));
     }
 
+    /**
+     * Store one JPEG beside the video. Later screens reuse that file.
+     */
+    public static function kickPoster(string $key): void
+    {
+        if (app()->runningUnitTests() || ! self::ffmpegBinary() || self::posterReady($key)) {
+            return;
+        }
+        if (Cache::has(self::posterLock($key)) || Cache::has(self::posterFail($key))) {
+            return;
+        }
+        if (! Cache::add(self::posterSpawn($key), 1, 120)) {
+            return;
+        }
+
+        $php = PHP_BINARY;
+        if ($php === '' || ! is_file($php)) {
+            $php = 'php';
+        }
+        $command = escapeshellarg($php).' '.escapeshellarg(base_path('artisan')).' media:make-poster '.escapeshellarg($key);
+        $log = storage_path('logs/media-preview.log');
+        exec($command.' >> '.escapeshellarg($log).' 2>&1 &');
+    }
+
+    public static function holdPoster(string $key): bool
+    {
+        return Cache::add(self::posterLock($key), 1, 1800);
+    }
+
+    public static function releasePoster(string $key): void
+    {
+        Cache::forget(self::posterLock($key));
+        Cache::forget(self::posterSpawn($key));
+    }
+
+    public static function markPosterFailed(string $key): void
+    {
+        Cache::put(self::posterFail($key), self::lastError() ?: 'failed', now()->addMinutes(2));
+    }
+
+    public static function posterReady(string $key): bool
+    {
+        $posterKey = self::posterKey($key);
+        foreach (self::disks() as $disk) {
+            if (self::storedOk($disk, $posterKey)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function ensurePoster(string $key): bool
+    {
+        if (self::posterReady($key)) {
+            return true;
+        }
+        if (! self::ffmpegBinary()) {
+            self::rememberError('ffmpeg not found');
+
+            return false;
+        }
+
+        $located = self::locateVideo($key);
+        if ($located === null) {
+            self::rememberError('source not found');
+
+            return false;
+        }
+
+        $source = self::materializeSource($located['disk'], $located['key']);
+        if ($source === null) {
+            return false;
+        }
+
+        try {
+            if (self::posterReady($key)) {
+                return true;
+            }
+            $poster = self::extractPoster($source['path']);
+            if ($poster === null) {
+                self::rememberError(self::lastError() ?: 'poster failed');
+
+                return false;
+            }
+
+            return self::writePreview($located['disk'], self::posterKey($key), $poster);
+        } finally {
+            if ($source['cleanup']) {
+                @unlink($source['path']);
+            }
+        }
+    }
+
     public static function markPreviewFailed(string $key): void
     {
         Cache::put(self::previewFail($key), self::lastError() ?: 'failed', now()->addMinutes(2));
@@ -95,6 +189,45 @@ class BrowserVideo
     private static function previewFail(string $key): string
     {
         return 'media-preview-fail:'.sha1($key);
+    }
+
+    private static function posterLock(string $key): string
+    {
+        return 'media-poster:'.sha1($key);
+    }
+
+    private static function posterSpawn(string $key): string
+    {
+        return 'media-poster-spawn:'.sha1($key);
+    }
+
+    private static function posterFail(string $key): string
+    {
+        return 'media-poster-fail:'.sha1($key);
+    }
+
+    /**
+     * @return array{disk: Filesystem, key: string}|null
+     */
+    private static function locateVideo(string $key): ?array
+    {
+        $candidates = array_values(array_unique([self::mp4Key($key), $key]));
+        foreach ($candidates as $candidate) {
+            if (! preg_match('/\.(mp4|mov|qt|m4v|webm)$/i', $candidate)) {
+                continue;
+            }
+            foreach (self::disks() as $disk) {
+                try {
+                    if ($disk->exists($candidate) && (int) $disk->size($candidate) > 32) {
+                        return ['disk' => $disk, 'key' => $candidate];
+                    }
+                } catch (Throwable) {
+                    //
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -143,7 +276,7 @@ class BrowserVideo
         $mp4Key = self::mp4Key($key);
         foreach (self::disks() as $disk) {
             if ($mp4Key !== $key && $disk->exists($mp4Key) && (int) $disk->size($mp4Key) > 32) {
-                self::ensureLocalPoster($disk, $key, $mp4Key);
+                self::ensurePoster($key);
 
                 return ['path' => $mp4Key, 'size' => (int) $disk->size($mp4Key)];
             }
@@ -482,26 +615,6 @@ class BrowserVideo
         }
 
         return null;
-    }
-
-    private static function ensureLocalPoster(Filesystem $disk, string $key, string $mp4Key): void
-    {
-        $posterKey = self::posterKey($key);
-        try {
-            if ($disk->exists($posterKey) || ! method_exists($disk, 'path')) {
-                return;
-            }
-            $local = $disk->path($mp4Key);
-            if (! is_string($local) || ! is_file($local)) {
-                return;
-            }
-            $poster = self::extractPoster($local);
-            if ($poster !== null) {
-                self::writePreview($disk, $posterKey, $poster);
-            }
-        } catch (Throwable) {
-            //
-        }
     }
 
     private static function rememberError(string $message): void

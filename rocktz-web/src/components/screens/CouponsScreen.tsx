@@ -16,6 +16,16 @@ import type { Company, CreatorCoupon, CreatorCouponCampaignOption, CreatorCoupon
 const fieldClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition-colors focus:border-purple-600";
 const areaClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-purple-600";
 
+function normalizedCouponCode(value: string) {
+  return value.trim().replace(/\s+/g, "").replace(/^@+/, "").toUpperCase();
+}
+
+function isCouponCode(value: string, original?: string) {
+  const code = normalizedCouponCode(value);
+  if (original && code === normalizedCouponCode(original)) return true;
+  return /^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code);
+}
+
 function CouponChangePanel({
   coupon,
   isCreator,
@@ -202,12 +212,15 @@ function CouponsInner() {
   const [coupons, setCoupons] = useState<CreatorCoupon[]>([]);
   const [campaigns, setCampaigns] = useState<CreatorCouponCampaignOption[]>([]);
   const [manualCreators, setManualCreators] = useState<CreatorCouponCreator[]>([]);
-  const [creating, setCreating] = useState(false);
-  const [manualCreatorId, setManualCreatorId] = useState("");
-  const [manualCode, setManualCode] = useState("");
-  const [manualDiscount, setManualDiscount] = useState("");
-  const [manualCommission, setManualCommission] = useState("");
-  const [savingManual, setSavingManual] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formKind, setFormKind] = useState<"manual" | "campaign">("manual");
+  const [formCampaignId, setFormCampaignId] = useState("");
+  const [formCreatorId, setFormCreatorId] = useState("");
+  const [formCode, setFormCode] = useState("");
+  const [formDiscount, setFormDiscount] = useState("");
+  const [formCommission, setFormCommission] = useState("");
+  const [savingForm, setSavingForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [onlyIncomplete, setOnlyIncomplete] = useState(false);
@@ -299,31 +312,100 @@ function CouponsInner() {
     }
   }
 
-  async function createManual(event: FormEvent) {
-    event.preventDefault();
-    const code = manualCode.trim().replace(/\s+/g, "").replace(/^@+/, "").toUpperCase();
-    const discount = parseBenefitPercent(manualDiscount);
-    const commission = parseBenefitPercent(manualCommission);
-    if (!manualCreatorId || !/^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code) || discount == null || commission == null) {
-      await alertWarning(t("coupons.manualRequired"));
+  const editing = coupons.find((coupon) => coupon.id === editingId) ?? null;
+  const selectedCampaign = campaigns.find((campaign) => String(campaign.id) === formCampaignId);
+  const campaignCreators = (selectedCampaign?.creators ?? []).filter((creator) => !creator.coupon_id || creator.coupon_id === editingId);
+  const selectedCreator = formKind === "manual"
+    ? manualCreators.find((creator) => String(creator.id) === formCreatorId)
+    : selectedCampaign?.creators.find((creator) => String(creator.id) === formCreatorId)
+      ?? (editing && String(editing.creator_id) === formCreatorId ? editing.creator : undefined);
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditingId(null);
+    setFormKind("manual");
+    setFormCampaignId("");
+    setFormCreatorId("");
+    setFormCode("");
+    setFormDiscount("");
+    setFormCommission("");
+  }
+
+  function openCreate() {
+    if (formOpen && editingId === null) {
+      closeForm();
       return;
     }
-    setSavingManual(true);
+    setEditingId(null);
+    setFormKind(campaigns.length > 0 ? "campaign" : "manual");
+    setFormCampaignId("");
+    setFormCreatorId("");
+    setFormCode("");
+    setFormDiscount("");
+    setFormCommission("");
+    setFormOpen(true);
+  }
+
+  function openEdit(coupon: CreatorCoupon) {
+    setEditingId(coupon.id);
+    setFormKind(coupon.campaign_id ? "campaign" : "manual");
+    setFormCampaignId(coupon.campaign_id ? String(coupon.campaign_id) : "");
+    setFormCreatorId(String(coupon.creator_id));
+    setFormCode(coupon.code);
+    setFormDiscount(coupon.discount_percent != null ? String(coupon.discount_percent) : "");
+    setFormCommission(coupon.commission_percent != null ? String(coupon.commission_percent) : "");
+    setFormOpen(true);
+  }
+
+  function chooseCampaign(value: string) {
+    setFormCampaignId(value);
+    if (String(editing?.campaign_id ?? "") !== value) setFormCreatorId("");
+    if (editingId) return;
+    const campaign = campaigns.find((item) => String(item.id) === value);
+    if (!campaign) return;
+    if (campaign.benefit_discount_percent != null) setFormDiscount(String(campaign.benefit_discount_percent));
+    if (campaign.benefit_commission_percent != null) setFormCommission(String(campaign.benefit_commission_percent));
+  }
+
+  async function saveForm(event: FormEvent) {
+    event.preventDefault();
+    const code = normalizedCouponCode(formCode);
+    const discount = parseBenefitPercent(formDiscount);
+    const commission = parseBenefitPercent(formCommission);
+    const codeOk = isCouponCode(formCode, editing?.code);
+    if (formKind === "manual") {
+      if (!formCreatorId || !codeOk || discount == null || commission == null) {
+        await alertWarning(t("coupons.manualRequired"));
+        return;
+      }
+    } else if (!formCampaignId || !formCreatorId || !codeOk || discount == null || commission == null) {
+      await alertWarning(t("coupons.required"));
+      return;
+    }
+    const body = formKind === "manual"
+      ? {
+          ...(editingId ? { campaign_id: null } : { manual: true, company_id: Number(companyId) }),
+          creator_id: Number(formCreatorId),
+          code,
+          discount_percent: discount,
+          commission_percent: commission,
+        }
+      : {
+          company_id: Number(companyId),
+          campaign_id: Number(formCampaignId),
+          creator_id: Number(formCreatorId),
+          code,
+          discount_percent: discount,
+          commission_percent: commission,
+        };
+    setSavingForm(true);
     try {
-      const created = await api.createCoupon({
-        manual: true,
-        company_id: Number(companyId),
-        creator_id: Number(manualCreatorId),
-        code,
-        discount_percent: discount,
-        commission_percent: commission,
-      });
-      setCreating(false);
-      setManualCreatorId("");
-      setManualCode("");
-      setManualDiscount("");
-      setManualCommission("");
-      if (created.data.name_complete === false) {
+      const saved = editingId ? await api.updateCoupon(editingId, body) : await api.createCoupon(body);
+      const wasEdit = editingId !== null;
+      closeForm();
+      if (wasEdit) {
+        await alertSuccess(t("coupons.saved"));
+      } else if (saved.data.name_complete === false) {
         await alertWarning(t("coupons.createdInactive"), t("coupons.createdInactiveText"));
       } else {
         await alertSuccess(t("coupons.created"));
@@ -332,7 +414,7 @@ function CouponsInner() {
     } catch (err) {
       await alertApiError(err);
     } finally {
-      setSavingManual(false);
+      setSavingForm(false);
     }
   }
 
@@ -432,7 +514,7 @@ function CouponsInner() {
               <button
                 type="button"
                 disabled={!companyId}
-                onClick={() => setCreating((open) => !open)}
+                onClick={openCreate}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-extrabold text-white hover:bg-violet-700 disabled:opacity-50"
               >
                 <Plus size={16} />
@@ -469,7 +551,8 @@ function CouponsInner() {
             onChange={(value) => {
               setCompanyId(value);
               setCampaignFilter("");
-              setCreating(false);
+              setFormOpen(false);
+              setEditingId(null);
             }}
           />
         </div>
@@ -479,57 +562,115 @@ function CouponsInner() {
         <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-sm text-slate-500">{t("coupons.pickCompany")}</p>
       ) : (
         <>
-          {isManager && creating ? (
-            <form noValidate onSubmit={(event) => void createManual(event)} className="flex flex-col gap-4 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
+          {isManager && formOpen ? (
+            <form noValidate onSubmit={(event) => void saveForm(event)} className="flex flex-col gap-4 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
               <div>
-                <h2 className="m-0 text-base font-extrabold text-slate-900">{t("coupons.manualTitle")}</h2>
-                <p className="mt-1 mb-0 text-sm text-slate-500">{t("coupons.manualHint")}</p>
+                <h2 className="m-0 text-base font-extrabold text-slate-900">{editing ? t("coupons.edit") : t("coupons.new")}</h2>
+                <p className="mt-1 mb-0 text-sm text-slate-500">{formKind === "campaign" ? t("coupons.hint") : t("coupons.manualHint")}</p>
               </div>
-              {manualCreators.length === 0 ? (
-                <p className="m-0 text-sm text-slate-500">{t("coupons.noManualCreators")}</p>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Select2Field
+                  theme="light"
+                  placeholder={t("coupons.kindPh")}
+                  value={formKind}
+                  options={[
+                    { value: "campaign", label: t("coupons.campaign") },
+                    { value: "manual", label: t("coupons.manual") },
+                  ]}
+                  onChange={(value) => {
+                    const next = value === "campaign" ? "campaign" : "manual";
+                    setFormKind(next);
+                    if (next === "manual") setFormCampaignId("");
+                  }}
+                />
+                {formKind === "campaign" ? (
+                  <Select2Field
+                    theme="light"
+                    placeholder={t("coupons.campaignPh")}
+                    value={formCampaignId}
+                    options={campaigns.map((campaign) => ({ value: String(campaign.id), label: campaign.name }))}
+                    onChange={chooseCampaign}
+                  />
+                ) : (
                   <Select2Field
                     theme="light"
                     placeholder={t("coupons.manualCreatorPh")}
-                    value={manualCreatorId}
-                    options={manualCreators.map((creator) => ({
-                      value: String(creator.id),
-                      label: creator.artistic_name || creator.full_name || "—",
-                    }))}
-                    onChange={setManualCreatorId}
+                    value={formCreatorId}
+                    options={[
+                      ...manualCreators.map((creator) => ({
+                        value: String(creator.id),
+                        label: creator.artistic_name || creator.full_name || "—",
+                      })),
+                      ...(editing && formCreatorId && !manualCreators.some((creator) => String(creator.id) === formCreatorId)
+                        ? [{ value: formCreatorId, label: creatorName(editing.creator) }]
+                        : []),
+                    ]}
+                    onChange={setFormCreatorId}
                   />
-                  <input
-                    value={manualCode}
-                    onChange={(event) => setManualCode(event.target.value.toUpperCase())}
-                    placeholder={t("coupons.codePh")}
-                    maxLength={40}
-                    className={fieldClass}
+                )}
+                {formKind === "campaign" ? (
+                  <Select2Field
+                    theme="light"
+                    placeholder={t("coupons.creatorPh")}
+                    value={formCreatorId}
+                    options={[
+                      ...campaignCreators.map((creator) => ({
+                        value: String(creator.id),
+                        label: creator.artistic_name || creator.full_name || "—",
+                      })),
+                      ...(editing && formCreatorId && !campaignCreators.some((creator) => String(creator.id) === formCreatorId)
+                        ? [{ value: formCreatorId, label: creatorName(editing.creator) }]
+                        : []),
+                    ]}
+                    onChange={setFormCreatorId}
                   />
-                  <input
-                    inputMode="decimal"
-                    value={manualDiscount}
-                    onChange={(event) => setManualDiscount(event.target.value)}
-                    placeholder={t("coupons.discount")}
-                    className={fieldClass}
-                  />
-                  <input
-                    inputMode="decimal"
-                    value={manualCommission}
-                    onChange={(event) => setManualCommission(event.target.value)}
-                    placeholder={t("coupons.commission")}
-                    className={fieldClass}
-                  />
-                </div>
-              )}
-              {manualCreators.some((creator) => String(creator.id) === manualCreatorId && !isCompletePersonName(creator.full_name)) ? (
+                ) : null}
+                <input
+                  value={formCode}
+                  onChange={(event) => setFormCode(event.target.value.toUpperCase())}
+                  placeholder={t("coupons.codePh")}
+                  maxLength={64}
+                  className={fieldClass}
+                />
+                <input
+                  inputMode="decimal"
+                  value={formDiscount}
+                  onChange={(event) => setFormDiscount(event.target.value)}
+                  placeholder={t("coupons.discount")}
+                  className={fieldClass}
+                />
+                <input
+                  inputMode="decimal"
+                  value={formCommission}
+                  onChange={(event) => setFormCommission(event.target.value)}
+                  placeholder={t("coupons.commission")}
+                  className={fieldClass}
+                />
+              </div>
+              {formKind === "manual" && manualCreators.length === 0 ? (
+                <p className="m-0 text-sm text-slate-500">{t("coupons.noManualCreators")}</p>
+              ) : null}
+              {formKind === "campaign" && campaigns.length === 0 ? (
+                <p className="m-0 text-sm text-slate-500">{t("coupons.noCampaigns")}</p>
+              ) : null}
+              {formKind === "campaign" && selectedCampaign && selectedCampaign.creators.length === 0 ? (
+                <p className="m-0 text-sm text-slate-500">{t("coupons.noCreators")}</p>
+              ) : null}
+              {formKind === "campaign" && selectedCampaign && selectedCampaign.creators.length > 0 && campaignCreators.length === 0 && !editing ? (
+                <p className="m-0 text-sm text-slate-500">{t("coupons.allHaveCoupon")}</p>
+              ) : null}
+              {selectedCreator && !isCompletePersonName(selectedCreator.full_name) ? (
                 <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{t("coupons.incompleteNameHint")}</p>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={savingManual || manualCreators.length === 0} className="inline-flex h-11 items-center rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">
+                <button
+                  type="submit"
+                  disabled={savingForm || (formKind === "manual" && manualCreators.length === 0) || (formKind === "campaign" && campaigns.length === 0)}
+                  className="inline-flex h-11 items-center rounded-xl bg-slate-950 px-4 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50"
+                >
                   {t("coupons.save")}
                 </button>
-                <button type="button" disabled={savingManual} onClick={() => setCreating(false)} className="inline-flex h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                <button type="button" disabled={savingForm} onClick={closeForm} className="inline-flex h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                   {t("coupons.closeRequest")}
                 </button>
               </div>
@@ -628,6 +769,11 @@ function CouponsInner() {
                     <button type="button" onClick={() => void copyCode(coupon.code)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                       <Copy size={14} /> {t("coupons.copy")}
                     </button>
+                    {isManager ? (
+                      <button type="button" onClick={() => openEdit(coupon)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50">
+                        <PencilLine size={14} /> {t("coupons.edit")}
+                      </button>
+                    ) : null}
                     {isManager ? (
                       <>
                         <button type="button" disabled={busyId === coupon.id} onClick={() => void (coupon.is_active ? inactivate(coupon) : activate(coupon))} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">

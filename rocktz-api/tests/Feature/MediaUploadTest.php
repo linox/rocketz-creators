@@ -182,6 +182,12 @@ class MediaUploadTest extends TestCase
 
         $this->get('/stream/portfolio/video-iphone.mp4')->assertNotFound();
 
+        Storage::disk('uploads')->put('portfolio/clip.mp4', str_repeat('previewmp4x', 20));
+        $this->get('/stream/portfolio/clip.jpg')
+            ->assertNotFound()
+            ->assertHeader('Cache-Control', 'no-store, private');
+        $this->assertFalse(Storage::disk('uploads')->exists('portfolio/clip.jpg'));
+
         Storage::disk('uploads')->put('portfolio/video-iphone.mp4', str_repeat('previewmp4x', 20));
         $this->get('/stream/portfolio/video-iphone.mp4')
             ->assertOk()

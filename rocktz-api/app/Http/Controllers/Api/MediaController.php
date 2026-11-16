@@ -369,6 +369,18 @@ class MediaController extends Controller
         }
 
         $path = $folder.'/'.$filename;
+        if (! $this->objectExists($path)) {
+            $videoKey = $this->videoKeyForPoster($path);
+            if ($videoKey !== null) {
+                BrowserVideo::kickPoster($videoKey);
+
+                return response()->json(['poster' => null], 404, [
+                    'Cache-Control' => 'no-store',
+                    'Access-Control-Allow-Origin' => '*',
+                ]);
+            }
+        }
+
         if (! Storage::disk('uploads')->exists($path)) {
             if ($this->isStreamedImage($filename)) {
                 $redirect = $this->redirectRemoteMedia($path, false, $this->documentMime($filename));
@@ -439,6 +451,8 @@ class MediaController extends Controller
             if (BrowserVideo::needsTranscode($key)) {
                 MakeVideoPlayableJob::dispatch($key);
                 BrowserVideo::kick($key);
+            } else {
+                BrowserVideo::kickPoster($key);
             }
 
             $submission = is_array($meta['submission'] ?? null) ? $meta['submission'] : null;
@@ -572,11 +586,16 @@ class MediaController extends Controller
         $original = $this->originalKey($requested);
 
         if ($this->objectExists($preview)) {
+            $poster = $this->posterSrc($preview);
+            if ($poster === null && ! BrowserVideo::needsTranscode($preview)) {
+                BrowserVideo::kickPoster($preview);
+            }
+
             return $this->sourceJson(
                 $this->publicPlaybackSrc($preview),
                 $original ? $this->publicPlaybackSrc($original) : $this->publicPlaybackSrc($preview),
                 false,
-                $this->posterSrc($preview),
+                $poster,
             );
         }
 
@@ -590,11 +609,16 @@ class MediaController extends Controller
         }
 
         if ($this->objectExists($requested)) {
+            $poster = $this->posterSrc($requested);
+            if ($poster === null && ! BrowserVideo::needsTranscode($requested)) {
+                BrowserVideo::kickPoster($requested);
+            }
+
             return $this->sourceJson(
                 $this->publicPlaybackSrc($requested),
                 $this->publicPlaybackSrc($requested),
                 false,
-                $this->posterSrc($requested),
+                $poster,
             );
         }
 
@@ -665,6 +689,23 @@ class MediaController extends Controller
             'Access-Control-Allow-Origin' => '*',
             'Cache-Control' => 'no-store',
         ];
+    }
+
+    private function videoKeyForPoster(string $path): ?string
+    {
+        if (! str_ends_with(strtolower($path), '.jpg')) {
+            return null;
+        }
+
+        $base = substr($path, 0, -4);
+        foreach (['mp4', 'mov', 'webm', 'm4v', 'qt'] as $extension) {
+            $candidate = $base.'.'.$extension;
+            if ($this->objectExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function posterSrc(string $path): ?string

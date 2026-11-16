@@ -175,6 +175,103 @@ class CampaignBenefitCouponTest extends TestCase
             ->assertJsonPath('data.0.code', 'ana.ugcBLACK');
     }
 
+    public function test_creator_can_be_added_again_after_removal_from_a_coupon_campaign(): void
+    {
+        [$user, $company] = $this->companyUser();
+        $admin = User::factory()->admin()->create();
+        $created = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/campaigns', [
+                'name' => 'Cupom reentrada',
+                'is_benefit_coupon' => true,
+                'benefit_coupon_code' => 'BLACK',
+                'benefit_discount_percent' => 15,
+                'benefit_commission_percent' => 10,
+            ])
+            ->assertCreated();
+
+        $creator = Creator::factory()->active()->create([
+            'artistic_name' => 'Ana',
+            'full_name' => 'Ana Silva',
+            'socials' => ['instagram' => '@ana.ugc'],
+        ]);
+        $participation = CampaignCreator::factory()->create([
+            'campaign_id' => $created->json('data.id'),
+            'creator_id' => $creator->id,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->patchJson('/api/campaign-creators/'.$participation->id, [
+                'application_status' => 'approved',
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, CreatorCoupon::query()->where('campaign_id', $created->json('data.id'))->count());
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson('/api/campaign-creators/'.$participation->id)
+            ->assertOk();
+
+        $this->assertSame(0, CreatorCoupon::query()->where('creator_id', $creator->id)->count());
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/campaigns/'.$created->json('data.id').'/assign', [
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+
+        $coupon = CreatorCoupon::query()->where('campaign_id', $created->json('data.id'))->where('creator_id', $creator->id)->first();
+        $this->assertNotNull($coupon);
+        $this->assertTrue($coupon->is_active);
+        $this->assertSame('ana.ugcBLACK', $coupon->code);
+    }
+
+    public function test_custom_coupon_can_be_issued_again_after_the_creator_returns(): void
+    {
+        [$user] = $this->companyUser();
+        $admin = User::factory()->admin()->create();
+        $created = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/campaigns', [
+                'name' => 'Cupom custom',
+                'is_benefit_coupon' => true,
+                'benefit_coupon_code' => 'BLACK',
+                'benefit_discount_percent' => 15,
+                'benefit_commission_percent' => 10,
+            ])
+            ->assertCreated();
+
+        $creator = Creator::factory()->active()->create([
+            'full_name' => 'Ana Silva',
+            'socials' => ['instagram' => '@ana.ugc'],
+        ]);
+        $participation = CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $created->json('data.id'),
+            'creator_id' => $creator->id,
+        ]);
+        CreatorCoupon::query()->create([
+            'company_id' => $created->json('data.company_id'),
+            'campaign_id' => $created->json('data.id'),
+            'creator_id' => $creator->id,
+            'code' => 'ANA15',
+            'discount_percent' => 15,
+            'commission_percent' => 10,
+            'is_active' => true,
+            'is_auto' => false,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson('/api/campaign-creators/'.$participation->id)
+            ->assertOk();
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/campaigns/'.$created->json('data.id').'/assign', [
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+
+        $this->assertSame(1, CreatorCoupon::query()->where('creator_id', $creator->id)->count());
+        $this->assertSame('ANA15', CreatorCoupon::query()->where('creator_id', $creator->id)->value('code'));
+    }
+
     public function test_benefit_coupon_can_be_created_with_percentages_only(): void
     {
         [$user] = $this->companyUser();
