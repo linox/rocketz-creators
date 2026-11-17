@@ -34,7 +34,8 @@ class CreatorCouponTest extends TestCase
             ->assertJsonPath('data.discount_percent', 15)
             ->assertJsonPath('data.commission_percent', 10)
             ->assertJsonPath('data.company_id', $company->id)
-            ->assertJsonPath('data.creator.artistic_name', $creator->artistic_name);
+            ->assertJsonPath('data.creator.artistic_name', $creator->artistic_name)
+            ->assertJsonPath('data.creator.instagram', 'oiviv_');
 
         $this->assertDatabaseHas('notifications', [
             'creator_id' => $creator->id,
@@ -202,6 +203,7 @@ class CreatorCouponTest extends TestCase
         $ids = collect($row['creators'])->pluck('id')->all();
         $this->assertContains($creator->id, $ids);
         $this->assertNotContains($pending->id, $ids);
+        $this->assertSame('oiviv_', collect($row['creators'])->firstWhere('id', $creator->id)['instagram']);
     }
 
     public function test_company_and_agency_can_create_a_manual_coupon_without_a_campaign(): void
@@ -402,6 +404,7 @@ class CreatorCouponTest extends TestCase
         $other = Creator::factory()->active()->create([
             'artistic_name' => 'Zoe Cupom',
             'full_name' => 'Zoe Cupom',
+            'socials' => ['tiktok' => 'zoecupom'],
             'invited_by_company_id' => $company->id,
         ]);
         CreatorCoupon::query()->create([
@@ -444,9 +447,9 @@ class CreatorCouponTest extends TestCase
 
         $text = $csv->getContent();
         $this->assertStringStartsWith("\xEF\xBB\xBF", $text);
-        $this->assertStringContainsString('codigo;criador;empresa;campanha;desconto;comissao;status;codigo_sugerido;criado_em;razao', $text);
-        $this->assertStringContainsString('ANA15;"Ana Cupom";"Loja Aurora";"Cupom Aurora";15;10;Ativo;;', $text);
-        $this->assertStringContainsString('MANUAL20;"Zoe Cupom";"Loja Aurora";Manual;10,50;4;Pausado;ZOE20;', $text);
+        $this->assertStringContainsString('codigo;criador;instagram;empresa;campanha;desconto;comissao;status;codigo_sugerido;criado_em;razao', $text);
+        $this->assertStringContainsString('ANA15;"Ana Cupom";oiviv_;"Loja Aurora";"Cupom Aurora";15;10;Ativo;;', $text);
+        $this->assertStringContainsString('MANUAL20;"Zoe Cupom";;"Loja Aurora";Manual;10,50;4;Pausado;ZOE20;', $text);
         $this->assertStringNotContainsString('SEGREDO', $text);
 
         $own = $this->asUser($creator->user)
@@ -700,6 +703,7 @@ class CreatorCouponTest extends TestCase
         $creator = Creator::factory()->active()->create([
             'artistic_name' => 'Ana Cupom',
             'full_name' => 'Ana Cupom',
+            'socials' => ['instagram' => '@oiviv_'],
             'invited_by_company_id' => $company->id,
         ]);
         CampaignCreator::factory()->approved()->create([

@@ -43,6 +43,7 @@ class CreatorCouponResource extends JsonResource
                 'id' => $this->creator->id,
                 'artistic_name' => $this->creator->artistic_name,
                 'full_name' => $this->creator->full_name,
+                'instagram' => $this->creator->instagramHandle(),
                 'photo_url' => MediaUrl::publicAbsolute($this->creator->photo_url),
             ] : null),
         ];

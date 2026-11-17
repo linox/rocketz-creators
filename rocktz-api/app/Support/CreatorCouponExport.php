@@ -19,7 +19,7 @@ class CreatorCouponExport
         }
 
         fwrite($handle, "\xEF\xBB\xBF");
-        $headers = ['code', 'creator', 'company', 'campaign', 'discount', 'commission', 'status', 'suggested_code', 'created_at', 'inactive_reason'];
+        $headers = ['code', 'creator', 'instagram', 'company', 'campaign', 'discount', 'commission', 'status', 'suggested_code', 'created_at', 'inactive_reason'];
         fputcsv($handle, array_map(fn (string $key) => __('coupons.csv.'.$key), $headers), ';');
 
         foreach ($coupons as $coupon) {
@@ -28,6 +28,7 @@ class CreatorCouponExport
             fputcsv($handle, [
                 self::cell($coupon->code),
                 self::cell($creator?->artistic_name ?: $creator?->full_name),
+                self::cell($creator?->instagramHandle()),
                 self::cell($coupon->company?->name),
                 self::cell($coupon->campaign?->name ?: __('coupons.csv.manual')),
                 self::percent($coupon->discount_percent),

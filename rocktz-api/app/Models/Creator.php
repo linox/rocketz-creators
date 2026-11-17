@@ -7,6 +7,7 @@ use App\Enums\CreatorStatus;
 use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Support\Geo;
+use App\Support\SocialHandle;
 use Database\Factories\CreatorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -133,6 +134,15 @@ class Creator extends Model
     {
         return $this->belongsToMany(CreatorGroup::class, 'creator_group_members')
             ->withTimestamps();
+    }
+
+    public function instagramHandle(): ?string
+    {
+        $socials = is_array($this->socials) ? $this->socials : [];
+        $raw = $socials['instagram'] ?? null;
+        $handle = SocialHandle::instagram(is_string($raw) ? $raw : null);
+
+        return $handle !== '' ? $handle : null;
     }
 
     public function campaignCreators(): HasMany

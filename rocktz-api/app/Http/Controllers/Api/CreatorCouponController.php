@@ -70,7 +70,7 @@ class CreatorCouponController extends Controller
         $participants = CampaignCreator::query()
             ->whereIn('campaign_id', $campaigns->pluck('id'))
             ->where('application_status', ApplicationStatus::Approved)
-            ->with('creator:id,artistic_name,full_name')
+            ->with('creator:id,artistic_name,full_name,socials')
             ->get();
 
         $assigned = CreatorCoupon::query()
@@ -86,7 +86,7 @@ class CreatorCouponController extends Controller
             )
             ->orderBy('artistic_name')
             ->orderBy('full_name')
-            ->get(['id', 'artistic_name', 'full_name']);
+            ->get(['id', 'artistic_name', 'full_name', 'socials']);
 
         return response()->json([
             'data' => [
@@ -94,6 +94,7 @@ class CreatorCouponController extends Controller
                     'id' => $creator->id,
                     'artistic_name' => $creator->artistic_name,
                     'full_name' => $creator->full_name,
+                    'instagram' => $creator->instagramHandle(),
                 ])->values(),
                 'campaigns' => $campaigns->map(function (Campaign $campaign) use ($participants, $assigned) {
                     $creators = $participants
@@ -107,6 +108,7 @@ class CreatorCouponController extends Controller
                                 'id' => $row->creator->id,
                                 'artistic_name' => $row->creator->artistic_name,
                                 'full_name' => $row->creator->full_name,
+                                'instagram' => $row->creator->instagramHandle(),
                                 'coupon_id' => $coupon?->id,
                             ];
                         })
@@ -369,7 +371,7 @@ class CreatorCouponController extends Controller
             ->with([
                 'company:id,name',
                 'campaign:id,name',
-                'creator:id,artistic_name,full_name,photo_url',
+                'creator:id,artistic_name,full_name,photo_url,socials',
             ]);
 
         if ($user->role === UserRole::Creator) {
@@ -722,7 +724,7 @@ class CreatorCouponController extends Controller
         return $coupon->load([
             'company:id,name',
             'campaign:id,name',
-            'creator:id,artistic_name,full_name,photo_url',
+            'creator:id,artistic_name,full_name,photo_url,socials',
         ]);
     }
 

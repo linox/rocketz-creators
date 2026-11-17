@@ -212,6 +212,7 @@ export type CreatorCouponCreator = {
   id: number;
   artistic_name: string | null;
   full_name: string | null;
+  instagram?: string | null;
   photo_url?: string | null;
   coupon_id?: number | null;
 };

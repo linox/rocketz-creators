@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Coins, Copy, Download, PencilLine, Plus, TicketPercent, Trash2, X } from "lucide-react";
+import { Check, Coins, Copy, Download, Instagram, PencilLine, Plus, TicketPercent, Trash2, X } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { api } from "@/lib/api";
 import { alertApiError, alertConfirm, alertError, alertSuccess, alertWarning, promptTextarea } from "@/lib/alerts";
 import { formatBenefitPercent, parseBenefitPercent } from "@/lib/benefit-coupon";
 import { isCompletePersonName } from "@/lib/person-name";
+import { safeHttpUrl } from "@/lib/safe-http-url";
 import { useAuth } from "@/lib/use-auth";
 import type { Company, CreatorCoupon, CreatorCouponCampaignOption, CreatorCouponCreator } from "@/lib/types";
 
@@ -201,6 +202,17 @@ function creatorName(creator?: { artistic_name?: string | null; full_name?: stri
   return creator?.artistic_name || creator?.full_name || "—";
 }
 
+function instagramHandle(value?: string | null) {
+  const handle = (value || "").replace(/^@+/, "").trim();
+  return /^[A-Za-z0-9._]{1,30}$/.test(handle) ? handle : null;
+}
+
+function creatorOptionLabel(creator?: { artistic_name?: string | null; full_name?: string | null; instagram?: string | null } | null) {
+  const name = creatorName(creator);
+  const handle = instagramHandle(creator?.instagram);
+  return handle ? `${name} · @${handle}` : name;
+}
+
 function CouponsInner() {
   const user = useAuth();
   const { t } = useTranslation("app");
@@ -294,7 +306,7 @@ function CouponsInner() {
     if (campaignFilter && String(coupon.campaign_id) !== campaignFilter) return false;
     const query = search.trim().toLowerCase();
     if (!query) return true;
-    const blob = [coupon.code, coupon.change_request?.suggested_code, creatorName(coupon.creator), coupon.creator?.full_name, coupon.inactive_reason, coupon.campaign?.name, coupon.company?.name]
+    const blob = [coupon.code, coupon.change_request?.suggested_code, creatorName(coupon.creator), coupon.creator?.instagram, coupon.creator?.full_name, coupon.inactive_reason, coupon.campaign?.name, coupon.company?.name]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -599,10 +611,10 @@ function CouponsInner() {
                     options={[
                       ...manualCreators.map((creator) => ({
                         value: String(creator.id),
-                        label: creator.artistic_name || creator.full_name || "—",
+                        label: creatorOptionLabel(creator),
                       })),
                       ...(editing && formCreatorId && !manualCreators.some((creator) => String(creator.id) === formCreatorId)
-                        ? [{ value: formCreatorId, label: creatorName(editing.creator) }]
+                        ? [{ value: formCreatorId, label: creatorOptionLabel(editing.creator) }]
                         : []),
                     ]}
                     onChange={setFormCreatorId}
@@ -616,10 +628,10 @@ function CouponsInner() {
                     options={[
                       ...campaignCreators.map((creator) => ({
                         value: String(creator.id),
-                        label: creator.artistic_name || creator.full_name || "—",
+                        label: creatorOptionLabel(creator),
                       })),
                       ...(editing && formCreatorId && !campaignCreators.some((creator) => String(creator.id) === formCreatorId)
-                        ? [{ value: formCreatorId, label: creatorName(editing.creator) }]
+                        ? [{ value: formCreatorId, label: creatorOptionLabel(editing.creator) }]
                         : []),
                     ]}
                     onChange={setFormCreatorId}
@@ -713,7 +725,10 @@ function CouponsInner() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {visible.map((coupon) => (
+              {visible.map((coupon) => {
+                const instagram = instagramHandle(coupon.creator?.instagram);
+                const instagramUrl = instagram ? safeHttpUrl(`https://www.instagram.com/${instagram}/`) : undefined;
+                return (
                 <article key={coupon.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <p className="m-0 font-mono text-lg font-black tracking-wide text-slate-900">{coupon.code}</p>
@@ -749,6 +764,17 @@ function CouponsInner() {
                       <p className="mt-3 mb-0 text-sm font-semibold text-slate-800">{creatorName(coupon.creator)}</p>
                       <p className="mt-1 mb-0 text-xs text-slate-500">{t("coupons.legalName")}: {coupon.creator?.full_name?.trim() || "—"}</p>
                     </>
+                  ) : null}
+                  {instagram && instagramUrl ? (
+                    <a
+                      href={instagramUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t("coupons.instagram")}
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pink-700 hover:underline"
+                    >
+                      <Instagram size={12} /> @{instagram}
+                    </a>
                   ) : null}
                   <p className="mt-1 mb-0 text-sm text-slate-500">
                     {[coupon.campaign?.name, coupon.company?.name].filter(Boolean).join(" · ")}
@@ -792,7 +818,8 @@ function CouponsInner() {
                   </div>
                   <CouponChangePanel coupon={coupon} isCreator={isCreator} isManager={isManager} onChanged={reload} />
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </>

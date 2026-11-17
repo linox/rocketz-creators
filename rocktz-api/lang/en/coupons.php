@@ -5,6 +5,7 @@ return [
         'filename' => 'coupons.csv',
         'code' => 'code',
         'creator' => 'creator',
+        'instagram' => 'instagram',
         'company' => 'company',
         'campaign' => 'campaign',
         'discount' => 'discount',
