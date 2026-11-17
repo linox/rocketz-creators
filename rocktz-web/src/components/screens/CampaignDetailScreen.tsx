@@ -938,7 +938,7 @@ function DetailInner() {
     const next = await patch(row, {
       application_status: "approved",
       ...(hideCreatorValues ? {} : { amount }),
-      delivery_status: row.delivery_status || "pending",
+      ...((row.demands?.length ?? 0) > 0 ? {} : { delivery_status: row.delivery_status || "pending" }),
       delivery_type: deliveryType,
       rejection_reason: "",
     });

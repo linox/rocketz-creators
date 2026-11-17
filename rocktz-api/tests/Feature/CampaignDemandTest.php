@@ -98,6 +98,58 @@ class CampaignDemandTest extends TestCase
         $this->assertSame('pending', $demands[0]->fresh()->delivery_status->value);
     }
 
+    public function test_creator_can_be_approved_again_after_leaving_the_casting(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $row = CampaignCreator::factory()->pendingApplication()->create();
+        $row->campaign->deliverable()->create(['reels' => 2]);
+        $token = $admin->createToken('auth')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'approved',
+                'delivery_status' => 'pending',
+                'delivery_type' => 'ugc',
+                'rejection_reason' => '',
+            ])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.demands');
+
+        $demand = $row->demands()->firstOrFail();
+        $demand->update([
+            'script' => 'Roteiro que deve permanecer',
+            'script_status' => 'submitted',
+            'delivery_status' => 'sent',
+        ]);
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'pending',
+                'rejection_reason' => '',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.application_status', 'pending');
+
+        $this->assertSame(2, $row->demands()->count());
+
+        $this->withToken($token)
+            ->patchJson("/api/campaign-creators/{$row->id}", [
+                'application_status' => 'approved',
+                'delivery_status' => 'pending',
+                'delivery_type' => 'ugc',
+                'rejection_reason' => '',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.application_status', 'approved')
+            ->assertJsonCount(2, 'data.demands')
+            ->assertJsonPath('data.delivery_status', 'sent');
+
+        $demand->refresh();
+        $this->assertSame('Roteiro que deve permanecer', $demand->script);
+        $this->assertSame('submitted', $demand->script_status->value);
+        $this->assertSame('sent', $demand->delivery_status->value);
+    }
+
     public function test_submission_without_demand_is_rejected_when_quota_exists(): void
     {
         $row = $this->approvedWithReels(3);

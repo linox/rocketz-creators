@@ -561,11 +561,10 @@ class CampaignController extends Controller
         }
         unset($data['revert_publication']);
 
-        $touchesSubmission = $contentFields !== []
+        $touchesDemandContent = $contentFields !== []
             || array_key_exists('pauta', $data)
             || array_key_exists('script_status', $data)
             || array_key_exists('video_status', $data)
-            || array_key_exists('delivery_status', $data)
             || array_key_exists('script_feedback', $data)
             || array_key_exists('video_feedback', $data)
             || array_key_exists('revision_details', $data)
@@ -573,10 +572,15 @@ class CampaignController extends Controller
             || array_key_exists('script_reaction', $data)
             || array_key_exists('video_liked', $data)
             || array_key_exists('video_reaction', $data);
-        if ($campaignCreator->demands()->exists() && $touchesSubmission && ! $demand) {
-            throw ValidationException::withMessages([
-                'demand_id' => __('auth.campaign_demand_required'),
-            ]);
+        $updatesDeliveryStatus = array_key_exists('delivery_status', $data);
+        if ($campaignCreator->demands()->exists() && ! $demand && ($touchesDemandContent || $updatesDeliveryStatus)) {
+            $castingDecision = array_key_exists('application_status', $data) && ! $touchesDemandContent;
+            if (! $castingDecision) {
+                throw ValidationException::withMessages([
+                    'demand_id' => __('auth.campaign_demand_required'),
+                ]);
+            }
+            unset($data['delivery_status']);
         }
 
         $demandAttributes = $contentFields;
@@ -676,6 +680,9 @@ class CampaignController extends Controller
         if ($becomingApproved) {
             $freshParticipation = $campaignCreator->fresh();
             $this->demands->syncCreator($freshParticipation);
+            if ($freshParticipation?->demands()->exists()) {
+                $this->demands->rollup($freshParticipation);
+            }
             $freshParticipation?->loadMissing(['creator', 'campaign']);
             if ($freshParticipation) {
                 $this->barterShipments->syncParticipation($freshParticipation);
