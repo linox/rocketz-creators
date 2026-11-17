@@ -115,6 +115,8 @@ export type DeliveryInboxItem = {
   formatKey?: string | null;
   /** Campaign demand brief. Shown in the body, never as the row title. */
   brief?: string | null;
+  liked?: boolean;
+  reactionMessage?: string | null;
 };
 
 export type InboxFolder =
@@ -567,6 +569,8 @@ function buildCampaignStageItem(
     stageTotal: opts.total,
     period: (row.delivery_date || campaign.delivery_date || campaign.end_date || "").slice(0, 7) || null,
     brief: demand?.pauta?.trim() || null,
+    liked: isScript ? Boolean(row.script_liked) : Boolean(row.video_liked),
+    reactionMessage: isScript ? row.script_reaction : row.video_reaction,
   };
 }
 
@@ -862,6 +866,8 @@ function buildPlanningStageItem(
     stagePart: opts.part,
     stageTotal: opts.total,
     period: (item.month || item.planned_date || "").slice(0, 7) || null,
+    liked: isScript ? Boolean(item.script_liked) : Boolean(item.video_liked),
+    reactionMessage: isScript ? item.script_reaction : item.video_reaction,
   };
 }
 

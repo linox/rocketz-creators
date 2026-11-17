@@ -1,4 +1,25 @@
 {
+  "contentReaction": {
+    "hint": "Além de aprovar, você pode curtir e deixar um recado. O criador vê isso no conteúdo.",
+    "like": "Curtir",
+    "liked": "Curtido",
+    "messageLabel": "Recado para o criador",
+    "messagePh": "Opcional. Ex: ficou incrível, a gente adorou esse take.",
+    "creatorTitle": "A marca curtiu este conteúdo",
+    "creatorMessageTitle": "Recado da marca",
+    "editTitle": "Reagir ao conteúdo",
+    "editText": "O criador vê a curtida e o recado neste conteúdo.",
+    "save": "Salvar reação",
+    "saved": "Reação enviada ao criador",
+    "likeScript": "Curtir roteiro",
+    "likeVideo": "Curtir conteúdo",
+    "scriptStage": "Roteiro",
+    "videoStage": "Conteúdo",
+    "approveScriptTitle": "Aprovar roteiro",
+    "approveScriptText": "O criador pode seguir. Se quiser, curta o roteiro ou deixe um recado.",
+    "approveVideoTitle": "Aprovar conteúdo",
+    "approveVideoText": "O criador vê a aprovação. Se quiser, curta o conteúdo ou deixe um recado."
+  },
   "barterShipments": {
     "title": "Permutas",
     "subtitle": "Criadores aprovados em campanhas de permuta entram aqui aguardando o código. O rastreio começa quando o código dos Correios é salvo.",

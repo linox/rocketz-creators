@@ -511,6 +511,10 @@ export type CampaignCreator = {
   video_status: string | null;
   script_feedback: string | null;
   video_feedback: string | null;
+  script_liked?: boolean;
+  script_reaction?: string | null;
+  video_liked?: boolean;
+  video_reaction?: string | null;
   script_submitted_at?: string | null;
   video_submitted_at?: string | null;
   pending_upload_id?: string | null;
@@ -550,6 +554,10 @@ export type CampaignDemand = {
   video_status: string | null;
   script_feedback?: string | null;
   video_feedback?: string | null;
+  script_liked?: boolean;
+  script_reaction?: string | null;
+  video_liked?: boolean;
+  video_reaction?: string | null;
   revision_details?: string | null;
   script_submitted_at?: string | null;
   video_submitted_at?: string | null;
@@ -664,6 +672,10 @@ export type PlanningItem = {
   video_status?: string | null;
   script_feedback?: string | null;
   video_feedback?: string | null;
+  script_liked?: boolean;
+  script_reaction?: string | null;
+  video_liked?: boolean;
+  video_reaction?: string | null;
   script_submitted_at?: string | null;
   video_submitted_at?: string | null;
   pending_upload_id?: string | null;

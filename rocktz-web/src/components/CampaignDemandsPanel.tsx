@@ -5,7 +5,9 @@ import { Check, Link2, ScrollText, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
-import { alertConfirm, alertSuccess, alertWarning, promptTextarea } from "@/lib/alerts";
+import { ContentReactionButton, ContentReactionNotes } from "@/components/ContentReactionNote";
+import { alertConfirm, alertSuccess, alertWarning, promptContentReaction, promptTextarea } from "@/lib/alerts";
+import { reactionPayload } from "@/lib/content-reaction";
 import { projectDemand } from "@/lib/campaign-demands";
 import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
 import { isLivePautaType } from "@/lib/pauta-briefing";
@@ -169,6 +171,20 @@ function DemandCard({
     if (saved) await alertSuccess(t("campaignDetail.revertConclusionOk"));
   }
 
+  async function approveStage(stage: "script" | "video") {
+    const reaction = await promptContentReaction({
+      title: t(stage === "script" ? "contentReaction.approveScriptTitle" : "contentReaction.approveVideoTitle"),
+      text: t(stage === "script" ? "contentReaction.approveScriptText" : "contentReaction.approveVideoText"),
+      confirmText: t(stage === "script" ? "campaignDetail.approveScript" : "campaignDetail.approveMaterial"),
+      liked: stage === "script" ? Boolean(demand.script_liked) : Boolean(demand.video_liked),
+      message: (stage === "script" ? demand.script_reaction : demand.video_reaction) ?? "",
+    });
+    if (!reaction) return;
+    await onUpdate(demand.id, stage === "script"
+      ? { script_status: "approved", script_feedback: "", ...reactionPayload("script", reaction) }
+      : { video_status: "approved", delivery_status: "approved", video_feedback: "", ...reactionPayload("video", reaction) });
+  }
+
   async function requestRevision() {
     const note = await promptTextarea({
       title: t("campaignDetail.requestRevision"),
@@ -316,6 +332,36 @@ function DemandCard({
         </div>
       ) : null}
 
+      <ContentReactionNotes
+        scriptLiked={demand.script_liked}
+        scriptMessage={demand.script_reaction}
+        videoLiked={demand.video_liked}
+        videoMessage={demand.video_reaction}
+      />
+
+      {canManage && (demand.script_status === "approved" || demand.video_status === "approved" || demand.delivery_status === "approved" || demand.delivery_status === "published") ? (
+        <div className="flex flex-wrap gap-2">
+          {demand.script_status === "approved" ? (
+            <ContentReactionButton
+              label={t("contentReaction.likeScript")}
+              liked={demand.script_liked}
+              message={demand.script_reaction}
+              disabled={updating}
+              onSave={(reaction) => onUpdate(demand.id, reactionPayload("script", reaction))}
+            />
+          ) : null}
+          {demand.video_status === "approved" || demand.delivery_status === "approved" || demand.delivery_status === "published" ? (
+            <ContentReactionButton
+              label={t("contentReaction.likeVideo")}
+              liked={demand.video_liked}
+              message={demand.video_reaction}
+              disabled={updating}
+              onSave={(reaction) => onUpdate(demand.id, reactionPayload("video", reaction))}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       {(demand.script_feedback || demand.video_feedback || demand.revision_details) && (state === "scriptRevision" || state === "videoRevision" || state === "revision") ? (
         <p className="m-0 whitespace-pre-wrap rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">
           {demand.script_status === "revision" ? demand.script_feedback : demand.video_status === "revision" ? demand.video_feedback : demand.revision_details}
@@ -328,7 +374,7 @@ function DemandCard({
             <button
               type="button"
               disabled={updating}
-              onClick={() => void onUpdate(demand.id, { script_status: "approved", script_feedback: "" })}
+              onClick={() => void approveStage("script")}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider text-white uppercase hover:bg-emerald-700 disabled:opacity-50"
             >
               <Check size={13} /> {t("campaignDetail.approveScript")}
@@ -338,7 +384,7 @@ function DemandCard({
             <button
               type="button"
               disabled={updating}
-              onClick={() => void onUpdate(demand.id, { video_status: "approved", delivery_status: "approved", video_feedback: "" })}
+              onClick={() => void approveStage("video")}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider text-white uppercase hover:bg-emerald-700 disabled:opacity-50"
             >
               <Check size={13} /> {t("campaignDetail.approveMaterial")}

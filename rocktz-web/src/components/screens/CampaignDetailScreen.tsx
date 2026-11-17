@@ -94,7 +94,9 @@ import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
 import { agencyFeeFromBudget, currentAgencyFeePercent, parseAgencyFeePercent } from "@/lib/agency-fee";
 import { isPendingAgency } from "@/lib/agency-approval";
-import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { ContentReactionButton, ContentReactionNotes } from "@/components/ContentReactionNote";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning, promptContentReaction } from "@/lib/alerts";
+import { reactionPayload } from "@/lib/content-reaction";
 import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
@@ -898,6 +900,18 @@ function DetailInner() {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", next);
     window.history.replaceState({}, "", url);
+  }
+
+  async function approveWithReaction(row: CampaignCreator, stage: "script" | "video", body: Record<string, unknown>) {
+    const reaction = await promptContentReaction({
+      title: t(stage === "script" ? "contentReaction.approveScriptTitle" : "contentReaction.approveVideoTitle"),
+      text: t(stage === "script" ? "contentReaction.approveScriptText" : "contentReaction.approveVideoText"),
+      confirmText: t(stage === "script" ? "campaignDetail.approveScript" : "campaignDetail.approveMaterial"),
+      liked: stage === "script" ? Boolean(row.script_liked) : Boolean(row.video_liked),
+      message: (stage === "script" ? row.script_reaction : row.video_reaction) ?? "",
+    });
+    if (!reaction) return null;
+    return patch(row, { ...body, ...reactionPayload(stage, reaction) });
   }
 
   async function patch(row: CampaignCreator, body: Record<string, unknown>) {
@@ -2438,6 +2452,34 @@ function DetailInner() {
                             {t(isBrandPosting(campaign.posting_profile) ? "campaignDetail.approvedBannerBrand" : "campaignDetail.approvedBanner", { name: selectedCreator.artistic_name })}
                           </div>
                         ) : null}
+                        <ContentReactionNotes
+                          scriptLiked={selected.script_liked}
+                          scriptMessage={selected.script_reaction}
+                          videoLiked={selected.video_liked}
+                          videoMessage={selected.video_reaction}
+                        />
+                        {(selected.script_status === "approved" || selected.video_status === "approved" || selected.delivery_status === "approved" || selected.delivery_status === "published") ? (
+                        <div className="flex flex-wrap gap-2">
+                          {selected.script_status === "approved" ? (
+                            <ContentReactionButton
+                              label={t("contentReaction.likeScript")}
+                              liked={selected.script_liked}
+                              message={selected.script_reaction}
+                              disabled={updatingId !== null}
+                              onSave={(reaction) => patch(selected, reactionPayload("script", reaction))}
+                            />
+                          ) : null}
+                          {selected.video_status === "approved" || selected.delivery_status === "approved" || selected.delivery_status === "published" ? (
+                            <ContentReactionButton
+                              label={t("contentReaction.likeVideo")}
+                              liked={selected.video_liked}
+                              message={selected.video_reaction}
+                              disabled={updatingId !== null}
+                              onSave={(reaction) => patch(selected, reactionPayload("video", reaction))}
+                            />
+                          ) : null}
+                        </div>
+                        ) : null}
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5 text-[10px] font-black tracking-wider text-slate-700 uppercase">
                             <Edit3 size={13} className="text-brand-primary" /> {t("campaignDetail.decisionTitle")}
@@ -2509,7 +2551,7 @@ function DetailInner() {
                                   {t("campaignDetail.requestRevision")}
                                 </button>
                                 {selected.script_status === "submitted" || (selected.content?.script && selected.script_status !== "approved" && !selected.content?.video_url && !publishedLinkDraft.trim()) ? (
-                                  <button type="button" disabled={updatingId !== null} onClick={() => patch(selected, { script_status: "approved", script_feedback: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
+                                  <button type="button" disabled={updatingId !== null} onClick={() => void approveWithReaction(selected, "script", { script_status: "approved", script_feedback: "" })} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50">
                                     <ThumbsUp size={12} fill="currentColor" /> {t("campaignDetail.approveScript")}
                                   </button>
                                 ) : (
@@ -2525,7 +2567,7 @@ function DetailInner() {
                                         revision_details: "",
                                       };
                                       if (published) body.published_link = published;
-                                      void patch(selected, body);
+                                      void approveWithReaction(selected, "video", body);
                                     }}
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50"
                                   >
@@ -3832,7 +3874,7 @@ function DetailInner() {
                   disabled={updatingId !== null}
                   onClick={() => {
                     setScriptPreviewOpen(false);
-                    void patch(selected, { script_status: "approved", script_feedback: "" });
+                    void approveWithReaction(selected, "script", { script_status: "approved", script_feedback: "" });
                   }}
                   className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-[11px] font-black tracking-wider whitespace-nowrap text-white uppercase shadow-xs hover:bg-emerald-700 disabled:opacity-50"
                 >

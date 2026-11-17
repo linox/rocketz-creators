@@ -65,7 +65,9 @@ import { MoneyInput } from "@/components/MoneyInput";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { isPendingAgency } from "@/lib/agency-approval";
-import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { ContentReactionButton, ContentReactionNotes } from "@/components/ContentReactionNote";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning, promptContentReaction } from "@/lib/alerts";
+import { reactionPayload } from "@/lib/content-reaction";
 import { cn } from "@/lib/cn";
 import { getCalendarDays, localDateStr, planningDateEvents } from "@/lib/calendar";
 import { itemHasPautaBriefing, itemIsAwaitingPauta, isLivePautaType, namedPautaTitle, parsePautaBriefing, pautaBriefingHasContent, pautaBriefingSummary, emptyPautaBriefing } from "@/lib/pauta-briefing";
@@ -1065,16 +1067,21 @@ function DetailInner() {
 
   async function onApproveScript(item: PlanningItem) {
     const live = isLivePauta(item.content_type);
-    if (!(await alertConfirm(
-      t(live ? "recurringDetail.liveApproveScriptTitle" : "recurringDetail.approveScriptTitle"),
-      t(live ? "recurringDetail.liveApproveScriptText" : "recurringDetail.approveScriptText"),
-    ))) return;
+    const reaction = await promptContentReaction({
+      title: t(live ? "recurringDetail.liveApproveScriptTitle" : "recurringDetail.approveScriptTitle"),
+      text: t(live ? "recurringDetail.liveApproveScriptText" : "recurringDetail.approveScriptText"),
+      confirmText: t("recurringDetail.approveScript"),
+      liked: Boolean(item.script_liked),
+      message: item.script_reaction ?? "",
+    });
+    if (!reaction) return;
     try {
       await api.updatePlanningItem(item.id, {
         script_status: "approved",
         script_feedback: "",
         status: "in_production",
         feedback_note: "",
+        ...reactionPayload("script", reaction),
       });
       await alertSuccess(t(live ? "recurringDetail.liveApproveScriptOk" : "recurringDetail.approveScriptOk"));
       if (viewingPauta?.id === item.id) closePautaView();
@@ -1084,14 +1091,32 @@ function DetailInner() {
     }
   }
 
+  async function saveReaction(item: PlanningItem, stage: "script" | "video", reaction: { liked: boolean; message: string }) {
+    try {
+      await api.updatePlanningItem(item.id, reactionPayload(stage, reaction));
+      await alertSuccess(t("contentReaction.saved"));
+      load();
+    } catch (err) {
+      await alertApiError(err);
+    }
+  }
+
   async function onApproveVideo(item: PlanningItem) {
-    if (!(await alertConfirm(t("recurringDetail.approveVideoTitle"), t("recurringDetail.approveVideoText")))) return;
+    const reaction = await promptContentReaction({
+      title: t("recurringDetail.approveVideoTitle"),
+      text: t("recurringDetail.approveVideoText"),
+      confirmText: t("recurringDetail.approveVideo"),
+      liked: Boolean(item.video_liked),
+      message: item.video_reaction ?? "",
+    });
+    if (!reaction) return;
     try {
       await api.updatePlanningItem(item.id, {
         video_status: "approved",
         video_feedback: "",
         status: "approved",
         feedback_note: "",
+        ...reactionPayload("video", reaction),
       });
       await alertSuccess(t("recurringDetail.approveVideoOk"));
       if (viewingPauta?.id === item.id) closePautaView();
@@ -2047,7 +2072,31 @@ function DetailInner() {
                                     </button>
                                   </>
                                 ) : null}
+                                {canManage && item.script_status === "approved" ? (
+                                  <ContentReactionButton
+                                    label={t("contentReaction.likeScript")}
+                                    liked={item.script_liked}
+                                    message={item.script_reaction}
+                                    onSave={(reaction) => saveReaction(item, "script", reaction)}
+                                  />
+                                ) : null}
+                                {canManage && (item.video_status === "approved" || item.status === "approved" || item.status === "published") ? (
+                                  <ContentReactionButton
+                                    label={t("contentReaction.likeVideo")}
+                                    liked={item.video_liked}
+                                    message={item.video_reaction}
+                                    onSave={(reaction) => saveReaction(item, "video", reaction)}
+                                  />
+                                ) : null}
                               </div>
+                              {!isCreator ? (
+                                <ContentReactionNotes
+                                  scriptLiked={item.script_liked}
+                                  scriptMessage={item.script_reaction}
+                                  videoLiked={item.video_liked}
+                                  videoMessage={item.video_reaction}
+                                />
+                              ) : null}
                               {videoVersions.length > 1 ? (
                                 <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
                                   <p className="m-0 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase">{t("recurringDetail.videoVersionsTitle")}</p>

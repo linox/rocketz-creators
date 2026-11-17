@@ -21,6 +21,7 @@ use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
+use App\Support\ContentReaction;
 use App\Support\CreatorPrivacy;
 use App\Support\DeliveryMovements;
 use App\Support\PublicationRevert;
@@ -427,6 +428,7 @@ class RecurringContractController extends Controller
             'script_feedback' => ['nullable', 'string'],
             'video_feedback' => ['nullable', 'string'],
             'revert_publication' => ['sometimes', 'boolean'],
+            ...ContentReaction::rules(),
         ]);
         $this->normalizeBriefingPayload($data);
         $data = SafeHttpUrl::validateFields($data, [
@@ -542,6 +544,9 @@ class RecurringContractController extends Controller
             $data['reviewed_at'] = now();
         }
 
+        $reactionChanges = [];
+        $data = ContentReaction::prepare($contentPlanningItem, $data, $reactionChanges);
+
         DeliveryMovements::capture($contentPlanningItem, $data);
         $contentPlanningItem->fill($data);
 
@@ -580,6 +585,14 @@ class RecurringContractController extends Controller
 
         $contentPlanningItem->loadMissing(['creator.user', 'recurringContract']);
         $this->notifyPlanningItemChange($contentPlanningItem, $data);
+        ContentReaction::notify(
+            $this->notifications,
+            (int) $contentPlanningItem->creator_id,
+            $contentPlanningItem->notificationTitle(),
+            $contentPlanningItem->creatorFocusPath(),
+            $reactionChanges,
+            ['recurring_contract_id' => $contentPlanningItem->recurring_contract_id],
+        );
 
         if (
             $contentPlanningItem->isVisibleToCreator()

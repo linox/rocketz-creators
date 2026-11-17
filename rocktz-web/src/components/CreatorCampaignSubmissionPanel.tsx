@@ -23,6 +23,7 @@ import { isBrandPosting } from "@/lib/posting-profile";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
+import { ContentReactionNotes } from "@/components/ContentReactionNote";
 
 function briefingText(campaign: Campaign, key: string) {
   const value = campaign.briefing?.[key];
@@ -204,6 +205,12 @@ function CreatorLiveDemandForm({
 
   return (
     <div className="flex flex-col gap-3">
+      <ContentReactionNotes
+        scriptLiked={row.script_liked}
+        scriptMessage={row.script_reaction}
+        videoLiked={row.video_liked}
+        videoMessage={row.video_reaction}
+      />
       {scriptRevision ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
           <p className="m-0 text-xs font-black text-rose-900">{tp("revisionAlertTitle")}</p>
@@ -668,6 +675,12 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
 
       {briefingOnly ? null : (
       <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+        <ContentReactionNotes
+          scriptLiked={row.script_liked}
+          scriptMessage={row.script_reaction}
+          videoLiked={row.video_liked}
+          videoMessage={row.video_reaction}
+        />
         <h5 className="flex items-center gap-2 border-b border-slate-100 pb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
           {linkStage ? <Link2 size={15} className="text-emerald-600" /> : <Send size={15} className="text-brand-primary" />}
           {linkStage ? tp("publishLinkTitle") : tp("submissionTitle")}

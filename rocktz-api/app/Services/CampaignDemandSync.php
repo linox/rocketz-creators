@@ -292,6 +292,10 @@ class CampaignDemandSync
             'delivery_status',
             'script_feedback',
             'video_feedback',
+            'script_liked',
+            'script_reaction',
+            'video_liked',
+            'video_reaction',
             'revision_details',
             'pauta',
         ]));

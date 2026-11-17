@@ -1,4 +1,25 @@
 {
+  "contentReaction": {
+    "hint": "Besides approving, you can like it and leave a note. The creator sees this on the content.",
+    "like": "Like",
+    "liked": "Liked",
+    "messageLabel": "Note for the creator",
+    "messagePh": "Optional. E.g. this take was wonderful.",
+    "creatorTitle": "The brand liked this content",
+    "creatorMessageTitle": "Note from the brand",
+    "editTitle": "React to this content",
+    "editText": "The creator sees the like and the note on this content.",
+    "save": "Save reaction",
+    "saved": "Reaction sent to the creator",
+    "likeScript": "Like script",
+    "likeVideo": "Like content",
+    "scriptStage": "Script",
+    "videoStage": "Content",
+    "approveScriptTitle": "Approve script",
+    "approveScriptText": "The creator can continue. Like the script or leave a note if you want.",
+    "approveVideoTitle": "Approve content",
+    "approveVideoText": "The creator sees the approval. Like the content or leave a note if you want."
+  },
   "barterShipments": {
     "title": "Barter shipping",
     "subtitle": "Approved creators on barter campaigns show up here waiting for a code. Tracking starts when the Correios code is saved.",

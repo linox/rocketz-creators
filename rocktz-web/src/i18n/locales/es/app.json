@@ -1,4 +1,25 @@
 {
+  "contentReaction": {
+    "hint": "Además de aprobar, puedes dar me gusta y dejar un recado. El creador lo ve en el contenido.",
+    "like": "Me gusta",
+    "liked": "Te gustó",
+    "messageLabel": "Recado para el creador",
+    "messagePh": "Opcional. Ej.: quedó increíble, nos encantó esta toma.",
+    "creatorTitle": "A la marca le gustó este contenido",
+    "creatorMessageTitle": "Recado de la marca",
+    "editTitle": "Reaccionar al contenido",
+    "editText": "El creador ve el me gusta y el recado en este contenido.",
+    "save": "Guardar reacción",
+    "saved": "Reacción enviada al creador",
+    "likeScript": "Me gusta al guion",
+    "likeVideo": "Me gusta al contenido",
+    "scriptStage": "Guion",
+    "videoStage": "Contenido",
+    "approveScriptTitle": "Aprobar guion",
+    "approveScriptText": "El creador puede seguir. Si quieres, dale me gusta al guion o deja un recado.",
+    "approveVideoTitle": "Aprobar contenido",
+    "approveVideoText": "El creador ve la aprobación. Si quieres, dale me gusta o deja un recado."
+  },
   "barterShipments": {
     "title": "Permutas",
     "subtitle": "Los creadores aprobados en campañas de permuta aparecen aquí esperando el código. El rastreo empieza cuando se guarda el código de Correios.",

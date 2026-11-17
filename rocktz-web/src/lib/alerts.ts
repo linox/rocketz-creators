@@ -200,3 +200,75 @@ export async function promptTextarea(options: {
 
   return result.value.trim();
 }
+
+export type ContentReactionChoice = {
+  liked: boolean;
+  message: string;
+};
+
+export async function promptContentReaction(options: {
+  title: string;
+  text?: string;
+  confirmText: string;
+  liked?: boolean;
+  message?: string;
+}): Promise<ContentReactionChoice | null> {
+  const likeLabel = i18n.t("app:contentReaction.like");
+  const likedLabel = i18n.t("app:contentReaction.liked");
+  const hint = i18n.t("app:contentReaction.hint");
+  const messageLabel = i18n.t("app:contentReaction.messageLabel");
+  const messagePh = i18n.t("app:contentReaction.messagePh");
+
+  const result = await Swal.fire({
+    ...base(),
+    icon: "question",
+    title: options.title,
+    html: `
+      ${options.text ? `<p class="m-0 text-sm text-slate-600">${escapeAlertHtml(options.text)}</p>` : ""}
+      <div class="mt-4 flex flex-col gap-3 text-left">
+        <p class="m-0 text-xs font-semibold text-slate-500">${escapeAlertHtml(hint)}</p>
+        <button type="button" id="swal-content-like" class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700"></button>
+        <label class="flex flex-col gap-1">
+          <span class="text-[11px] font-bold tracking-wider text-slate-500 uppercase">${escapeAlertHtml(messageLabel)}</span>
+          <textarea id="swal-content-message" rows="3" maxlength="1000" placeholder="${escapeAlertHtml(messagePh)}" class="w-full resize-y rounded-xl border border-slate-200 p-3 text-sm text-slate-800"></textarea>
+        </label>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: options.confirmText,
+    cancelButtonText: i18n.t("common:cancel"),
+    focusConfirm: false,
+    didOpen: () => {
+      const like = document.getElementById("swal-content-like");
+      const message = document.getElementById("swal-content-message");
+      if (message instanceof HTMLTextAreaElement) message.value = options.message ?? "";
+      const paint = (liked: boolean) => {
+        if (!like) return;
+        like.dataset.liked = liked ? "1" : "0";
+        like.textContent = liked ? `♥ ${likedLabel}` : `♡ ${likeLabel}`;
+        like.className = liked
+          ? "inline-flex items-center justify-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-extrabold text-rose-700"
+          : "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700";
+      };
+      paint(Boolean(options.liked));
+      like?.addEventListener("click", () => {
+        paint(like.dataset.liked !== "1");
+      });
+    },
+    preConfirm: () => {
+      const like = document.getElementById("swal-content-like");
+      const message = document.getElementById("swal-content-message");
+      return {
+        liked: like?.dataset.liked === "1",
+        message: message instanceof HTMLTextAreaElement ? message.value.trim() : "",
+      };
+    },
+  });
+
+  if (!result.isConfirmed || !result.value || typeof result.value !== "object") return null;
+  const value = result.value as ContentReactionChoice;
+  return {
+    liked: Boolean(value.liked),
+    message: typeof value.message === "string" ? value.message.trim() : "",
+  };
+}

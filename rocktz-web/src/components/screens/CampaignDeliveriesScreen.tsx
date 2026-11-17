@@ -19,6 +19,7 @@ import {
   Link2,
   Maximize2,
   Undo2,
+  Heart,
   MessageSquare,
   Play,
   Search,
@@ -34,7 +35,9 @@ import { safeHttpUrl } from "@/lib/safe-http-url";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VideoLightbox } from "@/components/VideoLightbox";
 import { VideoPoster } from "@/components/VideoPoster";
-import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/alerts";
+import { ContentReactionNote } from "@/components/ContentReactionNote";
+import { alertApiError, alertConfirm, alertSuccess, alertWarning, promptContentReaction, type ContentReactionChoice } from "@/lib/alerts";
+import { reactionPayload } from "@/lib/content-reaction";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { mediaDownloadUrl } from "@/lib/media-playback";
@@ -298,11 +301,17 @@ function DeliveriesInboxInner() {
     return item.demandId ? { demand_id: item.demandId, ...body } : body;
   }
 
-  async function approveOnApi(item: DeliveryInboxItem, publishedLink?: string) {
+  function reactionBody(item: DeliveryInboxItem, reaction?: ContentReactionChoice | null) {
+    if (!reaction) return {};
+    return reactionPayload(item.approvalStage === "script" ? "script" : "video", reaction);
+  }
+
+  async function approveOnApi(item: DeliveryInboxItem, publishedLink?: string, reaction?: ContentReactionChoice | null) {
     const link = publishedLink?.trim();
+    const reactionFields = reactionBody(item, reaction);
     if (item.planningItemId) {
       if (link) {
-        await api.updatePlanningItem(item.planningItemId, { published_url: link });
+        await api.updatePlanningItem(item.planningItemId, { published_url: link, ...reactionFields });
         return;
       }
       if (item.approvalStage === "script") {
@@ -311,6 +320,7 @@ function DeliveriesInboxInner() {
           script_feedback: "",
           status: "in_production",
           feedback_note: "",
+          ...reactionFields,
         });
         return;
       }
@@ -320,10 +330,11 @@ function DeliveriesInboxInner() {
           video_feedback: "",
           status: "approved",
           feedback_note: "",
+          ...reactionFields,
         });
         return;
       }
-      await api.updatePlanningItem(item.planningItemId, { status: "approved", feedback_note: "" });
+      await api.updatePlanningItem(item.planningItemId, { status: "approved", feedback_note: "", ...reactionFields });
       return;
     }
     if (!item.participationId) return;
@@ -336,11 +347,12 @@ function DeliveriesInboxInner() {
         revision_details: "",
         script_feedback: "",
         video_feedback: "",
+        ...reactionFields,
       }));
       return;
     }
     if (item.approvalStage === "script") {
-      await api.updateParticipation(item.participationId, participationPayload(item, { script_status: "approved", script_feedback: "" }));
+      await api.updateParticipation(item.participationId, participationPayload(item, { script_status: "approved", script_feedback: "", ...reactionFields }));
       return;
     }
     await api.updateParticipation(item.participationId, participationPayload(item, {
@@ -350,6 +362,7 @@ function DeliveriesInboxInner() {
       revision_details: "",
       script_feedback: "",
       video_feedback: "",
+      ...reactionFields,
     }));
   }
 
@@ -542,6 +555,7 @@ function DeliveriesInboxInner() {
   async function approveSelected(withPublishedLink = false) {
     if (!selected || busy) return;
     const published = publishedLinkDraft.trim();
+    let approvalReaction: ContentReactionChoice | null = null;
     if (withPublishedLink) {
       if (!published) {
         await alertWarning(t("deliveries.inbox.publishedLinkRequiredTitle"), t("deliveries.inbox.publishedLinkRequiredText"));
@@ -551,26 +565,38 @@ function DeliveriesInboxInner() {
         await alertWarning(t("deliveries.inbox.publishedLinkRequiredTitle"), t("deliveries.inbox.publishedLinkInvalid"));
         return;
       }
-      if (!(await alertConfirm(
-        t("deliveries.inbox.concludeWithLinkTitle"),
-        t("deliveries.inbox.concludeWithLinkText"),
-        t("deliveries.inbox.concludeWithLink"),
-      ))) return;
+      const reaction = await promptContentReaction({
+        title: t("deliveries.inbox.concludeWithLinkTitle"),
+        text: t("deliveries.inbox.concludeWithLinkText"),
+        confirmText: t("deliveries.inbox.concludeWithLink"),
+        liked: Boolean(selected.liked),
+        message: selected.reactionMessage ?? "",
+      });
+      if (!reaction) return;
+      approvalReaction = reaction;
     } else {
       const isScriptStage = selected.approvalStage === "script";
-      const confirmTitle = isScriptStage ? t("deliveries.inbox.approveScriptTitle") : t("deliveries.inbox.approveConfirmTitle");
-      const confirmText = isScriptStage ? t("deliveries.inbox.approveScriptText") : t("deliveries.inbox.approveConfirmText");
-      if (!(await alertConfirm(confirmTitle, confirmText, t("deliveries.inbox.approve")))) return;
+      const reaction = await promptContentReaction({
+        title: isScriptStage ? t("deliveries.inbox.approveScriptTitle") : t("deliveries.inbox.approveConfirmTitle"),
+        text: isScriptStage ? t("deliveries.inbox.approveScriptText") : t("deliveries.inbox.approveConfirmText"),
+        confirmText: t("deliveries.inbox.approve"),
+        liked: Boolean(selected.liked),
+        message: selected.reactionMessage ?? "",
+      });
+      if (!reaction) return;
+      approvalReaction = reaction;
     }
     setBusy(true);
     try {
-      await approveOnApi(selected, withPublishedLink ? published : undefined);
+      await approveOnApi(selected, withPublishedLink ? published : undefined, approvalReaction);
       const now = new Date().toISOString();
       const isScriptStage = !withPublishedLink && selected.approvalStage === "script";
       patchItem(selected.id, (row) => ({
         ...row,
         status: "approved",
         viewedAt: row.viewedAt ?? now,
+        liked: approvalReaction?.liked ?? row.liked,
+        reactionMessage: approvalReaction?.message ?? row.reactionMessage,
         movements: [...approvalMovements(row, now, withPublishedLink), ...row.movements],
       }));
       await alertSuccess(
@@ -585,6 +611,36 @@ function DeliveriesInboxInner() {
       const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
       if (next) openDelivery(next);
       void loadInbox(true);
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveReaction(item: DeliveryInboxItem) {
+    const reaction = await promptContentReaction({
+      title: t("contentReaction.editTitle"),
+      text: t("contentReaction.editText"),
+      confirmText: t("contentReaction.save"),
+      liked: Boolean(item.liked),
+      message: item.reactionMessage ?? "",
+    });
+    if (!reaction) return;
+    setBusy(true);
+    try {
+      const body = reactionBody(item, reaction);
+      if (item.planningItemId) {
+        await api.updatePlanningItem(item.planningItemId, body);
+      } else if (item.participationId) {
+        await api.updateParticipation(item.participationId, participationPayload(item, body));
+      }
+      patchItem(item.id, (row) => ({
+        ...row,
+        liked: reaction.liked,
+        reactionMessage: reaction.message,
+      }));
+      await alertSuccess(t("contentReaction.saved"));
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -1119,6 +1175,7 @@ function DeliveriesInboxInner() {
                 onBack={() => setMobileShowDetail(false)}
                 onVersion={(id) => setVersionId(id)}
                 onApprove={() => void approveSelected(false)}
+                onReact={() => { if (selected) void saveReaction(selected); }}
                 onConcludeWithLink={() => void approveSelected(true)}
                 onConcludeWithoutLink={() => void concludeWithoutLink()}
                 onRevertConclusion={() => void revertConclusion()}
@@ -1296,6 +1353,7 @@ function InboxRow({
           <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
             {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
           </span>
+          {item.liked ? <Heart size={12} className="fill-rose-500 text-rose-500" /> : null}
         </div>
       </div>
     </div>
@@ -1316,6 +1374,7 @@ function ReadingPane({
   onBack,
   onVersion,
   onApprove,
+  onReact,
   onConcludeWithLink,
   onConcludeWithoutLink,
   onRevertConclusion,
@@ -1342,6 +1401,7 @@ function ReadingPane({
   onBack: () => void;
   onVersion: (id: string) => void;
   onApprove: () => void;
+  onReact: () => void;
   onConcludeWithLink: () => void;
   onConcludeWithoutLink: () => void;
   onRevertConclusion: () => void;
@@ -1415,6 +1475,11 @@ function ReadingPane({
             </button>
           ) : null}
           {hasMaterial ? (
+            <button type="button" onClick={onReact} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-extrabold text-rose-700 hover:bg-rose-100">
+              <Heart size={14} className={item.liked ? "fill-current" : ""} /> {item.liked ? t("contentReaction.liked") : t("contentReaction.like")}
+            </button>
+          ) : null}
+          {hasMaterial ? (
             <button type="button" onClick={onToggleRevision} className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-extrabold text-purple-700 hover:bg-purple-100">
               <MessageSquare size={14} /> {t("deliveries.inbox.requestRevision")}
             </button>
@@ -1433,6 +1498,12 @@ function ReadingPane({
             </button>
           ) : null}
         </div>
+
+        {item.liked || item.reactionMessage?.trim() ? (
+          <div className="mt-3">
+            <ContentReactionNote liked={item.liked} message={item.reactionMessage} />
+          </div>
+        ) : null}
 
         {awaitingVideoWithoutFile ? (
           <div className="mt-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/80 px-4 py-3">

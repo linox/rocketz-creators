@@ -32,6 +32,7 @@ use App\Services\CreatorCouponIssuer;
 use App\Services\FinancePaymentSync;
 use App\Services\Mail\MailNotifier;
 use App\Services\NotificationService;
+use App\Support\ContentReaction;
 use App\Support\CreatorPrivacy;
 use App\Support\DeliveryMovements;
 use App\Support\Geo;
@@ -486,6 +487,7 @@ class CampaignController extends Controller
             'image_url' => ['nullable', 'string', 'max:2048'],
             'published_link' => ['nullable', 'string', 'max:2048'],
             'revert_publication' => ['sometimes', 'boolean'],
+            ...ContentReaction::rules(),
         ]);
 
         $campaignCreator->loadMissing('campaign');
@@ -566,7 +568,11 @@ class CampaignController extends Controller
             || array_key_exists('delivery_status', $data)
             || array_key_exists('script_feedback', $data)
             || array_key_exists('video_feedback', $data)
-            || array_key_exists('revision_details', $data);
+            || array_key_exists('revision_details', $data)
+            || array_key_exists('script_liked', $data)
+            || array_key_exists('script_reaction', $data)
+            || array_key_exists('video_liked', $data)
+            || array_key_exists('video_reaction', $data);
         if ($campaignCreator->demands()->exists() && $touchesSubmission && ! $demand) {
             throw ValidationException::withMessages([
                 'demand_id' => __('auth.campaign_demand_required'),
@@ -576,7 +582,7 @@ class CampaignController extends Controller
         $demandAttributes = $contentFields;
         $previousPauta = trim((string) ($demand?->pauta ?? ''));
         if ($demand) {
-            foreach (['pauta', 'script_status', 'video_status', 'delivery_status', 'script_feedback', 'video_feedback', 'revision_details'] as $key) {
+            foreach (['pauta', 'script_status', 'video_status', 'delivery_status', 'script_feedback', 'video_feedback', 'revision_details', 'script_liked', 'script_reaction', 'video_liked', 'video_reaction'] as $key) {
                 if (array_key_exists($key, $data)) {
                     $demandAttributes[$key] = $data[$key];
                     unset($data[$key]);
@@ -632,6 +638,11 @@ class CampaignController extends Controller
             $data['additional_briefing'] = trim((string) ($data['additional_briefing'] ?? '')) ?: null;
         }
 
+        $reactionChanges = [];
+        if (! $demand) {
+            $data = ContentReaction::prepare($campaignCreator, $data, $reactionChanges);
+        }
+
         $previousBriefing = trim((string) ($campaignCreator->additional_briefing ?? ''));
         $movementBefore = [
             'script_status' => $campaignCreator->script_status,
@@ -680,6 +691,7 @@ class CampaignController extends Controller
 
         if ($demand) {
             $demandAttributes = $this->demands->storeBriefInsteadOfEmptyRevision($demand, $demandAttributes);
+            $demandAttributes = ContentReaction::prepare($demand, $demandAttributes, $reactionChanges);
             $this->demands->fillSubmission($demand, $demandAttributes);
         } elseif ($contentFields) {
             CampaignCreatorContent::query()->updateOrCreate(
@@ -755,6 +767,14 @@ class CampaignController extends Controller
         $campaignCreator->loadMissing(['creator.user', 'campaign', 'content', 'demands']);
         $notifyData = $demand ? array_merge($data, $demandAttributes) : $data;
         $this->notifyParticipationChange($campaignCreator, $notifyData);
+        ContentReaction::notify(
+            $this->notifications,
+            (int) $campaignCreator->creator_id,
+            $demand?->label() ?? ($campaignCreator->campaign?->name ?? ''),
+            '/creators/'.$campaignCreator->creator_id.'?tab=campaigns',
+            $reactionChanges,
+            ['campaign_id' => (int) $campaignCreator->campaign_id],
+        );
         $this->notifyAdditionalBriefing($campaignCreator, $data, $previousBriefing);
         $this->notifyDemandPauta($campaignCreator, $demand, $demandAttributes, $previousPauta);
 

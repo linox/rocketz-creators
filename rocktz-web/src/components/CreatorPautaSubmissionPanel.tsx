@@ -18,6 +18,7 @@ import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document
 import { isBrandPosting } from "@/lib/posting-profile";
 import { ScriptDocumentField } from "@/components/ScriptDocumentField";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
+import { ContentReactionNotes } from "@/components/ContentReactionNote";
 
 type Props = {
   item: PlanningItem;
@@ -283,6 +284,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     : videoRevision
       ? (item.video_feedback || item.feedback_note || "")
       : "";
+  const reactions = (
+    <ContentReactionNotes
+      scriptLiked={item.script_liked}
+      scriptMessage={item.script_reaction}
+      videoLiked={item.video_liked}
+      videoMessage={item.video_reaction}
+    />
+  );
 
   if (awaitingPauta) {
     return (
@@ -296,6 +305,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     if (brandPosts) {
       return item.published_url ? (
         <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          {reactions}
           <p className="m-0 text-[10px] font-extrabold tracking-wider text-emerald-800 uppercase">{tp("publishedLinkLabel")}</p>
           <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
             <Link2 size={13} /> {item.published_url}
@@ -307,6 +317,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     const publishedUnchanged = publishedUrl.trim() === (item.published_url || "").trim();
     return (
       <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+        {reactions}
         <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("editPublishedLinkHint")}</p>
         {item.published_url ? (
           <a href={safeHttpUrl(item.published_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 truncate text-xs font-bold text-emerald-800 hover:underline">
@@ -383,6 +394,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     if (scriptApproved) {
       return (
         <div className="flex flex-col gap-3">
+          {reactions}
           {briefingBlock}
           {liveLinkForm}
         </div>
@@ -392,6 +404,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     if (awaitingScriptApproval) {
       return (
         <div className="flex flex-col gap-3">
+          {reactions}
           {briefingBlock}
           <p className="m-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-900">
             {tp("waitingLiveScriptApproval")}
@@ -402,6 +415,7 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
 
     return (
       <div className="flex flex-col gap-3">
+        {reactions}
         {briefingBlock}
         {hasRevision ? (
           <div ref={revisionRef} className="flex flex-col gap-2.5 rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50 p-4 shadow-sm">
@@ -459,12 +473,14 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     if (brandPosts) {
       return (
         <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          {reactions}
           <p className="m-0 text-[11px] font-medium text-amber-900">{tp("approvedPublishHintBrand")}</p>
         </div>
       );
     }
     return (
       <div className="flex flex-col gap-3">
+        {reactions}
         {pautaScriptFile || item.script ? (
           <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
             {item.script ? (
@@ -506,10 +522,11 @@ export function CreatorPautaSubmissionPanel({ item, onSubmitted }: Props) {
     );
   }
 
-  if (done) return null;
+  if (done) return reactions;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+      {reactions}
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-extrabold tracking-wider text-indigo-800 uppercase">
         <Send size={12} />
         {staged ? t("recurringDetail.pautaSubmitStaged") : t("recurringDetail.pautaSubmitVideo")}
