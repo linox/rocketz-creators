@@ -164,6 +164,47 @@ class CreatorVideoLibraryTest extends TestCase
         $this->assertSame($planning->id, CreatorVideo::query()->where('title', 'Unboxing de março')->value('content_planning_item_id'));
     }
 
+    public function test_company_can_tag_a_video_and_the_tags_survive_sync(): void
+    {
+        [$company, $user] = $this->companyUser();
+        $campaign = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'name' => 'Verao Aurora',
+        ]);
+        $participation = CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+        ]);
+        $this->demand($participation, 1);
+
+        $videoId = $this->asUser($user)->getJson('/api/creator-videos')->json('data.0.id');
+
+        $this->asUser($user)
+            ->putJson("/api/creator-videos/{$videoId}/tags", [
+                'tags' => [' Black Friday ', 'black friday', 'UGC', ''],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.tags', ['Black Friday', 'UGC']);
+
+        $again = collect($this->asUser($user)->getJson('/api/creator-videos')->assertOk()->json('data'));
+        $this->assertSame(['Black Friday', 'UGC'], $again->firstWhere('id', $videoId)['tags']);
+
+        $this->asUser($participation->creator->user)
+            ->putJson("/api/creator-videos/{$videoId}/tags", ['tags' => ['outra']])
+            ->assertForbidden();
+
+        $this->asUser($user)
+            ->putJson("/api/creator-videos/{$videoId}/tags", [
+                'tags' => array_map(fn (int $index) => 'tag '.$index, range(1, 13)),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('tags');
+
+        $this->asUser($user)
+            ->putJson("/api/creator-videos/{$videoId}/tags", ['tags' => []])
+            ->assertOk()
+            ->assertJsonPath('data.tags', []);
+    }
+
     public function test_removed_campaign_post_stays_out_of_the_history(): void
     {
         [$company, $user] = $this->companyUser();

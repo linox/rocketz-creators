@@ -8,6 +8,7 @@ use App\Enums\ContentType;
 use App\Enums\NotificationType;
 use App\Enums\PostingProfile;
 use App\Enums\RecurringContractStatus;
+use App\Enums\RecurringPaymentMode;
 use App\Enums\StageApprovalStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -35,6 +36,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class RecurringContractController extends Controller
 {
@@ -161,6 +163,7 @@ class RecurringContractController extends Controller
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
             'status' => ['nullable', Rule::enum(RecurringContractStatus::class)],
+            'payment_mode' => ['nullable', Rule::enum(RecurringPaymentMode::class)],
             'monthly_fee' => ['nullable', 'numeric'],
             'notes' => ['nullable', 'string'],
             'creator_ids' => ['nullable', 'array'],
@@ -175,6 +178,10 @@ class RecurringContractController extends Controller
         Company::assertApproved((int) $data['company_id']);
         $data['currency'] = Company::query()->find((int) $data['company_id'])?->currencyCode() ?: Geo::DEFAULT_CURRENCY;
         $data['start_date'] ??= now()->toDateString();
+        $data['payment_mode'] = RecurringPaymentMode::tryFrom((string) ($data['payment_mode'] ?? '')) ?? RecurringPaymentMode::Cash;
+        if ($data['payment_mode'] === RecurringPaymentMode::Barter) {
+            $data['monthly_fee'] = 0;
+        }
 
         $ids = $data['creator_ids'] ?? [];
         unset($data['creator_ids']);
@@ -209,11 +216,18 @@ class RecurringContractController extends Controller
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
             'status' => ['nullable', Rule::enum(RecurringContractStatus::class)],
+            'payment_mode' => ['sometimes', Rule::enum(RecurringPaymentMode::class)],
             'monthly_fee' => ['nullable', 'numeric'],
             'notes' => ['nullable', 'string'],
         ]);
         if (! $request->user()->canPublishWithoutApproval()) {
             unset($data['status']);
+        }
+        $mode = isset($data['payment_mode'])
+            ? RecurringPaymentMode::from((string) $data['payment_mode'])
+            : ($recurringContract->payment_mode ?? RecurringPaymentMode::Cash);
+        if ($mode === RecurringPaymentMode::Barter) {
+            $data['monthly_fee'] = 0;
         }
         $previousStatus = $recurringContract->status;
         $recurringContract->fill($data)->save();
@@ -252,9 +266,12 @@ class RecurringContractController extends Controller
             'monthly_cache' => ['nullable', 'numeric'],
             'monthly_deliverables' => ['nullable', 'array'],
             'notes' => ['nullable', 'string'],
+            'barter_details' => ['nullable', 'string', 'max:2000'],
         ]);
         if (CreatorPrivacy::hidesCreatorValues($request->user())) {
-            unset($data['monthly_cache'], $data['monthly_fee'], $data['deliverables_fee']);
+            unset($data['monthly_cache'], $data['monthly_fee'], $data['deliverables_fee'], $data['barter_details']);
+        } else {
+            $data = $this->normalizeCreatorPayment($recurringContract, $data);
         }
         $this->assertCompanyCanAssignCreators($request, [(int) $data['creator_id']], $recurringContract);
         $this->publishIfActorCan($request, $recurringContract);
@@ -271,7 +288,7 @@ class RecurringContractController extends Controller
 
         $row->load('creator');
         if (CreatorPrivacy::hidesCreatorValues($request->user())) {
-            $row->makeHidden(['monthly_cache', 'monthly_fee', 'deliverables_fee']);
+            $row->makeHidden(['monthly_cache', 'monthly_fee', 'deliverables_fee', 'barter_details']);
             $row->creator?->makeHidden(['pricing']);
         }
 
@@ -871,6 +888,49 @@ class RecurringContractController extends Controller
             return;
         }
         abort(403, __('auth.forbidden'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeCreatorPayment(RecurringContract $contract, array $data): array
+    {
+        $mode = $contract->payment_mode ?? RecurringPaymentMode::Cash;
+        $barter = trim((string) ($data['barter_details'] ?? ''));
+        $cash = (float) ($data['monthly_cache'] ?? 0);
+
+        if ($mode === RecurringPaymentMode::Barter) {
+            if ($barter === '') {
+                throw ValidationException::withMessages([
+                    'barter_details' => [__('auth.recurring_barter_required')],
+                ]);
+            }
+            $data['barter_details'] = $barter;
+            $data['monthly_cache'] = 0;
+            $data['monthly_fee'] = 0;
+
+            return $data;
+        }
+
+        if ($mode === RecurringPaymentMode::Cash) {
+            $data['barter_details'] = null;
+
+            return $data;
+        }
+
+        if ($cash <= 0 && $barter === '') {
+            throw ValidationException::withMessages([
+                'barter_details' => [__('auth.recurring_payment_required')],
+            ]);
+        }
+
+        $data['barter_details'] = $barter !== '' ? $barter : null;
+        if ($cash <= 0) {
+            $data['monthly_cache'] = 0;
+        }
+
+        return $data;
     }
 
     private function assertCanManage(Request $request, RecurringContract $contract): void

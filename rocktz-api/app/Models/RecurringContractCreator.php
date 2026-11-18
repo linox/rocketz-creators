@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'deliverables_fee',
     'monthly_deliverables',
     'notes',
+    'barter_details',
 ])]
 class RecurringContractCreator extends Model
 {

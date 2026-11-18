@@ -37,6 +37,7 @@ import {
   Users,
   Video,
   X,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -54,6 +55,7 @@ import { creatorPautaHeading, emptyPautaBriefing, itemHasPautaBriefing, itemIsAw
 import { usePrivacy } from "@/lib/privacy";
 import { formatMoneyGroups, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask, remaskMoney } from "@/lib/masks";
+import { recurringAllowsCash, recurringPaymentMode, type RecurringPaymentMode } from "@/lib/recurring-payment";
 import type { Company, Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { userHidesCreatorValues } from "@/lib/auth";
 import { useAuth } from "@/lib/use-auth";
@@ -141,6 +143,7 @@ const QUOTA_PILLS: { keys: string[]; type: string; labelKey: string }[] = [
 const EMPTY_CONTRACT = {
   title: "",
   company_id: "",
+  payment_mode: "cash" as RecurringPaymentMode,
   monthly_fee: "",
   objective: "",
   start_date: "",
@@ -396,6 +399,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
       setContractForm({
         title: contract.title,
         company_id: String(contract.company_id),
+        payment_mode: recurringPaymentMode(contract.payment_mode),
         monthly_fee: contract.monthly_fee != null ? moneyToMask(contract.monthly_fee, moneyCurrency(contract)) : "",
         objective: contract.objective || "",
         start_date: contract.start_date || "",
@@ -472,10 +476,12 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         return;
       }
     }
+    const allowsCash = recurringAllowsCash(contractForm.payment_mode);
     const body = {
       title: contractForm.title,
       company_id: companyId,
-      monthly_fee: contractForm.monthly_fee ? parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) : null,
+      payment_mode: contractForm.payment_mode,
+      monthly_fee: allowsCash && contractForm.monthly_fee ? parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) : 0,
       objective: contractForm.objective || null,
       start_date: contractForm.start_date || null,
       end_date: contractForm.end_date || null,
@@ -724,7 +730,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {filteredContracts.map((contract) => {
-                const fee = Number(contract.monthly_fee || 0);
+                const mode = recurringPaymentMode(contract.payment_mode);
+                const allowsCash = recurringAllowsCash(mode);
+                const fee = allowsCash ? Number(contract.monthly_fee || 0) : 0;
                 const cost = (contract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0);
                 const remaining = fee - cost;
                 const months = contractMonths(contract.start_date, contract.end_date);
@@ -747,6 +755,11 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                               {t(`status.${contract.status}`, { defaultValue: contract.status })}
                             </span>
                             {canManage && fee ? <span className="max-w-full truncate rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-700">{t("recurring.monthly", { value: pay(fee, contract) })}</span> : null}
+                            {mode !== "cash" ? (
+                              <span className="max-w-full truncate rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-800">
+                                {t(mode === "barter" ? "recurring.paymentBarter" : "recurring.paymentMixed")}
+                              </span>
+                            ) : null}
                             {canManage && contract.end_date && months > 1 && fee ? <span className="max-w-full truncate rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">{t("recurring.periodTotal", { value: pay(fee * months, contract), months })}</span> : null}
                             {canManage && fee ? (
                               <span className={cn("max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-black", remaining >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700")}>
@@ -796,6 +809,13 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                         <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5">
                           <BudgetCell label={t("recurringDetail.monthlyCache")} value={pay(cost, contract)} hint={t("recurring.perMonth")} />
                         </div>
+                      ) : isCreator && mode !== "cash" ? (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 p-2.5">
+                          <span className="text-[10px] font-extrabold tracking-wider text-amber-700 uppercase">{t("recurring.paymentBarter")}</span>
+                          <p className="mt-1 line-clamp-2 text-xs font-bold text-amber-950">{contract.creators?.find((row) => row.barter_details)?.barter_details || t("recurring.paymentBarterHint")}</p>
+                        </div>
+                      ) : mode === "barter" ? (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 p-2.5 text-xs font-semibold text-amber-900">{t("recurring.paymentBarterHint")}</div>
                       ) : null}
                     </div>
 
@@ -1242,6 +1262,31 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                   onChange={(e) => setContractForm({ ...contractForm, objective: e.target.value })}
                 />
               </label>
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.paymentMode")}</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["cash", "barter", "mixed"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setContractForm({ ...contractForm, payment_mode: mode, monthly_fee: mode === "barter" ? "" : contractForm.monthly_fee })}
+                      className={cn(
+                        "cursor-pointer rounded-xl border px-3 py-2.5 text-xs font-bold",
+                        contractForm.payment_mode === mode
+                          ? mode === "cash"
+                            ? "border-brand-primary bg-indigo-50 text-brand-primary"
+                            : "border-amber-400 bg-amber-50 text-amber-900"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                      )}
+                    >
+                      {t(mode === "cash" ? "recurring.paymentCash" : mode === "barter" ? "recurring.paymentBarter" : "recurring.paymentMixed")}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  {t(contractForm.payment_mode === "barter" ? "recurring.paymentBarterHint" : contractForm.payment_mode === "mixed" ? "recurring.paymentMixedHint" : "recurring.paymentCashHint")}
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.startDate")}</span>
@@ -1252,8 +1297,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                     onChange={(e) => setContractForm({ ...contractForm, start_date: e.target.value })}
                   />
                 </label>
+                {recurringAllowsCash(contractForm.payment_mode) ? (
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.fee", { currency: contractFormCurrency })}</span>
+                  <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t(contractForm.payment_mode === "mixed" ? "recurring.feeCash" : "recurring.fee", { currency: contractFormCurrency })}</span>
                   <MoneyInput
                     currency={contractFormCurrency}
                     className="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-bold text-slate-800 outline-none focus:border-brand-primary"
@@ -1261,6 +1307,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                     onChange={(value) => setContractForm({ ...contractForm, monthly_fee: value })}
                   />
                 </label>
+                ) : null}
                 {canPublishWithoutApproval ? (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("recurring.contractStatus")}</span>
@@ -1274,35 +1321,35 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                 </label>
                 ) : null}
               </div>
+              {editingContract && recurringAllowsCash(contractForm.payment_mode) ? (
+                <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>{t("recurring.projectBudget")}</span>
+                    <span className="font-bold text-slate-800">{pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency), editingContract)}</span>
+                  </div>
+                  {hideCreatorValues ? null : (
+                    <>
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>{t("recurring.creatorsCost", { count: editingContract.creators?.length || 0 })}</span>
+                    <span className="font-bold text-slate-700">{pay((editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
+                    <span className="font-bold text-slate-700">{t("recurring.remainingBalance")}</span>
+                    <span className={cn("font-black", parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0) >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                      {pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}
+                    </span>
+                  </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
               {editingContract ? (
-                <>
-                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px]">
-                    <div className="flex items-center justify-between text-slate-500">
-                      <span>{t("recurring.projectBudget")}</span>
-                      <span className="font-bold text-slate-800">{pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency), editingContract)}</span>
-                    </div>
-                    {hideCreatorValues ? null : (
-                      <>
-                    <div className="flex items-center justify-between text-slate-500">
-                      <span>{t("recurring.creatorsCost", { count: editingContract.creators?.length || 0 })}</span>
-                      <span className="font-bold text-slate-700">{pay((editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
-                      <span className="font-bold text-slate-700">{t("recurring.remainingBalance")}</span>
-                      <span className={cn("font-black", parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0) >= 0 ? "text-emerald-600" : "text-rose-600")}>
-                        {pay(parseMoneyMask(contractForm.monthly_fee, contractFormCurrency) - (editingContract.creators || []).reduce((sum, row) => sum + creatorCost(row), 0), editingContract)}
-                      </span>
-                    </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                    <span className="text-xs font-bold tracking-wider text-slate-800 uppercase">{t("recurring.allocatedCreators", { count: editingContract.creators?.length || 0 })}</span>
-                    <Link href={`/recurring/${editingContract.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline">
-                      <ExternalLink size={12} /> {t("recurring.manageOnProject")}
-                    </Link>
-                  </div>
-                </>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                  <span className="text-xs font-bold tracking-wider text-slate-800 uppercase">{t("recurring.allocatedCreators", { count: editingContract.creators?.length || 0 })}</span>
+                  <Link href={`/recurring/${editingContract.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline">
+                    <ExternalLink size={12} /> {t("recurring.manageOnProject")}
+                  </Link>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-indigo-100/60 bg-indigo-50/50 p-4 text-xs">
                   <div className="flex items-start gap-2.5">
@@ -1311,7 +1358,7 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-slate-800">{t("recurring.allocateTitle")}</h4>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{t("recurring.allocateBody")}</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{t(contractForm.payment_mode === "barter" ? "recurring.allocateBodyBarter" : contractForm.payment_mode === "mixed" ? "recurring.allocateBodyMixed" : "recurring.allocateBody")}</p>
                     </div>
                   </div>
                 </div>
@@ -1373,7 +1420,9 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
             <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-black tracking-wider text-brand-primary uppercase">{details.company?.name}</span>
             <h2 className="text-xl font-black text-slate-900">{details.title}</h2>
             {details.objective ? <p className="text-sm text-slate-600">{details.objective}</p> : null}
-            {canManage && details.monthly_fee != null ? <p className="text-sm font-bold text-slate-800">{pay(details.monthly_fee, details)}</p> : null}
+            {canManage && recurringPaymentMode(details.payment_mode) === "barter" ? (
+              <p className="text-sm font-bold text-amber-800">{t("recurring.paymentBarter")}</p>
+            ) : canManage && details.monthly_fee != null ? <p className="text-sm font-bold text-slate-800">{pay(details.monthly_fee, details)}</p> : null}
             <div className="flex flex-wrap gap-2">
               {(details.creators || []).map((row) => (
                 <span key={row.id} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold">

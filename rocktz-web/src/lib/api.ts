@@ -243,6 +243,8 @@ export const api = {
   downloadShippingLabels: (id: number, format: "pdf" | "csv") => laravelDownload(`/campaigns/${id}/shipping-labels?format=${format}`),
   barterShipments: () => laravelFetch<List<BarterShipmentRow>>("/barter-shipments"),
   creatorVideos: () => laravelFetch<CreatorVideoList>("/creator-videos"),
+  updateCreatorVideoTags: (id: number, tags: string[]) =>
+    laravelFetch<Item<CreatorVideo>>(`/creator-videos/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
   addCreatorVideoUsage: (id: number, body: { kind: "posted" | "ad"; url?: string | null; note?: string | null; occurred_at?: string | null }) =>
     laravelFetch<Item<CreatorVideo>>(`/creator-videos/${id}/usages`, { method: "POST", body: JSON.stringify(body) }),
   removeCreatorVideoUsage: (id: number, usageId: number) =>

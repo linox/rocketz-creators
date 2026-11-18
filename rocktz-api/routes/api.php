@@ -120,6 +120,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::patch('campaign-creators/{campaignCreator}', [CampaignController::class, 'updateParticipation']);
     Route::get('barter-shipments', [BarterShipmentController::class, 'index']);
     Route::get('creator-videos', [CreatorVideoController::class, 'index']);
+    Route::put('creator-videos/{creatorVideo}/tags', [CreatorVideoController::class, 'updateTags']);
     Route::post('creator-videos/{creatorVideo}/usages', [CreatorVideoController::class, 'storeUsage']);
     Route::delete('creator-videos/{creatorVideo}/usages/{creatorVideoUsage}', [CreatorVideoController::class, 'destroyUsage']);
 

@@ -5,8 +5,8 @@ import { mediaPosterUrl } from "@/lib/media-playback";
 
 type CoverStatus = "ready" | "missing";
 
-const RETRIES = 20;
 const RETRY_MS = 4000;
+const MAX_POLLS = 30;
 const PROBE_MS = 8000;
 
 const covers = new Map<string, CoverStatus>();
@@ -54,21 +54,16 @@ function watchCover(poster: string): Promise<void> {
   let job!: Promise<void>;
   job = (async () => {
     if (covers.get(poster) === "ready") return;
-    for (let attempt = 0; attempt < RETRIES; attempt += 1) {
-      if (await probe(poster)) {
-        readySrc.set(poster, displayUrl(poster));
-        covers.set(poster, "ready");
-        emit();
-        return;
-      }
-      covers.set(poster, "missing");
+    if (await probe(poster)) {
+      readySrc.set(poster, displayUrl(poster));
+      covers.set(poster, "ready");
       emit();
-      if (attempt < RETRIES - 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, RETRY_MS));
-      }
+      return;
     }
+    covers.set(poster, "missing");
+    emit();
   })().finally(() => {
-    if (inflight.get(poster) === job && covers.get(poster) !== "ready") inflight.delete(poster);
+    if (inflight.get(poster) === job) inflight.delete(poster);
     emit();
   });
 
@@ -77,7 +72,7 @@ function watchCover(poster: string): Promise<void> {
 }
 
 /** The JPEG stored beside the video. One load is shared by every screen. */
-export function useVideoCover(src?: string | null): { url: string | null; pending: boolean } {
+export function useVideoCover(src?: string | null, watch = true): { url: string | null; pending: boolean; failed: boolean } {
   const poster = mediaPosterUrl(src);
   const [, setTick] = useState(0);
 
@@ -90,11 +85,26 @@ export function useVideoCover(src?: string | null): { url: string | null; pendin
   }, []);
 
   useEffect(() => {
-    if (!poster || covers.get(poster) === "ready") return;
-    void watchCover(poster);
-  }, [poster]);
+    if (!poster || !watch || covers.get(poster) === "ready") return;
+    let cancelled = false;
+    let timer = 0;
+    const run = async () => {
+      for (let attempt = 0; attempt < MAX_POLLS && !cancelled && covers.get(poster) !== "ready"; attempt += 1) {
+        await watchCover(poster);
+        if (cancelled || covers.get(poster) === "ready") return;
+        await new Promise<void>((resolve) => {
+          timer = window.setTimeout(resolve, RETRY_MS);
+        });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [poster, watch]);
 
-  if (!poster) return { url: null, pending: false };
-  if (covers.get(poster) === "ready") return { url: readySrc.get(poster) ?? displayUrl(poster), pending: false };
-  return { url: null, pending: inflight.has(poster) };
+  if (!poster) return { url: null, pending: false, failed: true };
+  if (covers.get(poster) === "ready") return { url: readySrc.get(poster) ?? displayUrl(poster), pending: false, failed: false };
+  return { url: null, pending: inflight.has(poster), failed: covers.get(poster) === "missing" };
 }

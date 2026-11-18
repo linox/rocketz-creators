@@ -601,6 +601,7 @@ export type RecurringContract = {
   start_date: string | null;
   end_date: string | null;
   status: string;
+  payment_mode?: "cash" | "barter" | "mixed";
   monthly_fee: number | null;
   currency?: string | null;
   notes: string | null;
@@ -622,6 +623,7 @@ export type RecurringContract = {
     monthly_cache: number | null;
     monthly_deliverables?: Record<string, number>;
     notes?: string | null;
+    barter_details?: string | null;
     start_date?: string | null;
     end_date?: string | null;
   }[];
@@ -1002,6 +1004,7 @@ export type CreatorVideo = {
   recurring_contract_id: number | null;
   contract_name: string | null;
   company_name: string | null;
+  tags: string[];
   creator: {
     id: number | null;
     artistic_name: string | null;

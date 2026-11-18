@@ -50,6 +50,28 @@ class CreatorVideoController extends Controller
         ]);
     }
 
+    public function updateTags(Request $request, CreatorVideo $creatorVideo, CreatorVideoLibrary $library): JsonResponse
+    {
+        $user = $request->user();
+        $video = $this->findVisible($user, $creatorVideo->id);
+        abort_unless($this->canManage($user, $video), 403, __('auth.forbidden'));
+
+        $data = $request->validate([
+            'tags' => ['present', 'array', 'max:12'],
+            'tags.*' => ['nullable', 'string', 'max:32'],
+        ], [
+            'tags.max' => __('videos.tags_limit'),
+            'tags.*.max' => __('videos.tag_too_long'),
+        ]);
+
+        $video->tags = $this->normalizeTags($data['tags']);
+        $video->save();
+
+        return response()->json([
+            'data' => $this->present($this->reload($video), $library, true),
+        ]);
+    }
+
     public function storeUsage(Request $request, CreatorVideo $creatorVideo, CreatorVideoLibrary $library): JsonResponse
     {
         $user = $request->user();
@@ -186,6 +208,7 @@ class CreatorVideoController extends Controller
             'recurring_contract_id' => $video->recurring_contract_id,
             'contract_name' => $video->recurringContract?->title,
             'company_name' => $video->company?->name ?? $video->campaign?->company?->name,
+            'tags' => array_values(is_array($video->tags) ? $video->tags : []),
             'creator' => [
                 'id' => $video->creator?->id,
                 'artistic_name' => $video->creator?->artistic_name,
@@ -209,5 +232,35 @@ class CreatorVideoController extends Controller
         $text = trim((string) $value);
 
         return $text === '' ? null : $text;
+    }
+
+    /**
+     * @param  list<mixed>  $tags
+     * @return list<string>
+     */
+    private function normalizeTags(array $tags): array
+    {
+        $clean = [];
+        $seen = [];
+        foreach ($tags as $tag) {
+            $text = preg_replace('/\s+/u', ' ', trim((string) $tag)) ?? '';
+            $text = preg_replace('/[\x00-\x1F\x7F]/u', '', $text) ?? '';
+            $text = trim($text);
+            if ($text === '') {
+                continue;
+            }
+            $text = mb_substr($text, 0, 32);
+            $key = mb_strtolower($text);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $clean[] = $text;
+            if (count($clean) >= 12) {
+                break;
+            }
+        }
+
+        return $clean;
     }
 }

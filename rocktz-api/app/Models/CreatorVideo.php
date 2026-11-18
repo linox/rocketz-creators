@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'received_at',
     'source',
     'dismissed_fingerprints',
+    'tags',
 ])]
 class CreatorVideo extends Model
 {
@@ -38,6 +39,7 @@ class CreatorVideo extends Model
             'received_at' => 'datetime',
             'source' => CreatorVideoSource::class,
             'dismissed_fingerprints' => 'array',
+            'tags' => 'array',
         ];
     }
 

@@ -7,6 +7,7 @@ use App\Enums\FinancePaymentSource;
 use App\Enums\FinancePaymentStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\RecurringContractStatus;
+use App\Enums\RecurringPaymentMode;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
@@ -205,6 +206,10 @@ class FinancePaymentSync
 
     private function ensureRecurringMonths(RecurringContract $contract, RecurringContractCreator $row): void
     {
+        if (($contract->payment_mode ?? RecurringPaymentMode::Cash) === RecurringPaymentMode::Barter) {
+            return;
+        }
+
         $amount = (float) ($row->monthly_cache ?? 0);
         if ($amount <= 0 || ! $row->creator_id) {
             return;

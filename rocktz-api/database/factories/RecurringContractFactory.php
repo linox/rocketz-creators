@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\RecurringContractStatus;
+use App\Enums\RecurringPaymentMode;
 use App\Models\Company;
 use App\Models\RecurringContract;
 use App\Support\Geo;
@@ -25,6 +26,7 @@ class RecurringContractFactory extends Factory
             'start_date' => fake()->dateTimeBetween('-2 months', 'now')->format('Y-m-d'),
             'end_date' => fake()->optional()->dateTimeBetween('+2 months', '+1 year')?->format('Y-m-d'),
             'status' => RecurringContractStatus::Active,
+            'payment_mode' => RecurringPaymentMode::Cash,
             'monthly_fee' => fake()->randomFloat(2, 2000, 15000),
             'currency' => 'BRL',
             'notes' => fake()->optional()->sentence(),

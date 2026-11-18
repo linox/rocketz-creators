@@ -48,6 +48,7 @@ import {
   Users,
   Video,
   X,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
@@ -75,6 +76,7 @@ import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/
 import { usePrivacy } from "@/lib/privacy";
 import { DEFAULT_COUNTRY, formatLocation, moneyCurrency } from "@/lib/geo";
 import { moneyToMask, parseMoneyMask } from "@/lib/masks";
+import { recurringAllowsBarter, recurringAllowsCash, recurringPaymentMode } from "@/lib/recurring-payment";
 import { parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
 import type { Creator, PlanningItem, RecurringContract } from "@/lib/types";
 import { HIDDEN_CREATOR_VALUE, userHidesCreatorValues } from "@/lib/auth";
@@ -146,6 +148,7 @@ const EMPTY_CREATOR_FORM = {
   start_date: "",
   end_date: "",
   monthly_cache: "",
+  barter_details: "",
   notes: "",
   reels: "4",
   stories: "8",
@@ -727,7 +730,10 @@ function DetailInner() {
   const selectedPautas = selectedRow ? selectedSummary!.items.filter((item) => (showCompleted ? true : !isPublished(item))) : [];
   const completedPautas = selectedSummary?.items.filter((item) => isPublished(item)).length || 0;
 
-  const fee = Number(contract?.monthly_fee || 0);
+  const paymentMode = recurringPaymentMode(contract?.payment_mode);
+  const allowsCash = recurringAllowsCash(paymentMode);
+  const allowsBarter = recurringAllowsBarter(paymentMode);
+  const fee = allowsCash ? Number(contract?.monthly_fee || 0) : 0;
   const cost = allocated.reduce((sum, row) => sum + creatorCost(row), 0);
   const remaining = fee - cost;
   const months = contractMonths(contract?.start_date, contract?.end_date);
@@ -742,6 +748,7 @@ function DetailInner() {
         start_date: row.start_date || contract?.start_date || todayIsoDate(),
         end_date: row.end_date || contract?.end_date || "",
         monthly_cache: moneyToMask(row.monthly_cache ?? row.monthly_fee ?? 0, moneyCurrency(contract)),
+        barter_details: row.barter_details || "",
         notes: row.notes || "",
         reels: String(d.reels ?? d.reel ?? 0),
         stories: String(d.stories ?? d.story ?? 0),
@@ -822,12 +829,29 @@ function DetailInner() {
       await alertWarning(tc("alerts.incompleteTitle"), t("recurringDetail.contractStartRequired"));
       return;
     }
+    const barter = creatorForm.barter_details.trim();
+    const cash = creatorForm.monthly_cache ? parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract)) : 0;
+    if (!hideCreatorValues && paymentMode === "barter" && !barter) {
+      await alertWarning(t("recurringDetail.barterRequired"), t("recurringDetail.barterRequiredText"));
+      return;
+    }
+    if (!hideCreatorValues && paymentMode === "mixed" && cash <= 0 && !barter) {
+      await alertWarning(t("recurringDetail.paymentEitherRequired"), t("recurringDetail.paymentEitherRequiredText"));
+      return;
+    }
+    const payment = hideCreatorValues
+      ? {}
+      : paymentMode === "barter"
+        ? { monthly_cache: 0, barter_details: barter }
+        : paymentMode === "mixed"
+          ? { monthly_cache: cash, barter_details: barter || null }
+          : { monthly_cache: cash, barter_details: null };
     try {
       await api.addRecurringCreator(contract.id, {
         creator_id: Number(creatorForm.creator_id),
         start_date: creatorForm.start_date,
         end_date: creatorForm.end_date || null,
-        ...(hideCreatorValues ? {} : { monthly_cache: creatorForm.monthly_cache ? parseMoneyMask(creatorForm.monthly_cache, moneyCurrency(contract)) : 0 }),
+        ...payment,
         notes: creatorForm.notes || null,
         monthly_deliverables: {
           reels: Number(creatorForm.reels) || 0,
@@ -1227,6 +1251,11 @@ function DetailInner() {
               )}>
                 {contract.status === "active" ? "● " : ""}{statusLabel}
               </span>
+              {paymentMode !== "cash" ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider text-amber-800 uppercase">
+                  {t(paymentMode === "barter" ? "recurring.paymentBarter" : "recurring.paymentMixed")}
+                </span>
+              ) : null}
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">{contract.title}</h1>
             {contract.objective ? <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">{contract.objective}</p> : null}
@@ -1239,11 +1268,17 @@ function DetailInner() {
         <div className={cn("mt-5 grid grid-cols-1 gap-3.5 border-t border-slate-100 pt-5 sm:grid-cols-2", !isCreator && "xl:grid-cols-4")}>
           {isCreator ? (
             allocated[0] ? (
-              <MetricTile icon={DollarSign} iconClass="bg-indigo-100/80 text-brand-primary" label={t("recurringDetail.monthlyCache")} value={formatCurrency(creatorCost(allocated[0]))} unit={t("recurringDetail.perMonth")} />
+              paymentMode === "barter" ? (
+                <MetricTile icon={Gift} iconClass="bg-amber-100 text-amber-700" label={t("recurringDetail.barter")} value={hideCreatorValues ? HIDDEN_CREATOR_VALUE : (allocated[0].barter_details || t("recurring.paymentBarter"))} unit="" valueClass="line-clamp-4 text-sm leading-snug" />
+              ) : (
+                <MetricTile icon={DollarSign} iconClass="bg-indigo-100/80 text-brand-primary" label={t("recurringDetail.monthlyCache")} value={formatCurrency(creatorCost(allocated[0]))} unit={t("recurringDetail.perMonth")} extra={paymentMode === "mixed" && allocated[0].barter_details ? { label: t("recurringDetail.barter"), value: allocated[0].barter_details } : undefined} />
+              )
             ) : null
+          ) : paymentMode === "barter" ? (
+            <MetricTile icon={Gift} iconClass="bg-amber-100 text-amber-700" label={t("recurring.paymentMode")} badge={t("recurring.paymentBarter")} value={t("recurring.paymentBarter")} unit={t("recurring.perCreator")} />
           ) : (
             <>
-          <MetricTile icon={DollarSign} iconClass="bg-indigo-100/80 text-brand-primary" label={t("recurringDetail.budget")} badge={t("recurringDetail.clientFee")} value={formatCurrency(fee)} unit={t("recurringDetail.perMonth")} extra={contract.end_date && months > 1 ? { label: t("recurringDetail.periodTotal"), value: formatCurrency(fee * months) } : undefined} />
+          <MetricTile icon={DollarSign} iconClass="bg-indigo-100/80 text-brand-primary" label={t("recurringDetail.budget")} badge={paymentMode === "mixed" ? t("recurring.paymentMixed") : t("recurringDetail.clientFee")} badgeClass={paymentMode === "mixed" ? "border-amber-200 bg-amber-50 text-amber-800" : undefined} value={formatCurrency(fee)} unit={t("recurringDetail.perMonth")} extra={contract.end_date && months > 1 ? { label: t("recurringDetail.periodTotal"), value: formatCurrency(fee * months) } : undefined} />
           {hideCreatorValues ? null : (
             <>
           <MetricTile icon={Users} iconClass="bg-blue-100/80 text-blue-700" label={t("recurringDetail.creatorsCost")} badge={t(allocated.length === 1 ? "recurringDetail.creatorOne" : "recurringDetail.creatorMany", { count: allocated.length })} badgeClass="bg-blue-50 text-blue-700 border-blue-200" value={formatCurrency(cost)} unit={t("recurringDetail.perMonth")} extra={contract.end_date && months > 1 ? { label: t("recurringDetail.periodTotal"), value: formatCurrency(cost * months) } : undefined} />
@@ -1510,11 +1545,22 @@ function DetailInner() {
                         </div>
                         <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-2.5 sm:grid-cols-2">
                           <div className="rounded-xl border border-slate-200/60 bg-slate-50/90 p-2.5">
-                            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.monthlyCache")}</span>
-                            <div className="mt-0.5 flex items-baseline gap-1">
-                              <span className="text-sm font-black text-slate-900">{hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatCurrency(creatorCost(row))}</span>
-                              <span className="text-[10px] font-semibold text-slate-400">{t("recurringDetail.perMonth")}</span>
-                            </div>
+                            <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{paymentMode === "barter" ? t("recurringDetail.barter") : t("recurringDetail.monthlyCache")}</span>
+                            {hideCreatorValues ? (
+                              <span className="mt-0.5 block text-sm font-black text-slate-900">{HIDDEN_CREATOR_VALUE}</span>
+                            ) : paymentMode === "barter" ? (
+                              <p className="mt-0.5 line-clamp-3 text-xs font-bold text-amber-900">{row.barter_details || "—"}</p>
+                            ) : (
+                              <>
+                                <div className="mt-0.5 flex items-baseline gap-1">
+                                  <span className="text-sm font-black text-slate-900">{formatCurrency(creatorCost(row))}</span>
+                                  <span className="text-[10px] font-semibold text-slate-400">{t("recurringDetail.perMonth")}</span>
+                                </div>
+                                {paymentMode === "mixed" && row.barter_details ? (
+                                  <p className="mt-1 line-clamp-2 text-[11px] font-semibold text-amber-800">{row.barter_details}</p>
+                                ) : null}
+                              </>
+                            )}
                           </div>
                           <div className="rounded-xl border border-slate-200/60 bg-slate-50/90 p-2.5">
                             <span className="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">{t("recurringDetail.deliveriesMonth", { month: selectedMonth })}</span>
@@ -1718,7 +1764,12 @@ function DetailInner() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 sm:grid-cols-4">
-                  <MiniStat label={t("recurringDetail.monthlyCache")} value={hideCreatorValues ? HIDDEN_CREATOR_VALUE : formatCurrency(creatorCost(selectedRow))} hint={t("recurringDetail.perMonth")} icon={DollarSign} />
+                  <MiniStat
+                    label={paymentMode === "barter" ? t("recurringDetail.barter") : t("recurringDetail.monthlyCache")}
+                    value={hideCreatorValues ? HIDDEN_CREATOR_VALUE : paymentMode === "barter" ? (selectedRow.barter_details || t("recurring.paymentBarter")) : formatCurrency(creatorCost(selectedRow))}
+                    hint={paymentMode === "mixed" && selectedRow.barter_details ? selectedRow.barter_details : paymentMode === "barter" ? "" : t("recurringDetail.perMonth")}
+                    icon={paymentMode === "barter" ? Gift : DollarSign}
+                  />
                   <MiniStat
                     label={t("recurringDetail.completed")}
                     value={`${selectedSummary.completedCount}/${selectedSummary.quota}`}
@@ -2428,10 +2479,11 @@ function DetailInner() {
               </div>
 
                 {hideCreatorValues ? null : (
+                <>
+                {allowsCash ? (
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-slate-700">{t("recurringDetail.cache")} *</label>
+                  <label className="font-bold text-slate-700">{t(paymentMode === "mixed" ? "recurringDetail.cacheCash" : "recurringDetail.cache")}{paymentMode === "cash" ? " *" : ""}</label>
                   <MoneyInput
-                    required
                     currency={moneyCurrency(contract)}
                     value={creatorForm.monthly_cache}
                     onChange={(value) => setCreatorForm({ ...creatorForm, monthly_cache: value })}
@@ -2454,6 +2506,21 @@ function DetailInner() {
                   </div>
                 ) : null}
               </div>
+                ) : null}
+                {allowsBarter ? (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="font-bold text-amber-800">{t("recurringDetail.barterDetails")}{paymentMode === "barter" ? " *" : ""}</label>
+                    <textarea
+                      rows={3}
+                      className="min-h-20 w-full resize-none rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-xs font-semibold text-slate-800 outline-none focus:border-amber-400"
+                      placeholder={t("recurringDetail.barterDetailsPh")}
+                      value={creatorForm.barter_details}
+                      onChange={(e) => setCreatorForm({ ...creatorForm, barter_details: e.target.value })}
+                    />
+                    <p className="text-[11px] text-slate-500">{t("recurring.paymentBarterHint")}</p>
+                  </div>
+                ) : null}
+                </>
                 )}
 
               <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -3046,7 +3113,7 @@ function DetailInner() {
   );
 }
 
-function MetricTile({ icon: Icon, iconClass, label, badge, badgeClass, value, unit, extra }: { icon: LucideIcon; iconClass: string; label: string; badge?: string; badgeClass?: string; value: string; unit: string; extra?: { label: string; value: string } }) {
+function MetricTile({ icon: Icon, iconClass, label, badge, badgeClass, value, unit, extra, valueClass }: { icon: LucideIcon; iconClass: string; label: string; badge?: string; badgeClass?: string; value: string; unit: string; extra?: { label: string; value: string }; valueClass?: string }) {
   return (
     <div className="flex flex-col justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-2xs">
       <div className="flex items-center justify-between gap-2">
@@ -3058,10 +3125,10 @@ function MetricTile({ icon: Icon, iconClass, label, badge, badgeClass, value, un
       </div>
       <div className="border-t border-slate-200/50 pt-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xl font-black tracking-tight text-slate-900">{value}</span>
+          <span className={cn("text-xl font-black tracking-tight text-slate-900", valueClass)}>{value}</span>
           <span className="text-xs font-semibold text-slate-400">{unit}</span>
         </div>
-        {extra ? <div className="mt-1 flex items-center justify-between border-t border-slate-200/40 pt-1 text-[11px] text-slate-500"><span className="font-semibold text-slate-400">{extra.label}</span><span className="font-extrabold text-indigo-700">{extra.value}</span></div> : null}
+        {extra ? <div className="mt-1 flex items-start justify-between gap-2 border-t border-slate-200/40 pt-1 text-[11px] text-slate-500"><span className="font-semibold text-slate-400">{extra.label}</span><span className="line-clamp-2 text-right font-extrabold text-indigo-700">{extra.value}</span></div> : null}
       </div>
     </div>
   );

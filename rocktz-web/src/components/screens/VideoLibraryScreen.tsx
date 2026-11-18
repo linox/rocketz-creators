@@ -20,6 +20,10 @@ import type { CreatorVideo, CreatorVideoStatus, CreatorVideoUsageKind } from "@/
 import { useAuth } from "@/lib/use-auth";
 
 type UsageFilter = "all" | "unused" | "posted" | "ad";
+type SourceFilter = "all" | "campaign" | "recurring";
+
+const TAG_LIMIT = 12;
+const TAG_LENGTH = 32;
 
 const fieldClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500";
 
@@ -44,6 +48,28 @@ function formatSize(bytes: number | null) {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function videoTags(video: CreatorVideo): string[] {
+  return Array.isArray(video.tags) ? video.tags : [];
+}
+
+function cleanTag(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function mergeTags(current: string[], incoming: string[]): string[] {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const tag of [...current, ...incoming]) {
+    const text = cleanTag(tag);
+    if (!text) continue;
+    const key = text.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push(text);
+  }
+  return clean;
 }
 
 function matchesFilter(video: CreatorVideo, filter: UsageFilter) {
@@ -92,6 +118,11 @@ function VideoLibraryInner() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<UsageFilter>("all");
+  const [source, setSource] = useState<SourceFilter>("all");
+  const [campaignQuery, setCampaignQuery] = useState("");
+  const [activeTag, setActiveTag] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
+  const [tagSaving, setTagSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [playing, setPlaying] = useState<{ src: string; portrait: boolean } | null>(null);
   const [kind, setKind] = useState<CreatorVideoUsageKind>("posted");
@@ -119,16 +150,53 @@ function VideoLibraryInner() {
 
   const searched = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return videos;
+    const campaign = campaignQuery.trim().toLocaleLowerCase();
+    const tag = activeTag.trim().toLocaleLowerCase();
     return videos.filter((video) => {
+      if (source === "campaign" && video.source !== "campaign") return false;
+      if (source === "recurring" && video.source !== "recurring") return false;
+      if (campaign && !(video.campaign_name || "").toLocaleLowerCase().includes(campaign)) return false;
+      if (tag && !videoTags(video).some((item) => item.toLocaleLowerCase() === tag)) return false;
+      if (!query) return true;
       const identity = creatorIdentity(video.creator);
-      return [video.title, video.format, video.campaign_name, video.contract_name, video.company_name, identity.name, identity.handle]
+      return [video.title, video.format, video.campaign_name, video.contract_name, video.company_name, identity.name, identity.handle, ...videoTags(video)]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase()
         .includes(query);
     });
-  }, [search, videos]);
+  }, [activeTag, campaignQuery, search, source, videos]);
+
+  const tagChoices = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    const campaign = campaignQuery.trim().toLocaleLowerCase();
+    const counts = new Map<string, { label: string; count: number }>();
+    for (const video of videos) {
+      if (source === "campaign" && video.source !== "campaign") continue;
+      if (source === "recurring" && video.source !== "recurring") continue;
+      if (campaign && !(video.campaign_name || "").toLocaleLowerCase().includes(campaign)) continue;
+      if (query) {
+        const identity = creatorIdentity(video.creator);
+        const haystack = [video.title, video.format, video.campaign_name, video.contract_name, video.company_name, identity.name, identity.handle, ...videoTags(video)]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase();
+        if (!haystack.includes(query)) continue;
+      }
+      for (const label of videoTags(video)) {
+        const key = label.toLocaleLowerCase();
+        const current = counts.get(key);
+        if (current) current.count += 1;
+        else counts.set(key, { label, count: 1 });
+      }
+    }
+    const choices = [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)).slice(0, 24);
+    const current = activeTag.trim();
+    if (current && !choices.some((choice) => choice.label.toLocaleLowerCase() === current.toLocaleLowerCase())) {
+      choices.unshift({ label: current, count: 0 });
+    }
+    return choices;
+  }, [activeTag, campaignQuery, search, source, videos]);
 
   const visible = useMemo(() => searched.filter((video) => matchesFilter(video, filter)), [filter, searched]);
   const selected = videos.find((video) => video.id === selectedId) ?? null;
@@ -150,6 +218,12 @@ function VideoLibraryInner() {
   const kindOptions = useMemo(() => [
     { value: "posted", label: t("videoLibrary.kindPosted") },
     { value: "ad", label: t("videoLibrary.kindAd") },
+  ], [t]);
+
+  const sourceOptions = useMemo(() => [
+    { value: "all", label: t("videoLibrary.sourceAll") },
+    { value: "campaign", label: t("videoLibrary.sourceCampaign") },
+    { value: "recurring", label: t("videoLibrary.sourceRecurring") },
   ], [t]);
 
   function replaceVideo(next: CreatorVideo) {
@@ -193,6 +267,43 @@ function VideoLibraryInner() {
     }
   }
 
+  async function commitTags(next: string[]) {
+    if (!selected || tagSaving) return;
+    const videoId = selected.id;
+    setTagSaving(true);
+    try {
+      const response = await api.updateCreatorVideoTags(videoId, next);
+      replaceVideo(response.data);
+      setTagDraft("");
+    } catch (error) {
+      await alertApiError(error);
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
+  async function addTags(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || tagSaving) return;
+    const incoming = tagDraft.split(",").map(cleanTag).filter(Boolean);
+    if (incoming.length === 0) return;
+    if (incoming.some((tag) => tag.length > TAG_LENGTH)) {
+      await alertWarning(t("videoLibrary.tagTooLongTitle"), t("videoLibrary.tagTooLong"));
+      return;
+    }
+    const current = videoTags(selected);
+    const merged = mergeTags(current, incoming);
+    if (merged.length > TAG_LIMIT) {
+      await alertWarning(t("videoLibrary.tagLimitTitle"), t("videoLibrary.tagLimit"));
+      return;
+    }
+    if (merged.length === current.length) {
+      setTagDraft("");
+      return;
+    }
+    await commitTags(merged);
+  }
+
   async function removeUsage(usageId: number) {
     if (!selected) return;
     const confirmed = await alertConfirm(t("videoLibrary.removeTitle"), t("videoLibrary.removeText"), t("videoLibrary.remove"));
@@ -216,7 +327,7 @@ function VideoLibraryInner() {
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="grid gap-3 md:grid-cols-2">
           <label className="relative block">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -226,13 +337,51 @@ function VideoLibraryInner() {
               className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-violet-500"
             />
           </label>
+          <label className="relative block">
+            <Megaphone size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={campaignQuery}
+              onChange={(event) => setCampaignQuery(event.target.value)}
+              placeholder={t("videoLibrary.campaignSearch")}
+              aria-label={t("videoLibrary.campaign")}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-violet-500"
+            />
+          </label>
           <Select2Field
             theme="light"
             value={filter}
             options={filterOptions}
             onChange={(value) => setFilter((value || "all") as UsageFilter)}
           />
+          <Select2Field
+            theme="light"
+            value={source}
+            options={sourceOptions}
+            onChange={(value) => setSource(value === "campaign" || value === "recurring" ? value : "all")}
+          />
         </div>
+
+        {tagChoices.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {tagChoices.map((choice) => {
+              const selectedTag = choice.label.toLocaleLowerCase() === activeTag.trim().toLocaleLowerCase();
+              return (
+                <button
+                  key={choice.label}
+                  type="button"
+                  aria-pressed={selectedTag}
+                  onClick={() => setActiveTag(selectedTag ? "" : choice.label)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-bold",
+                    selectedTag ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600",
+                  )}
+                >
+                  {choice.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {([
@@ -276,36 +425,38 @@ function VideoLibraryInner() {
                   <li key={video.id}>
                     <article className={cn("overflow-hidden rounded-3xl border bg-white shadow-sm", active ? "border-violet-400 ring-2 ring-violet-200" : "border-slate-200")}>
                       {src ? (
-                        <button
-                          type="button"
-                          onClick={() => watchVideo(src, video.content_type)}
-                          aria-label={t("videoLibrary.watch")}
-                          className="relative block aspect-[3/4] w-full cursor-pointer overflow-hidden bg-slate-950"
-                        >
+                        <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
                           {drive ? (
                             <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-800 text-white">
                               <ExternalLink size={22} />
                             </span>
                           ) : (
-                            <VideoPoster src={src} fit="contain" className="absolute inset-0 h-full w-full" />
+                            <VideoPoster src={src} fit="contain" frame className="absolute inset-0 h-full w-full" />
                           )}
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
-                              <Play size={16} className="ml-0.5" />
-                            </span>
-                          </span>
-                          <span className="pointer-events-none absolute top-2 left-2 z-10 flex flex-wrap gap-1">
-                            {badgeKeys(video.status).map((badge) => (
-                              <span key={badge} className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", badgeTone(badge))}>
-                                {t(`videoLibrary.badge.${badge}`)}
+                          <button
+                            type="button"
+                            onClick={() => watchVideo(src, video.content_type)}
+                            aria-label={t("videoLibrary.watch")}
+                            className="absolute inset-0 z-10 cursor-pointer"
+                          >
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
+                                <Play size={16} className="ml-0.5" />
                               </span>
-                            ))}
-                          </span>
-                          <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent px-3 pt-10 pb-2.5 text-left">
-                            <span className="block truncate text-xs font-bold text-white">{video.title}</span>
-                            {context ? <span className="block truncate text-[10px] font-semibold text-white/75">{context}</span> : null}
-                          </span>
-                        </button>
+                            </span>
+                            <span className="pointer-events-none absolute top-2 left-2 flex flex-wrap gap-1">
+                              {badgeKeys(video.status).map((badge) => (
+                                <span key={badge} className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", badgeTone(badge))}>
+                                  {t(`videoLibrary.badge.${badge}`)}
+                                </span>
+                              ))}
+                            </span>
+                            <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent px-3 pt-10 pb-2.5 text-left">
+                              <span className="block truncate text-xs font-bold text-white">{video.title}</span>
+                              {context ? <span className="block truncate text-[10px] font-semibold text-white/75">{context}</span> : null}
+                            </span>
+                          </button>
+                        </div>
                       ) : null}
                       <div className="flex items-center gap-2 px-3 py-3">
                         <button
@@ -333,6 +484,20 @@ function VideoLibraryInner() {
                           </a>
                         ) : null}
                       </div>
+                      {videoTags(video).length > 0 ? (
+                        <div className="flex flex-wrap gap-1 px-3 pb-3">
+                          {videoTags(video).slice(0, 3).map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setActiveTag(tag)}
+                              className="max-w-full truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </article>
                   </li>
                 );
@@ -382,6 +547,47 @@ function VideoLibraryInner() {
                     selected.source === "recurring" ? t("videoLibrary.fromRecurring") : t("videoLibrary.fromCampaign"),
                   ].filter(Boolean).join(" · ")}
                 </p>
+
+                {selected.can_manage || videoTags(selected).length > 0 ? (
+                  <div className="mt-5">
+                    <h2 className="text-xs font-black uppercase tracking-wide text-slate-500">{t("videoLibrary.tags")}</h2>
+                    {videoTags(selected).length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {videoTags(selected).map((tag) => (
+                          <span key={tag} className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+                            <button type="button" onClick={() => setActiveTag(tag)} className="truncate" aria-label={t("videoLibrary.filterByTag", { tag })}>
+                              {tag}
+                            </button>
+                            {selected.can_manage ? (
+                              <button
+                                type="button"
+                                disabled={tagSaving}
+                                onClick={() => void commitTags(videoTags(selected).filter((item) => item.toLocaleLowerCase() !== tag.toLocaleLowerCase()))}
+                                className="text-slate-400 hover:text-rose-600"
+                                aria-label={t("videoLibrary.removeTag")}
+                              >
+                                <X size={12} />
+                              </button>
+                            ) : null}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {selected.can_manage ? (
+                      <form noValidate onSubmit={(event) => void addTags(event)} className="mt-2 flex gap-2">
+                        <input
+                          value={tagDraft}
+                          onChange={(event) => setTagDraft(event.target.value)}
+                          placeholder={t("videoLibrary.tagPlaceholder")}
+                          className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none focus:border-violet-500"
+                        />
+                        <button type="submit" disabled={tagSaving} className="h-11 shrink-0 rounded-xl bg-slate-900 px-3 text-xs font-bold text-white disabled:opacity-60">
+                          {t("videoLibrary.addTag")}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <h2 className="mt-5 text-xs font-black uppercase tracking-wide text-slate-500">{t("videoLibrary.history")}</h2>
                 {selected.usages.length === 0 ? (

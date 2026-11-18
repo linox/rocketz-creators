@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RecurringContractStatus;
+use App\Enums\RecurringPaymentMode;
 use Database\Factories\RecurringContractFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'start_date',
     'end_date',
     'status',
+    'payment_mode',
     'monthly_fee',
     'currency',
     'notes',
@@ -36,6 +38,7 @@ class RecurringContract extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'status' => RecurringContractStatus::class,
+            'payment_mode' => RecurringPaymentMode::class,
             'monthly_fee' => 'decimal:2',
         ];
     }

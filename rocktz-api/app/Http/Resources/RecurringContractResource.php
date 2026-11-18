@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\ContentType;
+use App\Enums\RecurringPaymentMode;
 use App\Enums\UserRole;
 use App\Support\CreatorPrivacy;
 use App\Support\MediaUrl;
@@ -34,6 +35,7 @@ class RecurringContractResource extends JsonResource
             'start_date' => $this->start_date?->toDateString(),
             'end_date' => $this->end_date?->toDateString(),
             'status' => $this->status?->value,
+            'payment_mode' => $this->payment_mode instanceof RecurringPaymentMode ? $this->payment_mode->value : RecurringPaymentMode::Cash->value,
             'monthly_fee' => $isCreator ? null : ($this->monthly_fee !== null ? (float) $this->monthly_fee : null),
             'currency' => $this->currency ?: $this->company?->currency,
             'notes' => $isCreator ? null : $this->notes,
@@ -60,6 +62,7 @@ class RecurringContractResource extends JsonResource
                 'deliverables_fee' => $hideCreatorValues ? null : ($row->deliverables_fee !== null ? (float) $row->deliverables_fee : null),
                 'monthly_deliverables' => $row->monthly_deliverables ?? [],
                 'notes' => $row->notes,
+                'barter_details' => $hideCreatorValues ? null : ($row->barter_details ?: null),
             ])),
             'items' => $this->whenLoaded('contentPlanningItems', fn () => ContentPlanningItemResource::collection($this->contentPlanningItems)),
             'excluded_demands' => $this->whenLoaded('excludedPlanningItems', function () {

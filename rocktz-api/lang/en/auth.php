@@ -35,6 +35,8 @@ return [
     'campaign_removed' => 'Campaign removed.',
     'creator_removed' => 'Creator removed from casting.',
     'recurring_creator_removed' => 'Creator removed from the contract.',
+    'recurring_barter_required' => 'Describe this creator\'s barter.',
+    'recurring_payment_required' => 'Enter a cash amount, a barter, or both.',
     'contract_removed' => 'Contract removed.',
     'item_removed' => 'Brief removed.',
     'video_removed' => 'Video removed.',

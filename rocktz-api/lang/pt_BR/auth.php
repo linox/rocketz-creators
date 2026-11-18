@@ -35,6 +35,8 @@ return [
     'campaign_removed' => 'Campanha removida.',
     'creator_removed' => 'Criador removido do casting.',
     'recurring_creator_removed' => 'Criador removido do contrato.',
+    'recurring_barter_required' => 'Descreva a permuta deste criador.',
+    'recurring_payment_required' => 'Informe o valor em dinheiro, a permuta, ou os dois.',
     'contract_removed' => 'Contrato removido.',
     'item_removed' => 'Pauta removida.',
     'video_removed' => 'Vídeo removido.',
