@@ -21,19 +21,21 @@ class MediaMakePosterCommand extends Command
             return self::FAILURE;
         }
 
-        if (! BrowserVideo::ffmpegBinary()) {
-            $this->error(Ffmpeg::installHint());
-
-            return self::FAILURE;
-        }
-
-        if (! BrowserVideo::holdPoster($key)) {
-            $this->line('already running '.$key);
-
-            return self::SUCCESS;
-        }
-
+        $held = false;
         try {
+            if (! BrowserVideo::ffmpegBinary()) {
+                $this->error(Ffmpeg::installHint());
+
+                return self::FAILURE;
+            }
+
+            $held = BrowserVideo::holdPoster($key);
+            if (! $held) {
+                $this->line('already running '.$key);
+
+                return self::SUCCESS;
+            }
+
             if (BrowserVideo::posterReady($key)) {
                 $this->info('cover ready '.BrowserVideo::posterKey($key));
 
@@ -53,7 +55,10 @@ class MediaMakePosterCommand extends Command
 
             return self::SUCCESS;
         } finally {
-            BrowserVideo::releasePoster($key);
+            if ($held) {
+                BrowserVideo::releasePoster($key);
+            }
+            BrowserVideo::releaseSlotFor($key);
         }
     }
 }

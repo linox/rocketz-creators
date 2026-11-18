@@ -43,6 +43,30 @@ class BrowserVideoTest extends TestCase
         $this->assertSame($jpeg, Storage::disk('uploads')->get('portfolio/clip.jpg'));
     }
 
+    public function test_background_php_is_the_cli_binary_not_php_fpm(): void
+    {
+        $root = sys_get_temp_dir().'/rz-php-'.bin2hex(random_bytes(4));
+        mkdir($root.'/usr/sbin', 0755, true);
+        mkdir($root.'/usr/bin', 0755, true);
+        $fpm = $root.'/usr/sbin/php-fpm';
+        $cli = $root.'/usr/bin/php';
+        file_put_contents($fpm, '');
+        file_put_contents($cli, '');
+        chmod($fpm, 0755);
+        chmod($cli, 0755);
+
+        try {
+            $this->assertSame($cli, BrowserVideo::resolveCliBinary($fpm));
+        } finally {
+            @unlink($fpm);
+            @unlink($cli);
+            @rmdir($root.'/usr/sbin');
+            @rmdir($root.'/usr/bin');
+            @rmdir($root.'/usr');
+            @rmdir($root);
+        }
+    }
+
     public function test_ensure_poster_missing_source_sets_last_error(): void
     {
         Storage::fake('uploads');

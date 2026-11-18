@@ -192,14 +192,22 @@ class MediaStorageService
         try {
             $ok = Storage::disk($disk)->writeStream($path, $stream);
         } catch (Throwable $e) {
+            if ($unlink && is_file($absolutePath)) {
+                @unlink($absolutePath);
+            }
             throw new MediaStorageException(StorageError::message($e), 500);
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);
             }
-            if ($unlink) {
-                @unlink($absolutePath);
-            }
+        }
+
+        if ($ok && $kind === 'video') {
+            BrowserVideo::savePosterBeside(Storage::disk($disk), $path, $absolutePath);
+        }
+
+        if ($unlink && is_file($absolutePath)) {
+            @unlink($absolutePath);
         }
 
         if (! $ok) {
@@ -207,13 +215,11 @@ class MediaStorageService
         }
 
         $payload = $this->record($disk, $path, $allocated['filename'], $mime, $size, $user, $kind);
-        if ($kind === 'video') {
-            if (BrowserVideo::needsTranscode($path)) {
-                MakeVideoPlayableJob::dispatch($path);
-                BrowserVideo::kick($path);
-            } else {
-                BrowserVideo::kickPoster($path);
-            }
+        if ($kind === 'video' && BrowserVideo::needsTranscode($path)) {
+            MakeVideoPlayableJob::dispatch($path);
+            BrowserVideo::kick($path);
+        } elseif ($kind === 'video' && ! BrowserVideo::posterReady($path)) {
+            BrowserVideo::kickPoster($path);
         }
 
         return $payload;

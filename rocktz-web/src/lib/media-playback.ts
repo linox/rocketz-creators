@@ -83,14 +83,6 @@ export function mediaPosterUrl(url?: string | null): string | null {
   return `${mediaOrigin()}/stream/${poster}`;
 }
 
-/** Browser-playable file a gallery can paint a frame from. Skips originals that still need a preview. */
-export function mediaFrameUrl(url?: string | null): string | null {
-  if (!url?.trim()) return null;
-  const path = url.trim().split(/[?#]/)[0]?.toLowerCase() ?? "";
-  if (!path.endsWith(".mp4") && !path.endsWith(".webm")) return null;
-  return mediaStreamUrl(url);
-}
-
 export type PlaybackSource = {
   src: string | null;
   original: string | null;

@@ -57,13 +57,7 @@ class BrowserVideo
             return;
         }
 
-        $php = PHP_BINARY;
-        if ($php === '' || ! is_file($php)) {
-            $php = 'php';
-        }
-        $command = escapeshellarg($php).' '.escapeshellarg(base_path('artisan')).' media:make-playable '.escapeshellarg($key);
-        $log = storage_path('logs/media-preview.log');
-        exec($command.' >> '.escapeshellarg($log).' 2>&1 &');
+        self::spawnArtisan('media:make-playable '.escapeshellarg($key));
     }
 
     public static function holdPreview(string $key): bool
@@ -91,14 +85,71 @@ class BrowserVideo
         if (! Cache::add(self::posterSpawn($key), 1, 120)) {
             return;
         }
+        if (! function_exists('exec') || ! self::acquirePosterSlot($key)) {
+            Cache::forget(self::posterSpawn($key));
 
-        $php = PHP_BINARY;
-        if ($php === '' || ! is_file($php)) {
-            $php = 'php';
+            return;
         }
-        $command = escapeshellarg($php).' '.escapeshellarg(base_path('artisan')).' media:make-poster '.escapeshellarg($key);
-        $log = storage_path('logs/media-preview.log');
-        exec($command.' >> '.escapeshellarg($log).' 2>&1 &');
+
+        self::spawnArtisan('media:make-poster '.escapeshellarg($key));
+    }
+
+    public static function hasLocalSource(string $key): bool
+    {
+        $located = self::locateVideo($key);
+
+        return $located !== null && self::hasLocalFile($located['disk'], $located['key']);
+    }
+
+    public static function savePosterBeside(Filesystem $disk, string $videoKey, string $absolute): bool
+    {
+        if (app()->runningUnitTests() || ! is_file($absolute) || self::posterReady($videoKey)) {
+            return self::posterReady($videoKey);
+        }
+
+        $poster = self::extractPoster($absolute);
+        if ($poster === null) {
+            return false;
+        }
+
+        return self::writePreview($disk, self::posterKey($videoKey), $poster);
+    }
+
+    public static function resolveCliBinary(?string $running = null): string
+    {
+        $running ??= PHP_BINARY;
+        if (self::isCliBinary($running)) {
+            return $running;
+        }
+
+        $candidates = [];
+        if ($running !== '') {
+            $candidates[] = dirname($running, 2).DIRECTORY_SEPARATOR.'bin'.DIRECTORY_SEPARATOR.'php';
+            $candidates[] = dirname($running).DIRECTORY_SEPARATOR.'php';
+        }
+        $candidates[] = PHP_BINDIR.DIRECTORY_SEPARATOR.'php';
+
+        foreach ($candidates as $path) {
+            if (self::isCliBinary($path)) {
+                return $path;
+            }
+        }
+
+        $which = trim((string) @shell_exec('command -v php 2>/dev/null'));
+        if (self::isCliBinary($which)) {
+            return $which;
+        }
+
+        return 'php';
+    }
+
+    public static function releaseSlotFor(string $key): void
+    {
+        for ($i = 0; $i < 2; $i++) {
+            if (Cache::get(self::posterSlot($i)) === $key) {
+                Cache::forget(self::posterSlot($i));
+            }
+        }
     }
 
     public static function holdPoster(string $key): bool
@@ -646,12 +697,15 @@ class BrowserVideo
             return null;
         }
 
-        foreach (['0.8', '0'] as $at) {
-            $command = escapeshellarg($ffmpeg).' -hide_banner -y'
-                .($remote ? ' -rw_timeout 20000000' : '')
-                .' -ss '.$at.' -i '.escapeshellarg($source)
-                .' -frames:v 1 -q:v 5 -vf '.escapeshellarg('scale=720:720:force_original_aspect_ratio=decrease')
-                .' '.escapeshellarg($target);
+        $commands = [];
+        foreach (['1', '0.2'] as $at) {
+            $commands[] = self::posterCommand($ffmpeg, $source, $target, $at, $remote, true);
+        }
+        if (! $remote) {
+            $commands[] = self::posterCommand($ffmpeg, $source, $target, '1', false, false);
+        }
+
+        foreach ($commands as $command) {
             if (self::ranOk($command, $target, false) && (int) filesize($target) > 32) {
                 return $target;
             }
@@ -659,6 +713,60 @@ class BrowserVideo
         }
 
         return null;
+    }
+
+    private static function posterCommand(string $ffmpeg, string $source, string $target, string $at, bool $remote, bool $seekInput): string
+    {
+        $input = escapeshellarg($source);
+        $seek = $seekInput ? '-ss '.$at.' -i '.$input : '-i '.$input.' -ss '.$at;
+        $network = $remote ? ' -rw_timeout 20000000' : '';
+
+        return escapeshellarg($ffmpeg).' -hide_banner -y'.$network.' '.$seek
+            .' -frames:v 1 -q:v 5 -vf '.escapeshellarg('scale=720:720:force_original_aspect_ratio=decrease')
+            .' '.escapeshellarg($target);
+    }
+
+    private static function spawnArtisan(string $arguments): void
+    {
+        if (! function_exists('exec')) {
+            return;
+        }
+
+        $command = 'nohup '.escapeshellarg(self::resolveCliBinary()).' '.escapeshellarg(base_path('artisan')).' '.$arguments;
+        $log = storage_path('logs/media-preview.log');
+        exec($command.' >> '.escapeshellarg($log).' 2>&1 &');
+    }
+
+    private static function acquirePosterSlot(string $key): bool
+    {
+        for ($i = 0; $i < 2; $i++) {
+            if (Cache::add(self::posterSlot($i), $key, now()->addMinutes(3))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function posterSlot(int $index): string
+    {
+        return 'media-poster-slot:'.$index;
+    }
+
+    private static function isCliBinary(string $path): bool
+    {
+        if ($path === '' || ! is_file($path)) {
+            return false;
+        }
+        $base = strtolower(basename($path));
+        if ($base !== 'php' && $base !== 'php.exe') {
+            return false;
+        }
+        if (! is_executable($path)) {
+            @chmod($path, 0755);
+        }
+
+        return is_executable($path);
     }
 
     private static function tempPosterPath(): ?string

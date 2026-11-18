@@ -372,12 +372,18 @@ class MediaController extends Controller
         if (! $this->objectExists($path)) {
             $videoKey = $this->videoKeyForPoster($path);
             if ($videoKey !== null) {
-                BrowserVideo::kickPoster($videoKey);
+                if (! app()->runningUnitTests() && BrowserVideo::hasLocalSource($videoKey)) {
+                    @set_time_limit(60);
+                    BrowserVideo::ensurePoster($videoKey);
+                }
+                if (! $this->objectExists($path)) {
+                    BrowserVideo::kickPoster($videoKey);
 
-                return response()->json(['poster' => null], 404, [
-                    'Cache-Control' => 'no-store',
-                    'Access-Control-Allow-Origin' => '*',
-                ]);
+                    return response()->json(['poster' => null], 404, [
+                        'Cache-Control' => 'no-store',
+                        'Access-Control-Allow-Origin' => '*',
+                    ]);
+                }
             }
         }
 
