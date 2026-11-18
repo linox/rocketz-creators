@@ -147,6 +147,17 @@ class BrowserVideo
             return false;
         }
 
+        if (! self::hasLocalFile($located['disk'], $located['key'])) {
+            $remotePoster = self::extractPosterFromRemote($located['key']);
+            if ($remotePoster !== null && self::writePreview($located['disk'], self::posterKey($key), $remotePoster)) {
+                return true;
+            }
+        }
+
+        if (self::posterReady($key)) {
+            return true;
+        }
+
         $source = self::materializeSource($located['disk'], $located['key']);
         if ($source === null) {
             return false;
@@ -596,16 +607,49 @@ class BrowserVideo
         return $code === 137 || $code === 9 ? 'ffmpeg killed (out of memory)' : 'ffmpeg failed (exit '.$code.')';
     }
 
-    private static function extractPoster(string $source): ?string
+    private static function hasLocalFile(Filesystem $disk, string $key): bool
     {
-        $ffmpeg = self::ffmpegBinary();
-        if ($ffmpeg === null || ! is_file($source)) {
+        try {
+            if (method_exists($disk, 'path')) {
+                $local = $disk->path($key);
+                if (is_string($local) && is_file($local) && filesize($local) > 32) {
+                    return true;
+                }
+            }
+        } catch (Throwable) {
+            // Remote disks have no local path.
+        }
+
+        return false;
+    }
+
+    private static function extractPosterFromRemote(string $key): ?string
+    {
+        $signed = MediaUrl::signedGet($key);
+        if (! is_string($signed) || ! str_starts_with($signed, 'https://')) {
             return null;
         }
 
-        $target = $source.'.poster.jpg';
+        return self::extractPoster($signed);
+    }
+
+    private static function extractPoster(string $source): ?string
+    {
+        $ffmpeg = self::ffmpegBinary();
+        $remote = preg_match('#\Ahttps?://#i', $source) === 1;
+        if ($ffmpeg === null || (! $remote && ! is_file($source))) {
+            return null;
+        }
+
+        $target = $remote ? self::tempPosterPath() : $source.'.poster.jpg';
+        if ($target === null) {
+            return null;
+        }
+
         foreach (['0.8', '0'] as $at) {
-            $command = escapeshellarg($ffmpeg).' -hide_banner -y -ss '.$at.' -i '.escapeshellarg($source)
+            $command = escapeshellarg($ffmpeg).' -hide_banner -y'
+                .($remote ? ' -rw_timeout 20000000' : '')
+                .' -ss '.$at.' -i '.escapeshellarg($source)
                 .' -frames:v 1 -q:v 5 -vf '.escapeshellarg('scale=720:720:force_original_aspect_ratio=decrease')
                 .' '.escapeshellarg($target);
             if (self::ranOk($command, $target, false) && (int) filesize($target) > 32) {
@@ -615,6 +659,18 @@ class BrowserVideo
         }
 
         return null;
+    }
+
+    private static function tempPosterPath(): ?string
+    {
+        $dir = storage_path('app/tmp');
+        if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
+            self::rememberError('could not create temp dir');
+
+            return null;
+        }
+
+        return $dir.'/'.bin2hex(random_bytes(8)).'.poster.jpg';
     }
 
     private static function rememberError(string $message): void

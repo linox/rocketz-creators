@@ -43,6 +43,22 @@ class BrowserVideoTest extends TestCase
         $this->assertSame($jpeg, Storage::disk('uploads')->get('portfolio/clip.jpg'));
     }
 
+    public function test_ensure_poster_missing_source_sets_last_error(): void
+    {
+        Storage::fake('uploads');
+        Storage::fake('r2');
+        config([
+            'media.disk' => 'uploads',
+            'filesystems.disks.r2.key' => '',
+            'filesystems.disks.r2.secret' => '',
+            'filesystems.disks.r2.bucket' => '',
+            'filesystems.disks.r2.endpoint' => '',
+        ]);
+
+        $this->assertFalse(BrowserVideo::ensurePoster('portfolio/missing.mp4'));
+        $this->assertNotSame('', (string) BrowserVideo::lastError());
+    }
+
     public function test_ensure_playable_missing_source_sets_last_error(): void
     {
         Storage::fake('uploads');

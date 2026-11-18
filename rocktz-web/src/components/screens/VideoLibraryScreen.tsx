@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { Clapperboard, ExternalLink, History, Megaphone, Play, Search, X } from "lucide-react";
+import { Clapperboard, Download, ExternalLink, History, Megaphone, Play, Search, X } from "lucide-react";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -14,6 +14,7 @@ import { alertApiError, alertConfirm, alertSuccess, alertWarning } from "@/lib/a
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
+import { mediaDownloadUrl } from "@/lib/media-playback";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import type { CreatorVideo, CreatorVideoStatus, CreatorVideoUsageKind } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
@@ -68,6 +69,11 @@ function isPortrait(contentType: string | null | undefined) {
   const type = (contentType || "").toLowerCase();
   if (!type) return true;
   return !(type.startsWith("live") || type.includes("youtube") || type === "blog" || type === "podcast" || type === "pinterest");
+}
+
+function fileDownloadUrl(src: string | null | undefined): string | null {
+  if (!src || isGoogleDriveUrl(src)) return null;
+  return mediaDownloadUrl(src);
 }
 
 export function VideoLibraryScreen() {
@@ -126,6 +132,7 @@ function VideoLibraryInner() {
 
   const visible = useMemo(() => searched.filter((video) => matchesFilter(video, filter)), [filter, searched]);
   const selected = videos.find((video) => video.id === selectedId) ?? null;
+  const selectedDownload = fileDownloadUrl(selected?.video_url);
   const counts = {
     total: searched.length,
     unused: searched.filter((video) => video.status === "unused").length,
@@ -263,7 +270,8 @@ function VideoLibraryInner() {
                 const active = video.id === selectedId;
                 const src = video.video_url;
                 const drive = isGoogleDriveUrl(src);
-                const portrait = isPortrait(video.content_type);
+                const downloadUrl = fileDownloadUrl(src);
+                const context = video.campaign_name || video.contract_name;
                 return (
                   <li key={video.id}>
                     <article className={cn("overflow-hidden rounded-3xl border bg-white shadow-sm", active ? "border-violet-400 ring-2 ring-violet-200" : "border-slate-200")}>
@@ -272,14 +280,14 @@ function VideoLibraryInner() {
                           type="button"
                           onClick={() => watchVideo(src, video.content_type)}
                           aria-label={t("videoLibrary.watch")}
-                          className={cn("relative block w-full cursor-pointer overflow-hidden bg-slate-950", portrait ? "aspect-[3/4]" : "aspect-video")}
+                          className="relative block aspect-[3/4] w-full cursor-pointer overflow-hidden bg-slate-950"
                         >
                           {drive ? (
                             <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-800 text-white">
                               <ExternalLink size={22} />
                             </span>
                           ) : (
-                            <VideoPoster src={src} className="absolute inset-0 h-full w-full" />
+                            <VideoPoster src={src} fit="contain" className="absolute inset-0 h-full w-full" />
                           )}
                           <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow">
@@ -293,22 +301,38 @@ function VideoLibraryInner() {
                               </span>
                             ))}
                           </span>
+                          <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent px-3 pt-10 pb-2.5 text-left">
+                            <span className="block truncate text-xs font-bold text-white">{video.title}</span>
+                            {context ? <span className="block truncate text-[10px] font-semibold text-white/75">{context}</span> : null}
+                          </span>
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(video.id)}
-                        className="flex w-full items-center gap-3 px-3 py-3 text-left"
-                      >
-                        <UserAvatar src={video.creator.photo_url} name={identity.name} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-bold text-slate-900">{identity.name}</span>
-                          <span className="block truncate text-[11px] text-slate-500">
-                            {[identity.handle, video.campaign_name || video.contract_name, video.title].filter(Boolean).join(" · ")}
+                      <div className="flex items-center gap-2 px-3 py-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(video.id)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          <UserAvatar src={video.creator.photo_url} name={identity.name} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-bold text-slate-900">{identity.name}</span>
+                            <span className="block truncate text-[11px] text-slate-500">
+                              {[identity.handle, context, video.format].filter(Boolean).join(" · ")}
+                            </span>
                           </span>
-                        </span>
-                        <History size={16} className="shrink-0 text-slate-400" />
-                      </button>
+                          <History size={16} className="shrink-0 text-slate-400" />
+                        </button>
+                        {downloadUrl ? (
+                          <a
+                            href={downloadUrl}
+                            download
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Download size={12} />
+                            {t("videoLibrary.download")}
+                          </a>
+                        ) : null}
+                      </div>
                     </article>
                   </li>
                 );
@@ -332,6 +356,11 @@ function VideoLibraryInner() {
                     <button type="button" onClick={() => watchVideo(selected.video_url as string, selected.content_type)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
                       <Play size={12} /> {t("videoLibrary.watch")}
                     </button>
+                  ) : null}
+                  {selectedDownload ? (
+                    <a href={selectedDownload} download className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
+                      <Download size={12} /> {t("videoLibrary.download")}
+                    </a>
                   ) : null}
                   {selected.campaign_id ? (
                     <Link href={`/campaigns/${selected.campaign_id}`} className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">

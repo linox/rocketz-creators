@@ -3293,6 +3293,7 @@
     },
     "receivedAt": "Received on {{date}}",
     "watch": "Watch",
+    "download": "Download",
     "openLink": "Open link",
     "history": "Usage history",
     "historyEmpty": "This video has not been posted or used in an ad.",
