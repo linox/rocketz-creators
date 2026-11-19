@@ -99,8 +99,29 @@ class ConversationMailbox
 
         $message = $conversation->messages()->latest('id')->first();
         if ($message) {
-            $this->notifyOthers($conversation, $message, $user);
+            $this->notifyOthers($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
         }
+
+        return $conversation;
+    }
+
+    public function close(User $user, Conversation $conversation): Conversation
+    {
+        $this->assertCanView($user, $conversation);
+        abort_unless(
+            $user->role === UserRole::Admin || $user->role === UserRole::Company,
+            403,
+            __('auth.forbidden'),
+        );
+
+        if ($conversation->closed_at) {
+            throw ValidationException::withMessages([
+                'conversation' => [__('messages.conversation_already_closed')],
+            ]);
+        }
+
+        $conversation->forceFill(['closed_at' => now()])->save();
+        $this->notifyOthers($conversation, $user, __('messages.conversation_closed_notice'));
 
         return $conversation;
     }
@@ -108,6 +129,11 @@ class ConversationMailbox
     public function reply(User $user, Conversation $conversation, string $body): ConversationMessage
     {
         $this->assertCanView($user, $conversation);
+        if ($conversation->closed_at) {
+            throw ValidationException::withMessages([
+                'body' => [__('messages.conversation_closed')],
+            ]);
+        }
         $text = $this->requiredText($body, 'body', 'messages.body_required', 5000);
 
         $message = DB::transaction(function () use ($user, $conversation, $text) {
@@ -121,7 +147,7 @@ class ConversationMailbox
             return $message;
         });
 
-        $this->notifyOthers($conversation, $message, $user);
+        $this->notifyOthers($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
 
         return $message;
     }
@@ -255,10 +281,9 @@ class ConversationMailbox
             ->update(['read' => true]);
     }
 
-    private function notifyOthers(Conversation $conversation, ConversationMessage $message, User $sender): void
+    private function notifyOthers(Conversation $conversation, User $sender, string $preview): void
     {
         $title = $conversation->subject;
-        $preview = Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180);
         $link = '/messages?c='.$conversation->id;
         $type = NotificationType::General;
         if ($conversation->creator_id) {

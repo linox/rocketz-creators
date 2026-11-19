@@ -83,6 +83,16 @@ class ConversationController extends Controller
         ]);
     }
 
+    public function close(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->mailbox->close($request->user(), $conversation);
+        $conversation = $this->mailbox->present($conversation, $request->user(), true);
+
+        return response()->json([
+            'data' => (new ConversationResource($conversation))->resolve($request),
+        ]);
+    }
+
     public function reply(Request $request, Conversation $conversation): JsonResponse
     {
         $data = $request->validate([

@@ -290,6 +290,64 @@ class ConversationTest extends TestCase
             ->assertJsonPath('data.works.0.id', $contract->id);
     }
 
+    public function test_company_or_agency_can_close_a_conversation(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $creator = Creator::factory()->active()->create();
+        $this->approveOnCampaign($campaign, $creator);
+        $member = $this->companyUser($campaign->company);
+        $admin = User::factory()->admin()->create();
+
+        $created = $this->asUser($creator->user)
+            ->postJson('/api/conversations', [
+                'subject' => 'Dúvida final',
+                'body' => 'Podemos encerrar depois da resposta.',
+                'campaign_id' => $campaign->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.closed', false);
+
+        $id = (int) $created->json('data.id');
+
+        $this->asUser($creator->user)
+            ->postJson("/api/conversations/{$id}/close")
+            ->assertForbidden();
+
+        $this->asUser($member)
+            ->postJson("/api/conversations/{$id}/close")
+            ->assertOk()
+            ->assertJsonPath('data.closed', true);
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $creator->user->id,
+            'link' => '/messages?c='.$id,
+            'message' => __('messages.conversation_closed_notice'),
+        ]);
+
+        $this->asUser($creator->user)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Mais uma dúvida'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.body.0', __('messages.conversation_closed'));
+
+        $this->asUser($admin)
+            ->postJson("/api/conversations/{$id}/close")
+            ->assertStatus(422)
+            ->assertJsonPath('errors.conversation.0', __('messages.conversation_already_closed'));
+
+        $again = $this->asUser($creator->user)
+            ->postJson('/api/conversations', [
+                'subject' => 'Outro assunto',
+                'body' => 'A agência pode encerrar.',
+                'campaign_id' => $campaign->id,
+            ])
+            ->assertCreated();
+
+        $this->asUser($admin)
+            ->postJson('/api/conversations/'.$again->json('data.id').'/close')
+            ->assertOk()
+            ->assertJsonPath('data.closed', true);
+    }
+
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void
     {
         CampaignCreator::factory()->create([

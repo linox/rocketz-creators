@@ -151,6 +151,7 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
     Route::post('conversations', [ConversationController::class, 'store'])->middleware('throttle:30,1');
     Route::get('conversations/{conversation}', [ConversationController::class, 'show']);
     Route::post('conversations/{conversation}/messages', [ConversationController::class, 'reply'])->middleware('throttle:30,1');
+    Route::post('conversations/{conversation}/close', [ConversationController::class, 'close'])->middleware('throttle:30,1');
 
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);

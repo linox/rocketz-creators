@@ -734,6 +734,8 @@ export type ConversationSummary = {
   preview: string | null;
   preview_author: string | null;
   last_message_at: string | null;
+  closed: boolean;
+  closed_at: string | null;
   unread: boolean;
 };
 

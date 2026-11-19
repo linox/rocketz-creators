@@ -37,6 +37,8 @@ class ConversationResource extends JsonResource
             'preview' => $this->relationLoaded('latestMessage') ? $this->previewText($this->latestMessage) : null,
             'preview_author' => $this->relationLoaded('latestMessage') ? $this->latestMessage?->user?->name : null,
             'last_message_at' => $this->last_message_at?->toIso8601String(),
+            'closed' => $this->closed_at !== null,
+            'closed_at' => $this->closed_at?->toIso8601String(),
             'unread' => (bool) $this->unread_for_viewer,
             'messages' => $this->whenLoaded('messages', function () use ($viewerId) {
                 return $this->messages

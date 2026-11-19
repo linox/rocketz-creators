@@ -9,4 +9,7 @@ return [
     'work_not_allowed' => 'Este trabajo no está disponible para conversar.',
     'body_required' => 'Escribe el mensaje.',
     'subject_required' => 'Escribe un asunto.',
+    'conversation_closed' => 'Esta conversación fue cerrada.',
+    'conversation_already_closed' => 'Esta conversación ya fue cerrada.',
+    'conversation_closed_notice' => 'La conversación fue cerrada.',
 ];

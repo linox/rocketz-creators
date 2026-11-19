@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Select2Field } from "@/components/Select2Field";
-import { alertApiError, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertConfirm, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -97,6 +97,7 @@ export function MessageList({
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
                 <span className={cn("min-w-0 flex-1 truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
                   {item.subject}
+                  {item.closed ? <span className="ml-2 text-[11px] font-semibold text-slate-400">{t("closed")}</span> : null}
                 </span>
                 <span className="shrink-0 text-[11px] text-slate-400">{formatMessageTime(item.last_message_at, i18n.language)}</span>
               </span>
@@ -129,7 +130,9 @@ export function MessageThread({
   const scroller = useRef<HTMLDivElement>(null);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [closing, setClosing] = useState(false);
   const counterpart = conversationWith(conversation, role);
+  const canClose = !conversation.closed && (role === "admin" || role === "company");
   const about = workLabel(conversation.work, t("campaignKind"), t("recurringKind"));
 
   useEffect(() => {
@@ -137,6 +140,21 @@ export function MessageThread({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [conversation.id, conversation.messages.length]);
+
+  async function close() {
+    const confirmed = await alertConfirm(t("closeConfirmTitle"), t("closeConfirmText"), t("close"));
+    if (!confirmed) return;
+    setClosing(true);
+    try {
+      const res = await api.closeConversation(conversation.id);
+      onReplied(res.data);
+      emitNavRefresh();
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setClosing(false);
+    }
+  }
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -175,6 +193,16 @@ export function MessageThread({
           {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
           <p className="truncate text-xs font-semibold text-slate-500">{counterpart}</p>
         </div>
+        {canClose ? (
+          <button
+            type="button"
+            onClick={() => void close()}
+            disabled={closing}
+            className="ml-auto shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
+          >
+            {t("close")}
+          </button>
+        ) : null}
       </header>
       <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {conversation.messages.map((message) => {
@@ -191,6 +219,9 @@ export function MessageThread({
           );
         })}
       </div>
+      {conversation.closed ? (
+        <p className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">{t("closedHint")}</p>
+      ) : (
       <form onSubmit={send} noValidate className="border-t border-slate-100 p-3">
         <label className="sr-only" htmlFor={`reply-${conversation.id}`}>{t("body")}</label>
         <textarea
@@ -207,10 +238,11 @@ export function MessageThread({
             disabled={sending}
             className="inline-flex h-10 items-center rounded-xl bg-brand-primary px-4 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-60"
           >
-            {tc("send")}
-          </button>
+          {tc("send")}
+        </button>
         </div>
       </form>
+      )}
     </div>
   );
 }

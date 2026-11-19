@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'with_agency',
     'created_by',
     'last_message_at',
+    'closed_at',
 ])]
 class Conversation extends Model
 {
@@ -30,6 +31,7 @@ class Conversation extends Model
         return [
             'with_agency' => 'boolean',
             'last_message_at' => 'datetime',
+            'closed_at' => 'datetime',
         ];
     }
 
