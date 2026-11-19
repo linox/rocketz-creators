@@ -1,4 +1,4 @@
-import { projectDemand } from "@/lib/campaign-demands";
+import { presentDemand, resolvedVideoUrl } from "@/lib/campaign-demands";
 import { calendarDateKey, effectivePlanningDueDate, isDateBeforeToday, isoToday } from "@/lib/delivery-date";
 import { namedPautaTitle } from "@/lib/pauta-briefing";
 import type { Campaign, CampaignCreator, CampaignDemand, PlanningItem, RecurringContract } from "@/lib/types";
@@ -469,10 +469,10 @@ function buildCampaignStageItem(
     resubmission,
     submittedAt: createdAt.startsWith("1970") ? null : createdAt,
   });
-  const contentType: DeliveryContentType = isScript ? "script" : mapCampaignContentType(row);
+  const contentType: DeliveryContentType = isScript ? "script" : campaignVideoContentType(row);
   const scriptFileUrl = row.content?.script_file_url || null;
   const scriptFileName = row.content?.script_file_name || fileNameFromUrl(scriptFileUrl);
-  const fileUrl = isScript ? scriptFileUrl : (row.content?.video_url || row.content?.image_url || null);
+  const fileUrl = isScript ? scriptFileUrl : (resolvedVideoUrl(row.content) || row.content?.image_url || null);
   const history = (row.content?.submission_versions ?? []).filter((entry) => entry.stage === stage);
   const versions: DeliveryVersion[] = history.length > 0
     ? history.map((entry) => {
@@ -584,6 +584,16 @@ function campaignDemandIdentity(demand: CampaignDemand): CampaignInboxDemand {
   };
 }
 
+function campaignVideoContentType(row: CampaignCreator): DeliveryContentType {
+  const videoUrl = resolvedVideoUrl(row.content);
+  if (row.content?.published_link?.trim() && !videoUrl && !row.content?.image_url?.trim()) return "link";
+  if (row.content?.image_url?.trim() && !videoUrl) return "image";
+  const fromType = mapContentType(row.delivery_type);
+  if (fromType === "story") return "story";
+  if (videoUrl || fromType === "script" || fromType === "caption" || fromType === "other") return "video";
+  return fromType;
+}
+
 function campaignCreatorSent(row: CampaignCreator) {
   return Boolean(
     row.script_submitted_at
@@ -605,46 +615,10 @@ function campaignStageHasScript(row: CampaignCreator) {
   );
 }
 
-function demandScriptBody(demand: CampaignDemand) {
-  const versions = demand.content?.submission_versions ?? [];
-  return Boolean(
-    demand.script_submitted_at
-    || demand.content?.script?.trim()
-    || demand.content?.script_file_url?.trim()
-    || versions.some((entry) => entry.stage === "script" && Boolean(entry.script?.trim() || entry.script_file_url?.trim()))
-  );
-}
-
-/** A pauta lives on the demand. A script sent before that slot existed stays on the participation. */
-function withLegacyScript(row: CampaignCreator, demand: CampaignDemand, projected: CampaignCreator): CampaignCreator {
-  if (demandScriptBody(demand) || !campaignStageHasScript(row)) return projected;
-  const host = row.demands?.find((item) => !demandScriptBody(item));
-  if (!host || host.id !== demand.id) return projected;
-  const parentStatus = row.script_status && row.script_status !== "pending" ? row.script_status : null;
-  return {
-    ...projected,
-    script_status: parentStatus || projected.script_status,
-    script_submitted_at: projected.script_submitted_at || row.script_submitted_at || null,
-    content: {
-      video_url: projected.content?.video_url ?? null,
-      image_url: projected.content?.image_url ?? null,
-      published_link: projected.content?.published_link ?? null,
-      ...(projected.content ?? {}),
-      script: row.content?.script ?? projected.content?.script ?? null,
-      script_file_url: row.content?.script_file_url || projected.content?.script_file_url,
-      script_file_name: row.content?.script_file_name || projected.content?.script_file_name,
-      script_version: row.content?.script_version || projected.content?.script_version,
-      submission_versions: projected.content?.submission_versions?.length
-        ? projected.content.submission_versions
-        : row.content?.submission_versions,
-    },
-  };
-}
-
 function campaignStageHasVideo(row: CampaignCreator) {
   return Boolean(
     row.video_submitted_at
-    || row.content?.video_url?.trim()
+    || resolvedVideoUrl(row.content)
     || row.content?.image_url?.trim()
     || row.content?.published_link?.trim()
   );
@@ -668,12 +642,7 @@ function fromCampaign(campaign: Campaign, row: CampaignCreator): DeliveryInboxIt
   if (row.demands?.length) {
     return row.demands.flatMap((demand) => fromCampaignSubmission(
       campaign,
-      withLegacyScript(row, demand, {
-        ...projectDemand(row, demand),
-        creator: row.creator,
-        creator_id: row.creator_id,
-        delivery_type: demand.content_type,
-      }),
+      presentDemand(row, demand),
       campaignDemandIdentity(demand),
     ));
   }
@@ -698,22 +667,8 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
     }
   }
 
-  const scriptReady = scriptOnly
-    ? false
-    : staged
-      ? row.script_status === "approved"
-      : true;
-
-  if ((staged && scriptReady) || videoOnly || flow === "live_link" || (!staged && !scriptOnly)) {
-    const hasVideoMaterial = campaignStageHasVideo(row);
-    const creatorSentVideo = hasVideoMaterial && (
-      row.video_status === "submitted"
-      || row.video_status === "revision"
-      || (row.delivery_status === "sent" && row.video_status !== "approved")
-    );
-    if (creatorSentVideo) {
-      items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
-    }
+  if (!scriptOnly && campaignStageHasVideo(row)) {
+    items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
   }
 
   // Fully done records still appear in approved folder
@@ -732,18 +687,6 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
   }
 
   return items;
-}
-
-function mapCampaignContentType(row: CampaignCreator): DeliveryContentType {
-  if (row.content?.published_link && !row.content?.video_url && !row.content?.image_url && !row.content?.script && !row.content?.script_file_url) {
-    return "link";
-  }
-  if ((row.content?.script || row.content?.script_file_url) && !row.content?.video_url && !row.content?.image_url) return "script";
-  if (row.content?.image_url && !row.content?.video_url) return "image";
-  const fromType = mapContentType(row.delivery_type);
-  if (fromType !== "other") return fromType;
-  if (row.content?.video_url) return "video";
-  return "other";
 }
 
 function buildPlanningStageItem(

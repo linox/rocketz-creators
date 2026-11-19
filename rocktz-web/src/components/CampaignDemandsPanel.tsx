@@ -8,7 +8,7 @@ import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
 import { ContentReactionButton, ContentReactionNotes } from "@/components/ContentReactionNote";
 import { alertConfirm, alertSuccess, alertWarning, promptContentReaction, promptTextarea } from "@/lib/alerts";
 import { reactionPayload } from "@/lib/content-reaction";
-import { projectDemand } from "@/lib/campaign-demands";
+import { demandDisplayContent, projectDemand, resolvedVideoUrl } from "@/lib/campaign-demands";
 import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
 import { isLivePautaType } from "@/lib/pauta-briefing";
 import { cn } from "@/lib/cn";
@@ -100,23 +100,25 @@ function DemandCard({
   useEffect(() => {
     onPautaChange?.(demand.id, pauta);
   }, [demand.id, onPautaChange, pauta]);
-  const projected = projectDemand(row, demand);
+  const display = demandDisplayContent(row, demand);
+  const projected = projectDemand(row, { ...demand, content: display });
   const live = isLivePautaType(demand.content_type);
   const state = campaignCreatorDeliveryState(projected, live ? "script_and_video" : flow);
   const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
   const title = t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total });
-  const script = demand.content?.script?.trim() || "";
-  const videoUrl = demand.content?.video_url?.trim() || "";
-  const publishedUrl = safeHttpUrl(demand.content?.published_link || "");
+  const script = display.script?.trim() || "";
+  const videoUrl = resolvedVideoUrl(display);
+  const publishedUrl = safeHttpUrl(display.published_link || "");
   const demandPublished = demand.delivery_status === "published";
   const hasVideoMaterial = Boolean(
     videoUrl
-    || demand.content?.image_url?.trim()
+    || display.image_url?.trim()
     || publishedUrl
     || demand.video_submitted_at
+    || projected.video_submitted_at
   );
   const canReviseScript = demand.script_status === "submitted"
-    || (Boolean(script || demand.content?.script_file_url) && demand.script_status !== "approved" && !hasVideoMaterial);
+    || (Boolean(script || display.script_file_url) && demand.script_status !== "approved" && !hasVideoMaterial);
   const canReviseVideo = hasVideoMaterial && demand.video_status !== "approved";
   const needsScript = state === "scriptReview";
   const needsVideo = state === "videoReview" || state === "sent";
@@ -242,20 +244,20 @@ function DemandCard({
         <p className="m-0 text-[11px] font-medium text-slate-400">{t("campaignDetail.demandPautaEmpty")}</p>
       )}
 
-      {script || demand.content?.script_file_url ? (
+      {videoUrl ? (
+        <CampaignSubmittedVideo videoUrl={videoUrl} fileSize={display.video_file_size} />
+      ) : null}
+
+      {script || display.script_file_url ? (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="m-0 text-[10px] font-black tracking-wider text-slate-500 uppercase">{t("campaignDetail.viewScript")}</p>
           {script ? <p className="m-0 mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{script}</p> : null}
-          {demand.content?.script_file_url ? (
+          {display.script_file_url ? (
             <div className="mt-2">
-              <ScriptDocumentLink url={demand.content.script_file_url} filename={demand.content.script_file_name || ""} />
+              <ScriptDocumentLink url={display.script_file_url} filename={display.script_file_name || ""} />
             </div>
           ) : null}
         </div>
-      ) : null}
-
-      {videoUrl ? (
-        <CampaignSubmittedVideo videoUrl={videoUrl} fileSize={demand.content?.video_file_size} compact />
       ) : null}
 
       {publishedUrl ? (

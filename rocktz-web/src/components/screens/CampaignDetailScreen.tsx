@@ -101,7 +101,7 @@ import { cn } from "@/lib/cn";
 import { usePrivacy } from "@/lib/privacy";
 import { campaignAgeLabel, parseAgeLimit } from "@/lib/campaign-age";
 import { benefitCouponLine, parseBenefitPercent, parseBenefitSuffix } from "@/lib/benefit-coupon";
-import { creatorDeliveryLabel, demandProgress } from "@/lib/campaign-demands";
+import { creatorDeliveryLabel, demandProgress, participationHasVideo, resolvedVideoUrl } from "@/lib/campaign-demands";
 import { campaignLocationLabel, DEFAULT_COUNTRY, hasRegions, moneyCurrency, normalizeCountry, normalizeRegion } from "@/lib/geo";
 import { formatShippingLines } from "@/lib/shipping-address";
 import { maskShippingPreview } from "@/lib/mask-sensitive";
@@ -217,7 +217,7 @@ function hasSubmittedMaterial(row: CampaignCreator) {
   const content = row.content;
   if (content?.script?.trim()) return true;
   if (content?.script_file_url?.trim()) return true;
-  if (content?.video_url?.trim()) return true;
+  if (resolvedVideoUrl(content)) return true;
   if (content?.image_url?.trim()) return true;
   const status = row.delivery_status;
   if (status === "sent" || status === "revision" || status === "approved" || status === "published") return true;
@@ -306,7 +306,7 @@ function campaignVideoVersions(row: CampaignCreator) {
 
 function needsAgencyAttention(row: CampaignCreator) {
   if (hasNoDemand(row)) return false;
-  if (!row.content?.video_url?.trim()) return false;
+  if (!participationHasVideo(row)) return false;
   const status = row.delivery_status;
   if (status === "approved" || status === "published") return false;
   if (status === "sent") return true;
@@ -2358,11 +2358,11 @@ function DetailInner() {
                               ) : null}
                             </button>
                           ) : null}
-                          {selected.content?.video_url?.trim() ? (
+                          {resolvedVideoUrl(selected.content) ? (
                             <CampaignSubmittedVideo
                               compact
                               className="w-auto"
-                              videoUrl={selected.content.video_url}
+                              videoUrl={resolvedVideoUrl(selected.content)}
                               fileSize={selected.content.video_file_size}
                             />
                           ) : selected.script_status === "approved" ? (

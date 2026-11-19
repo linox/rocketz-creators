@@ -13,7 +13,7 @@ import { alertApiError, alertSuccess, alertWarning } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { mergeUploadProgress } from "@/lib/content-delivery-status";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
-import { projectDemand } from "@/lib/campaign-demands";
+import { presentDemand, resolvedVideoUrl } from "@/lib/campaign-demands";
 import { isLivePautaType } from "@/lib/pauta-briefing";
 import type { Campaign, CampaignCreator } from "@/lib/types";
 import { CampaignAdditionalBriefing } from "@/components/CampaignAdditionalBriefing";
@@ -89,7 +89,7 @@ function CreatorCampaignDemandList({ campaign, row, onClose, onSubmitted, showBr
               {isLivePautaType(demand.content_type) ? (
                 <CreatorLiveDemandForm
                   key={`${demand.id}-${demand.script_status}-${demand.delivery_status}-${demand.content?.published_link ?? ""}-${demand.content?.script ?? ""}`}
-                  row={projectDemand(row, demand)}
+                  row={presentDemand(row, demand)}
                   demandId={demand.id}
                   brandPosts={isBrandPosting(campaign.posting_profile)}
                   onSubmitted={onSubmitted}
@@ -98,7 +98,7 @@ function CreatorCampaignDemandList({ campaign, row, onClose, onSubmitted, showBr
               <CreatorCampaignSubmissionForm
                 key={`${demand.id}-${demand.script_status}-${demand.video_status}-${demand.delivery_status}-${demand.content?.video_url ?? ""}-${demand.content?.script ?? ""}`}
                 campaign={campaign}
-                row={projectDemand(row, demand)}
+                row={presentDemand(row, demand)}
                 demandId={demand.id}
                 embedded
                 stayOpen
@@ -411,7 +411,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
         await alertWarning(tp("materialRequiredTitle"), tp("newVideoFileRequired"));
         return;
       }
-      if (!videoFile && !downloadUrl.trim() && !row.content?.video_url && !publishedUrl.trim()) {
+      if (!videoFile && !downloadUrl.trim() && !resolvedVideoUrl(row.content) && !publishedUrl.trim()) {
         await alertWarning(tp("materialRequiredTitle"), tp("videoOrLinkRequired"));
         return;
       }
@@ -465,7 +465,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
         return;
       }
 
-      let videoUrl = row.content?.video_url || null;
+      let videoUrl = resolvedVideoUrl(row.content) || null;
       let videoFileSize = row.content?.video_file_size ?? 0;
       if (videoFile && (canSubmitVideo || (!canSubmitScript && !linkStage))) {
         const uploaded = await api.uploadMedia(videoFile, videoFile.name, setUploadProgress);
@@ -562,7 +562,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
   const videoReady = canSubmitVideo
     ? (requiresNewVideoFile
       ? Boolean(videoFile || downloadUrl.trim())
-      : Boolean(videoFile || downloadUrl.trim() || row.content?.video_url || publishedUrl.trim()))
+      : Boolean(videoFile || downloadUrl.trim() || resolvedVideoUrl(row.content) || publishedUrl.trim()))
     : false;
   const submitDisabled = submitting
     || isBackgroundUploading
@@ -781,7 +781,7 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
                 disabled={submitting || isBackgroundUploading}
                 versionBadge={hasRevision ? tp("versionBadge", { n: nextVideoVersion }) : null}
                 requiresNewFile={requiresNewVideoFile}
-                showPreviousAttached={Boolean(requiresNewVideoFile && row.content?.video_url && !videoFile && !downloadUrl.trim())}
+                showPreviousAttached={Boolean(requiresNewVideoFile && resolvedVideoUrl(row.content) && !videoFile && !downloadUrl.trim())}
                 attachedHint={tp("previousVideoAttachedSelectNew")}
               />
               {!brandPosts && !requiresNewVideoFile ? (
@@ -803,26 +803,32 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
               ) : null}
             </div>
 
-            {row.content?.video_url ? (
+            {resolvedVideoUrl(row.content) ? (
               <CampaignSubmittedVideo
-                videoUrl={row.content.video_url}
-                fileSize={row.content.video_file_size}
+                videoUrl={resolvedVideoUrl(row.content)}
+                fileSize={row.content?.video_file_size}
                 compact
               />
             ) : null}
           </div>
-          ) : awaitingVideoApproval && row.content?.video_url ? (
+          ) : awaitingVideoApproval && resolvedVideoUrl(row.content) ? (
           <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold tracking-wider text-[#64748B] uppercase">{tp("videoLabel")}</label>
               <span className="text-xs font-semibold text-emerald-700">{tp("videoSentWaiting")}</span>
             </div>
             <CampaignSubmittedVideo
-              videoUrl={row.content.video_url}
-              fileSize={row.content.video_file_size}
+              videoUrl={resolvedVideoUrl(row.content)}
+              fileSize={row.content?.video_file_size}
               compact
             />
           </div>
+          ) : resolvedVideoUrl(row.content) ? (
+            <CampaignSubmittedVideo
+              videoUrl={resolvedVideoUrl(row.content)}
+              fileSize={row.content?.video_file_size}
+              compact
+            />
           ) : null}
             </>
           ) : null}
@@ -831,10 +837,10 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
             brandPosts ? (
             <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="m-0 text-[11px] font-medium text-amber-900">{tp("approvedPublishHintBrand")}</p>
-              {row.content?.video_url ? (
+              {resolvedVideoUrl(row.content) ? (
                 <CampaignSubmittedVideo
-                  videoUrl={row.content.video_url}
-                  fileSize={row.content.video_file_size}
+                  videoUrl={resolvedVideoUrl(row.content)}
+                  fileSize={row.content?.video_file_size}
                   compact
                 />
               ) : null}
@@ -843,10 +849,10 @@ function CreatorCampaignSubmissionForm({ campaign, row, onClose, onSubmitted, sh
             <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
               <p className="m-0 text-[11px] font-medium text-emerald-800">{isPublished ? tp("editPublishedLinkHint") : tp("approvedPublishHint")}</p>
               {!isPublished ? <p className="m-0 text-[11px] font-medium text-emerald-800">{tp("concludeWithoutLinkHint")}</p> : null}
-              {row.content?.video_url ? (
+              {resolvedVideoUrl(row.content) ? (
                 <CampaignSubmittedVideo
-                  videoUrl={row.content.video_url}
-                  fileSize={row.content.video_file_size}
+                  videoUrl={resolvedVideoUrl(row.content)}
+                  fileSize={row.content?.video_file_size}
                   compact
                 />
               ) : null}

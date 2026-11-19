@@ -41,7 +41,7 @@ import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignMo
 import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
-import { creatorDeliveryLabel } from "@/lib/campaign-demands";
+import { creatorDeliveryLabel, demandDisplayContent, resolvedVideoUrl } from "@/lib/campaign-demands";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
@@ -103,6 +103,23 @@ function formatRange(start: string | null | undefined, end: string | null | unde
   const fmt = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString(locale);
   if (start && end) return t("campaigns.dateRange", { start: fmt(start), end: fmt(end) });
   return fmt(start || end || "");
+}
+
+function participationVideos(row: MaterialRow) {
+  const clips: { key: string; url: string; size?: number | null }[] = [];
+  const seen = new Set<string>();
+  const push = (key: string, url: string, size?: number | null) => {
+    const clean = url.trim();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    clips.push({ key, url: clean, size });
+  };
+  for (const demand of row.demands ?? []) {
+    const content = demandDisplayContent(row, demand);
+    push(`demand-${demand.id}`, resolvedVideoUrl(content), content.video_file_size);
+  }
+  if (!clips.length) push("content", resolvedVideoUrl(row.content), row.content?.video_file_size);
+  return clips;
 }
 
 function getFormatBadge(deliveryType = "") {
@@ -671,8 +688,9 @@ function CampaignsInner() {
                       const expanded = expandedId === row.id;
                       const format = getFormatBadge(row.delivery_type ?? "");
                       const platform = getPlatformBadge(row.delivery_type ?? "");
-                      const hasVideo = Boolean(row.content?.video_url);
-                      const isScriptOnly = Boolean(row.content?.script) && !hasVideo;
+                      const videos = participationVideos(row);
+                      const hasVideo = videos.length > 0;
+                      const isScriptOnly = Boolean(row.content?.script || row.demands?.some((demand) => demand.content?.script?.trim())) && !hasVideo;
                       const FormatIcon = format.icon;
 
                       return (
@@ -788,14 +806,16 @@ function CampaignsInner() {
                                       </div>
                                       <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{t("campaigns.mediaFile")}</span>
                                     </div>
-                                    {row.content?.video_url ? (
+                                    {videos.length ? (
                                       <div className="space-y-3">
-                                        <CampaignSubmittedVideo
-                                          key={row.id}
-                                          videoUrl={row.content.video_url}
-                                          fileSize={row.content.video_file_size}
-                                        />
-                                        {row.content.published_link ? (
+                                        {videos.map((clip) => (
+                                          <CampaignSubmittedVideo
+                                            key={clip.key}
+                                            videoUrl={clip.url}
+                                            fileSize={clip.size}
+                                          />
+                                        ))}
+                                        {row.content?.published_link ? (
                                           <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
                                             <span className="truncate text-xs font-bold text-emerald-900">{t("campaigns.publishedPost")}</span>
                                             <a href={safeHttpUrl(row.content.published_link)} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 hover:underline">
