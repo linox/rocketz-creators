@@ -100,6 +100,12 @@ return [
             'body' => 'O prazo da demanda {{nome_demanda}} está próximo. Acesse a plataforma para enviar ou atualizar sua entrega.',
             'cta' => 'Acessar demanda',
         ],
+        'campaign.delivery_overdue' => [
+            'subject' => 'A entrega de {{nome_campanha}} está atrasada',
+            'greeting' => 'Olá, {{nome_criador}}!',
+            'body' => "O prazo da campanha {{nome_campanha}} era {{data_limite}} e a entrega ainda não foi concluída.\n\nEnvie o material na plataforma para encerrar este aviso. Ele segue todos os dias até a entrega ser concluída.",
+            'cta' => 'Enviar entrega',
+        ],
         'demand.post_day' => [
             'subject' => 'Hoje é o dia da postagem de {{nome_demanda}}',
             'greeting' => 'Olá, {{nome_usuario}}!',

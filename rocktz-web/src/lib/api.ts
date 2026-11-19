@@ -23,6 +23,9 @@ import type {
   CompanyLandingSignup,
   CompanyLandingMetrics,
   CalendarEvent,
+  ConversationDetail,
+  ConversationRecipients,
+  ConversationSummary,
   Creator,
   CreatorStorefront,
   StorefrontCategory,
@@ -72,7 +75,7 @@ export const api = {
     laravelFetch<Item<PostalPlace>>(`/postal-codes?${new URLSearchParams({ country, code })}`),
   dashboard: () => laravelFetch<DashboardStats>("/dashboard"),
   calendar: (query = "") => laravelFetch<List<CalendarEvent>>(`/calendar${query}`),
-  nav: () => laravelFetch<{ unread: number; pending_applications: number; has_recurring: boolean }>("/nav"),
+  nav: () => laravelFetch<{ unread: number; pending_applications: number; has_recurring: boolean; message_unread: number }>("/nav"),
   creators: (query = "") => laravelFetch<List<Creator>>(`/creators${query}`),
   creator: (id: number | string) => laravelFetch<Item<Creator>>(`/creators/${id}`),
   createCreator: (body: unknown) => laravelFetch<CreatorWrite>("/creators", { method: "POST", body: JSON.stringify(body) }),
@@ -314,6 +317,19 @@ export const api = {
   browserAlerts: () => laravelFetch<{ data: BrowserAlert[] }>("/browser-alerts"),
   markBrowserAlertSeen: (body: { key?: string; inbox_id?: string }) =>
     laravelFetch<{ ok: boolean }>("/browser-alerts/seen", { method: "POST", body: JSON.stringify(body) }),
+  conversations: () => laravelFetch<{ data: ConversationSummary[]; meta: { unread: number } }>("/conversations"),
+  conversation: (id: number) => laravelFetch<{ data: ConversationDetail }>(`/conversations/${id}`),
+  createConversation: (body: {
+    subject: string;
+    body: string;
+    campaign_id?: number | null;
+    recurring_contract_id?: number | null;
+    creator_id?: number | null;
+  }) =>
+    laravelFetch<{ data: ConversationDetail }>("/conversations", { method: "POST", body: JSON.stringify(body) }),
+  replyConversation: (id: number, body: string) =>
+    laravelFetch<{ data: ConversationDetail }>(`/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  conversationRecipients: (query = "") => laravelFetch<{ data: ConversationRecipients }>(`/conversations/recipients${query}`),
   notifications: (query = "") => laravelFetch<List<AppNotification>>(`/notifications${query}`),
   markRead: (id: number) => laravelFetch(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () => laravelFetch("/notifications/read-all", { method: "POST" }),

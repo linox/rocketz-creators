@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   Mail,
   Megaphone,
+  MessageCircle,
   Menu,
   MoreHorizontal,
   Package,
@@ -41,6 +42,7 @@ import {
   Zap,
 } from "lucide-react";
 import { BrowserAlerts } from "@/components/BrowserAlerts";
+import { MessageDock } from "@/components/messages/MessageDock";
 import { CreatorSwitcher } from "@/components/CreatorSwitcher";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { CreatorContractModal } from "@/components/CreatorContractModal";
@@ -237,6 +239,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const { t: tp } = useTranslation("profile");
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [messageUnread, setMessageUnread] = useState(0);
   const [pendingCampaigns, setPendingCampaigns] = useState(0);
   const [hasRecurring, setHasRecurring] = useState<boolean | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -258,8 +261,9 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   useEffect(() => {
     let cancelled = false;
 
-    function apply(badges: { unread: number; pending_applications: number; has_recurring?: boolean }) {
+    function apply(badges: { unread: number; pending_applications: number; has_recurring?: boolean; message_unread?: number }) {
       setUnread(badges.unread);
+      setMessageUnread(badges.message_unread ?? 0);
       setPendingCampaigns(user.role === "admin" ? badges.pending_applications : 0);
       if (typeof badges.has_recurring === "boolean") setHasRecurring(badges.has_recurring);
     }
@@ -421,6 +425,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             showFinanceNav ? { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") } : null,
           ]),
           sidebarSection("admin", t("groupAdmin"), Settings2, [
+            { href: "/messages", label: t("messages"), icon: MessageCircle, active: isActive("/messages"), badge: messageUnread },
             { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
             userHasPermission(user, "mail.manage") ? { href: "/mail", label: t("mailTemplates"), icon: Mail, active: isActive("/mail") && !isActive("/mail/log") } : null,
             userHasPermission(user, "mail.manage") ? { href: "/mail/log", label: t("mailLog"), icon: Mail, active: isActive("/mail/log") } : null,
@@ -455,6 +460,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
               { href: "/finance", label: t("finance"), icon: Wallet, active: isActive("/finance") },
             ]),
             sidebarSection("admin", t("groupAdmin"), Settings2, [
+              { href: "/messages", label: t("messages"), icon: MessageCircle, active: isActive("/messages"), badge: messageUnread },
               { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
               { href: "/company-landing", label: t("myLanding"), icon: Globe, active: isActive("/company-landing") },
               companyPublicLandingSlug
@@ -471,7 +477,6 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         : [
             sidebarSection("content", t("groupContent"), Layers, [
               { href: "/available-campaigns", label: t("availableCampaigns"), icon: Sparkles, active: isAvailableCampaignsActive },
-              { href: "/videos", label: t("videos"), icon: Film, active: isActive("/videos") },
               creatorProfileBase ? { href: `${creatorProfileBase}?tab=campaigns`, label: t("myCampaigns"), icon: Megaphone, active: isCreatorCampaignsActive } : null,
               showRecurringNav && creatorProfileBase
                 ? { href: `${creatorProfileBase}?tab=recurring`, label: t("recurring"), icon: Repeat, active: isCreatorRecurringActive }
@@ -493,6 +498,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             ]),
             sidebarSection("account", t("groupAccount"), UserRound, [
               creatorProfileBase ? { href: `${creatorProfileBase}?tab=shipping`, label: t("shippingAddress"), icon: Package, active: isCreatorShippingActive } : null,
+              { href: "/messages", label: t("messages"), icon: MessageCircle, active: isActive("/messages"), badge: messageUnread },
               { href: "/notifications", label: t("notifications"), icon: Bell, active: isNotificationsActive, badge: unread },
             ]),
           ]
@@ -684,7 +690,12 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
             variant="header"
           />
         </header>
-        <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10">
+        <main className={cn(
+          "flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain",
+          path === "/messages"
+            ? "p-3 pb-[calc(var(--app-bottom-nav-h)+0.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+1rem)] lg:p-10 lg:pb-10"
+            : "p-3 pb-[calc(var(--app-bottom-nav-h)+4.75rem)] sm:p-6 sm:pb-[calc(var(--app-bottom-nav-h)+5rem)] lg:p-10 lg:pb-24",
+        )}>
           <BrowserAlerts />
           {needsContract || needsFirstPortfolio ? (
             <div className="mb-4 flex flex-col gap-3 sm:mb-6">
@@ -698,6 +709,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
         </main>
       </div>
 
+      <MessageDock user={user} unread={messageUnread} menuOpen={open} />
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}

@@ -313,6 +313,41 @@ class TransactionalMailTest extends TestCase
         ]);
     }
 
+    public function test_campaign_overdue_email_repeats_daily_until_the_delivery_is_sent(): void
+    {
+        Mail::fake();
+        $this->travelTo('2026-11-19');
+        $overdue = CampaignCreator::factory()->approved()->create([
+            'delivery_date' => '2026-11-18',
+            'delivery_status' => DeliveryStatus::Pending,
+        ]);
+        $dueToday = CampaignCreator::factory()->approved()->create([
+            'delivery_date' => '2026-11-19',
+            'delivery_status' => DeliveryStatus::Pending,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $overdueMail = MailMessage::query()
+            ->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)
+            ->where('related_id', $overdue->id);
+        $this->assertSame(1, $overdueMail->count());
+        $this->assertSame(MailMessageStatus::Sent, $overdueMail->first()->status);
+        $this->assertSame(0, MailMessage::query()->where('template_key', MailTemplateKey::DemandReminder)->where('related_id', $overdue->id)->count());
+        $this->assertSame(0, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $dueToday->id)->count());
+        $this->assertSame(1, MailMessage::query()->where('template_key', MailTemplateKey::DemandReminder)->where('related_id', $dueToday->id)->count());
+
+        $this->travelTo('2026-11-20');
+        $this->artisan('mail:reminders')->assertSuccessful();
+        $this->assertSame(2, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $overdue->id)->count());
+
+        $overdue->update(['delivery_status' => DeliveryStatus::Sent]);
+        $this->travelTo('2026-11-21');
+        $this->artisan('mail:reminders')->assertSuccessful();
+        $this->assertSame(2, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $overdue->id)->count());
+    }
+
     public function test_post_day_email_is_sent_to_creator_when_post_date_is_today(): void
     {
         Mail::fake();

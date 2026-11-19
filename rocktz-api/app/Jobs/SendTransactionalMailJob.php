@@ -96,6 +96,7 @@ class SendTransactionalMailJob implements ShouldQueue
         $key = $message->template_key;
         if (! in_array($key, [
             MailTemplateKey::DemandReminder,
+            MailTemplateKey::CampaignDeliveryOverdue,
             MailTemplateKey::PostDayReminder,
             MailTemplateKey::DeliveryPendingReviewReminder,
         ], true)) {
@@ -121,6 +122,14 @@ class SendTransactionalMailJob implements ShouldQueue
         if ($related instanceof CampaignCreator) {
             if ($key === MailTemplateKey::PostDayReminder) {
                 return $related->delivery_status === DeliveryStatus::Published;
+            }
+
+            if ($key === MailTemplateKey::CampaignDeliveryOverdue) {
+                return in_array($related->delivery_status, [
+                    DeliveryStatus::Sent,
+                    DeliveryStatus::Approved,
+                    DeliveryStatus::Published,
+                ], true);
             }
 
             if ($key === MailTemplateKey::DemandReminder) {

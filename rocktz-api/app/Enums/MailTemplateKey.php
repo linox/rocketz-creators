@@ -14,6 +14,7 @@ enum MailTemplateKey: string
     case CampaignApplicationRejected = 'campaign.application_rejected';
     case DemandAssigned = 'demand.assigned';
     case DemandReminder = 'demand.reminder';
+    case CampaignDeliveryOverdue = 'campaign.delivery_overdue';
     case PostDayReminder = 'demand.post_day';
     case DeliveryRevisionRequested = 'delivery.revision_requested';
     case DeliveryApproved = 'delivery.approved';
@@ -76,7 +77,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::CampaignOpportunity => MailTemplateCategory::Opportunity,
-            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder, self::InvoiceDue, self::InvoiceOverdue => MailTemplateCategory::Reminder,
+            self::DemandReminder, self::CampaignDeliveryOverdue, self::PostDayReminder, self::DeliveryPendingReviewReminder, self::InvoiceDue, self::InvoiceOverdue => MailTemplateCategory::Reminder,
             self::AdminDeliveryStuck,
             self::AdminDemandOverdue,
             self::AdminCampaignStartingEmpty,
@@ -89,7 +90,7 @@ enum MailTemplateKey: string
     {
         return match ($this) {
             self::CampaignOpportunity => 'opportunities',
-            self::DemandReminder, self::PostDayReminder, self::DeliveryPendingReviewReminder => 'deadline_reminders',
+            self::DemandReminder, self::CampaignDeliveryOverdue, self::PostDayReminder, self::DeliveryPendingReviewReminder => 'deadline_reminders',
             self::CampaignCreatorApplied, self::CampaignPublished => 'campaign_updates',
             default => null,
         };
@@ -151,6 +152,7 @@ enum MailTemplateKey: string
             self::CampaignCreatorApplied => ['link_campanha'],
             self::DemandAssigned,
             self::DemandReminder,
+            self::CampaignDeliveryOverdue,
             self::PostDayReminder,
             self::DeliveryRevisionRequested,
             self::DeliveryApproved,
@@ -181,6 +183,7 @@ enum MailTemplateKey: string
             self::CampaignApplicationApproved => ['nome_campanha', 'nome_empresa', 'data_entrega'],
             self::DemandAssigned => ['nome_campanha', 'nome_empresa', 'nome_demanda', 'data_entrega', 'valor_campanha'],
             self::DemandReminder => ['nome_demanda', 'data_limite'],
+            self::CampaignDeliveryOverdue => ['nome_campanha', 'data_limite'],
             self::PostDayReminder => ['nome_demanda', 'data_postagem'],
             self::DeliveryRevisionRequested => ['nome_campanha', 'nome_demanda', 'solicitacao_modificacao', 'data_limite'],
             self::DemandUpdated => ['nome_demanda', 'data_limite', 'motivo_reprovacao'],

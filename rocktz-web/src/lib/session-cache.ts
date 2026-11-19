@@ -8,6 +8,7 @@ export type NavBadges = {
   unread: number;
   pending_applications: number;
   has_recurring?: boolean;
+  message_unread?: number;
 };
 
 let memoryUser: AuthUser | null = null;

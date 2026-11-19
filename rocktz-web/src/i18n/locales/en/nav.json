@@ -25,6 +25,7 @@
   "postingAgenda": "Schedule",
   "recurring": "Recurring",
   "notifications": "Notifications",
+  "messages": "Messages",
   "mailTemplates": "Email",
   "mailLog": "Email history",
   "activityLogs": "Logs",

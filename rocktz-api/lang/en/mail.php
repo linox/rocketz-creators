@@ -100,6 +100,12 @@ return [
             'body' => 'The deadline for {{nome_demanda}} is approaching. Open the platform to submit or update your delivery.',
             'cta' => 'Open deliverable',
         ],
+        'campaign.delivery_overdue' => [
+            'subject' => 'The delivery for {{nome_campanha}} is overdue',
+            'greeting' => 'Hi, {{nome_criador}}!',
+            'body' => "The deadline for {{nome_campanha}} was {{data_limite}} and the delivery is still open.\n\nSubmit it on the platform to stop this notice. It continues every day until the delivery is completed.",
+            'cta' => 'Submit delivery',
+        ],
         'demand.post_day' => [
             'subject' => 'Today is posting day for {{nome_demanda}}',
             'greeting' => 'Hi, {{nome_usuario}}!',

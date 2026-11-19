@@ -80,7 +80,7 @@ class ProcessMailRemindersCommand extends Command
                     return;
                 }
                 foreach ($offsets as $offset) {
-                    if (! $this->matchesOffset($row->delivery_date, (int) $offset)) {
+                    if ((int) $offset < 0 || ! $this->matchesOffset($row->delivery_date, (int) $offset)) {
                         continue;
                     }
                     $mail->send(
@@ -102,6 +102,7 @@ class ProcessMailRemindersCommand extends Command
                 }
             });
 
+        $this->sendCampaignDeliveryOverdue($mail);
         $this->sendPostDayReminders($mail);
         app(FinancePaymentNotifier::class)->remind(app(FinancePaymentSync::class));
 
@@ -150,6 +151,44 @@ class ProcessMailRemindersCommand extends Command
             });
 
         return self::SUCCESS;
+    }
+
+    private function sendCampaignDeliveryOverdue(TransactionalMailService $mail): void
+    {
+        CampaignCreator::query()
+            ->with(['creator.user', 'campaign'])
+            ->where('application_status', ApplicationStatus::Approved)
+            ->whereNotNull('delivery_date')
+            ->whereDate('delivery_date', '<', now()->toDateString())
+            ->whereNotIn('delivery_status', [
+                DeliveryStatus::Sent,
+                DeliveryStatus::Approved,
+                DeliveryStatus::Published,
+            ])
+            ->get()
+            ->each(function (CampaignCreator $row) use ($mail) {
+                $user = $row->creator?->user;
+                if (! $user || ! $row->delivery_date) {
+                    return;
+                }
+
+                $mail->send(
+                    MailTemplateKey::CampaignDeliveryOverdue,
+                    $user,
+                    [
+                        'nome_criador' => $row->creator?->artistic_name,
+                        'nome_demanda' => $row->campaign?->name,
+                        'nome_campanha' => $row->campaign?->name,
+                        'data_limite' => $row->delivery_date->isoFormat('D MMM YYYY'),
+                        'cta_url' => FrontendUrl::to('/creators/'.$row->creator_id.'?tab=campaigns'),
+                        'link_demanda' => FrontendUrl::to('/campaigns/'.$row->campaign_id),
+                        'campaign_id' => $row->campaign_id,
+                        'creator_id' => $row->creator_id,
+                    ],
+                    $row,
+                    'overdue:'.now()->toDateString(),
+                );
+            });
     }
 
     private function sendPostDayReminders(TransactionalMailService $mail): void

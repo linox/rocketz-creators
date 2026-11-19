@@ -9,13 +9,14 @@ use App\Http\Controllers\Controller;
 use App\Models\CampaignCreator;
 use App\Models\Notification;
 use App\Models\RecurringContract;
+use App\Services\ConversationMailbox;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class NavController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ConversationMailbox $mailbox): JsonResponse
     {
         $user = $request->user();
         $unread = Notification::collapseCopies(
@@ -33,6 +34,7 @@ class NavController extends Controller
             'unread' => $unread->count(),
             'pending_applications' => $pending,
             'has_recurring' => $this->userHasRecurring($user),
+            'message_unread' => $mailbox->unreadCount($user),
         ]);
     }
 

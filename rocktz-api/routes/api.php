@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyLandingController;
+use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\CouponEarningController;
 use App\Http\Controllers\Api\CreatorController;
 use App\Http\Controllers\Api\CreatorCouponController;
@@ -145,6 +146,12 @@ Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
 
     Route::get('browser-alerts', [BrowserAlertController::class, 'index']);
     Route::post('browser-alerts/seen', [BrowserAlertController::class, 'seen']);
+    Route::get('conversations/recipients', [ConversationController::class, 'recipients']);
+    Route::get('conversations', [ConversationController::class, 'index']);
+    Route::post('conversations', [ConversationController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('conversations/{conversation}', [ConversationController::class, 'show']);
+    Route::post('conversations/{conversation}/messages', [ConversationController::class, 'reply'])->middleware('throttle:30,1');
+
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);

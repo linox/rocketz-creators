@@ -699,6 +699,53 @@ export type PlanningItem = {
   reviewed_at?: string | null;
 };
 
+export type ConversationPartyRef = { id: number; name: string };
+
+export type ConversationParties = {
+  company: ConversationPartyRef | null;
+  creator: ConversationPartyRef | null;
+  agency: boolean;
+};
+
+export type ConversationMessage = {
+  id: number;
+  body: string;
+  created_at: string | null;
+  mine: boolean;
+  author: { id: number | null; name: string | null; side: "agency" | "company" | "creator" | null };
+};
+
+export type ConversationWork = {
+  kind: "campaign" | "recurring";
+  id: number;
+  name: string;
+};
+
+export type ConversationWorkOption = ConversationWork & {
+  company: ConversationPartyRef | null;
+  creators: ConversationPartyRef[];
+};
+
+export type ConversationSummary = {
+  id: number;
+  subject: string;
+  parties: ConversationParties;
+  work: ConversationWork | null;
+  preview: string | null;
+  preview_author: string | null;
+  last_message_at: string | null;
+  unread: boolean;
+};
+
+export type ConversationDetail = ConversationSummary & {
+  messages: ConversationMessage[];
+};
+
+export type ConversationRecipients = {
+  works: ConversationWorkOption[];
+  truncated: boolean;
+};
+
 export type AppNotification = {
   id: number;
   title: string;
