@@ -33,11 +33,13 @@
     "pickSubject": "Escribe un asunto.",
     "pickBody": "Escribe el mensaje.",
     "you": "Tú",
+    "searchPlaceholder": "Buscar campaña, trabajo o nombre",
     "dockLabel": "Abrir mensajes",
     "closeDock": "Cerrar mensajes",
     "sideAgency": "Agencia",
     "sideCompany": "Empresa",
-    "sideCreator": "Creador"
+    "sideCreator": "Creador",
+    "refineSearch": "Afina la búsqueda para ver más trabajos."
   },
   "contentReaction": {
     "hint": "Además de aprobar, puedes dar me gusta y dejar un recado. El creador lo ve en el contenido.",

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
-import { MessageCompose, MessageList, MessageThread } from "@/components/messages/MessagePanels";
+import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageThread, newerThread } from "@/components/messages/MessagePanels";
 import { alertApiError } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -23,32 +23,39 @@ function MessagesInner() {
   const [thread, setThread] = useState<ConversationDetail | null>(null);
   const [composing, setComposing] = useState(false);
   const [ready, setReady] = useState(false);
-
-  const loadList = useCallback(async () => {
-    const res = await api.conversations();
-    setItems(res.data);
-  }, []);
+  const seenUnread = useRef<number | null>(null);
+  const openId = useRef(0);
+  openId.current = thread?.id ?? 0;
 
   useEffect(() => {
     let cancelled = false;
-    api.conversations()
-      .then((res) => {
-        if (!cancelled) setItems(res.data);
-      })
-      .catch((err) => {
-        if (!cancelled) void alertApiError(err);
-      })
-      .finally(() => {
+
+    async function load(quiet: boolean) {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const res = await api.conversations();
+        if (cancelled) return;
+        const rows = res.data.map((item) => (item.id === openId.current ? { ...item, unread: false } : item));
+        setItems(rows);
+        const count = rows.filter((item) => item.unread).length;
+        if (seenUnread.current !== count && (seenUnread.current !== null || count > 0)) emitNavRefresh();
+        seenUnread.current = count;
+      } catch (err) {
+        if (!quiet && !cancelled) void alertApiError(err);
+      } finally {
         if (!cancelled) setReady(true);
-      });
+      }
+    }
+
+    void load(false);
     const timer = window.setInterval(() => {
-      void loadList().catch(() => undefined);
-    }, 60_000);
+      void load(true);
+    }, MESSAGE_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [loadList, user.company?.id, user.id, user.role]);
+  }, [user.company?.id, user.id, user.role]);
 
   useEffect(() => {
     if (!requested) {
@@ -71,6 +78,26 @@ function MessagesInner() {
       cancelled = true;
     };
   }, [requested, router, user.company?.id]);
+
+  useEffect(() => {
+    if (!thread?.id) return;
+    const id = thread.id;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      api.conversation(id)
+        .then((res) => {
+          if (cancelled) return;
+          setThread((current) => newerThread(current, res.data));
+          setItems((current) => current.map((item) => (item.id === res.data.id ? { ...item, ...res.data, unread: false } : item)));
+        })
+        .catch(() => undefined);
+    }, MESSAGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [thread?.id]);
 
   function openThread(id: number) {
     setComposing(false);

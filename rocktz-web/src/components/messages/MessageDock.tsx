@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { MessageCircle, X } from "lucide-react";
-import { MessageCompose, MessageList, MessageThread } from "@/components/messages/MessagePanels";
+import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageThread, newerThread } from "@/components/messages/MessagePanels";
 import { alertApiError } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
@@ -32,6 +32,12 @@ export function MessageDock({
   const [view, setView] = useState<DockView>("list");
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [thread, setThread] = useState<ConversationDetail | null>(null);
+  const openRef = useRef(open);
+  const seenUnread = useRef<number | null>(null);
+  const alerted = useRef(false);
+  const openId = useRef<number | null>(null);
+  openRef.current = open;
+  openId.current = open && view === "thread" ? thread?.id ?? null : null;
 
   useEffect(() => setMounted(true), []);
 
@@ -43,28 +49,59 @@ export function MessageDock({
     if (menuOpen) setOpen(false);
   }, [menuOpen]);
 
+  const onInbox = (pathname.replace(/\/+$/, "") || "/") === "/messages";
+
   useEffect(() => {
-    if (!open) return;
+    if (onInbox) return;
     let cancelled = false;
 
-    async function load(quiet: boolean) {
+    async function load() {
+      if (document.visibilityState === "hidden") return;
       try {
         const res = await api.conversations();
-        if (!cancelled) setItems(res.data);
+        if (cancelled) return;
+        const rows = res.data.map((item) => (item.id === openId.current ? { ...item, unread: false } : item));
+        setItems(rows);
+        const count = rows.filter((item) => item.unread).length;
+        if (seenUnread.current !== count && (seenUnread.current !== null || count > 0)) emitNavRefresh();
+        seenUnread.current = count;
       } catch (err) {
-        if (!quiet && !cancelled) await alertApiError(err);
+        if (openRef.current && !alerted.current && !cancelled) {
+          alerted.current = true;
+          await alertApiError(err);
+        }
       }
     }
 
-    void load(false);
+    void load();
     const timer = window.setInterval(() => {
-      void load(true);
-    }, 60_000);
+      void load();
+    }, MESSAGE_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [open, user.company?.id, user.role]);
+  }, [onInbox, user.company?.id, user.role]);
+
+  useEffect(() => {
+    if (!open || view !== "thread" || !thread?.id) return;
+    const id = thread.id;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      api.conversation(id)
+        .then((res) => {
+          if (cancelled) return;
+          setThread((current) => newerThread(current, res.data));
+          setItems((current) => current.map((item) => (item.id === res.data.id ? { ...item, ...res.data, unread: false } : item)));
+        })
+        .catch(() => undefined);
+    }, MESSAGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [open, view, thread?.id]);
 
   useEffect(() => {
     if (!open) return;

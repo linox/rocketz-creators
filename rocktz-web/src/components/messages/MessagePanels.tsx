@@ -27,6 +27,15 @@ export function formatMessageTime(value: string | null, locale: string) {
   }).format(date);
 }
 
+export const MESSAGE_POLL_MS = 4000;
+
+export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
+  if (!current || current.id !== next.id) return next;
+  const currentLast = current.messages.at(-1)?.id ?? 0;
+  const nextLast = next.messages.at(-1)?.id ?? 0;
+  return nextLast < currentLast ? current : next;
+}
+
 export function workLabel(work: ConversationWork | null | undefined, campaign: string, recurring: string) {
   if (!work) return "";
   return `${work.kind === "recurring" ? recurring : campaign} · ${work.name}`;
@@ -217,6 +226,8 @@ export function MessageCompose({
 }) {
   const { t } = useTranslation("app", { keyPrefix: "messages" });
   const { t: tc } = useTranslation("common");
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
   const [recipients, setRecipients] = useState<ConversationRecipients>(EMPTY_RECIPIENTS);
   const [loaded, setLoaded] = useState(false);
   const [workKey, setWorkKey] = useState("");
@@ -226,8 +237,13 @@ export function MessageCompose({
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     let cancelled = false;
-    api.conversationRecipients()
+    api.conversationRecipients(query ? `?q=${encodeURIComponent(query)}` : "")
       .then((res) => {
         if (!cancelled) {
           setRecipients(res.data);
@@ -240,7 +256,7 @@ export function MessageCompose({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [query]);
 
   const workOptions = useMemo(
     () => recipients.works.map((work) => ({
@@ -302,14 +318,23 @@ export function MessageCompose({
 
   return (
     <form onSubmit={send} noValidate className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-      {loaded && recipients.works.length === 0 ? (
+      <label className="block">
+        <span className="sr-only">{t("searchPlaceholder")}</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t("searchPlaceholder")}
+          className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-purple-600"
+        />
+      </label>
+      {recipients.truncated ? <p className="text-xs text-slate-500">{t("refineSearch")}</p> : null}
+      {loaded && recipients.works.length === 0 && search.trim() === "" ? (
         <p className="text-sm text-slate-500">{t("emptyWorks")}</p>
       ) : (
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("work")}</span>
           <Select2Field
             theme="light"
-            searchable={false}
             placeholder={t("workPlaceholder")}
             value={workKey}
             onChange={chooseWork}
@@ -322,7 +347,6 @@ export function MessageCompose({
           <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("creator")}</span>
           <Select2Field
             theme="light"
-            searchable={false}
             placeholder={t("creatorPlaceholder")}
             value={creatorId}
             onChange={setCreatorId}
@@ -330,7 +354,7 @@ export function MessageCompose({
           />
         </label>
       ) : null}
-      {loaded && recipients.works.length === 0 ? (
+      {loaded && recipients.works.length === 0 && search.trim() === "" ? (
         onCancel ? (
           <div className="flex justify-end">
             <button type="button" onClick={onCancel} className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">

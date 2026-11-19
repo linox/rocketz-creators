@@ -33,11 +33,13 @@
     "pickSubject": "Write a subject.",
     "pickBody": "Write the message.",
     "you": "You",
+    "searchPlaceholder": "Search campaign, job, or name",
     "dockLabel": "Open messages",
     "closeDock": "Close messages",
     "sideAgency": "Agency",
     "sideCompany": "Company",
-    "sideCreator": "Creator"
+    "sideCreator": "Creator",
+    "refineSearch": "Refine the search to see more jobs."
   },
   "contentReaction": {
     "hint": "Besides approving, you can like it and leave a note. The creator sees this on the content.",
