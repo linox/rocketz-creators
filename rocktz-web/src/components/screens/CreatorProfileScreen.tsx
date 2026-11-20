@@ -160,8 +160,8 @@ function recurringRowPace(work: RecurringWorkRow): WorkPace {
   return deliveryPace(work.deliveryStatus, effectivePlanningDueDate(work.item), work.item.month);
 }
 
-function campaignRowPace(campaign: Campaign, row: { delivery_date?: string | null }, state: ContentDeliveryState) {
-  const due = effectiveCampaignDeliveryDate(row, campaign).date || campaign.end_date;
+function campaignRowPace(campaign: Campaign, row: { delivery_date?: string | null; post_date?: string | null }, state: ContentDeliveryState) {
+  const due = effectiveCampaignDeliveryDate(row, campaign).date || row.post_date || campaign.end_date;
   return deliveryPace(state, due);
 }
 
@@ -1274,8 +1274,9 @@ function ProfileInner() {
       },
     }];
   });
-  const carriedAgendaEntries = [...carriedCampaignEntries, ...carriedRecurringEntries]
-    .sort((a, b) => Number(Boolean(b.late)) - Number(Boolean(a.late)) || a.month.localeCompare(b.month) || a.title.localeCompare(b.title));
+  const owedCampaigns = approvedCampaigns.filter(({ campaign, row }) => campaignRowPace(campaign, row, campaignCreatorDeliveryState(row, campaign.approval_flow)) === "owing");
+  const owedRecurring = recurringWorkRows.filter((work) => recurringRowPace(work) === "owing");
+  const owedCount = owedCampaigns.length + owedRecurring.length;
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const invitedApplications = myParticipations.filter((item) => item.row.application_status === "invited");
   const declinedApplications = myParticipations.filter((item) => item.row.application_status === "declined");
@@ -2473,13 +2474,66 @@ function ProfileInner() {
             </form>
           ) : showCreatorTabs && tab === "dashboard" ? (
             <div className="flex flex-col gap-8">
+              {owedCount > 0 ? (
+                <section className="rounded-[24px] border-2 border-rose-500 bg-rose-50 p-5 shadow-md sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-sm">
+                      <AlertTriangle size={22} />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="m-0 text-xl font-black text-rose-950">{tp("youOweTitle", { count: owedCount })}</h2>
+                      <p className="mt-1 mb-0 max-w-2xl text-sm leading-relaxed text-rose-900">{tp("youOweHint")}</p>
+                    </div>
+                  </div>
+                  <ul className="mt-4 flex list-none flex-col gap-2 p-0">
+                    {owedCampaigns.map(({ campaign, row }) => (
+                      <li key={`owe-campaign-${row.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => openSubmission(row.id)}
+                          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-left shadow-sm hover:border-rose-400"
+                        >
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-black text-slate-900">{campaign.name}</span>
+                              <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">
+                              {[campaign.company?.name, fmtDate(row.delivery_date || campaign.delivery_date || row.post_date)].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">{tp("youOweAction")}</span>
+                        </button>
+                      </li>
+                    ))}
+                    {owedRecurring.map((work) => (
+                      <li key={`owe-recurring-${work.key}`}>
+                        <button
+                          type="button"
+                          onClick={() => openRecurringWork(work.key)}
+                          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-left shadow-sm hover:border-rose-400"
+                        >
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-black text-slate-900">{creatorPautaHeading(work.item?.title, work.contract.title)}</span>
+                              <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">
+                              {[work.contract.company?.name, work.contract.title, fmtDate(work.item?.planned_date || work.item?.post_date)].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">{tp("youOweAction")}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
               <div className="rounded-[24px] border border-white/5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-8 text-white shadow-xl">
                 <span className="w-fit rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-extrabold tracking-widest text-indigo-300 uppercase">{tp("panelTitle")}</span>
                 <h2 className="mt-3 text-2xl font-bold">{tp("helloCreator", { name: creator.artistic_name || creator.full_name })}</h2>
                 <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-300">{tp("panelHint")}</p>
               </div>
-
-              <OpenBacklogPanel items={carriedAgendaEntries} />
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <button type="button" onClick={() => goTab("shipping")} className="flex items-center gap-3 rounded-[16px] border border-amber-200 bg-white p-4 text-left shadow-sm hover:border-amber-300">
@@ -2714,13 +2768,17 @@ function ProfileInner() {
                 selectedCount={recurringRowsForTab.length}
                 demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
               />
-              {recurringMonthActive === demandCurrentMonth ? (
-                carriedRecurringEntries.length > 0 ? (
-                  <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950">
-                    {ta("dash.carriedTitle", { count: carriedRecurringEntries.length })}. {ta("dash.carriedHint")}
-                  </p>
-                ) : null
-              ) : (
+              {owedRecurring.length > 0 ? (
+                <div className="flex items-start gap-3 rounded-2xl border-2 border-rose-500 bg-rose-50 px-4 py-3 shadow-sm">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white">
+                    <AlertTriangle size={18} />
+                  </span>
+                  <div>
+                    <p className="m-0 text-base font-black text-rose-950">{tp("youOweTitle", { count: owedRecurring.length })}</p>
+                    <p className="mt-0.5 mb-0 text-sm text-rose-900">{tp("youOweHint")}</p>
+                  </div>
+                </div>
+              ) : recurringMonthActive === demandCurrentMonth ? null : (
                 <OpenBacklogPanel items={carriedRecurringEntries} />
               )}
               <ActiveRecurringWorksTable
@@ -2753,7 +2811,19 @@ function ProfileInner() {
                 </Link>
               </div>
 
-              <OpenBacklogPanel items={carriedCampaignEntries} />
+              {owedCampaigns.length > 0 ? (
+                <div className="flex items-start gap-3 rounded-2xl border-2 border-rose-500 bg-rose-50 px-4 py-3 shadow-sm">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white">
+                    <AlertTriangle size={18} />
+                  </span>
+                  <div>
+                    <p className="m-0 text-base font-black text-rose-950">{tp("youOweTitle", { count: owedCampaigns.length })}</p>
+                    <p className="mt-0.5 mb-0 text-sm text-rose-900">{tp("youOweHint")}</p>
+                  </div>
+                </div>
+              ) : (
+                <OpenBacklogPanel items={carriedCampaignEntries} />
+              )}
 
               <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                 <button type="button" onClick={() => setCampaignSubTab("active")} className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold", campaignSubTab === "active" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
@@ -3161,9 +3231,8 @@ function ActiveRecurringWorksTable({
         const monthRows = monthItems
           .filter((work) => statusFilter === "all" || recurringRowPace(work) === statusFilter)
           .sort((a, b) => {
-            const aLeft = a.item && planningLeftBehindMonth(a.item) ? 0 : 1;
-            const bLeft = b.item && planningLeftBehindMonth(b.item) ? 0 : 1;
-            return aLeft - bLeft;
+            const rank = (work: RecurringWorkRow) => recurringRowPace(work) === "owing" ? 0 : work.item && planningLeftBehindMonth(work.item) ? 1 : 2;
+            return rank(a) - rank(b);
           });
         const pendingRows = monthItems.filter((work) => recurringRowPace(work) !== "done");
         const overdueRows = monthItems.filter((work) => recurringRowPace(work) === "owing");
@@ -3257,13 +3326,14 @@ function ActiveRecurringWorksTable({
           const awaitingPauta = !item || itemIsAwaitingPauta(item);
           const deliveryTitle = creatorPautaHeading(item?.title, tp("awaitingDemand"));
           const formatLabel = contentFormatLabel(item?.content_type, ta);
+          const owing = recurringRowPace(work) === "owing";
 
           return (
-            <div key={key} data-demand-id={item?.id ?? undefined} className={cn("p-4", isOpen && "bg-purple-50/40")}>
+            <div key={key} data-demand-id={item?.id ?? undefined} className={cn("p-4", owing ? "bg-rose-50" : isOpen && "bg-purple-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
-                  <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />
+                  {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />}
                 </div>
               </div>
               <div className="mt-3 flex flex-col gap-2">
@@ -3279,9 +3349,9 @@ function ActiveRecurringWorksTable({
                   <CheckCircle2 size={11} />
                   {tp("contractLinked")}
                 </span>
-                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
                   <DeliveryStatusIcon state={item && !awaitingPauta ? deliveryStatus : "waiting"} />
-                  {awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
+                  {owing ? tp("owingBadge") : awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
                 </span>
                 </div>
               </div>
@@ -3338,12 +3408,13 @@ function ActiveRecurringWorksTable({
               const awaitingPauta = !item || itemIsAwaitingPauta(item);
               const deliveryTitle = creatorPautaHeading(item?.title, tp("awaitingDemand"));
               const formatLabel = contentFormatLabel(item?.content_type, ta);
+              const owing = recurringRowPace(work) === "owing";
 
               return (
-                <tr key={key} data-demand-id={item?.id ?? undefined} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
+                <tr key={key} data-demand-id={item?.id ?? undefined} className={cn("transition-colors", owing ? "bg-rose-50 hover:bg-rose-100/70" : "hover:bg-purple-50/30", isOpen && !owing && "bg-purple-50/50")}>
                   <td className="p-3.5 pl-5">
                     <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
-                    <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />
+                    {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />}
                   </td>
                   <td className="p-3.5">
                     <WorkDateCell
@@ -3357,9 +3428,9 @@ function ActiveRecurringWorksTable({
                     <WorkDateCell value={item?.post_date} fmtDate={fmtDate} />
                   </td>
                   <td className="p-3.5">
-                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
+                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : awaitingPauta ? "border-orange-200 bg-orange-50 text-orange-800" : deliveryBadgeClass(item ? deliveryStatus : "waiting"))}>
                       <DeliveryStatusIcon state={item && !awaitingPauta ? deliveryStatus : "waiting"} />
-                      {awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
+                      {owing ? tp("owingBadge") : awaitingPauta ? tp("awaitingDemand") : deliveryLabel(deliveryStatus)}
                     </span>
                     {item ? (
                       <DeliveryUploadProgress
@@ -3533,9 +3604,8 @@ function ActiveCampaignsTable({
     if (statusFilter !== "all" && campaignRowPace(item.campaign, item.row, item.deliveryStatus) !== statusFilter) return false;
     return true;
   }).sort((a, b) => {
-    const aLeft = campaignLeftBehindMonth(a.campaign, a.row) ? 0 : 1;
-    const bLeft = campaignLeftBehindMonth(b.campaign, b.row) ? 0 : 1;
-    return aLeft - bLeft;
+    const rank = (item: (typeof rows)[number]) => campaignRowPace(item.campaign, item.row, item.deliveryStatus) === "owing" ? 0 : campaignLeftBehindMonth(item.campaign, item.row) ? 1 : 2;
+    return rank(a) - rank(b);
   }), [rows, companyFilter, statusFilter]);
 
   const groups = useMemo(() => groupRowsByCompany(filteredRows, (item) => ({
@@ -3600,12 +3670,13 @@ function ActiveCampaignsTable({
               tp={tp}
             />
           );
+          const owing = campaignRowPace(campaign, row, deliveryStatus) === "owing";
           return (
-            <div key={row.id} className={cn("p-4", isOpen && "bg-indigo-50/40")}>
+            <div key={row.id} className={cn("p-4", owing ? "bg-rose-50" : isOpen && "bg-indigo-50/40")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{campaign.name}</p>
-                  <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />
+                  {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
@@ -3621,9 +3692,9 @@ function ActiveCampaignsTable({
                   {row.application_status === "approved" ? <CheckCircle2 size={11} /> : null}
                   {applicationLabel(row.application_status)}
                 </span>
-                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(deliveryStatus))}>
+                <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : deliveryBadgeClass(deliveryStatus))}>
                   <DeliveryStatusIcon state={deliveryStatus} />
-                  {deliveryLabel(deliveryStatus)}
+                  {owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
                 </span>
                 {campaign.is_barter && row.application_status === "approved" ? (
                   <BarterDeliveryBadge status={row.barter_shipment?.status} />
@@ -3674,12 +3745,13 @@ function ActiveCampaignsTable({
                 </tr>
             {group.rows.map(({ campaign, row, deliveryStatus }) => {
               const isOpen = expandedSubmissionId === row.id;
+              const owing = campaignRowPace(campaign, row, deliveryStatus) === "owing";
 
               return (
-                <tr key={row.id} className={cn("transition-colors hover:bg-indigo-50/30", isOpen && "bg-indigo-50/50")}>
+                <tr key={row.id} className={cn("transition-colors", owing ? "bg-rose-50 hover:bg-rose-100/70" : "hover:bg-indigo-50/30", isOpen && !owing && "bg-indigo-50/50")}>
                     <td className="p-3.5 pl-5">
                       <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
-                      <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />
+                      {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
                     </td>
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
@@ -3702,9 +3774,9 @@ function ActiveCampaignsTable({
                       </div>
                     </td>
                     <td className="p-3.5">
-                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", deliveryBadgeClass(deliveryStatus))}>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : deliveryBadgeClass(deliveryStatus))}>
                         <DeliveryStatusIcon state={deliveryStatus} />
-                        {deliveryLabel(deliveryStatus)}
+                        {owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
                       </span>
                       <DeliveryUploadProgress
                         subjectType="campaign_creator"

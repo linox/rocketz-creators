@@ -1,5 +1,6 @@
 import { currentYearMonth } from "@/lib/calendar";
-import type { Campaign, PlanningItem } from "@/lib/types";
+import { campaignCreatorDeliveryState, isApprovedDelivery } from "@/lib/content-delivery-status";
+import type { Campaign, CampaignCreator, PlanningItem } from "@/lib/types";
 
 export type OpenBacklogEntry = {
   id: string;
@@ -14,6 +15,7 @@ export type OpenBacklogEntry = {
 
 type ScheduleCampaign = {
   status?: string | null;
+  approval_flow?: string | null;
   delivery_date?: string | null;
   end_date?: string | null;
   start_date?: string | null;
@@ -43,8 +45,7 @@ export function planningStillOpen(item: { status?: string | null; published_url?
 export function campaignParticipationStillOpen(campaign: ScheduleCampaign, row: ScheduleParticipation) {
   if (campaign.status === "finished") return false;
   if (row.application_status && row.application_status !== "approved") return false;
-  if (row.demands?.length) return row.demands.some((demand) => demand.delivery_status !== "published");
-  return row.delivery_status !== "published";
+  return !isApprovedDelivery(campaignCreatorDeliveryState(row as CampaignCreator, campaign.approval_flow));
 }
 
 function scheduleMonths(campaign: ScheduleCampaign, row: ScheduleParticipation) {
