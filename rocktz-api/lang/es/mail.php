@@ -268,5 +268,17 @@ return [
             'body' => "Tu cupón {{codigo}} está inactivo porque el nombre del registro está incompleto.\n\nPara participar, el nombre necesita nombre y al menos un apellido. Actualiza el registro para que el equipo pueda activar el cupón.\n\nMotivo: {{motivo_reprovacao}}",
             'cta' => 'Completar mi nombre',
         ],
+        'conversation.started' => [
+            'subject' => 'Nuevo mensaje: {{assunto}}',
+            'greeting' => 'Hola, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} envió el primer mensaje sobre {{nome_trabalho}}.\n\nAsunto: {{assunto}}\n\n{{mensagem}}",
+            'cta' => 'Abrir conversación',
+        ],
+        'conversation.closed' => [
+            'subject' => 'Conversación cerrada: {{assunto}}',
+            'greeting' => 'Hola, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} cerró la conversación sobre {{nome_trabalho}}.\n\nMotivo: {{motivo}}",
+            'cta' => 'Abrir conversación',
+        ],
     ],
 ];

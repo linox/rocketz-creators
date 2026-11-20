@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\MailMessageStatus;
+use App\Enums\MailTemplateKey;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\Creator;
+use App\Models\MailMessage;
 use App\Models\Notification;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
@@ -324,6 +327,18 @@ class ConversationTest extends TestCase
             'user_id' => $creator->user->id,
             'link' => '/messages?c='.$creatorThread,
         ]);
+        foreach ([$member, $otherMember, $admin] as $recipient) {
+            $this->assertDatabaseHas('mail_messages', [
+                'user_id' => $recipient->id,
+                'template_key' => MailTemplateKey::ConversationStarted->value,
+                'related_id' => $creatorThread,
+                'status' => MailMessageStatus::Sent->value,
+            ]);
+        }
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationStarted->value,
+        ]);
 
         $fromCompany = $this->asUser($member)
             ->postJson('/api/conversations', [
@@ -347,6 +362,28 @@ class ConversationTest extends TestCase
             'user_id' => $admin->id,
             'link' => '/messages?c='.$companyThread,
         ]);
+        $this->assertDatabaseHas('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationStarted->value,
+            'related_id' => $companyThread,
+            'status' => MailMessageStatus::Sent->value,
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $otherMember->id,
+            'related_id' => $companyThread,
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $admin->id,
+            'related_id' => $companyThread,
+        ]);
+
+        $mailed = MailMessage::query()->where('template_key', MailTemplateKey::ConversationStarted)->count();
+        $this->asUser($creator->user)
+            ->postJson('/api/conversations/'.$companyThread.'/messages', [
+                'body' => 'Recebi, obrigado.',
+            ])
+            ->assertOk();
+        $this->assertSame($mailed, MailMessage::query()->where('template_key', MailTemplateKey::ConversationStarted)->count());
     }
 
     public function test_company_or_agency_can_close_a_conversation(): void
@@ -387,6 +424,16 @@ class ConversationTest extends TestCase
             'link' => '/messages?c='.$id,
             'message' => __('messages.conversation_closed_notice').' '.__('messages.close_reasons.resolved'),
         ]);
+        $this->assertDatabaseHas('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationClosed->value,
+            'related_id' => $id,
+            'status' => MailMessageStatus::Sent->value,
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $member->id,
+            'template_key' => MailTemplateKey::ConversationClosed->value,
+        ]);
 
         $this->asUser($creator->user)
             ->postJson("/api/conversations/{$id}/messages", ['body' => 'Mais uma dúvida'])
@@ -406,11 +453,22 @@ class ConversationTest extends TestCase
             ])
             ->assertCreated();
 
+        $againId = (int) $again->json('data.id');
         $this->asUser($admin)
-            ->postJson('/api/conversations/'.$again->json('data.id').'/close', ['reason' => 'other'])
+            ->postJson('/api/conversations/'.$againId.'/close', ['reason' => 'other'])
             ->assertOk()
             ->assertJsonPath('data.closed', true)
             ->assertJsonPath('data.close_reason', 'other');
+        $this->assertDatabaseHas('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationClosed->value,
+            'related_id' => $againId,
+            'status' => MailMessageStatus::Sent->value,
+        ]);
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $admin->id,
+            'template_key' => MailTemplateKey::ConversationClosed->value,
+        ]);
     }
 
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void

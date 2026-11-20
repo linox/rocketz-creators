@@ -268,5 +268,17 @@ return [
             'body' => "Your coupon {{codigo}} is inactive because the name on your profile is incomplete.\n\nTo take part, the name needs a first name and at least one last name. Update your profile so the team can activate the coupon.\n\nReason: {{motivo_reprovacao}}",
             'cta' => 'Complete my name',
         ],
+        'conversation.started' => [
+            'subject' => 'New message: {{assunto}}',
+            'greeting' => 'Hi, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} sent the first message about {{nome_trabalho}}.\n\nSubject: {{assunto}}\n\n{{mensagem}}",
+            'cta' => 'Open conversation',
+        ],
+        'conversation.closed' => [
+            'subject' => 'Conversation closed: {{assunto}}',
+            'greeting' => 'Hi, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} closed the conversation about {{nome_trabalho}}.\n\nReason: {{motivo}}",
+            'cta' => 'Open conversation',
+        ],
     ],
 ];

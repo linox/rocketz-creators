@@ -43,6 +43,8 @@ enum MailTemplateKey: string
     case PaymentReleased = 'finance.payment_released';
     case BarterDelivered = 'barter.delivered';
     case CouponIncompleteName = 'coupon.incomplete_name';
+    case ConversationStarted = 'conversation.started';
+    case ConversationClosed = 'conversation.closed';
 
     /**
      * Convites e oportunidades de campanha. O cron drena essa fila com teto próprio,
@@ -115,7 +117,9 @@ enum MailTemplateKey: string
             self::PasswordReset,
             self::TwoFactorCode,
             self::CreatorRegistered,
-            self::CompanyRegistered => true,
+            self::CompanyRegistered,
+            self::ConversationStarted,
+            self::ConversationClosed => true,
             default => false,
         };
     }
@@ -199,6 +203,8 @@ enum MailTemplateKey: string
             self::PaymentReleased => ['nome_campanha', 'valor_campanha', 'data_pagamento'],
             self::BarterDelivered => ['nome_criador', 'nome_campanha', 'codigo_rastreio'],
             self::CouponIncompleteName => ['codigo', 'motivo_reprovacao'],
+            self::ConversationStarted => ['assunto', 'nome_remetente', 'nome_trabalho'],
+            self::ConversationClosed => ['assunto', 'nome_remetente', 'motivo'],
             default => [],
         };
     }

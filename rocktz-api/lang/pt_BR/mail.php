@@ -268,5 +268,17 @@ return [
             'body' => "Seu cupom {{codigo}} está inativo porque o nome no cadastro está incompleto.\n\nPara participar, o nome precisa ter nome e pelo menos um sobrenome. Atualize o cadastro para a equipe poder ativar o cupom.\n\nMotivo: {{motivo_reprovacao}}",
             'cta' => 'Completar meu nome',
         ],
+        'conversation.started' => [
+            'subject' => 'Nova mensagem: {{assunto}}',
+            'greeting' => 'Olá, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} enviou a primeira mensagem sobre {{nome_trabalho}}.\n\nAssunto: {{assunto}}\n\n{{mensagem}}",
+            'cta' => 'Abrir conversa',
+        ],
+        'conversation.closed' => [
+            'subject' => 'Conversa encerrada: {{assunto}}',
+            'greeting' => 'Olá, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} encerrou a conversa sobre {{nome_trabalho}}.\n\nMotivo: {{motivo}}",
+            'cta' => 'Abrir conversa',
+        ],
     ],
 ];

@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Enums\CampaignStatus;
+use App\Enums\CompanyStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\UserRole;
@@ -10,7 +11,9 @@ use App\Models\BarterShipment;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
 use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\ContentPlanningItem;
+use App\Models\Conversation;
 use App\Models\Creator;
 use App\Models\CreatorCoupon;
 use App\Models\MailMessage;
@@ -418,6 +421,88 @@ class MailNotifier
             'creator_id' => $item->creator_id,
             'company_id' => $item->company_id,
         ], $item, 'updated:'.($item->updated_at?->timestamp ?? time()));
+    }
+
+    public function conversationStarted(Conversation $conversation, User $sender, string $preview): void
+    {
+        $context = array_merge($this->conversationContext($conversation, $sender), [
+            'mensagem' => $preview,
+        ]);
+
+        foreach ($this->conversationRecipients($conversation, $sender) as $recipient) {
+            $this->mail->send(
+                MailTemplateKey::ConversationStarted,
+                $recipient,
+                $context,
+                $conversation,
+                'first:'.$conversation->id,
+            );
+        }
+    }
+
+    public function conversationClosed(Conversation $conversation, User $sender, string $reason): void
+    {
+        foreach ($this->conversationRecipients($conversation, $sender) as $recipient) {
+            $locale = $recipient->preferredLocale();
+            $this->mail->send(
+                MailTemplateKey::ConversationClosed,
+                $recipient,
+                array_merge($this->conversationContext($conversation, $sender), [
+                    'motivo' => trans('messages.close_reasons.'.$reason, [], $locale),
+                ]),
+                $conversation,
+                'closed:'.$conversation->id,
+            );
+        }
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private function conversationContext(Conversation $conversation, User $sender): array
+    {
+        $conversation->loadMissing(['creator.user', 'campaign:id,name', 'recurringContract:id,title']);
+        $work = $conversation->campaign?->name ?: $conversation->recurringContract?->title ?: $conversation->subject;
+        $link = FrontendUrl::to('/messages?c='.$conversation->id);
+
+        return [
+            'assunto' => $conversation->subject,
+            'nome_remetente' => $sender->name,
+            'nome_trabalho' => $work,
+            'cta_url' => $link,
+            'link_plataforma' => $link,
+            'company_id' => $conversation->company_id,
+            'creator_id' => $conversation->creator_id,
+            'campaign_id' => $conversation->campaign_id,
+        ];
+    }
+
+    /**
+     * @return list<User>
+     */
+    private function conversationRecipients(Conversation $conversation, User $sender): array
+    {
+        if ($sender->role === UserRole::Creator) {
+            $ids = CompanyUser::query()
+                ->where('company_id', $conversation->company_id ?? 0)
+                ->where('status', CompanyStatus::Active)
+                ->whereNotNull('user_id')
+                ->where('user_id', '!=', $sender->id)
+                ->pluck('user_id');
+            $admins = User::query()
+                ->where('role', UserRole::Admin)
+                ->where('id', '!=', $sender->id)
+                ->pluck('id');
+
+            return User::query()->whereIn('id', $ids->merge($admins)->unique())->get()->all();
+        }
+
+        $creatorUser = $conversation->creator?->user;
+        if (! $creatorUser || (int) $creatorUser->id === (int) $sender->id) {
+            return [];
+        }
+
+        return [$creatorUser];
     }
 
     public function adminSendFailed(MailMessage $failed): void

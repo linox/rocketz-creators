@@ -22,6 +22,7 @@ use App\Models\Notification;
 use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
+use App\Services\Mail\MailNotifier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -31,7 +32,10 @@ class ConversationMailbox
 {
     private const RECIPIENT_LIMIT = 40;
 
-    public function __construct(private NotificationService $notifications) {}
+    public function __construct(
+        private NotificationService $notifications,
+        private MailNotifier $mail,
+    ) {}
 
     public function visibleQuery(User $user): Builder
     {
@@ -101,7 +105,9 @@ class ConversationMailbox
 
         $message = $conversation->messages()->latest('id')->first();
         if ($message) {
-            $this->notifyAudience($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
+            $preview = Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180);
+            $this->notifyAudience($conversation, $user, $preview);
+            $this->mail->conversationStarted($conversation, $user, $preview);
         }
 
         return $conversation;
@@ -138,6 +144,7 @@ class ConversationMailbox
             $user,
             __('messages.conversation_closed_notice').' '.__('messages.close_reasons.'.$parsed->value),
         );
+        $this->mail->conversationClosed($conversation, $user, $parsed->value);
 
         return $conversation;
     }
