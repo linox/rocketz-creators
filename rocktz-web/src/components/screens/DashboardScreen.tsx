@@ -169,7 +169,17 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
         </div>
       ) : null}
 
+      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
+        <KpiCard label={t("dash.kpiCasting")} value={formatNumber(stats.total_creators)} />
+        <KpiCard label={t("dash.kpiCompanies")} value={formatNumber(stats.total_companies ?? 0)} />
+        <KpiCard label={t("dash.kpiContent")} value={formatNumber(stats.managed_content ?? 0)} />
+        <KpiCard label={t("dash.kpiCampaigns")} value={stats.running_campaigns ?? 0} />
+        {hasRecurringWork ? <KpiCard label={t("dash.kpiRecurring")} value={stats.running_recurring ?? 0} /> : null}
+        <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_managed_value ?? stats.total_campaign_value)} />
+      </div>
+
       <OpenBacklogPanel
+        variant="compact"
         count={stats.open_backlog?.count}
         items={(stats.open_backlog?.items ?? []).map((item) => ({
           id: item.id,
@@ -179,15 +189,6 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
           month: item.month,
         }))}
       />
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
-        <KpiCard label={t("dash.kpiCasting")} value={formatNumber(stats.total_creators)} />
-        <KpiCard label={t("dash.kpiCompanies")} value={formatNumber(stats.total_companies ?? 0)} />
-        <KpiCard label={t("dash.kpiContent")} value={formatNumber(stats.managed_content ?? 0)} />
-        <KpiCard label={t("dash.kpiCampaigns")} value={stats.running_campaigns ?? 0} />
-        {hasRecurringWork ? <KpiCard label={t("dash.kpiRecurring")} value={stats.running_recurring ?? 0} /> : null}
-        <KpiCard label={t("dash.kpiBudget")} value={formatCurrency(stats.total_managed_value ?? stats.total_campaign_value)} />
-      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col overflow-hidden rounded-[16px] border border-[#E2E8F0] bg-white shadow-sm lg:col-span-2">
@@ -426,6 +427,7 @@ function DashboardInner() {
               title: item.title || "—",
               meta: item.creator,
               month: item.month,
+              late: item.source === "campaign",
             }))}
           />
         </div>

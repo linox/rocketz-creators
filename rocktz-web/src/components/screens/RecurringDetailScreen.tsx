@@ -1132,13 +1132,15 @@ function DetailInner() {
     }
   }
 
-  async function saveReaction(item: PlanningItem, stage: "script" | "video", reaction: { liked: boolean; message: string }) {
+  async function saveReaction(item: PlanningItem, stage: "script" | "video", reaction: { liked: boolean; message: string }, options?: { silent?: boolean }) {
     try {
       await api.updatePlanningItem(item.id, reactionPayload(stage, reaction));
-      await alertSuccess(t("contentReaction.saved"));
+      if (!options?.silent) await alertSuccess(t("contentReaction.saved"));
       load();
+      return true;
     } catch (err) {
       await alertApiError(err);
+      return false;
     }
   }
 
@@ -2148,7 +2150,7 @@ function DetailInner() {
                                     label={t("contentReaction.likeScript")}
                                     liked={item.script_liked}
                                     message={item.script_reaction}
-                                    onSave={(reaction) => saveReaction(item, "script", reaction)}
+                                    onSave={(reaction, options) => saveReaction(item, "script", reaction, options)}
                                   />
                                 ) : null}
                                 {canManage && (item.video_status === "approved" || item.status === "approved" || item.status === "published") ? (
@@ -2156,7 +2158,7 @@ function DetailInner() {
                                     label={t("contentReaction.likeVideo")}
                                     liked={item.video_liked}
                                     message={item.video_reaction}
-                                    onSave={(reaction) => saveReaction(item, "video", reaction)}
+                                    onSave={(reaction, options) => saveReaction(item, "video", reaction, options)}
                                   />
                                 ) : null}
                               </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Heart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { promptContentReaction, type ContentReactionChoice } from "@/lib/alerts";
@@ -57,31 +58,67 @@ export function ContentReactionButton({
   liked?: boolean | null;
   message?: string | null;
   disabled?: boolean;
-  onSave: (reaction: ContentReactionChoice) => Promise<unknown> | unknown;
+  onSave: (reaction: ContentReactionChoice, options?: { silent?: boolean }) => Promise<unknown> | unknown;
 }) {
   const { t } = useTranslation("app");
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+  const saving = useRef(false);
+  useEffect(() => {
+    setOptimistic(null);
+  }, [liked]);
+  const shownLiked = optimistic ?? Boolean(liked);
 
   return (
     <button
       type="button"
       disabled={disabled}
+      title={shownLiked ? t("contentReaction.unlike") : label}
       onClick={() => {
         void (async () => {
+          if (saving.current) return;
+          saving.current = true;
+          const existing = message ?? "";
+          if (shownLiked) {
+            setOptimistic(false);
+            const saved = await onSave({ liked: false, message: existing });
+            if (saved === false || saved === null) setOptimistic(null);
+            return;
+          }
+          setOptimistic(true);
+          const saved = await onSave({ liked: true, message: existing }, { silent: true });
+          if (saved === false || saved === null) {
+            setOptimistic(null);
+            return;
+          }
           const reaction = await promptContentReaction({
             title: t("contentReaction.editTitle"),
             text: t("contentReaction.editText"),
             confirmText: t("contentReaction.save"),
+            cancelText: t("contentReaction.dismiss"),
             liked: true,
-            message: message ?? "",
+            message: existing,
+            keepOnDismiss: true,
           });
-          if (!reaction) return;
-          await onSave(reaction);
-        })();
+          if (!reaction || reaction.dismissed) {
+            if (reaction?.dismissed && !reaction.liked) {
+              setOptimistic(false);
+              const unliked = await onSave({ liked: false, message: existing }, { silent: true });
+              if (unliked === false || unliked === null) setOptimistic(null);
+            }
+            return;
+          }
+          if (reaction.liked && reaction.message.trim() === existing.trim()) return;
+          const updated = await onSave({ liked: reaction.liked, message: reaction.message });
+          if (updated === false || updated === null) setOptimistic(null);
+          else setOptimistic(reaction.liked);
+        })().finally(() => {
+          saving.current = false;
+        });
       }}
       className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"
     >
-      <Heart size={12} className={liked ? "fill-current" : ""} />
-      {liked ? t("contentReaction.liked") : label}
+      <Heart size={12} className={shownLiked ? "fill-current" : ""} />
+      {shownLiked ? t("contentReaction.liked") : label}
     </button>
   );
 }

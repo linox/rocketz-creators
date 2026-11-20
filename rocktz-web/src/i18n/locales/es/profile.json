@@ -331,6 +331,7 @@
   "monthlyDeliveriesLabel": "Cuota del mes",
   "pendingThisMonth": "Entregas en {{month}}",
   "carriedFromMonth": "Pendiente desde {{month}}",
+  "carriedLateSince": "Atrasada desde {{month}}",
   "noPendingThisMonth": "Ninguna entrega este mes.",
   "monthQuotaProgress": "{{pending}} de {{total}} pendientes",
   "noMonthlyQuota": "Sin cuota definida",

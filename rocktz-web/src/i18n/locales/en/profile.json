@@ -331,6 +331,7 @@
   "monthlyDeliveriesLabel": "This month's quota",
   "pendingThisMonth": "Deliveries in {{month}}",
   "carriedFromMonth": "Open since {{month}}",
+  "carriedLateSince": "Overdue since {{month}}",
   "noPendingThisMonth": "No deliveries this month.",
   "monthQuotaProgress": "{{pending}} of {{total}} pending",
   "noMonthlyQuota": "No quota set",

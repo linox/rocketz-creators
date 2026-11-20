@@ -8,6 +8,8 @@ export type OpenBacklogEntry = {
   meta?: string | null;
   href?: string;
   onOpen?: () => void;
+  /** Campaign left behind after its month. Rendered louder than other open work. */
+  late?: boolean;
 };
 
 type ScheduleCampaign = {

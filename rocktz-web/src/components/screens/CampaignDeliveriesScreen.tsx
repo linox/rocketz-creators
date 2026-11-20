@@ -233,6 +233,7 @@ function DeliveriesInboxInner() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [busy, setBusy] = useState(false);
+  const reactionLock = useRef(false);
   const [publishedLinkDraft, setPublishedLinkDraft] = useState("");
   const openedFromQuery = useRef<string | null>(null);
 
@@ -618,33 +619,92 @@ function DeliveriesInboxInner() {
     }
   }
 
+  async function writeReaction(item: DeliveryInboxItem, reaction: ContentReactionChoice) {
+    const body = reactionBody(item, reaction);
+    if (item.planningItemId) {
+      await api.updatePlanningItem(item.planningItemId, body);
+      return;
+    }
+    if (item.participationId) {
+      await api.updateParticipation(item.participationId, participationPayload(item, body));
+    }
+  }
+
   async function saveReaction(item: DeliveryInboxItem) {
+    if (reactionLock.current) return;
+    reactionLock.current = true;
+    try {
+    const existing = item.reactionMessage ?? "";
+    if (item.liked) {
+      patchItem(item.id, (row) => ({ ...row, liked: false }));
+      setBusy(true);
+      try {
+        await writeReaction(item, { liked: false, message: existing });
+        await alertSuccess(t("contentReaction.saved"));
+      } catch (err) {
+        patchItem(item.id, (row) => ({ ...row, liked: true, reactionMessage: existing }));
+        await alertApiError(err);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    patchItem(item.id, (row) => ({ ...row, liked: true }));
+    setBusy(true);
+    try {
+      await writeReaction(item, { liked: true, message: existing });
+    } catch (err) {
+      patchItem(item.id, (row) => ({ ...row, liked: Boolean(item.liked), reactionMessage: existing }));
+      await alertApiError(err);
+      return;
+    } finally {
+      setBusy(false);
+    }
+
     const reaction = await promptContentReaction({
       title: t("contentReaction.editTitle"),
       text: t("contentReaction.editText"),
       confirmText: t("contentReaction.save"),
+      cancelText: t("contentReaction.dismiss"),
       liked: true,
-      message: item.reactionMessage ?? "",
+      message: existing,
+      keepOnDismiss: true,
     });
-    if (!reaction) return;
+    if (!reaction || reaction.dismissed) {
+      if (reaction?.dismissed && !reaction.liked) {
+        patchItem(item.id, (row) => ({ ...row, liked: false }));
+        setBusy(true);
+        try {
+          await writeReaction(item, { liked: false, message: existing });
+        } catch (err) {
+          patchItem(item.id, (row) => ({ ...row, liked: true, reactionMessage: existing }));
+          await alertApiError(err);
+        } finally {
+          setBusy(false);
+        }
+      }
+      return;
+    }
+    if (reaction.liked && reaction.message.trim() === existing.trim()) return;
+
+    patchItem(item.id, (row) => ({
+      ...row,
+      liked: reaction.liked,
+      reactionMessage: reaction.message,
+    }));
     setBusy(true);
     try {
-      const body = reactionBody(item, reaction);
-      if (item.planningItemId) {
-        await api.updatePlanningItem(item.planningItemId, body);
-      } else if (item.participationId) {
-        await api.updateParticipation(item.participationId, participationPayload(item, body));
-      }
-      patchItem(item.id, (row) => ({
-        ...row,
-        liked: reaction.liked,
-        reactionMessage: reaction.message,
-      }));
+      await writeReaction(item, reaction);
       await alertSuccess(t("contentReaction.saved"));
     } catch (err) {
+      patchItem(item.id, (row) => ({ ...row, liked: true, reactionMessage: existing }));
       await alertApiError(err);
     } finally {
       setBusy(false);
+    }
+    } finally {
+      reactionLock.current = false;
     }
   }
 
@@ -1475,7 +1535,7 @@ function ReadingPane({
             </button>
           ) : null}
           {hasMaterial ? (
-            <button type="button" onClick={onReact} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-extrabold text-rose-700 hover:bg-rose-100">
+            <button type="button" title={item.liked ? t("contentReaction.unlike") : t("contentReaction.like")} onClick={onReact} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-extrabold text-rose-700 hover:bg-rose-100">
               <Heart size={14} className={item.liked ? "fill-current" : ""} /> {item.liked ? t("contentReaction.liked") : t("contentReaction.like")}
             </button>
           ) : null}

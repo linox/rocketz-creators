@@ -204,6 +204,7 @@ export async function promptTextarea(options: {
 export type ContentReactionChoice = {
   liked: boolean;
   message: string;
+  dismissed?: boolean;
 };
 
 const REACTION_HEART = `<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
@@ -212,8 +213,10 @@ export async function promptContentReaction(options: {
   title: string;
   text?: string;
   confirmText: string;
+  cancelText?: string;
   liked?: boolean;
   message?: string;
+  keepOnDismiss?: boolean;
 }): Promise<ContentReactionChoice | null> {
   const likedTitle = i18n.t("app:contentReaction.likedTitle");
   const likedHint = i18n.t("app:contentReaction.likedHint");
@@ -223,6 +226,8 @@ export async function promptContentReaction(options: {
   const messagePh = i18n.t("app:contentReaction.messagePh");
   const optionalLabel = i18n.t("app:contentReaction.optional");
   const theme = base();
+  let currentLiked = Boolean(options.liked);
+  let currentMessage = options.message ?? "";
 
   const result = await Swal.fire({
     ...theme,
@@ -249,7 +254,7 @@ export async function promptContentReaction(options: {
     `,
     showCancelButton: true,
     confirmButtonText: options.confirmText,
-    cancelButtonText: i18n.t("common:cancel"),
+    cancelButtonText: options.cancelText ?? i18n.t("common:cancel"),
     focusConfirm: false,
     customClass: {
       ...theme.customClass,
@@ -262,8 +267,14 @@ export async function promptContentReaction(options: {
       const likeTitleEl = document.getElementById("swal-content-like-title");
       const likeHintEl = document.getElementById("swal-content-like-hint");
       const message = document.getElementById("swal-content-message");
-      if (message instanceof HTMLTextAreaElement) message.value = options.message ?? "";
+      if (message instanceof HTMLTextAreaElement) {
+        message.value = options.message ?? "";
+        message.addEventListener("input", () => {
+          currentMessage = message.value;
+        });
+      }
       const paint = (liked: boolean) => {
+        currentLiked = liked;
         if (!like) return;
         like.dataset.liked = liked ? "1" : "0";
         like.classList.toggle("is-liked", liked);
@@ -289,7 +300,15 @@ export async function promptContentReaction(options: {
     },
   });
 
-  if (!result.isConfirmed || !result.value || typeof result.value !== "object") return null;
+  if (!result.isConfirmed) {
+    if (!options.keepOnDismiss) return null;
+    return {
+      liked: currentLiked,
+      message: currentMessage.trim(),
+      dismissed: true,
+    };
+  }
+  if (!result.value || typeof result.value !== "object") return null;
   const value = result.value as ContentReactionChoice;
   return {
     liked: Boolean(value.liked),

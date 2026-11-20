@@ -190,13 +190,13 @@ function recurringDemandMonth(work: RecurringWorkRow, current: string) {
   return planningVisibleMonth(work.item, current);
 }
 
-function CarriedMonthBadge({ month }: { month: string | null }) {
+function CarriedMonthBadge({ month, late = false }: { month: string | null; late?: boolean }) {
   const { t, i18n } = useTranslation("profile");
   if (!month) return null;
   const locale = intlLocale(normalizeLocale(i18n.language));
   return (
-    <span className="mt-1 inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-800">
-      {t("carriedFromMonth", { month: formatMonthLabel(month, locale) })}
+    <span className={cn("mt-1 inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-extrabold", late ? "border-rose-300 bg-rose-600 text-white" : "border-amber-200 bg-amber-50 text-amber-800")}>
+      {t(late ? "carriedLateSince" : "carriedFromMonth", { month: formatMonthLabel(month, locale) })}
     </span>
   );
 }
@@ -1253,6 +1253,7 @@ function ProfileInner() {
       title: campaign.name,
       meta: campaign.company?.name,
       month,
+      late: true,
       onOpen: () => {
         setDemandMonth(demandCurrentMonth);
         openSubmission(row.id);
@@ -1274,7 +1275,7 @@ function ProfileInner() {
     }];
   });
   const carriedAgendaEntries = [...carriedCampaignEntries, ...carriedRecurringEntries]
-    .sort((a, b) => a.month.localeCompare(b.month) || a.title.localeCompare(b.title));
+    .sort((a, b) => Number(Boolean(b.late)) - Number(Boolean(a.late)) || a.month.localeCompare(b.month) || a.title.localeCompare(b.title));
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const invitedApplications = myParticipations.filter((item) => item.row.application_status === "invited");
   const declinedApplications = myParticipations.filter((item) => item.row.application_status === "declined");
@@ -2478,6 +2479,8 @@ function ProfileInner() {
                 <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-300">{tp("panelHint")}</p>
               </div>
 
+              <OpenBacklogPanel items={carriedAgendaEntries} />
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <button type="button" onClick={() => goTab("shipping")} className="flex items-center gap-3 rounded-[16px] border border-amber-200 bg-white p-4 text-left shadow-sm hover:border-amber-300">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Package size={20} /></span>
@@ -2518,15 +2521,6 @@ function ProfileInner() {
                   currentDetail={currentDemandDetail}
                   demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
                 />
-                {demandMonthActive === demandCurrentMonth ? (
-                  carriedAgendaEntries.length > 0 ? (
-                    <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950">
-                      {ta("dash.carriedTitle", { count: carriedAgendaEntries.length })}. {ta("dash.carriedHint")}
-                    </p>
-                  ) : null
-                ) : (
-                  <OpenBacklogPanel items={carriedAgendaEntries} />
-                )}
               </div>
 
               {loadingCampaigns ? (
@@ -3611,7 +3605,7 @@ function ActiveCampaignsTable({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{campaign.name}</p>
-                  <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} />
+                  <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
@@ -3685,7 +3679,7 @@ function ActiveCampaignsTable({
                 <tr key={row.id} className={cn("transition-colors hover:bg-indigo-50/30", isOpen && "bg-indigo-50/50")}>
                     <td className="p-3.5 pl-5">
                       <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
-                      <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} />
+                      <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />
                     </td>
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
