@@ -67,18 +67,24 @@ export function OpenBacklogPanel({ items, count, variant = "full" }: { items: Op
   }
 
   return (
-    <section className={cn("rounded-2xl border p-4 shadow-sm", hasLate ? "border-rose-300 bg-rose-50" : "border-amber-200 bg-amber-50/80")}>
-      <div className="flex items-start gap-3">
+    <section className={cn("rounded-2xl border shadow-sm", hasLate ? "border-rose-300 bg-rose-50" : "border-amber-200 bg-amber-50/80")}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full cursor-pointer items-center gap-3 p-4 text-left"
+      >
         <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white", hasLate ? "bg-rose-600" : "bg-amber-500")}>
           <AlertTriangle size={16} />
         </span>
-        <div className="min-w-0">
-          <h3 className={cn("m-0 text-sm font-black", hasLate ? "text-rose-950" : "text-amber-950")}>{t("dash.carriedTitle", { count: total })}</h3>
-          <p className={cn("mt-0.5 mb-0 text-xs leading-relaxed", hasLate ? "text-rose-900/80" : "text-amber-900/80")}>{t("dash.carriedHint")}</p>
-        </div>
-      </div>
-      {ordered.length > 0 ? (
-        <ul className="mt-3 flex list-none flex-col gap-2 p-0">
+        <span className="min-w-0 flex-1">
+          <span className={cn("block text-sm font-black", hasLate ? "text-rose-950" : "text-amber-950")}>{t("dash.carriedTitle", { count: total })}</span>
+          <span className={cn("mt-0.5 block text-xs leading-relaxed", hasLate ? "text-rose-900/80" : "text-amber-900/80")}>{t("dash.carriedHint")}</span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 transition-transform", hasLate ? "text-rose-700" : "text-amber-800", open && "rotate-180")} />
+      </button>
+      {open && ordered.length > 0 ? (
+        <ul className="mx-4 mb-4 flex max-h-96 list-none flex-col gap-2 overflow-y-auto p-0">
           {ordered.map((item) => {
             const inner = (
               <>
@@ -117,7 +123,7 @@ export function OpenBacklogPanel({ items, count, variant = "full" }: { items: Op
           })}
         </ul>
       ) : null}
-      {hidden > 0 ? <p className={cn("mt-2 mb-0 text-xs font-bold", hasLate ? "text-rose-900" : "text-amber-900")}>{t("dash.carriedMore", { count: hidden })}</p> : null}
+      {open && hidden > 0 ? <p className={cn("mx-4 mb-4 mt-0 text-xs font-bold", hasLate ? "text-rose-900" : "text-amber-900")}>{t("dash.carriedMore", { count: hidden })}</p> : null}
     </section>
   );
 }
