@@ -34,6 +34,7 @@ import {
   KeyRound,
   Megaphone,
   AlertTriangle,
+  ChevronDown,
   Pencil,
   Repeat,
   Scale,
@@ -163,6 +164,30 @@ function recurringRowPace(work: RecurringWorkRow): WorkPace {
 function campaignRowPace(campaign: Campaign, row: { delivery_date?: string | null; post_date?: string | null }, state: ContentDeliveryState) {
   const due = effectiveCampaignDeliveryDate(row, campaign).date || row.post_date || campaign.end_date;
   return deliveryPace(state, due);
+}
+
+function CreatorOwePanel({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-[24px] border-2 border-rose-500 bg-rose-50 shadow-md">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full cursor-pointer items-center gap-3 p-4 text-left sm:p-5"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-sm">
+          <AlertTriangle size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg font-black text-rose-950">{title}</span>
+          <span className="mt-0.5 block text-sm leading-relaxed text-rose-900">{hint}</span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 text-rose-700 transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? <div className="px-4 pb-4 sm:px-5 sm:pb-5">{children}</div> : null}
+    </section>
+  );
 }
 
 function paceFilterOptions(tp: (key: string) => string, includeAwaiting: boolean) {
@@ -2475,17 +2500,8 @@ function ProfileInner() {
           ) : showCreatorTabs && tab === "dashboard" ? (
             <div className="flex flex-col gap-8">
               {owedCount > 0 ? (
-                <section className="rounded-[24px] border-2 border-rose-500 bg-rose-50 p-5 shadow-md sm:p-6">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-sm">
-                      <AlertTriangle size={22} />
-                    </span>
-                    <div className="min-w-0">
-                      <h2 className="m-0 text-xl font-black text-rose-950">{tp("youOweTitle", { count: owedCount })}</h2>
-                      <p className="mt-1 mb-0 max-w-2xl text-sm leading-relaxed text-rose-900">{tp("youOweHint")}</p>
-                    </div>
-                  </div>
-                  <ul className="mt-4 flex list-none flex-col gap-2 p-0">
+                <CreatorOwePanel title={tp("youOweTitle", { count: owedCount })} hint={tp("youOweHint")}>
+                  <ul className="flex list-none flex-col gap-2 p-0">
                     {owedCampaigns.map(({ campaign, row }) => (
                       <li key={`owe-campaign-${row.id}`}>
                         <button
@@ -2527,7 +2543,7 @@ function ProfileInner() {
                       </li>
                     ))}
                   </ul>
-                </section>
+                </CreatorOwePanel>
               ) : null}
               <div className="rounded-[24px] border border-white/5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-8 text-white shadow-xl">
                 <span className="w-fit rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-extrabold tracking-widest text-indigo-300 uppercase">{tp("panelTitle")}</span>
@@ -2769,15 +2785,30 @@ function ProfileInner() {
                 demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
               />
               {owedRecurring.length > 0 ? (
-                <div className="flex items-start gap-3 rounded-2xl border-2 border-rose-500 bg-rose-50 px-4 py-3 shadow-sm">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white">
-                    <AlertTriangle size={18} />
-                  </span>
-                  <div>
-                    <p className="m-0 text-base font-black text-rose-950">{tp("youOweTitle", { count: owedRecurring.length })}</p>
-                    <p className="mt-0.5 mb-0 text-sm text-rose-900">{tp("youOweHint")}</p>
-                  </div>
-                </div>
+                <CreatorOwePanel title={tp("youOweTitle", { count: owedRecurring.length })} hint={tp("youOweHint")}>
+                  <ul className="flex list-none flex-col gap-2 p-0">
+                    {owedRecurring.map((work) => (
+                      <li key={`owe-recurring-tab-${work.key}`}>
+                        <button
+                          type="button"
+                          onClick={() => openRecurringWork(work.key)}
+                          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-left shadow-sm hover:border-rose-400"
+                        >
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-black text-slate-900">{creatorPautaHeading(work.item?.title, work.contract.title)}</span>
+                              <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">
+                              {[work.contract.company?.name, work.contract.title, fmtDate(work.item?.planned_date || work.item?.post_date)].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">{tp("youOweAction")}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </CreatorOwePanel>
               ) : recurringMonthActive === demandCurrentMonth ? null : (
                 <OpenBacklogPanel items={carriedRecurringEntries} />
               )}
@@ -2812,15 +2843,30 @@ function ProfileInner() {
               </div>
 
               {owedCampaigns.length > 0 ? (
-                <div className="flex items-start gap-3 rounded-2xl border-2 border-rose-500 bg-rose-50 px-4 py-3 shadow-sm">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white">
-                    <AlertTriangle size={18} />
-                  </span>
-                  <div>
-                    <p className="m-0 text-base font-black text-rose-950">{tp("youOweTitle", { count: owedCampaigns.length })}</p>
-                    <p className="mt-0.5 mb-0 text-sm text-rose-900">{tp("youOweHint")}</p>
-                  </div>
-                </div>
+                <CreatorOwePanel title={tp("youOweTitle", { count: owedCampaigns.length })} hint={tp("youOweHint")}>
+                  <ul className="flex list-none flex-col gap-2 p-0">
+                    {owedCampaigns.map(({ campaign, row }) => (
+                      <li key={`owe-campaign-tab-${row.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => openSubmission(row.id)}
+                          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-left shadow-sm hover:border-rose-400"
+                        >
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-black text-slate-900">{campaign.name}</span>
+                              <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">
+                              {[campaign.company?.name, fmtDate(row.delivery_date || campaign.delivery_date || row.post_date)].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">{tp("youOweAction")}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </CreatorOwePanel>
               ) : (
                 <OpenBacklogPanel items={carriedCampaignEntries} />
               )}
