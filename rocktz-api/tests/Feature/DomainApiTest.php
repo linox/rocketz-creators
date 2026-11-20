@@ -236,6 +236,11 @@ class DomainApiTest extends TestCase
         $this->assertSame(1, $previous['recurring_published']);
         $this->assertSame(1, $previous['recurring_overdue']);
         $this->assertSame(0, $previous['recurring_in_progress']);
+
+        $backlog = collect($response->json('open_backlog.items'));
+        $this->assertSame(2, $response->json('open_backlog.count'));
+        $this->assertTrue($backlog->contains(fn ($item) => $item['source'] === 'campaign' && $item['month'] === $previousMonth));
+        $this->assertTrue($backlog->contains(fn ($item) => $item['source'] === 'recurring' && $item['month'] === $previousMonth));
     }
 
     public function test_creator_dashboard_includes_audience_activity_and_fees(): void

@@ -330,6 +330,7 @@
   "monthlyCacheLabel": "Monthly fee",
   "monthlyDeliveriesLabel": "This month's quota",
   "pendingThisMonth": "Deliveries in {{month}}",
+  "carriedFromMonth": "Open since {{month}}",
   "noPendingThisMonth": "No deliveries this month.",
   "monthQuotaProgress": "{{pending}} of {{total}} pending",
   "noMonthlyQuota": "No quota set",

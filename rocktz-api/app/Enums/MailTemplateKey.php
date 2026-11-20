@@ -203,7 +203,7 @@ enum MailTemplateKey: string
             self::PaymentReleased => ['nome_campanha', 'valor_campanha', 'data_pagamento'],
             self::BarterDelivered => ['nome_criador', 'nome_campanha', 'codigo_rastreio'],
             self::CouponIncompleteName => ['codigo', 'motivo_reprovacao'],
-            self::ConversationStarted => ['assunto', 'nome_remetente', 'nome_trabalho'],
+            self::ConversationStarted => ['assunto', 'nome_trabalho'],
             self::ConversationClosed => ['assunto', 'nome_remetente', 'motivo'],
             default => [],
         };

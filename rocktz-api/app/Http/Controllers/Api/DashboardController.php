@@ -94,6 +94,7 @@ class DashboardController extends Controller
             'pending_signatures' => (int) $counts->pending_signatures,
             'upcoming_deliveries' => (int) $counts->upcoming_campaign_deliveries + (int) $counts->upcoming_planning_deliveries,
             'pending_applications' => (int) $counts->pending_applications,
+            'open_backlog' => $this->openBacklog(),
             'revenue' => $revenue,
             'content_deliveries' => $this->contentDeliverySeries($revenue),
             'signatures' => $pendingSignatures->map(fn (CampaignCreator $row) => [
@@ -256,6 +257,7 @@ class DashboardController extends Controller
                 'pending' => (float) (clone $rows)->whereIn('payment_status', [PaymentStatus::Pending, PaymentStatus::Scheduled])->sum('amount'),
             ],
             'activity' => $this->creatorActivitySeries($creatorId),
+            'open_backlog' => $this->openBacklog($creatorId > 0 ? $creatorId : 0),
         ];
     }
 
@@ -594,6 +596,151 @@ class DashboardController extends Controller
         return (float) $contract->recurringContractCreators->sum(
             fn (RecurringContractCreator $row) => (float) ($row->monthly_cache ?: $row->monthly_fee ?: 0),
         );
+    }
+
+    /**
+     * Open campaign pieces and recurring demands whose month has already passed.
+     * They stay listed after the calendar rolls so the work does not disappear.
+     *
+     * @return array{count: int, items: list<array<string, mixed>>}
+     */
+    private function openBacklog(?int $creatorId = null): array
+    {
+        if ($creatorId === 0) {
+            return ['count' => 0, 'items' => []];
+        }
+
+        $current = now()->format('Y-m');
+        $items = [];
+
+        $demands = CampaignDemand::query()
+            ->where('delivery_status', '!=', DeliveryStatus::Published)
+            ->whereHas('campaignCreator', function (Builder $query) use ($creatorId) {
+                $query->where('application_status', ApplicationStatus::Approved);
+                if ($creatorId) {
+                    $query->where('creator_id', $creatorId);
+                }
+                $query->whereHas('campaign', fn (Builder $campaign) => $campaign->where('status', '!=', CampaignStatus::Finished));
+            })
+            ->with([
+                'campaignCreator:id,campaign_id,creator_id,delivery_date,post_date',
+                'campaignCreator.creator:id,artistic_name',
+                'campaignCreator.campaign:id,name,delivery_date,end_date,start_date',
+            ])
+            ->get();
+
+        $participationIds = $demands->pluck('campaign_creator_id')->filter()->unique()->values();
+
+        foreach ($demands as $demand) {
+            $row = $demand->campaignCreator;
+            if ($row === null) {
+                continue;
+            }
+            $month = $this->participationDueMonth($row);
+            if ($month === null || $month >= $current) {
+                continue;
+            }
+            $items[] = [
+                'id' => 'campaign-demand-'.$demand->id,
+                'source' => 'campaign',
+                'href' => '/campaigns/'.$row->campaign_id,
+                'title' => $row->campaign?->name,
+                'creator' => $row->creator?->artistic_name,
+                'month' => $month,
+                'status' => $demand->delivery_status?->value,
+            ];
+        }
+
+        $loose = CampaignCreator::query()
+            ->where('application_status', ApplicationStatus::Approved)
+            ->where('delivery_status', '!=', DeliveryStatus::Published)
+            ->when($creatorId, fn (Builder $query) => $query->where('creator_id', $creatorId))
+            ->when($participationIds->isNotEmpty(), fn (Builder $query) => $query->whereNotIn('id', $participationIds))
+            ->whereHas('campaign', fn (Builder $query) => $query->where('status', '!=', CampaignStatus::Finished))
+            ->with([
+                'creator:id,artistic_name',
+                'campaign:id,name,delivery_date,end_date,start_date',
+            ])
+            ->get(['id', 'campaign_id', 'creator_id', 'delivery_date', 'post_date', 'delivery_status']);
+
+        foreach ($loose as $row) {
+            $month = $this->participationDueMonth($row);
+            if ($month === null || $month >= $current) {
+                continue;
+            }
+            $items[] = [
+                'id' => 'campaign-'.$row->id,
+                'source' => 'campaign',
+                'href' => '/campaigns/'.$row->campaign_id,
+                'title' => $row->campaign?->name,
+                'creator' => $row->creator?->artistic_name,
+                'month' => $month,
+                'status' => $row->delivery_status?->value,
+            ];
+        }
+
+        ContentPlanningItem::query()
+            ->whereNotIn('status', [ContentPlanningStatus::Published, ContentPlanningStatus::Rejected])
+            ->where(function (Builder $query) {
+                $query->whereNull('published_url')->orWhere('published_url', '');
+            })
+            ->where(function (Builder $query) use ($current) {
+                $query->where('month', '<', $current)
+                    ->orWhere(function (Builder $inner) {
+                        $inner->where(function (Builder $blank) {
+                            $blank->whereNull('month')->orWhere('month', '');
+                        })->whereDate('planned_date', '<', now()->startOfMonth()->toDateString());
+                    });
+            })
+            ->when($creatorId, fn (Builder $query) => $query->where('creator_id', $creatorId))
+            ->with([
+                'creator:id,artistic_name',
+                'recurringContract:id,title',
+            ])
+            ->get(['id', 'recurring_contract_id', 'creator_id', 'title', 'month', 'planned_date', 'status'])
+            ->each(function (ContentPlanningItem $item) use (&$items, $current) {
+                $month = is_string($item->month) && preg_match('/^\d{4}-\d{2}/', $item->month)
+                    ? substr($item->month, 0, 7)
+                    : $item->planned_date?->format('Y-m');
+                if ($month === null || $month >= $current) {
+                    return;
+                }
+                $items[] = [
+                    'id' => 'recurring-'.$item->id,
+                    'source' => 'recurring',
+                    'href' => '/recurring/'.$item->recurring_contract_id.'?month='.$month,
+                    'title' => trim((string) $item->title) !== '' ? $item->title : $item->recurringContract?->title,
+                    'creator' => $item->creator?->artistic_name,
+                    'month' => $month,
+                    'status' => $item->status?->value,
+                ];
+            });
+
+        usort($items, fn (array $left, array $right) => [$left['month'], (string) $left['title']] <=> [$right['month'], (string) $right['title']]);
+
+        return [
+            'count' => count($items),
+            'items' => array_slice($items, 0, 12),
+        ];
+    }
+
+    private function participationDueMonth(CampaignCreator $row): ?string
+    {
+        $dates = [
+            $row->delivery_date,
+            $row->post_date,
+            $row->campaign?->delivery_date,
+            $row->campaign?->end_date,
+            $row->campaign?->start_date,
+        ];
+
+        foreach ($dates as $date) {
+            if ($date instanceof Carbon) {
+                return $date->format('Y-m');
+            }
+        }
+
+        return null;
     }
 
     /**

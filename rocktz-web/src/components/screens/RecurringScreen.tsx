@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
 import { futureMonthCounts, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
+import { planningBacklog } from "@/lib/open-demands";
 import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
 import {
   Building2,
@@ -387,6 +389,14 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
   const monthPercent = monthItems.length ? Math.round((publishedMonth / monthItems.length) * 100) : 0;
   const monthLabel = new Date(`${selectedMonth}-02`).toLocaleDateString(locale, { month: "long", year: "numeric" });
   const upcomingMonths = futureMonthCounts(kpiItems.map((item) => planningDemandMonth(item)));
+  const carriedBacklog = useMemo(() => {
+    const source = isAdmin ? companyItems : contentItems;
+    return planningBacklog(source).filter((entry) => {
+      if (entry.month === selectedMonth) return false;
+      if (creatorFilter === "all") return true;
+      return source.some((item) => `planning-${item.id}` === entry.id && String(item.creator_id) === creatorFilter);
+    });
+  }, [isAdmin, companyItems, contentItems, selectedMonth, creatorFilter]);
   const currentMonthCount = kpiItems.filter((item) => itemInMonth(item, currentMonth())).length;
   const agendaCreatorId = creatorFilter !== "all" ? Number(creatorFilter) : rosterCreators[0]?.id;
   const agendaCreator = rosterCreators.find((c) => c.id === agendaCreatorId);
@@ -699,6 +709,8 @@ export function RecurringInner({ embedded: _embedded = false }: { embedded?: boo
         selectedCount={monthItems.length}
         demandsLabel={(count) => t(count === 1 ? "recurring.monthDemandsOne" : "recurring.monthDemands", { count })}
       />
+
+      <OpenBacklogPanel items={carriedBacklog} />
 
       {innerTab === "contracts" ? (
         <div className="space-y-6">

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { safeHttpUrl } from "@/lib/safe-http-url";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
+import { campaignBacklog } from "@/lib/open-demands";
 import {
   AlertTriangle,
   Archive,
@@ -410,6 +412,7 @@ function CampaignsInner() {
     () => activeCampaigns.filter((campaign) => statusFilter === "all" || campaign.status === statusFilter),
     [activeCampaigns, statusFilter],
   );
+  const carriedBacklog = useMemo(() => campaignBacklog(activeCampaigns), [activeCampaigns]);
 
   const materials = useMemo<MaterialRow[]>(
     () =>
@@ -494,6 +497,8 @@ function CampaignsInner() {
           </div>
         ) : null}
       </header>
+
+      <OpenBacklogPanel items={carriedBacklog} />
 
       <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-1 hide-scrollbar">
         <button

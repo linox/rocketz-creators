@@ -846,6 +846,18 @@ export type DashboardStats = {
   }[];
   campaigns_preview?: DashboardPreviewItem[];
   recurring_preview?: DashboardPreviewItem[];
+  open_backlog?: {
+    count: number;
+    items: {
+      id: string;
+      source?: "campaign" | "recurring";
+      href?: string;
+      title?: string | null;
+      creator?: string | null;
+      month: string;
+      status?: string | null;
+    }[];
+  };
 };
 
 export type StorefrontItemType = "coupon" | "link";

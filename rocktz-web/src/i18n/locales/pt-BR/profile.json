@@ -330,6 +330,7 @@
   "monthlyCacheLabel": "Cachê mensal",
   "monthlyDeliveriesLabel": "Cota do mês",
   "pendingThisMonth": "Entregas em {{month}}",
+  "carriedFromMonth": "Pendente desde {{month}}",
   "noPendingThisMonth": "Nenhuma entrega neste mês.",
   "monthQuotaProgress": "{{pending}} de {{total}} pendentes",
   "noMonthlyQuota": "Nenhuma cota definida",

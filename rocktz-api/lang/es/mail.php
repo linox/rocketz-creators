@@ -32,6 +32,11 @@ return [
         'link_entrega' => 'Enlace de la entrega',
         'link_suporte' => 'Enlace de soporte',
         'codigo' => 'Código',
+        'assunto' => 'Asunto',
+        'nome_trabalho' => 'Trabajo',
+        'nome_remetente' => 'Remitente',
+        'mensagem' => 'Mensaje',
+        'motivo' => 'Motivo',
     ],
     'templates' => [
         'creator.registered' => [
@@ -271,7 +276,7 @@ return [
         'conversation.started' => [
             'subject' => 'Nuevo mensaje: {{assunto}}',
             'greeting' => 'Hola, {{nome_usuario}}!',
-            'body' => "{{nome_remetente}} envió el primer mensaje sobre {{nome_trabalho}}.\n\nAsunto: {{assunto}}\n\n{{mensagem}}",
+            'body' => "Recibiste un mensaje sobre {{nome_trabalho}}.\n\n{{mensagem}}",
             'cta' => 'Abrir conversación',
         ],
         'conversation.closed' => [

@@ -71,7 +71,7 @@ export function ContentReactionButton({
             title: t("contentReaction.editTitle"),
             text: t("contentReaction.editText"),
             confirmText: t("contentReaction.save"),
-            liked: Boolean(liked),
+            liked: true,
             message: message ?? "",
           });
           if (!reaction) return;

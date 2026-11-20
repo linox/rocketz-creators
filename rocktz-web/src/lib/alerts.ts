@@ -206,6 +206,8 @@ export type ContentReactionChoice = {
   message: string;
 };
 
+const REACTION_HEART = `<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+
 export async function promptContentReaction(options: {
   title: string;
   text?: string;
@@ -213,47 +215,69 @@ export async function promptContentReaction(options: {
   liked?: boolean;
   message?: string;
 }): Promise<ContentReactionChoice | null> {
-  const likeLabel = i18n.t("app:contentReaction.like");
-  const likedLabel = i18n.t("app:contentReaction.liked");
-  const hint = i18n.t("app:contentReaction.hint");
+  const likedTitle = i18n.t("app:contentReaction.likedTitle");
+  const likedHint = i18n.t("app:contentReaction.likedHint");
+  const likeTitle = i18n.t("app:contentReaction.likeTitle");
+  const likeHint = i18n.t("app:contentReaction.likeHint");
   const messageLabel = i18n.t("app:contentReaction.messageLabel");
   const messagePh = i18n.t("app:contentReaction.messagePh");
+  const optionalLabel = i18n.t("app:contentReaction.optional");
+  const theme = base();
 
   const result = await Swal.fire({
-    ...base(),
-    icon: "question",
+    ...theme,
+    icon: "info",
+    iconHtml: `<span class="swal-reaction-icon-heart">${REACTION_HEART}</span>`,
     title: options.title,
     html: `
-      ${options.text ? `<p class="m-0 text-sm text-slate-600">${escapeAlertHtml(options.text)}</p>` : ""}
-      <div class="mt-4 flex flex-col gap-3 text-left">
-        <p class="m-0 text-xs font-semibold text-slate-500">${escapeAlertHtml(hint)}</p>
-        <button type="button" id="swal-content-like" class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700"></button>
-        <label class="flex flex-col gap-1">
-          <span class="text-[11px] font-bold tracking-wider text-slate-500 uppercase">${escapeAlertHtml(messageLabel)}</span>
-          <textarea id="swal-content-message" rows="3" maxlength="1000" placeholder="${escapeAlertHtml(messagePh)}" class="w-full resize-y rounded-xl border border-slate-200 p-3 text-sm text-slate-800"></textarea>
-        </label>
-      </div>
+      ${options.text ? `<p class="swal-reaction-lead">${escapeAlertHtml(options.text)}</p>` : ""}
+      <button type="button" id="swal-content-like" class="swal-reaction-like" aria-pressed="false">
+        <span class="swal-reaction-like-mark" aria-hidden="true">${REACTION_HEART}</span>
+        <span class="swal-reaction-like-copy">
+          <span id="swal-content-like-title" class="swal-reaction-like-title"></span>
+          <span id="swal-content-like-hint" class="swal-reaction-like-hint"></span>
+        </span>
+        <span class="swal-reaction-like-check" aria-hidden="true"></span>
+      </button>
+      <label class="swal-reaction-field">
+        <span class="swal-reaction-label">
+          <span>${escapeAlertHtml(messageLabel)}</span>
+          <span class="swal-reaction-optional">${escapeAlertHtml(optionalLabel)}</span>
+        </span>
+        <textarea id="swal-content-message" rows="3" maxlength="1000" placeholder="${escapeAlertHtml(messagePh)}"></textarea>
+      </label>
     `,
     showCancelButton: true,
     confirmButtonText: options.confirmText,
     cancelButtonText: i18n.t("common:cancel"),
     focusConfirm: false,
+    customClass: {
+      ...theme.customClass,
+      popup: "rounded-3xl font-sans swal-reaction-popup",
+      icon: "swal-reaction-icon",
+      htmlContainer: "swal-reaction-html",
+    },
     didOpen: () => {
       const like = document.getElementById("swal-content-like");
+      const likeTitleEl = document.getElementById("swal-content-like-title");
+      const likeHintEl = document.getElementById("swal-content-like-hint");
       const message = document.getElementById("swal-content-message");
       if (message instanceof HTMLTextAreaElement) message.value = options.message ?? "";
       const paint = (liked: boolean) => {
         if (!like) return;
         like.dataset.liked = liked ? "1" : "0";
-        like.textContent = liked ? `♥ ${likedLabel}` : `♡ ${likeLabel}`;
-        like.className = liked
-          ? "inline-flex items-center justify-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-extrabold text-rose-700"
-          : "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700";
+        like.classList.toggle("is-liked", liked);
+        like.setAttribute("aria-pressed", liked ? "true" : "false");
+        if (likeTitleEl) likeTitleEl.textContent = liked ? likedTitle : likeTitle;
+        if (likeHintEl) likeHintEl.textContent = liked ? likedHint : likeHint;
       };
       paint(Boolean(options.liked));
-      like?.addEventListener("click", () => {
-        paint(like.dataset.liked !== "1");
-      });
+      if (like) {
+        like.onclick = (event) => {
+          event.preventDefault();
+          paint(like.dataset.liked !== "1");
+        };
+      }
     },
     preConfirm: () => {
       const like = document.getElementById("swal-content-like");

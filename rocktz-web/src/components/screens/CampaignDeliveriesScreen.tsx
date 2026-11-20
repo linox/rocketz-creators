@@ -623,7 +623,7 @@ function DeliveriesInboxInner() {
       title: t("contentReaction.editTitle"),
       text: t("contentReaction.editText"),
       confirmText: t("contentReaction.save"),
-      liked: Boolean(item.liked),
+      liked: true,
       message: item.reactionMessage ?? "",
     });
     if (!reaction) return;

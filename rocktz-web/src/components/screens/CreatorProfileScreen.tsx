@@ -58,6 +58,8 @@ import {
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
 import { formatMonthLabel, futureMonthCounts, monthQueryValue, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
+import { campaignLeftBehindMonth, campaignVisibleMonth, planningLeftBehindMonth, planningStillOpen, planningVisibleMonth, type OpenBacklogEntry } from "@/lib/open-demands";
 import { effectiveCampaignDeliveryDate, effectivePlanningDueDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
@@ -177,23 +179,26 @@ function paceFilterOptions(tp: (key: string) => string, includeAwaiting: boolean
 
 function campaignDemandMonth(
   campaign: Campaign,
-  row: { delivery_date?: string | null; post_date?: string | null },
+  row: { delivery_date?: string | null; post_date?: string | null; delivery_status?: string | null; application_status?: string | null; demands?: { delivery_status?: string | null }[] | null },
   current: string,
 ) {
-  const dated = [row.delivery_date || campaign.delivery_date, row.post_date, campaign.end_date, campaign.start_date]
-    .map((value) => value?.match(/^(\d{4}-\d{2})/)?.[1])
-    .filter((value): value is string => Boolean(value));
-  if (dated.length === 0) return campaign.status === "finished" ? null : current;
-  const ahead = dated.filter((month) => month >= current).sort();
-  if (ahead[0]) return ahead[0];
-  return campaign.status === "finished" ? null : current;
+  return campaignVisibleMonth(campaign, row, current);
 }
 
 function recurringDemandMonth(work: RecurringWorkRow, current: string) {
   if (!work.item) return current;
-  const month = planningDemandMonth(work.item);
-  if (!month || month < current) return month ? null : current;
-  return month;
+  return planningVisibleMonth(work.item, current);
+}
+
+function CarriedMonthBadge({ month }: { month: string | null }) {
+  const { t, i18n } = useTranslation("profile");
+  if (!month) return null;
+  const locale = intlLocale(normalizeLocale(i18n.language));
+  return (
+    <span className="mt-1 inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-800">
+      {t("carriedFromMonth", { month: formatMonthLabel(month, locale) })}
+    </span>
+  );
 }
 
 function recurringWorkInMonth(work: RecurringWorkRow, month: string, current: string) {
@@ -1094,8 +1099,9 @@ function ProfileInner() {
       return;
     }
     appliedDemandFocus.current = key;
-    const itemMonth = planningDemandMonth(row.item);
-    if (itemMonth) setDemandMonth(itemMonth);
+    const originMonth = planningDemandMonth(row.item);
+    const carriedMonth = originMonth && planningStillOpen(row.item) && originMonth < currentYearMonth() ? currentYearMonth() : originMonth;
+    if (carriedMonth) setDemandMonth(carriedMonth);
     setExpandedRecurringKey(row.key);
     window.setTimeout(() => scrollDemandIntoView(itemId), 150);
   }, [searchParams, recurringReady, recurring, id]);
@@ -1239,6 +1245,36 @@ function ProfileInner() {
   const currentRecurringCount = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandCurrentMonth).length;
   const recurringMonthLabel = formatMonthLabel(recurringMonthActive, locale);
   const demandMonthLabel = formatMonthLabel(demandMonthActive, locale);
+  const carriedCampaignEntries: OpenBacklogEntry[] = approvedCampaigns.flatMap(({ campaign, row }) => {
+    const month = campaignLeftBehindMonth(campaign, row, demandCurrentMonth);
+    if (!month) return [];
+    return [{
+      id: `campaign-${row.id}`,
+      title: campaign.name,
+      meta: campaign.company?.name,
+      month,
+      onOpen: () => {
+        setDemandMonth(demandCurrentMonth);
+        openSubmission(row.id);
+      },
+    }];
+  });
+  const carriedRecurringEntries: OpenBacklogEntry[] = recurringWorkRows.flatMap((work) => {
+    const month = work.item ? planningLeftBehindMonth(work.item, demandCurrentMonth) : null;
+    if (!month) return [];
+    return [{
+      id: work.key,
+      title: creatorPautaHeading(work.item?.title, tp("awaitingDemand")),
+      meta: [work.contract.company?.name, work.contract.title].filter(Boolean).join(" · "),
+      month,
+      onOpen: () => {
+        setDemandMonth(demandCurrentMonth);
+        openRecurringWork(work.key);
+      },
+    }];
+  });
+  const carriedAgendaEntries = [...carriedCampaignEntries, ...carriedRecurringEntries]
+    .sort((a, b) => a.month.localeCompare(b.month) || a.title.localeCompare(b.title));
   const pendingApplications = myParticipations.filter((item) => item.row.application_status === "pending");
   const invitedApplications = myParticipations.filter((item) => item.row.application_status === "invited");
   const declinedApplications = myParticipations.filter((item) => item.row.application_status === "declined");
@@ -2482,6 +2518,15 @@ function ProfileInner() {
                   currentDetail={currentDemandDetail}
                   demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
                 />
+                {demandMonthActive === demandCurrentMonth ? (
+                  carriedAgendaEntries.length > 0 ? (
+                    <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950">
+                      {ta("dash.carriedTitle", { count: carriedAgendaEntries.length })}. {ta("dash.carriedHint")}
+                    </p>
+                  ) : null
+                ) : (
+                  <OpenBacklogPanel items={carriedAgendaEntries} />
+                )}
               </div>
 
               {loadingCampaigns ? (
@@ -2675,6 +2720,15 @@ function ProfileInner() {
                 selectedCount={recurringRowsForTab.length}
                 demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}
               />
+              {recurringMonthActive === demandCurrentMonth ? (
+                carriedRecurringEntries.length > 0 ? (
+                  <p className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950">
+                    {ta("dash.carriedTitle", { count: carriedRecurringEntries.length })}. {ta("dash.carriedHint")}
+                  </p>
+                ) : null
+              ) : (
+                <OpenBacklogPanel items={carriedRecurringEntries} />
+              )}
               <ActiveRecurringWorksTable
                 month={recurringMonthActive}
                 creatorId={profile.id}
@@ -2704,6 +2758,8 @@ function ProfileInner() {
                   <Sparkles size={14} /> {tp("browseAvailable")}
                 </Link>
               </div>
+
+              <OpenBacklogPanel items={carriedCampaignEntries} />
 
               <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                 <button type="button" onClick={() => setCampaignSubTab("active")} className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold", campaignSubTab === "active" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
@@ -3108,7 +3164,13 @@ function ActiveRecurringWorksTable({
         if (companyFilter !== "all" && companyId !== companyFilter) return null;
         const monthItems = list.filter((work) => recurringWorkInMonth(work, month, currentYearMonth()));
         if (monthItems.length === 0) return null;
-        const monthRows = monthItems.filter((work) => statusFilter === "all" || recurringRowPace(work) === statusFilter);
+        const monthRows = monthItems
+          .filter((work) => statusFilter === "all" || recurringRowPace(work) === statusFilter)
+          .sort((a, b) => {
+            const aLeft = a.item && planningLeftBehindMonth(a.item) ? 0 : 1;
+            const bLeft = b.item && planningLeftBehindMonth(b.item) ? 0 : 1;
+            return aLeft - bLeft;
+          });
         const pendingRows = monthItems.filter((work) => recurringRowPace(work) !== "done");
         const overdueRows = monthItems.filter((work) => recurringRowPace(work) === "owing");
         return {
@@ -3207,6 +3269,7 @@ function ActiveRecurringWorksTable({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
+                  <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />
                 </div>
               </div>
               <div className="mt-3 flex flex-col gap-2">
@@ -3286,6 +3349,7 @@ function ActiveRecurringWorksTable({
                 <tr key={key} data-demand-id={item?.id ?? undefined} className={cn("transition-colors hover:bg-purple-50/30", isOpen && "bg-purple-50/50")}>
                   <td className="p-3.5 pl-5">
                     <RecurringDeliveryName title={deliveryTitle} formatLabel={formatLabel} />
+                    <CarriedMonthBadge month={item ? planningLeftBehindMonth(item) : null} />
                   </td>
                   <td className="p-3.5">
                     <WorkDateCell
@@ -3474,6 +3538,10 @@ function ActiveCampaignsTable({
     if (companyFilter !== "all" && item.companyId !== companyFilter) return false;
     if (statusFilter !== "all" && campaignRowPace(item.campaign, item.row, item.deliveryStatus) !== statusFilter) return false;
     return true;
+  }).sort((a, b) => {
+    const aLeft = campaignLeftBehindMonth(a.campaign, a.row) ? 0 : 1;
+    const bLeft = campaignLeftBehindMonth(b.campaign, b.row) ? 0 : 1;
+    return aLeft - bLeft;
   }), [rows, companyFilter, statusFilter]);
 
   const groups = useMemo(() => groupRowsByCompany(filteredRows, (item) => ({
@@ -3543,6 +3611,7 @@ function ActiveCampaignsTable({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{campaign.name}</p>
+                  <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} />
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
@@ -3616,6 +3685,7 @@ function ActiveCampaignsTable({
                 <tr key={row.id} className={cn("transition-colors hover:bg-indigo-50/30", isOpen && "bg-indigo-50/50")}>
                     <td className="p-3.5 pl-5">
                       <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
+                      <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} />
                     </td>
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>

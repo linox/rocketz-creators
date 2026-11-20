@@ -7,6 +7,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, 
 import { ArrowRight, CheckCircle2, FileText, Megaphone, Repeat, TrendingUp, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
@@ -167,6 +168,17 @@ function AdminDashboard({ stats }: { stats: DashboardStats }) {
           </div>
         </div>
       ) : null}
+
+      <OpenBacklogPanel
+        count={stats.open_backlog?.count}
+        items={(stats.open_backlog?.items ?? []).map((item) => ({
+          id: item.id,
+          href: item.href,
+          title: item.title || "—",
+          meta: item.creator,
+          month: item.month,
+        }))}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
         <KpiCard label={t("dash.kpiCasting")} value={formatNumber(stats.total_creators)} />
@@ -404,6 +416,18 @@ function DashboardInner() {
           <KpiCard label={t("dash.campaigns")} value={stats.campaigns ?? 0} />
           <KpiCard label={t("dash.approved")} value={stats.approved_campaigns ?? 0} />
           <KpiCard label={t("dash.applications")} value={stats.pending_applications ?? 0} />
+        </div>
+        <div className="mt-6">
+          <OpenBacklogPanel
+            count={stats.open_backlog?.count}
+            items={(stats.open_backlog?.items ?? []).map((item) => ({
+              id: item.id,
+              href: item.href,
+              title: item.title || "—",
+              meta: item.creator,
+              month: item.month,
+            }))}
+          />
         </div>
         <div className="mt-6 flex gap-3">
           <Link href="/available-campaigns" className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-bold text-white">{t("dash.available")}</Link>

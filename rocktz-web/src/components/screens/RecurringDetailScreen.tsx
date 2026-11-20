@@ -6,6 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { isGoogleDriveUrl } from "@/lib/google-drive";
 import { futureMonthCounts, monthQueryValue, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
+import { planningBacklog } from "@/lib/open-demands";
 import { isoToday, planningItemIsOverdue } from "@/lib/delivery-date";
 import { buildDeliveryMovements, isPlaceholderSubmissionTime } from "@/lib/delivery-inbox";
 import { excludedDemandCount, monthDemandExpectation } from "@/lib/recurring-demands";
@@ -583,6 +585,21 @@ function DetailInner() {
     return !itemIsAwaitingPauta(item);
   });
   const upcomingMonths = futureMonthCounts(items.map((item) => planningDemandMonth(item)));
+  const carriedBacklog = useMemo(() => {
+    return planningBacklog(items)
+      .filter((entry) => entry.month !== selectedMonth)
+      .map((entry) => {
+        const item = items.find((row) => `planning-${row.id}` === entry.id);
+        return {
+          ...entry,
+          href: undefined,
+          onOpen: () => {
+            setSelectedMonth(entry.month);
+            if (item) setSelectedCreatorId(item.creator_id);
+          },
+        };
+      });
+  }, [items, selectedMonth]);
   const currentMonthCount = items.filter((item) => itemInMonth(item, currentMonth())).length;
   const selectedMonthCount = items.filter((item) => itemInMonth(item, selectedMonth)).length;
   const allocated = (contract?.creators ?? []).filter((row) => !isCreator || !ownCreatorId || row.creator_id === ownCreatorId);
@@ -1344,6 +1361,9 @@ function DetailInner() {
           selectedCount={selectedMonthCount}
           demandsLabel={(count) => t(count === 1 ? "recurring.monthDemandsOne" : "recurring.monthDemands", { count })}
         />
+        <div className="mt-4">
+          <OpenBacklogPanel items={carriedBacklog} />
+        </div>
         </div>
       </div>
 

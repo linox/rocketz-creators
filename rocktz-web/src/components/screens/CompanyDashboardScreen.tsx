@@ -25,6 +25,8 @@ import {
   X,
 } from "lucide-react";
 import { AppModal } from "@/components/AppModal";
+import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
+import { campaignBacklog, planningBacklog } from "@/lib/open-demands";
 import { ApproveAgencyCampaignModal } from "@/components/ApproveAgencyCampaignModal";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
 import { CompanyCreatorGroupsPanel } from "@/components/CompanyCreatorGroupsPanel";
@@ -230,6 +232,10 @@ function CompanyDashboardInner() {
     [recurring],
   );
   const pendingAgencyCount = pendingAgencyCampaigns.length + pendingAgencyRecurring.length;
+  const carriedBacklog = useMemo(() => {
+    const planning = recurring.flatMap((contract) => planningBacklog(contract.items ?? []));
+    return [...campaignBacklog(campaigns), ...planning].sort((a, b) => a.month.localeCompare(b.month) || a.title.localeCompare(b.title));
+  }, [campaigns, recurring]);
 
   async function approveAgencyCampaign(campaign: Campaign) {
     setApprovingCampaign(campaign);
@@ -724,6 +730,8 @@ function CompanyDashboardInner() {
           ))}
         </div>
       </div>
+
+      {tab === "overview" || tab === "campaigns" || tab === "recurring" ? <OpenBacklogPanel items={carriedBacklog} /> : null}
 
       {tab === "overview" ? (
         <div className="flex min-w-0 flex-col gap-8">
