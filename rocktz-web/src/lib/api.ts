@@ -327,8 +327,8 @@ export const api = {
     creator_id?: number | null;
   }) =>
     laravelFetch<{ data: ConversationDetail }>("/conversations", { method: "POST", body: JSON.stringify(body) }),
-  closeConversation: (id: number) =>
-    laravelFetch<{ data: ConversationDetail }>(`/conversations/${id}/close`, { method: "POST" }),
+  closeConversation: (id: number, reason: string) =>
+    laravelFetch<{ data: ConversationDetail }>(`/conversations/${id}/close`, { method: "POST", body: JSON.stringify({ reason }) }),
   replyConversation: (id: number, body: string) =>
     laravelFetch<{ data: ConversationDetail }>(`/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
   conversationRecipients: (query = "") => laravelFetch<{ data: ConversationRecipients }>(`/conversations/recipients${query}`),

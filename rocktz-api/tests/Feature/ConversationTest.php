@@ -290,6 +290,65 @@ class ConversationTest extends TestCase
             ->assertJsonPath('data.works.0.id', $contract->id);
     }
 
+    public function test_opening_message_notifies_the_creator_or_the_company_and_agency(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $creator = Creator::factory()->active()->create();
+        $this->approveOnCampaign($campaign, $creator);
+        $member = $this->companyUser($campaign->company);
+        $otherMember = $this->companyUser($campaign->company);
+        $admin = User::factory()->admin()->create();
+
+        $fromCreator = $this->asUser($creator->user)
+            ->postJson('/api/conversations', [
+                'subject' => 'Para a Creatorz',
+                'body' => 'Preciso de um retorno.',
+                'campaign_id' => $campaign->id,
+            ])
+            ->assertCreated();
+        $creatorThread = (int) $fromCreator->json('data.id');
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $member->id,
+            'link' => '/messages?c='.$creatorThread,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $otherMember->id,
+            'link' => '/messages?c='.$creatorThread,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $admin->id,
+            'link' => '/messages?c='.$creatorThread,
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $creator->user->id,
+            'link' => '/messages?c='.$creatorThread,
+        ]);
+
+        $fromCompany = $this->asUser($member)
+            ->postJson('/api/conversations', [
+                'subject' => 'Para o criador',
+                'body' => 'Vamos alinhar a entrega.',
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+        $companyThread = (int) $fromCompany->json('data.id');
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $creator->user->id,
+            'link' => '/messages?c='.$companyThread,
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $otherMember->id,
+            'link' => '/messages?c='.$companyThread,
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $admin->id,
+            'link' => '/messages?c='.$companyThread,
+        ]);
+    }
+
     public function test_company_or_agency_can_close_a_conversation(): void
     {
         $campaign = Campaign::factory()->create();
@@ -310,18 +369,23 @@ class ConversationTest extends TestCase
         $id = (int) $created->json('data.id');
 
         $this->asUser($creator->user)
-            ->postJson("/api/conversations/{$id}/close")
+            ->postJson("/api/conversations/{$id}/close", ['reason' => 'resolved'])
             ->assertForbidden();
 
         $this->asUser($member)
-            ->postJson("/api/conversations/{$id}/close")
+            ->postJson("/api/conversations/{$id}/close", [])
+            ->assertStatus(422);
+
+        $this->asUser($member)
+            ->postJson("/api/conversations/{$id}/close", ['reason' => 'resolved'])
             ->assertOk()
-            ->assertJsonPath('data.closed', true);
+            ->assertJsonPath('data.closed', true)
+            ->assertJsonPath('data.close_reason', 'resolved');
 
         $this->assertDatabaseHas('notifications', [
             'user_id' => $creator->user->id,
             'link' => '/messages?c='.$id,
-            'message' => __('messages.conversation_closed_notice'),
+            'message' => __('messages.conversation_closed_notice').' '.__('messages.close_reasons.resolved'),
         ]);
 
         $this->asUser($creator->user)
@@ -330,7 +394,7 @@ class ConversationTest extends TestCase
             ->assertJsonPath('errors.body.0', __('messages.conversation_closed'));
 
         $this->asUser($admin)
-            ->postJson("/api/conversations/{$id}/close")
+            ->postJson("/api/conversations/{$id}/close", ['reason' => 'duplicate'])
             ->assertStatus(422)
             ->assertJsonPath('errors.conversation.0', __('messages.conversation_already_closed'));
 
@@ -343,9 +407,10 @@ class ConversationTest extends TestCase
             ->assertCreated();
 
         $this->asUser($admin)
-            ->postJson('/api/conversations/'.$again->json('data.id').'/close')
+            ->postJson('/api/conversations/'.$again->json('data.id').'/close', ['reason' => 'other'])
             ->assertOk()
-            ->assertJsonPath('data.closed', true);
+            ->assertJsonPath('data.closed', true)
+            ->assertJsonPath('data.close_reason', 'other');
     }
 
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void

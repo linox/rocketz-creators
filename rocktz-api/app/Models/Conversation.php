@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ConversationCloseReason;
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'created_by',
     'last_message_at',
     'closed_at',
+    'close_reason',
 ])]
 class Conversation extends Model
 {
@@ -32,6 +34,7 @@ class Conversation extends Model
             'with_agency' => 'boolean',
             'last_message_at' => 'datetime',
             'closed_at' => 'datetime',
+            'close_reason' => ConversationCloseReason::class,
         ];
     }
 

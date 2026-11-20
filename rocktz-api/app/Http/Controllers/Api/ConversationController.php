@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ConversationCloseReason;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ConversationResource;
 use App\Models\Conversation;
 use App\Services\ConversationMailbox;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ConversationController extends Controller
 {
@@ -85,7 +87,11 @@ class ConversationController extends Controller
 
     public function close(Request $request, Conversation $conversation): JsonResponse
     {
-        $this->mailbox->close($request->user(), $conversation);
+        $data = $request->validate([
+            'reason' => ['required', Rule::enum(ConversationCloseReason::class)],
+        ]);
+        $reason = $data['reason'] instanceof ConversationCloseReason ? $data['reason']->value : (string) $data['reason'];
+        $this->mailbox->close($request->user(), $conversation, $reason);
         $conversation = $this->mailbox->present($conversation, $request->user(), true);
 
         return response()->json([

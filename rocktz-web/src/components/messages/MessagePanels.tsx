@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Select2Field } from "@/components/Select2Field";
-import { alertApiError, alertConfirm, alertWarning } from "@/lib/alerts";
+import { alertApiError, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -27,7 +27,40 @@ export function formatMessageTime(value: string | null, locale: string) {
   }).format(date);
 }
 
+const CLOSE_REASONS = ["resolved", "no_longer_needed", "duplicate", "other"] as const;
+
 export const MESSAGE_POLL_MS = 4000;
+
+export function filterConversations(items: ConversationSummary[], filter: string) {
+  if (!filter || filter === "all") return items;
+  if (filter === "open") return items.filter((item) => !item.closed);
+  if (filter === "closed") return items.filter((item) => item.closed);
+  return items.filter((item) => item.close_reason === filter);
+}
+
+export function MessageStatusFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const { t } = useTranslation("app", { keyPrefix: "messages" });
+
+  return (
+    <Select2Field
+      theme="light"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: "all", label: t("filterAll") },
+        { value: "open", label: t("filterOpen") },
+        { value: "closed", label: t("filterClosed") },
+        ...CLOSE_REASONS.map((reason) => ({ value: reason, label: t(`reasons.${reason}`) })),
+      ]}
+    />
+  );
+}
 
 export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
   if (!current || current.id !== next.id) return next;
@@ -97,7 +130,11 @@ export function MessageList({
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
                 <span className={cn("min-w-0 flex-1 truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
                   {item.subject}
-                  {item.closed ? <span className="ml-2 text-[11px] font-semibold text-slate-400">{t("closed")}</span> : null}
+                  {item.closed ? (
+                    <span className="ml-2 text-[11px] font-semibold text-slate-400">
+                      {item.close_reason ? `${t("closed")} · ${t(`reasons.${item.close_reason}`)}` : t("closed")}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="shrink-0 text-[11px] text-slate-400">{formatMessageTime(item.last_message_at, i18n.language)}</span>
               </span>
@@ -131,6 +168,8 @@ export function MessageThread({
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [pickingReason, setPickingReason] = useState(false);
+  const [reason, setReason] = useState("");
   const counterpart = conversationWith(conversation, role);
   const canClose = !conversation.closed && (role === "admin" || role === "company");
   const about = workLabel(conversation.work, t("campaignKind"), t("recurringKind"));
@@ -142,11 +181,14 @@ export function MessageThread({
   }, [conversation.id, conversation.messages.length]);
 
   async function close() {
-    const confirmed = await alertConfirm(t("closeConfirmTitle"), t("closeConfirmText"), t("close"));
-    if (!confirmed) return;
+    if (!reason) {
+      await alertWarning(t("pickCloseReason"));
+      return;
+    }
     setClosing(true);
     try {
-      const res = await api.closeConversation(conversation.id);
+      const res = await api.closeConversation(conversation.id, reason);
+      setPickingReason(false);
       onReplied(res.data);
       emitNavRefresh();
     } catch (err) {
@@ -196,7 +238,7 @@ export function MessageThread({
         {canClose ? (
           <button
             type="button"
-            onClick={() => void close()}
+            onClick={() => setPickingReason(true)}
             disabled={closing}
             className="ml-auto shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
           >
@@ -220,7 +262,37 @@ export function MessageThread({
         })}
       </div>
       {conversation.closed ? (
-        <p className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">{t("closedHint")}</p>
+        <p className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
+          {conversation.close_reason
+            ? `${t("closedHint")} ${t(`reasons.${conversation.close_reason}`)}.`
+            : t("closedHint")}
+        </p>
+      ) : pickingReason ? (
+        <div className="space-y-3 border-t border-slate-100 p-3">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("closeReason")}</span>
+            <Select2Field
+              theme="light"
+              placeholder={t("closeReasonPlaceholder")}
+              value={reason}
+              onChange={setReason}
+              options={CLOSE_REASONS.map((item) => ({ value: item, label: t(`reasons.${item}`) }))}
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setPickingReason(false)} className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">
+              {tc("cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void close()}
+              disabled={closing}
+              className="inline-flex h-10 items-center rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {t("close")}
+            </button>
+          </div>
+        </div>
       ) : (
       <form onSubmit={send} noValidate className="border-t border-slate-100 p-3">
         <label className="sr-only" htmlFor={`reply-${conversation.id}`}>{t("body")}</label>

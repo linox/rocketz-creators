@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AuthenticatedShell } from "@/components/AuthenticatedShell";
-import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageThread, newerThread } from "@/components/messages/MessagePanels";
+import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageStatusFilter, MessageThread, filterConversations, newerThread } from "@/components/messages/MessagePanels";
 import { alertApiError } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -23,6 +23,7 @@ function MessagesInner() {
   const [thread, setThread] = useState<ConversationDetail | null>(null);
   const [composing, setComposing] = useState(false);
   const [ready, setReady] = useState(false);
+  const [filter, setFilter] = useState("all");
   const seenUnread = useRef<number | null>(null);
   const openId = useRef(0);
   openId.current = thread?.id ?? 0;
@@ -134,7 +135,16 @@ function MessagesInner() {
               }}
             />
           ) : ready ? (
-            <MessageList items={items} activeId={thread?.id} role={user.role} onOpen={openThread} />
+            <>
+              <div className="border-b border-slate-100 px-3 py-2">
+                <MessageStatusFilter value={filter} onChange={setFilter} />
+              </div>
+              {filterConversations(items, filter).length === 0 && items.length > 0 ? (
+                <p className="px-4 py-6 text-sm text-slate-500">{t("emptyFilter")}</p>
+              ) : (
+                <MessageList items={filterConversations(items, filter)} activeId={thread?.id} role={user.role} onOpen={openThread} />
+              )}
+            </>
           ) : (
             <p className="px-4 py-6 text-sm text-slate-500">{tc("loading")}</p>
           )}

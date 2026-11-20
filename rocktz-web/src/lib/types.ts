@@ -736,6 +736,7 @@ export type ConversationSummary = {
   last_message_at: string | null;
   closed: boolean;
   closed_at: string | null;
+  close_reason: "resolved" | "no_longer_needed" | "duplicate" | "other" | null;
   unread: boolean;
 };
 

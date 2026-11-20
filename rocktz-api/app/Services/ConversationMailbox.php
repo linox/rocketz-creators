@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\CampaignStatus;
+use App\Enums\CompanyStatus;
+use App\Enums\ConversationCloseReason;
 use App\Enums\NotificationTargetRole;
 use App\Enums\NotificationType;
 use App\Enums\RecurringContractStatus;
@@ -99,13 +101,13 @@ class ConversationMailbox
 
         $message = $conversation->messages()->latest('id')->first();
         if ($message) {
-            $this->notifyOthers($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
+            $this->notifyAudience($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
         }
 
         return $conversation;
     }
 
-    public function close(User $user, Conversation $conversation): Conversation
+    public function close(User $user, Conversation $conversation, string $reason): Conversation
     {
         $this->assertCanView($user, $conversation);
         abort_unless(
@@ -114,14 +116,28 @@ class ConversationMailbox
             __('auth.forbidden'),
         );
 
+        $parsed = ConversationCloseReason::tryFrom($reason);
+        if (! $parsed) {
+            throw ValidationException::withMessages([
+                'reason' => [__('messages.close_reason_required')],
+            ]);
+        }
+
         if ($conversation->closed_at) {
             throw ValidationException::withMessages([
                 'conversation' => [__('messages.conversation_already_closed')],
             ]);
         }
 
-        $conversation->forceFill(['closed_at' => now()])->save();
-        $this->notifyOthers($conversation, $user, __('messages.conversation_closed_notice'));
+        $conversation->forceFill([
+            'closed_at' => now(),
+            'close_reason' => $parsed,
+        ])->save();
+        $this->notifyAudience(
+            $conversation,
+            $user,
+            __('messages.conversation_closed_notice').' '.__('messages.close_reasons.'.$parsed->value),
+        );
 
         return $conversation;
     }
@@ -147,7 +163,7 @@ class ConversationMailbox
             return $message;
         });
 
-        $this->notifyOthers($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
+        $this->notifyAudience($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
 
         return $message;
     }
@@ -281,53 +297,77 @@ class ConversationMailbox
             ->update(['read' => true]);
     }
 
-    private function notifyOthers(Conversation $conversation, User $sender, string $preview): void
+    private function notifyAudience(Conversation $conversation, User $sender, string $preview): void
     {
+        if ($sender->role === UserRole::Creator) {
+            $this->notifyCompany($conversation, $sender, $preview);
+            $this->notifyAgency($sender, $conversation->subject, $preview, '/messages?c='.$conversation->id);
+
+            return;
+        }
+
+        $this->notifyCreatorParty($conversation, $sender, $preview);
+    }
+
+    private function notifyCreatorParty(Conversation $conversation, User $sender, string $preview): void
+    {
+        if (! $conversation->creator_id) {
+            return;
+        }
+
+        $creatorUserId = (int) Creator::query()->whereKey($conversation->creator_id)->value('user_id');
+        if ($creatorUserId <= 0 || $creatorUserId === (int) $sender->id) {
+            return;
+        }
+
+        $this->notifications->notifyCreator((int) $conversation->creator_id, [
+            'title' => $conversation->subject,
+            'message' => $preview,
+            'type' => NotificationType::General,
+            'link' => '/messages?c='.$conversation->id,
+        ]);
+    }
+
+    private function notifyCompany(Conversation $conversation, User $sender, string $preview): void
+    {
+        if (! $conversation->company_id) {
+            return;
+        }
+
         $title = $conversation->subject;
         $link = '/messages?c='.$conversation->id;
-        $type = NotificationType::General;
-        if ($conversation->creator_id) {
-            $creatorUserId = (int) Creator::query()->whereKey($conversation->creator_id)->value('user_id');
-            if ($creatorUserId > 0 && $creatorUserId !== (int) $sender->id) {
-                $this->notifications->notifyCreator((int) $conversation->creator_id, [
+        CompanyUser::query()
+            ->where('company_id', $conversation->company_id)
+            ->where('status', CompanyStatus::Active)
+            ->whereNotNull('user_id')
+            ->where('user_id', '!=', $sender->id)
+            ->pluck('user_id')
+            ->unique()
+            ->each(function ($userId) use ($title, $preview, $link) {
+                $this->notifications->send([
+                    'user_id' => (int) $userId,
                     'title' => $title,
                     'message' => $preview,
-                    'type' => $type,
+                    'type' => NotificationType::General,
+                    'target_role' => NotificationTargetRole::Company,
                     'link' => $link,
                 ]);
-            }
-        }
+            });
+    }
 
-        if ($conversation->company_id) {
-            CompanyUser::query()
-                ->where('company_id', $conversation->company_id)
-                ->whereNotNull('user_id')
-                ->where('user_id', '!=', $sender->id)
-                ->pluck('user_id')
-                ->unique()
-                ->each(function ($userId) use ($title, $preview, $type, $link) {
-                    $this->notifications->send([
-                        'user_id' => (int) $userId,
-                        'title' => $title,
-                        'message' => $preview,
-                        'type' => $type,
-                        'target_role' => NotificationTargetRole::Company,
-                        'link' => $link,
-                    ]);
-                });
-        }
-
+    private function notifyAgency(User $sender, string $title, string $preview, string $link): void
+    {
         User::query()
             ->where('role', UserRole::Admin)
             ->where('id', '!=', $sender->id)
             ->orderBy('id')
             ->get()
-            ->each(function (User $admin) use ($title, $preview, $type, $link) {
+            ->each(function (User $admin) use ($title, $preview, $link) {
                 $this->notifications->send([
                     'user_id' => $admin->id,
                     'title' => $title,
                     'message' => $preview,
-                    'type' => $type,
+                    'type' => NotificationType::General,
                     'target_role' => NotificationTargetRole::Admin,
                     'link' => $link,
                 ]);

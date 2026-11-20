@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\ConversationCloseReason;
 use App\Enums\UserRole;
 use App\Models\ConversationMessage;
 use App\Models\User;
@@ -39,6 +40,7 @@ class ConversationResource extends JsonResource
             'last_message_at' => $this->last_message_at?->toIso8601String(),
             'closed' => $this->closed_at !== null,
             'closed_at' => $this->closed_at?->toIso8601String(),
+            'close_reason' => $this->close_reason instanceof ConversationCloseReason ? $this->close_reason->value : $this->close_reason,
             'unread' => (bool) $this->unread_for_viewer,
             'messages' => $this->whenLoaded('messages', function () use ($viewerId) {
                 return $this->messages

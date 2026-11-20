@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { MessageCircle, X } from "lucide-react";
-import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageThread, newerThread } from "@/components/messages/MessagePanels";
+import { MESSAGE_POLL_MS, MessageCompose, MessageList, MessageStatusFilter, MessageThread, filterConversations, newerThread } from "@/components/messages/MessagePanels";
 import { alertApiError } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
@@ -32,6 +32,7 @@ export function MessageDock({
   const [view, setView] = useState<DockView>("list");
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [thread, setThread] = useState<ConversationDetail | null>(null);
+  const [filter, setFilter] = useState("all");
   const openRef = useRef(open);
   const seenUnread = useRef<number | null>(null);
   const alerted = useRef(false);
@@ -196,7 +197,14 @@ export function MessageDock({
                   {t("new")}
                 </button>
               </div>
-              <MessageList items={items} role={user.role} onOpen={(id) => void openThread(id)} />
+              <div className="border-b border-slate-100 px-3 py-2">
+                <MessageStatusFilter value={filter} onChange={setFilter} />
+              </div>
+              {filterConversations(items, filter).length === 0 && items.length > 0 ? (
+                <p className="px-4 py-6 text-sm text-slate-500">{t("emptyFilter")}</p>
+              ) : (
+                <MessageList items={filterConversations(items, filter)} role={user.role} onOpen={(id) => void openThread(id)} />
+              )}
             </>
           ) : null}
         </section>

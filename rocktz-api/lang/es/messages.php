@@ -12,4 +12,11 @@ return [
     'conversation_closed' => 'Esta conversación fue cerrada.',
     'conversation_already_closed' => 'Esta conversación ya fue cerrada.',
     'conversation_closed_notice' => 'La conversación fue cerrada.',
+    'close_reason_required' => 'Elige el motivo del cierre.',
+    'close_reasons' => [
+        'resolved' => 'Resuelto',
+        'no_longer_needed' => 'Ya no hace falta',
+        'duplicate' => 'Duplicada',
+        'other' => 'Otro',
+    ],
 ];
