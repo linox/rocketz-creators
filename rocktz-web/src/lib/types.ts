@@ -712,7 +712,13 @@ export type ConversationMessage = {
   body: string;
   created_at: string | null;
   mine: boolean;
-  author: { id: number | null; name: string | null; side: "agency" | "company" | "creator" | null };
+  author: { id: number | null; name: string | null; photo_url?: string | null; side: "agency" | "company" | "creator" | null };
+};
+
+export type ConversationParticipant = {
+  id: number | null;
+  name: string;
+  photo_url: string | null;
 };
 
 export type ConversationWork = {
@@ -730,6 +736,7 @@ export type ConversationSummary = {
   id: number;
   subject: string;
   parties: ConversationParties;
+  participants: ConversationParticipant[];
   work: ConversationWork | null;
   preview: string | null;
   preview_author: string | null;

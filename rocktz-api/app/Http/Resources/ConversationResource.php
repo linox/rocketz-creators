@@ -35,6 +35,7 @@ class ConversationResource extends JsonResource
                 'agency' => (bool) $this->with_agency,
             ],
             'work' => $this->workPayload(),
+            'participants' => array_values($this->participants ?? []),
             'preview' => $this->relationLoaded('latestMessage') ? $this->previewText($this->latestMessage) : null,
             'preview_author' => $this->relationLoaded('latestMessage') ? $this->latestMessage?->user?->name : null,
             'last_message_at' => $this->last_message_at?->toIso8601String(),
@@ -57,6 +58,7 @@ class ConversationResource extends JsonResource
                             'author' => [
                                 'id' => $author?->id,
                                 'name' => $author?->name,
+                                'photo_url' => $this->photoOf($author),
                                 'side' => $this->sideOf($author),
                             ],
                         ];
@@ -99,6 +101,19 @@ class ConversationResource extends JsonResource
         $flat = trim((string) preg_replace('/\s+/', ' ', $message->body));
 
         return $flat === '' ? null : Str::limit($flat, 140);
+    }
+
+    private function photoOf(?User $author): ?string
+    {
+        if (! $author) {
+            return null;
+        }
+
+        if ($author->role === UserRole::Creator) {
+            return $author->creator?->photo_url ?: $author->avatar_url;
+        }
+
+        return $author->avatar_url;
     }
 
     private function sideOf(?User $author): ?string

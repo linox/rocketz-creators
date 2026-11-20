@@ -21,7 +21,7 @@ class ConversationController extends Controller
         $conversations = $this->mailbox->visibleQuery($user)
             ->with([
                 'company:id,name',
-                'creator:id,artistic_name,full_name',
+                'creator:id,user_id,artistic_name,full_name,photo_url',
                 'campaign:id,name',
                 'recurringContract:id,title',
                 'latestMessage.user:id,name',
@@ -37,6 +37,7 @@ class ConversationController extends Controller
             $latestId = (int) ($conversation->latestMessage?->id ?? 0);
             $conversation->setAttribute('unread_for_viewer', $latestId > $readId);
         });
+        $this->mailbox->attachParticipants($conversations);
 
         return response()->json([
             'data' => ConversationResource::collection($conversations)->resolve($request),

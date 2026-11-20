@@ -93,7 +93,9 @@ class ConversationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('meta.unread', 1)
             ->assertJsonPath('data.0.id', $id)
-            ->assertJsonPath('data.0.unread', true);
+            ->assertJsonPath('data.0.unread', true)
+            ->assertJsonCount(1, 'data.0.participants')
+            ->assertJsonPath('data.0.participants.0.name', $creator->artistic_name);
 
         $this->asUser($member)
             ->getJson("/api/conversations/{$id}")
@@ -113,7 +115,11 @@ class ConversationTest extends TestCase
             ->postJson("/api/conversations/{$id}/messages", ['body' => 'Pode postar amanhã.'])
             ->assertOk()
             ->assertJsonPath('data.messages.1.body', 'Pode postar amanhã.')
-            ->assertJsonPath('data.messages.1.mine', true);
+            ->assertJsonPath('data.messages.1.mine', true)
+            ->assertJsonCount(2, 'data.participants')
+            ->assertJsonPath('data.participants.0.name', $creator->artistic_name)
+            ->assertJsonPath('data.participants.0.photo_url', $creator->photo_url)
+            ->assertJsonPath('data.participants.1.id', $member->id);
 
         $this->asUser($creator->user)
             ->getJson('/api/nav')
@@ -173,7 +179,10 @@ class ConversationTest extends TestCase
         $this->asUser($creator->user)
             ->getJson("/api/conversations/{$id}")
             ->assertOk()
-            ->assertJsonPath('data.messages.1.author.side', 'company');
+            ->assertJsonPath('data.messages.1.author.side', 'company')
+            ->assertJsonCount(2, 'data.participants')
+            ->assertJsonPath('data.participants.0.name', $creator->artistic_name)
+            ->assertJsonPath('data.participants.1.id', $admin->id);
     }
 
     public function test_agency_only_includes_a_creator_who_is_approved_on_the_campaign(): void

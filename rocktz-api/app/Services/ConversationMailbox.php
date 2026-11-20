@@ -24,6 +24,7 @@ use App\Models\RecurringContractCreator;
 use App\Models\User;
 use App\Services\Mail\MailNotifier;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -185,7 +186,7 @@ class ConversationMailbox
     {
         $conversation->load([
             'company:id,name',
-            'creator:id,artistic_name,full_name',
+            'creator:id,user_id,artistic_name,full_name,photo_url',
             'campaign:id,name',
             'recurringContract:id,title',
             'latestMessage.user:id,name',
@@ -194,15 +195,84 @@ class ConversationMailbox
 
         if ($withMessages) {
             $conversation->load([
-                'messages' => fn ($query) => $query->with('user:id,name,role')->orderByDesc('id')->limit(300),
+                'messages' => fn ($query) => $query->with([
+                    'user:id,name,role,avatar_url',
+                    'user.creator:id,user_id,artistic_name,full_name,photo_url',
+                ])->orderByDesc('id')->limit(300),
             ]);
         }
 
         $readId = (int) ($conversation->reads->first()?->last_read_message_id ?? 0);
         $latestId = (int) ($conversation->latestMessage?->id ?? 0);
         $conversation->setAttribute('unread_for_viewer', $latestId > $readId);
+        $this->attachParticipants(collect([$conversation]));
 
         return $conversation;
+    }
+
+    /**
+     * @param  Collection<int, Conversation>  $conversations
+     */
+    public function attachParticipants(Collection $conversations): void
+    {
+        if ($conversations->isEmpty()) {
+            return;
+        }
+
+        $rows = ConversationMessage::query()
+            ->whereIn('conversation_id', $conversations->pluck('id'))
+            ->select('conversation_id', 'user_id')
+            ->selectRaw('MIN(id) as first_id')
+            ->groupBy('conversation_id', 'user_id')
+            ->orderBy('first_id')
+            ->get();
+
+        $users = User::query()
+            ->whereIn('id', $rows->pluck('user_id')->filter()->unique())
+            ->with('creator:id,user_id,artistic_name,full_name,photo_url')
+            ->get(['id', 'name', 'role', 'avatar_url'])
+            ->keyBy('id');
+
+        $authors = $rows->groupBy('conversation_id');
+
+        foreach ($conversations as $conversation) {
+            $people = [];
+            $seen = [];
+            $creator = $conversation->creator;
+            if ($creator) {
+                $userId = (int) $creator->user_id;
+                $people[] = [
+                    'id' => $userId > 0 ? $userId : null,
+                    'name' => self::creatorName($creator),
+                    'photo_url' => $creator->photo_url,
+                ];
+                if ($userId > 0) {
+                    $seen[$userId] = true;
+                }
+            }
+
+            foreach ($authors->get($conversation->id, collect()) as $row) {
+                $userId = (int) $row->user_id;
+                if ($userId === 0 || isset($seen[$userId])) {
+                    continue;
+                }
+                $user = $users->get($userId);
+                if (! $user) {
+                    continue;
+                }
+                $seen[$userId] = true;
+                $people[] = [
+                    'id' => $userId,
+                    'name' => $user->role === UserRole::Creator ? (self::creatorName($user->creator) ?: $user->name) : $user->name,
+                    'photo_url' => $user->role === UserRole::Creator ? ($user->creator?->photo_url ?: $user->avatar_url) : $user->avatar_url,
+                ];
+                if (count($people) >= 8) {
+                    break;
+                }
+            }
+
+            $conversation->setAttribute('participants', $people);
+        }
     }
 
     public static function creatorName(?Creator $creator): string

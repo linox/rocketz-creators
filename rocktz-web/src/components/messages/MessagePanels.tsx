@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Select2Field } from "@/components/Select2Field";
+import { UserAvatar } from "@/components/UserAvatar";
 import { alertApiError, alertWarning } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 import { cn } from "@/lib/cn";
-import type { ConversationDetail, ConversationRecipients, ConversationSummary, ConversationWork } from "@/lib/types";
+import type { ConversationDetail, ConversationParticipant, ConversationRecipients, ConversationSummary, ConversationWork } from "@/lib/types";
 import { emitNavRefresh } from "@/lib/session-cache";
 
 const EMPTY_RECIPIENTS: ConversationRecipients = {
@@ -88,6 +89,39 @@ function sideLabel(side: string | null, t: (key: string) => string) {
   return "";
 }
 
+const FACE_LIMIT = 3;
+
+export function MessageFaces({ people }: { people: ConversationParticipant[] }) {
+  if (people.length === 0) return null;
+  const visible = people.slice(0, FACE_LIMIT);
+  const extra = people.length - visible.length;
+  const names = people.map((person) => person.name).filter(Boolean).join(", ");
+
+  return (
+    <span className="flex shrink-0 items-center" aria-label={names} title={names}>
+      <span className="flex -space-x-2">
+        {visible.map((person, index) => (
+          <UserAvatar
+            key={`${person.id ?? "person"}-${index}`}
+            src={person.photo_url}
+            name={person.name}
+            alt={person.name}
+            size="custom"
+            shape="circle"
+            className="h-8 w-8 border-2 border-white"
+            textClassName="text-[10px]"
+          />
+        ))}
+      </span>
+      {extra > 0 ? (
+        <span className="ml-1 inline-flex h-8 min-w-8 items-center justify-center rounded-full border-2 border-white bg-slate-100 px-1 text-[10px] font-bold text-slate-600">
+          +{extra}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function MessageList({
   items,
   activeId,
@@ -122,10 +156,12 @@ export function MessageList({
               type="button"
               onClick={() => onOpen(item.id)}
               className={cn(
-                "flex w-full flex-col gap-1 border-b border-slate-100 px-4 py-3 text-left",
+                "flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left",
                 active ? "bg-purple-50" : "hover:bg-slate-50",
               )}
             >
+              <MessageFaces people={item.participants ?? []} />
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="flex items-center gap-2">
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
                 <span className={cn("min-w-0 flex-1 truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
@@ -141,6 +177,7 @@ export function MessageList({
               {about ? <span className="truncate text-xs font-semibold text-purple-700">{about}</span> : null}
               {withLabel ? <span className="truncate text-xs text-slate-500">{withLabel}</span> : null}
               {item.preview ? <span className="truncate text-xs text-slate-500">{item.preview}</span> : null}
+              </span>
             </button>
           </li>
         );
@@ -230,6 +267,7 @@ export function MessageThread({
             {tc("back")}
           </button>
         ) : null}
+        <MessageFaces people={conversation.participants ?? []} />
         <div className="min-w-0">
           <h2 className="truncate text-base font-black text-slate-950">{conversation.subject}</h2>
           {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
@@ -250,13 +288,24 @@ export function MessageThread({
         {conversation.messages.map((message) => {
           const side = sideLabel(message.author.side, t);
           return (
-            <article key={message.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <article key={message.id} className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <UserAvatar
+                src={message.author.photo_url}
+                name={message.author.name}
+                alt={message.author.name || side}
+                size="custom"
+                shape="circle"
+                className="mt-0.5 h-7 w-7 border border-white"
+                textClassName="text-[10px]"
+              />
+              <div className="min-w-0 flex-1">
               <p className="mb-1 flex flex-wrap items-center gap-x-2 text-[11px] font-bold tracking-wide text-slate-500 uppercase">
                 <span className="text-slate-800">{message.mine ? t("you") : (message.author.name || side)}</span>
                 {side ? <span>{side}</span> : null}
                 <span className="font-medium normal-case tracking-normal">{formatMessageTime(message.created_at, i18n.language)}</span>
               </p>
               <p className="text-sm whitespace-pre-wrap break-words text-slate-800">{message.body}</p>
+              </div>
             </article>
           );
         })}
