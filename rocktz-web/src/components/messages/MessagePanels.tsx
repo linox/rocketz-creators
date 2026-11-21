@@ -385,8 +385,8 @@ export function MessageThread({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-slate-100 px-3 py-2">
+    <div data-dock-thread className="flex min-h-0 flex-1 flex-col">
+      <header data-dock-chrome className="border-b border-slate-100 px-3 py-2">
         <div className="flex items-start gap-2">
           {onBack ? (
             <button
@@ -417,7 +417,7 @@ export function MessageThread({
         </div>
         {conversation.receipt ? <div className="mt-1"><ReceiptBadge receipt={conversation.receipt} /></div> : null}
       </header>
-      <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div ref={scroller} data-dock-chrome className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {conversation.messages.map((message) => {
           const side = sideLabel(message.author.side, t);
           return (
@@ -477,8 +477,8 @@ export function MessageThread({
         </div>
       ) : (
       <MessageEmojiFrame value={body} onChange={setBody}>
-      <div className="shrink-0 border-t border-slate-100 p-3">
-        <div className="mb-2 flex items-start justify-between gap-2">
+      <div data-dock-composer className="shrink-0 border-t border-slate-100 p-3">
+        <div data-dock-chrome className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
           </div>
@@ -633,15 +633,15 @@ export function MessageCompose({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div data-dock-thread className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {role === "creator" ? null : (
-        <div className="px-4 pt-4">
+        <div data-dock-chrome className="px-4 pt-4">
           <ChatIdentityEditor />
         </div>
       )}
     <form onSubmit={send} noValidate className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       {needsCompany ? (
-        <label className="block">
+        <label data-dock-chrome className="block">
           <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("company")}</span>
           <Select2Field
             theme="light"
@@ -654,7 +654,7 @@ export function MessageCompose({
       ) : null}
       {waitingForCompany ? (
         <>
-          <p className="text-sm text-slate-500">{t("pickCompanyFirst")}</p>
+          <p data-dock-chrome className="text-sm text-slate-500">{t("pickCompanyFirst")}</p>
           {onCancel ? (
             <div className="flex justify-end">
               <button type="button" onClick={onCancel} className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">
@@ -665,7 +665,7 @@ export function MessageCompose({
         </>
       ) : (
       <>
-      <label className="block">
+      <label data-dock-chrome className="block">
         <span className="sr-only">{t("searchPlaceholder")}</span>
         <input
           value={search}
@@ -674,11 +674,11 @@ export function MessageCompose({
           className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-purple-600"
         />
       </label>
-      {recipients.truncated ? <p className="text-xs text-slate-500">{t("refineSearch")}</p> : null}
+      {recipients.truncated ? <p data-dock-chrome className="text-xs text-slate-500">{t("refineSearch")}</p> : null}
       {noWorks ? (
-        <p className="text-sm text-slate-500">{t("emptyWorks")}</p>
+        <p data-dock-chrome className="text-sm text-slate-500">{t("emptyWorks")}</p>
       ) : (
-        <label className="block">
+        <label data-dock-chrome className="block">
           <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("work")}</span>
           <Select2Field
             theme="light"
@@ -690,7 +690,7 @@ export function MessageCompose({
         </label>
       )}
       {selected && needsCreator ? (
-        <label className="block">
+        <label data-dock-chrome className="block">
           <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("creator")}</span>
           <Select2Field
             theme="light"
@@ -711,7 +711,7 @@ export function MessageCompose({
         ) : null
       ) : (
       <>
-      <label className="block">
+      <label data-dock-chrome className="block">
         <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("subject")}</span>
         <input
           value={subject}
@@ -721,6 +721,7 @@ export function MessageCompose({
           className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-purple-600"
         />
       </label>
+      <div data-dock-composer className="flex flex-col gap-3">
       <label className="block">
         <MessageEmojiField
           id="new-message-body"
@@ -745,6 +746,7 @@ export function MessageCompose({
         >
           {tc("send")}
         </button>
+      </div>
       </div>
       </>
       )}

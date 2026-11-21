@@ -16,42 +16,10 @@ import { emitNavRefresh } from "@/lib/session-cache";
 
 type DockView = "list" | "thread" | "compose";
 
-type DockFrame = {
-  top: number;
-  height: number;
-  keyboard: boolean;
-};
-
-function useDockFrame(): DockFrame | null {
-  const [frame, setFrame] = useState<DockFrame | null>(null);
-
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    function update() {
-      const next = window.visualViewport;
-      if (!next) return;
-      const hidden = window.innerHeight - next.height;
-      setFrame({
-        top: next.offsetTop + 8,
-        height: Math.max(220, next.height - 16),
-        keyboard: hidden > 120,
-      });
-    }
-
-    update();
-    viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
-    window.addEventListener("orientationchange", update);
-    return () => {
-      viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
-      window.removeEventListener("orientationchange", update);
-    };
-  }, []);
-
-  return frame;
+function keyboardLift() {
+  const viewport = window.visualViewport;
+  if (!viewport) return 0;
+  return Math.max(0, Math.round(window.innerHeight - viewport.offsetTop - viewport.height));
 }
 
 export function MessageDock({
@@ -64,10 +32,12 @@ export function MessageDock({
   menuOpen: boolean;
 }) {
   const pathname = usePathname();
-  const frame = useDockFrame();
   const { t } = useTranslation("app", { keyPrefix: "messages" });
+  const dockRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [lift, setLift] = useState(0);
   const [view, setView] = useState<DockView>("list");
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [thread, setThread] = useState<ConversationDetail | null>(null);
@@ -83,7 +53,76 @@ export function MessageDock({
 
   useEffect(() => {
     setOpen(false);
+    setWriting(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!open) setWriting(false);
+  }, [open]);
+
+  useEffect(() => {
+    const root = dockRef.current;
+    if (!root || !open) return;
+
+    let timer = 0;
+
+    function onFocusIn(event: FocusEvent) {
+      if (!window.matchMedia("(max-width: 1023px)").matches) return;
+      if (!(event.target instanceof HTMLTextAreaElement)) return;
+      window.clearTimeout(timer);
+      setWriting(true);
+    }
+
+    function onFocusOut() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLTextAreaElement && root?.contains(active)) return;
+        if (active instanceof Element && active.closest("[data-dock-composer]")) return;
+        setWriting(false);
+      }, 250);
+    }
+
+    root.addEventListener("focusin", onFocusIn);
+    root.addEventListener("focusout", onFocusOut);
+    return () => {
+      window.clearTimeout(timer);
+      root.removeEventListener("focusin", onFocusIn);
+      root.removeEventListener("focusout", onFocusOut);
+    };
+  }, [open, mounted]);
+
+  useEffect(() => {
+    if (!writing) return;
+    const viewport = window.visualViewport;
+    let frames = 0;
+    let raf = 0;
+
+    function update() {
+      setLift(keyboardLift());
+    }
+
+    function tick() {
+      update();
+      frames += 1;
+      if (frames < 12) raf = window.requestAnimationFrame(tick);
+    }
+
+    update();
+    raf = window.requestAnimationFrame(tick);
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    window.addEventListener("orientationchange", update);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.cancelAnimationFrame(raf);
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+      window.removeEventListener("orientationchange", update);
+      document.body.style.overflow = previous;
+    };
+  }, [writing]);
 
   useEffect(() => {
     if (menuOpen) setOpen(false);
@@ -179,29 +218,30 @@ export function MessageDock({
   const path = pathname.replace(/\/+$/, "") || "/";
   if (!mounted || path === "/messages") return null;
 
-  const keyboard = open && frame?.keyboard === true;
-
   return createPortal(
     <div
+      ref={dockRef}
       data-message-dock
-      style={keyboard && frame ? { top: frame.top, height: frame.height } : undefined}
+      data-writing={writing ? "" : undefined}
+      style={writing ? { bottom: lift + 8 } : undefined}
       className={cn(
         "fixed right-3 flex flex-col items-end lg:right-6",
-        keyboard ? "left-3 bottom-auto" : "bottom-[calc(var(--app-bottom-nav-h)+0.75rem)] lg:bottom-6",
+        writing ? "left-3" : "bottom-[calc(var(--app-bottom-nav-h)+0.75rem)] lg:bottom-6",
         open ? "z-[45]" : "z-30",
       )}
     >
       {open ? (
         <section
+          data-dock-panel
           className={cn(
-            "flex min-h-0 w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]",
-            keyboard
-              ? "h-full w-full"
-              : "mb-3 h-[min(32rem,calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-6.5rem))]",
+            "flex min-h-0 w-[min(24rem,calc(100vw-1.5rem))] flex-col rounded-3xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]",
+            writing
+              ? "h-auto w-full overflow-visible"
+              : "mb-3 h-[min(32rem,calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-6.5rem))] overflow-hidden",
           )}
           aria-label={t("title")}
         >
-          <header className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+          <header data-dock-chrome className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{t("title")}</h2>
             <Link href="/messages" className="shrink-0 text-xs font-semibold text-purple-700" onClick={() => setOpen(false)}>
               {t("openInbox")}
@@ -256,7 +296,7 @@ export function MessageDock({
           ) : null}
         </section>
       ) : null}
-      {keyboard ? null : (
+      {writing ? null : (
       <button
         type="button"
         onClick={() => {
