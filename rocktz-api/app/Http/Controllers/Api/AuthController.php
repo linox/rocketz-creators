@@ -279,6 +279,34 @@ class AuthController extends Controller
         ]);
     }
 
+    public function updateChatIdentity(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(
+            $user->role === UserRole::Admin || $user->role === UserRole::Company,
+            403,
+            __('auth.forbidden'),
+        );
+
+        $data = $request->validate([
+            'chat_name' => ['present', 'nullable', 'string', 'max:40'],
+            'chat_avatar_url' => ['present', 'nullable', 'string', 'max:2048'],
+        ]);
+        $data['chat_name'] = trim((string) ($data['chat_name'] ?? '')) ?: null;
+        $data['chat_avatar_url'] = trim((string) ($data['chat_avatar_url'] ?? '')) ?: null;
+        $data = SafeHttpUrl::validateFields($data, ['chat_avatar_url']);
+
+        $user->forceFill([
+            'chat_name' => $data['chat_name'],
+            'chat_avatar_url' => $data['chat_avatar_url'],
+        ])->save();
+        $user->loadAuthRelations();
+
+        return response()->json([
+            'user' => new UserResource($user),
+        ]);
+    }
+
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
         if (! app(TransactionalMailService::class)->providerConfigured()) {

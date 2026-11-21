@@ -480,6 +480,62 @@ class ConversationTest extends TestCase
         ]);
     }
 
+    public function test_company_and_agency_reply_with_a_chat_nickname(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $creator = Creator::factory()->active()->create();
+        $this->approveOnCampaign($campaign, $creator);
+        $member = $this->companyUser($campaign->company);
+        $admin = User::factory()->admin()->create();
+
+        $this->asUser($creator->user)
+            ->patchJson('/api/auth/me/chat-identity', [
+                'chat_name' => 'Ana do chat',
+                'chat_avatar_url' => 'https://cdn.example.com/ana.jpg',
+            ])
+            ->assertForbidden();
+
+        $this->asUser($member)
+            ->patchJson('/api/auth/me/chat-identity', [
+                'chat_name' => 'Time Aurora',
+                'chat_avatar_url' => 'https://cdn.example.com/aurora.jpg',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.chat_name', 'Time Aurora')
+            ->assertJsonPath('user.chat_avatar_url', 'https://cdn.example.com/aurora.jpg');
+
+        $created = $this->asUser($member)
+            ->postJson('/api/conversations', [
+                'subject' => 'Com apelido',
+                'body' => 'Oi, aqui é o time.',
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+        $id = (int) $created->json('data.id');
+
+        $this->asUser($admin)
+            ->patchJson('/api/auth/me/chat-identity', [
+                'chat_name' => 'Equipe Creatorz',
+                'chat_avatar_url' => 'https://cdn.example.com/agency.jpg',
+            ])
+            ->assertOk();
+
+        $this->asUser($admin)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'A agência também responde.'])
+            ->assertOk();
+
+        $this->asUser($creator->user)
+            ->getJson("/api/conversations/{$id}")
+            ->assertOk()
+            ->assertJsonPath('data.messages.0.author.name', 'Time Aurora')
+            ->assertJsonPath('data.messages.0.author.photo_url', 'https://cdn.example.com/aurora.jpg')
+            ->assertJsonPath('data.messages.1.author.name', 'Equipe Creatorz')
+            ->assertJsonPath('data.messages.1.author.photo_url', 'https://cdn.example.com/agency.jpg')
+            ->assertJsonPath('data.participants.1.name', 'Time Aurora')
+            ->assertJsonPath('data.participants.2.name', 'Equipe Creatorz');
+    }
+
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void
     {
         CampaignCreator::factory()->create([

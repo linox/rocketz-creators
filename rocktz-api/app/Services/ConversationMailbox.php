@@ -23,6 +23,7 @@ use App\Models\RecurringContract;
 use App\Models\RecurringContractCreator;
 use App\Models\User;
 use App\Services\Mail\MailNotifier;
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -189,14 +190,14 @@ class ConversationMailbox
             'creator:id,user_id,artistic_name,full_name,photo_url',
             'campaign:id,name',
             'recurringContract:id,title',
-            'latestMessage.user:id,name',
+            'latestMessage.user:id,name,role,avatar_url,chat_name,chat_avatar_url',
             'reads' => fn ($query) => $query->where('user_id', $viewer->id),
         ]);
 
         if ($withMessages) {
             $conversation->load([
                 'messages' => fn ($query) => $query->with([
-                    'user:id,name,role,avatar_url',
+                    'user:id,name,role,avatar_url,chat_name,chat_avatar_url',
                     'user.creator:id,user_id,artistic_name,full_name,photo_url',
                 ])->orderByDesc('id')->limit(300),
             ]);
@@ -230,7 +231,7 @@ class ConversationMailbox
         $users = User::query()
             ->whereIn('id', $rows->pluck('user_id')->filter()->unique())
             ->with('creator:id,user_id,artistic_name,full_name,photo_url')
-            ->get(['id', 'name', 'role', 'avatar_url'])
+            ->get(['id', 'name', 'role', 'avatar_url', 'chat_name', 'chat_avatar_url'])
             ->keyBy('id');
 
         $authors = $rows->groupBy('conversation_id');
@@ -244,7 +245,7 @@ class ConversationMailbox
                 $people[] = [
                     'id' => $userId > 0 ? $userId : null,
                     'name' => self::creatorName($creator),
-                    'photo_url' => $creator->photo_url,
+                    'photo_url' => MediaUrl::publicAbsolute($creator->photo_url),
                 ];
                 if ($userId > 0) {
                     $seen[$userId] = true;
@@ -263,8 +264,8 @@ class ConversationMailbox
                 $seen[$userId] = true;
                 $people[] = [
                     'id' => $userId,
-                    'name' => $user->role === UserRole::Creator ? (self::creatorName($user->creator) ?: $user->name) : $user->name,
-                    'photo_url' => $user->role === UserRole::Creator ? ($user->creator?->photo_url ?: $user->avatar_url) : $user->avatar_url,
+                    'name' => $user->role === UserRole::Creator ? (self::creatorName($user->creator) ?: $user->name) : $user->chatDisplayName(),
+                    'photo_url' => MediaUrl::publicAbsolute($user->chatDisplayPhoto()),
                 ];
                 if (count($people) >= 8) {
                     break;

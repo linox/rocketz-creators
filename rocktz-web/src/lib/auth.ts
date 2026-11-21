@@ -7,6 +7,8 @@ export type AuthUser = {
   locale?: string;
   role: UserRole;
   avatar_url?: string | null;
+  chat_name?: string | null;
+  chat_avatar_url?: string | null;
   permissions?: string[];
   can_publish_without_approval?: boolean;
   two_factor_enabled?: boolean;

@@ -23,6 +23,8 @@ class UserResource extends JsonResource
             'role' => $this->role?->value,
             'locale' => $this->locale ?: AppLocale::DEFAULT,
             'avatar_url' => MediaUrl::publicAbsolute($this->avatar_url),
+            'chat_name' => $this->chat_name,
+            'chat_avatar_url' => MediaUrl::publicAbsolute($this->chat_avatar_url),
             'permissions' => $this->permissionSlugs(),
             'can_publish_without_approval' => $this->canPublishWithoutApproval(),
             'two_factor_enabled' => (bool) $this->two_factor_enabled,

@@ -13,9 +13,11 @@ type Props = {
   name: string;
   onPhotoUrlChange: (url: string) => void;
   onUploadingChange?: (busy: boolean) => void;
+  compact?: boolean;
+  quiet?: boolean;
 };
 
-export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadingChange }: Props) {
+export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadingChange, compact = false, quiet = false }: Props) {
   const { t } = useTranslation("app");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -54,7 +56,7 @@ export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadi
       const uploaded = await api.uploadMedia(blob, "avatar.jpg");
       setUploadProgress(100);
       onPhotoUrlChange(uploaded.data.url);
-      await alertSuccess(t("editProfile.photoUploaded"));
+      if (!quiet) await alertSuccess(t("editProfile.photoUploaded"));
     } catch (err) {
       await alertApiError(err);
     } finally {
@@ -66,9 +68,9 @@ export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadi
 
   return (
     <>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 sm:flex-row">
+      <div className={compact ? "flex items-center gap-3" : "flex flex-col items-center gap-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 sm:flex-row"}>
         <div className="group relative shrink-0">
-          <UserAvatar src={photoUrl} name={name} size="custom" shape="rounded-2xl" className="h-20 w-20 border-2 border-white shadow-md sm:h-24 sm:w-24" textClassName="text-2xl font-bold" />
+          <UserAvatar src={photoUrl} name={name} size="custom" shape={compact ? "circle" : "rounded-2xl"} className={compact ? "h-12 w-12 border-2 border-white shadow-sm" : "h-20 w-20 border-2 border-white shadow-md sm:h-24 sm:w-24"} textClassName={compact ? "text-sm font-bold" : "text-2xl font-bold"} />
           <button
             type="button"
             onClick={pickFile}
@@ -80,7 +82,7 @@ export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadi
           </button>
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
         </div>
-        <div className="w-full flex-1 space-y-2">
+        {compact ? null : <div className="w-full flex-1 space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">{t("editProfile.photoLabel")}</label>
             {isUploadingPhoto ? <span className="animate-pulse text-[10px] font-bold text-brand-primary">{t("editProfile.uploading", { progress: uploadProgress })}</span> : null}
@@ -103,7 +105,7 @@ export function ProfilePhotoPicker({ photoUrl, name, onPhotoUrlChange, onUploadi
             </button>
           </div>
           <p className="text-[10px] text-slate-400">{t("editProfile.photoHint")}</p>
-        </div>
+        </div>}
       </div>
       {cropSrc ? (
         <ImageCropModal

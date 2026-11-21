@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
 import { alertApiError, alertWarning } from "@/lib/alerts";
@@ -9,7 +10,8 @@ import { api } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import type { ConversationDetail, ConversationParticipant, ConversationRecipients, ConversationSummary, ConversationWork } from "@/lib/types";
-import { emitNavRefresh } from "@/lib/session-cache";
+import { emitAuthRefresh, emitNavRefresh } from "@/lib/session-cache";
+import { useAuth } from "@/lib/use-auth";
 
 const EMPTY_RECIPIENTS: ConversationRecipients = {
   works: [],
@@ -90,6 +92,97 @@ function sideLabel(side: string | null, t: (key: string) => string) {
 }
 
 const FACE_LIMIT = 3;
+
+export function ChatIdentityEditor({
+  conversationId,
+  onUpdated,
+}: {
+  conversationId?: number;
+  onUpdated?: (next: ConversationDetail) => void;
+}) {
+  const user = useAuth();
+  const { t } = useTranslation("app", { keyPrefix: "messages" });
+  const { t: tc } = useTranslation("common");
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(user.chat_name || "");
+  const [photo, setPhoto] = useState(user.chat_avatar_url || "");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setName(user.chat_name || "");
+    setPhoto(user.chat_avatar_url || "");
+  }, [user.chat_name, user.chat_avatar_url]);
+
+  if (user.role === "creator") return null;
+
+  const shownName = user.chat_name?.trim() || user.name;
+  const shownPhoto = user.chat_avatar_url || user.avatar_url || "";
+
+  async function save() {
+    const trimmed = name.trim();
+    if (trimmed.length > 40) {
+      await alertWarning(t("aliasTooLong"));
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.updateChatIdentity({
+        chat_name: trimmed || null,
+        chat_avatar_url: photo.trim() || null,
+      });
+      emitAuthRefresh();
+      setOpen(false);
+      if (conversationId && onUpdated) {
+        const res = await api.conversation(conversationId);
+        onUpdated(res.data);
+      }
+    } catch (err) {
+      await alertApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen((current) => !current)} className="flex items-center gap-2 text-left">
+        <UserAvatar src={shownPhoto} name={shownName} alt={shownName} size="custom" shape="circle" className="h-7 w-7 border border-white" textClassName="text-[10px]" />
+        <span className="min-w-0 truncate text-xs font-semibold text-slate-700">{shownName}</span>
+        <span className="shrink-0 text-xs font-semibold text-purple-700">{t("alias")}</span>
+      </button>
+      {open ? (
+        <div className="mt-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs text-slate-500">{t("aliasHint")}</p>
+          <ProfilePhotoPicker compact quiet photoUrl={photo} name={name.trim() || shownName} onPhotoUrlChange={setPhoto} onUploadingChange={setUploading} />
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("aliasName")}</span>
+            <input
+              value={name}
+              maxLength={40}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t("aliasPlaceholder")}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-purple-600"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setOpen(false)} className="inline-flex h-9 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">
+              {tc("cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving || uploading}
+              className="inline-flex h-9 items-center rounded-xl bg-brand-primary px-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {tc("save")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function MessageFaces({ people }: { people: ConversationParticipant[] }) {
   if (people.length === 0) return null;
@@ -343,7 +436,9 @@ export function MessageThread({
           </div>
         </div>
       ) : (
-      <form onSubmit={send} noValidate className="border-t border-slate-100 p-3">
+      <div className="space-y-2 border-t border-slate-100 p-3">
+        <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
+        <form onSubmit={send} noValidate>
         <label className="sr-only" htmlFor={`reply-${conversation.id}`}>{t("body")}</label>
         <textarea
           id={`reply-${conversation.id}`}
@@ -362,7 +457,8 @@ export function MessageThread({
           {tc("send")}
         </button>
         </div>
-      </form>
+        </form>
+      </div>
       )}
     </div>
   );
@@ -470,7 +566,13 @@ export function MessageCompose({
   }
 
   return (
-    <form onSubmit={send} noValidate className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {role === "creator" ? null : (
+        <div className="px-4 pt-4">
+          <ChatIdentityEditor />
+        </div>
+      )}
+    <form onSubmit={send} noValidate className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <label className="block">
         <span className="sr-only">{t("searchPlaceholder")}</span>
         <input
@@ -555,5 +657,6 @@ export function MessageCompose({
       </>
       )}
     </form>
+    </div>
   );
 }

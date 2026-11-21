@@ -10,8 +10,8 @@ use App\Support\AppLocale;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use RuntimeException;
 
-#[Fillable(['name', 'email', 'password', 'role', 'google_id', 'avatar_url', 'locale', 'active_company_id'])]
+#[Fillable(['name', 'email', 'password', 'role', 'google_id', 'avatar_url', 'chat_name', 'chat_avatar_url', 'locale', 'active_company_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements HasLocalePreference
 {
@@ -42,6 +42,29 @@ class User extends Authenticatable implements HasLocalePreference
             'role' => UserRole::class,
             'two_factor_enabled' => 'boolean',
         ];
+    }
+
+    public function chatDisplayName(): string
+    {
+        if ($this->role !== UserRole::Creator) {
+            $alias = trim((string) $this->chat_name);
+            if ($alias !== '') {
+                return $alias;
+            }
+        }
+
+        return (string) $this->name;
+    }
+
+    public function chatDisplayPhoto(): ?string
+    {
+        if ($this->role === UserRole::Creator) {
+            return $this->creator?->photo_url ?: $this->avatar_url;
+        }
+
+        $photo = trim((string) $this->chat_avatar_url);
+
+        return $photo !== '' ? $photo : $this->avatar_url;
     }
 
     public function twoFactorChallenges(): HasMany

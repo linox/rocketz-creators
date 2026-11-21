@@ -402,6 +402,7 @@ export const api = {
     return laravelUpload<{ data: { id: number; url: string; filename: string; path: string; size?: number } }>("/media", body, onProgress, signal);
   },
   updateMe: (body: { name?: string; avatar_url?: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
+  updateChatIdentity: (body: { chat_name: string | null; chat_avatar_url: string | null }) => laravelFetch<{ user: AuthUser }>("/auth/me/chat-identity", { method: "PATCH", body: JSON.stringify(body) }),
   switchActiveCompany: (companyId: number) =>
     laravelFetch<{ user: AuthUser; message: string }>("/auth/company", { method: "PATCH", body: JSON.stringify({ company_id: companyId }) }),
 };

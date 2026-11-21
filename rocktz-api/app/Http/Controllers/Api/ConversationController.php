@@ -24,7 +24,7 @@ class ConversationController extends Controller
                 'creator:id,user_id,artistic_name,full_name,photo_url',
                 'campaign:id,name',
                 'recurringContract:id,title',
-                'latestMessage.user:id,name',
+                'latestMessage.user:id,name,role,avatar_url,chat_name,chat_avatar_url',
                 'reads' => fn ($query) => $query->where('user_id', $user->id),
             ])
             ->orderByDesc('last_message_at')

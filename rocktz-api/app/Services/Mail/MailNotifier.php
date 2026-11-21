@@ -467,7 +467,7 @@ class MailNotifier
 
         return [
             'assunto' => $conversation->subject,
-            'nome_remetente' => $sender->name,
+            'nome_remetente' => $sender->chatDisplayName(),
             'nome_trabalho' => $work,
             'cta_url' => $link,
             'link_plataforma' => $link,
