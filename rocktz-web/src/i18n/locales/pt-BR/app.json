@@ -20,8 +20,8 @@
     "filterOpen": "Abertas",
     "filterClosed": "Encerradas",
     "receiptOpen": "Em aberto",
-    "receiptOpened": "Já aberta",
-    "receiptReplied": "Respondida",
+    "receiptOpened": "Equipe abriu",
+    "receiptReplied": "Equipe respondeu",
     "emptyFilter": "Nenhuma conversa neste filtro.",
     "reasons": {
       "resolved": "Resolvido",

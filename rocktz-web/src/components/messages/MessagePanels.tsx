@@ -90,7 +90,7 @@ function ReceiptBadge({ receipt }: { receipt: ConversationSummary["receipt"] }) 
       ? "bg-sky-50 text-sky-700"
       : "bg-amber-50 text-amber-700";
 
-  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", tone)}>{label}</span>;
+  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", tone)}>{label}</span>;
 }
 
 export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
@@ -291,6 +291,7 @@ export function MessageList({
               <span className="flex items-center gap-2">
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
                 {names ? <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">{names}</span> : <span className="flex-1" />}
+                <ReceiptBadge receipt={item.receipt} />
                 <span className="shrink-0 text-[11px] text-slate-400">{formatMessageTime(item.last_message_at, i18n.language)}</span>
               </span>
               <span className={cn("truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
@@ -302,7 +303,6 @@ export function MessageList({
                 ) : null}
               </span>
               {about ? <span className="truncate text-xs font-semibold text-purple-700">{about}</span> : null}
-              {item.receipt ? <ReceiptBadge receipt={item.receipt} /> : null}
               {withLabel ? <span className="truncate text-xs text-slate-500">{withLabel}</span> : null}
               {item.preview ? <span className="truncate text-xs text-slate-500">{item.preview}</span> : null}
               </span>
