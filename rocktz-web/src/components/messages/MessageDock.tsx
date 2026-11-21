@@ -16,6 +16,44 @@ import { emitNavRefresh } from "@/lib/session-cache";
 
 type DockView = "list" | "thread" | "compose";
 
+type DockFrame = {
+  top: number;
+  height: number;
+  keyboard: boolean;
+};
+
+function useDockFrame(): DockFrame | null {
+  const [frame, setFrame] = useState<DockFrame | null>(null);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    function update() {
+      const next = window.visualViewport;
+      if (!next) return;
+      const hidden = window.innerHeight - next.height;
+      setFrame({
+        top: next.offsetTop + 8,
+        height: Math.max(220, next.height - 16),
+        keyboard: hidden > 120,
+      });
+    }
+
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
+  return frame;
+}
+
 export function MessageDock({
   user,
   unread,
@@ -26,6 +64,7 @@ export function MessageDock({
   menuOpen: boolean;
 }) {
   const pathname = usePathname();
+  const frame = useDockFrame();
   const { t } = useTranslation("app", { keyPrefix: "messages" });
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -140,18 +179,26 @@ export function MessageDock({
   const path = pathname.replace(/\/+$/, "") || "/";
   if (!mounted || path === "/messages") return null;
 
+  const keyboard = open && frame?.keyboard === true;
+
   return createPortal(
     <div
       data-message-dock
+      style={keyboard && frame ? { top: frame.top, height: frame.height } : undefined}
       className={cn(
         "fixed right-3 flex flex-col items-end lg:right-6",
-        "bottom-[calc(var(--app-bottom-nav-h)+0.75rem)] lg:bottom-6",
+        keyboard ? "left-3 bottom-auto" : "bottom-[calc(var(--app-bottom-nav-h)+0.75rem)] lg:bottom-6",
         open ? "z-[45]" : "z-30",
       )}
     >
       {open ? (
         <section
-          className="mb-3 flex h-[min(32rem,calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-6.5rem))] w-[min(24rem,calc(100vw-1.5rem))] min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]"
+          className={cn(
+            "flex min-h-0 w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]",
+            keyboard
+              ? "h-full w-full"
+              : "mb-3 h-[min(32rem,calc(100dvh-var(--app-header-h)-var(--app-bottom-nav-h)-6.5rem))]",
+          )}
           aria-label={t("title")}
         >
           <header className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
@@ -209,6 +256,7 @@ export function MessageDock({
           ) : null}
         </section>
       ) : null}
+      {keyboard ? null : (
       <button
         type="button"
         onClick={() => {
@@ -226,6 +274,7 @@ export function MessageDock({
           </span>
         ) : null}
       </button>
+      )}
     </div>,
     document.body,
   );

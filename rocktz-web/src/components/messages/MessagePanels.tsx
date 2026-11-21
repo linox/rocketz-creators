@@ -386,38 +386,36 @@ export function MessageThread({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className={cn("mt-0.5 shrink-0 text-sm font-semibold text-purple-700", showBackOnDesktop ? "" : "lg:hidden")}
-          >
-            {tc("back")}
-          </button>
-        ) : null}
-        <MessageFaces people={conversation.participants ?? []} />
-        <div className="min-w-0">
-          {names ? <p className="truncate text-xs font-semibold text-slate-700">{names}</p> : null}
-          <h2 className="truncate text-base font-black text-slate-950">{conversation.subject}</h2>
-          {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
-          <p className="truncate text-xs font-semibold text-slate-500">{counterpart}</p>
-        </div>
-        {conversation.receipt || canClose ? (
-          <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
-            <ReceiptBadge receipt={conversation.receipt} />
-            {canClose ? (
-              <button
-                type="button"
-                onClick={() => setPickingReason(true)}
-                disabled={closing}
-                className="shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
-              >
-                {t("close")}
-              </button>
-            ) : null}
+      <header className="border-b border-slate-100 px-3 py-2">
+        <div className="flex items-start gap-2">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className={cn("mt-0.5 shrink-0 text-sm font-semibold text-purple-700", showBackOnDesktop ? "" : "lg:hidden")}
+            >
+              {tc("back")}
+            </button>
+          ) : null}
+          <MessageFaces people={conversation.participants ?? []} />
+          <div className="min-w-0 flex-1">
+            {names ? <p className="truncate text-xs font-semibold text-slate-700">{names}</p> : null}
+            <h2 className="truncate text-base font-black text-slate-950">{conversation.subject}</h2>
+            {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
+            <p className="truncate text-xs font-semibold text-slate-500">{counterpart}</p>
           </div>
-        ) : null}
+          {canClose ? (
+            <button
+              type="button"
+              onClick={() => setPickingReason(true)}
+              disabled={closing}
+              className="shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
+            >
+              {t("close")}
+            </button>
+          ) : null}
+        </div>
+        {conversation.receipt ? <div className="mt-1"><ReceiptBadge receipt={conversation.receipt} /></div> : null}
       </header>
       <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {conversation.messages.map((message) => {
@@ -479,7 +477,7 @@ export function MessageThread({
         </div>
       ) : (
       <MessageEmojiFrame value={body} onChange={setBody}>
-      <div className="border-t border-slate-100 p-3">
+      <div className="shrink-0 border-t border-slate-100 p-3">
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
@@ -491,8 +489,8 @@ export function MessageThread({
         <MessageEmojiArea
           id={`reply-${conversation.id}`}
           placeholder={t("replyPlaceholder")}
-          rows={6}
-          className="min-h-32 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-600"
+          rows={3}
+          className="max-h-28 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-600 sm:max-h-40 sm:min-h-32 sm:resize-y"
         />
         <div className="mt-2 flex justify-end">
           <button
@@ -731,7 +729,7 @@ export function MessageCompose({
           placeholder={t("bodyPlaceholder")}
           rows={6}
           header={<span className="block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("body")}</span>}
-          className="min-h-32 w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-purple-600"
+          className="max-h-28 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-purple-600 sm:max-h-40 sm:min-h-32 sm:resize-y"
         />
       </label>
       <div className="flex justify-end gap-2">
