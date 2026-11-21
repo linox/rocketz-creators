@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MessageEmojiField } from "@/components/messages/MessageEmojiField";
+import { MessageEmojiArea, MessageEmojiButton, MessageEmojiField, MessageEmojiFrame } from "@/components/messages/MessageEmojiField";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -445,17 +445,21 @@ export function MessageThread({
           </div>
         </div>
       ) : (
-      <div className="space-y-2 border-t border-slate-100 p-3">
-        <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
+      <MessageEmojiFrame value={body} onChange={setBody}>
+      <div className="border-t border-slate-100 p-3">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
+          </div>
+          <MessageEmojiButton />
+        </div>
         <form onSubmit={send} noValidate>
         <label className="sr-only" htmlFor={`reply-${conversation.id}`}>{t("body")}</label>
-        <MessageEmojiField
+        <MessageEmojiArea
           id={`reply-${conversation.id}`}
-          value={body}
-          onChange={setBody}
           placeholder={t("replyPlaceholder")}
-          rows={3}
-          className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-600"
+          rows={6}
+          className="min-h-32 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-600"
         />
         <div className="mt-2 flex justify-end">
           <button
@@ -468,6 +472,7 @@ export function MessageThread({
         </div>
         </form>
       </div>
+      </MessageEmojiFrame>
       )}
     </div>
   );
@@ -639,14 +644,14 @@ export function MessageCompose({
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("body")}</span>
         <MessageEmojiField
           id="new-message-body"
           value={body}
           onChange={setBody}
           placeholder={t("bodyPlaceholder")}
-          rows={5}
-          className="w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-purple-600"
+          rows={6}
+          header={<span className="block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("body")}</span>}
+          className="min-h-32 w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-purple-600"
         />
       </label>
       <div className="flex justify-end gap-2">

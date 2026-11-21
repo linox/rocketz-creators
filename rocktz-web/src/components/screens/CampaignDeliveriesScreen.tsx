@@ -163,6 +163,13 @@ function inboxStatusKey(item: DeliveryInboxItem) {
   return isOnSchedule(item) ? "on_track" : item.status;
 }
 
+function inboxStatusLabelKey(item: DeliveryInboxItem) {
+  if (item.status === "overdue" && item.sourceType === "campaign" && item.approvalStage === "video" && !inboxHasMaterial(item)) {
+    return "content_overdue";
+  }
+  return inboxStatusKey(item);
+}
+
 function approvalMovements(item: DeliveryInboxItem, at: string, withPublishedLink: boolean): DeliveryMovement[] {
   const stamp = Date.now();
   if (withPublishedLink) {
@@ -1411,7 +1418,7 @@ function InboxRow({
           {stage ? <span className="font-bold text-indigo-700">{stage}</span> : null}
           {inboxHasMaterial(item) ? <span className="font-semibold text-slate-500">V{item.currentVersion}</span> : null}
           <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
-            {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
+            {t(`deliveries.inbox.status.${inboxStatusLabelKey(item)}`)}
           </span>
           {item.liked ? <Heart size={12} className="fill-rose-500 text-rose-500" /> : null}
         </div>
@@ -1522,7 +1529,7 @@ function ReadingPane({
                 {hasMaterial ? `${formatName} · V${item.currentVersion}` : formatName}
               </span>
               <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
-                {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
+                {t(`deliveries.inbox.status.${inboxStatusLabelKey(item)}`)}
               </span>
             </div>
           </div>
@@ -2172,7 +2179,7 @@ function TableView({
               <td className="px-3 py-2 whitespace-nowrap">{item.approvalDeadline ? new Date(item.approvalDeadline).toLocaleString(locale) : "—"}</td>
               <td className="px-3 py-2">
                 <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase", statusTone(inboxStatusKey(item)))}>
-                  {t(`deliveries.inbox.status.${inboxStatusKey(item)}`)}
+                  {t(`deliveries.inbox.status.${inboxStatusLabelKey(item)}`)}
                 </span>
               </td>
               <td className="px-3 py-2">{item.responsibleUserName}</td>

@@ -90,6 +90,7 @@ import { ApiError, peekLaravelGet } from "@/lib/laravel";
 import { cn } from "@/lib/cn";
 import {
   campaignCreatorDeliveryState,
+  displayedCampaignDeliveryState,
   creatorNextDeliveryAction,
   deliveryStatusRank,
   isApprovedDelivery,
@@ -161,8 +162,13 @@ function recurringRowPace(work: RecurringWorkRow): WorkPace {
   return deliveryPace(work.deliveryStatus, effectivePlanningDueDate(work.item), work.item.month);
 }
 
-function campaignRowPace(campaign: Campaign, row: { delivery_date?: string | null; post_date?: string | null }, state: ContentDeliveryState) {
-  const due = effectiveCampaignDeliveryDate(row, campaign).date || row.post_date || campaign.end_date;
+function campaignDueDate(campaign: Campaign, row: { delivery_date?: string | null; post_date?: string | null }) {
+  return effectiveCampaignDeliveryDate(row, campaign).date || row.post_date || campaign.end_date;
+}
+
+function campaignRowPace(campaign: Campaign, row: Parameters<typeof displayedCampaignDeliveryState>[0], state: ContentDeliveryState) {
+  const due = campaignDueDate(campaign, row);
+  if (displayedCampaignDeliveryState(row, campaign.approval_flow, due) === "contentOverdue") return "owing";
   return deliveryPace(state, due);
 }
 
@@ -560,7 +566,7 @@ function RecurringCompanyHeader({
 }
 
 function DeliveryStatusIcon({ state }: { state: ContentDeliveryState }) {
-  if (isRevisionDelivery(state)) return <AlertTriangle size={11} />;
+  if (state === "contentOverdue" || isRevisionDelivery(state)) return <AlertTriangle size={11} />;
   if (isApprovedDelivery(state) || state === "scriptApproved") return <CheckCircle2 size={11} />;
   if (state === "scriptReview" || state === "videoReview" || state === "sent") return <Clock size={11} />;
   return <Hourglass size={11} />;
@@ -1340,6 +1346,7 @@ function ProfileInner() {
     if (status === "scriptApproved") return ta("campaignDetail.scriptApprovedStatus");
     if (status === "scriptRevision") return ta("campaignDetail.scriptRevisionStatus");
     if (status === "videoRevision") return ta("campaignDetail.videoRevisionStatus");
+    if (status === "contentOverdue") return ta("campaignDetail.contentOverdue");
     if (status === "scriptReview") return ta("campaignDetail.scriptReviewStatus");
     if (status === "videoReview") return ta("campaignDetail.videoReviewStatus");
     if (status === "revision") return ta("campaignDetail.adjustments");
@@ -3627,6 +3634,7 @@ function ActiveCampaignsTable({
   const rows = useMemo(() => approvedCampaigns.map((item) => ({
     ...item,
     deliveryStatus: campaignCreatorDeliveryState(item.row, item.campaign.approval_flow),
+    contentLate: displayedCampaignDeliveryState(item.row, item.campaign.approval_flow, campaignDueDate(item.campaign, item.row)) === "contentOverdue",
     companyId: companyFilterId(item.campaign.company_id ?? item.campaign.company?.id, item.campaign.company?.name),
     companyName: item.campaign.company?.name || tp("partnerCompany"),
     logoUrl: item.campaign.company?.logo_url ?? null,
@@ -3703,7 +3711,7 @@ function ActiveCampaignsTable({
               tone="indigo"
             />
             <div className="divide-y divide-slate-100">
-        {group.rows.map(({ campaign, row, deliveryStatus }) => {
+        {group.rows.map(({ campaign, row, deliveryStatus, contentLate }) => {
           const isOpen = expandedSubmissionId === row.id;
           const actions = (
             <CreatorWorkActions
@@ -3722,7 +3730,7 @@ function ActiveCampaignsTable({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="m-0 text-sm font-bold break-words text-slate-900">{campaign.name}</p>
-                  {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
+                  {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{contentLate ? tp("contentOverdue") : tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
                 </div>
                 <span className="shrink-0 text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
               </div>
@@ -3739,8 +3747,8 @@ function ActiveCampaignsTable({
                   {applicationLabel(row.application_status)}
                 </span>
                 <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : deliveryBadgeClass(deliveryStatus))}>
-                  <DeliveryStatusIcon state={deliveryStatus} />
-                  {owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
+                  <DeliveryStatusIcon state={contentLate ? "contentOverdue" : deliveryStatus} />
+                  {contentLate ? tp("contentOverdue") : owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
                 </span>
                 {campaign.is_barter && row.application_status === "approved" ? (
                   <BarterDeliveryBadge status={row.barter_shipment?.status} />
@@ -3789,7 +3797,7 @@ function ActiveCampaignsTable({
                     />
                   </td>
                 </tr>
-            {group.rows.map(({ campaign, row, deliveryStatus }) => {
+            {group.rows.map(({ campaign, row, deliveryStatus, contentLate }) => {
               const isOpen = expandedSubmissionId === row.id;
               const owing = campaignRowPace(campaign, row, deliveryStatus) === "owing";
 
@@ -3797,7 +3805,7 @@ function ActiveCampaignsTable({
                 <tr key={row.id} className={cn("transition-colors", owing ? "bg-rose-50 hover:bg-rose-100/70" : "hover:bg-indigo-50/30", isOpen && !owing && "bg-indigo-50/50")}>
                     <td className="p-3.5 pl-5">
                       <span className="text-sm font-bold text-slate-900">{campaign.name}</span>
-                      {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
+                      {owing ? <span className="mt-1 inline-flex rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white uppercase">{contentLate ? tp("contentOverdue") : tp("owingBadge")}</span> : <CarriedMonthBadge month={campaignLeftBehindMonth(campaign, row)} late />}
                     </td>
                     <td className="p-3.5">
                       <span className="text-sm font-extrabold text-brand-primary">{creatorFeeText(campaign, row)}</span>
@@ -3821,8 +3829,8 @@ function ActiveCampaignsTable({
                     </td>
                     <td className="p-3.5">
                       <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase", owing ? "border-rose-600 bg-rose-600 text-white" : deliveryBadgeClass(deliveryStatus))}>
-                        <DeliveryStatusIcon state={deliveryStatus} />
-                        {owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
+                        <DeliveryStatusIcon state={contentLate ? "contentOverdue" : deliveryStatus} />
+                        {contentLate ? tp("contentOverdue") : owing ? tp("owingBadge") : deliveryLabel(deliveryStatus)}
                       </span>
                       <DeliveryUploadProgress
                         subjectType="campaign_creator"

@@ -109,7 +109,7 @@ import { SensitiveText } from "@/components/SensitiveValue";
 import { integerToMask, moneyToMask, parseMoneyMask } from "@/lib/masks";
 import { matchesNetworkRange, NETWORK_TIER_BOUNDS, networkSize, networkTierI18nKey, rangeFromTier, tierFromRange } from "@/lib/network-size";
 import { briefingScriptDocument, parseScriptDocument, uploadScriptDocument } from "@/lib/script-document";
-import { campaignCreatorDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
+import { campaignCreatorDeliveryState, displayedCampaignDeliveryState, isApprovedDelivery, type ContentDeliveryState } from "@/lib/content-delivery-status";
 import { effectiveCampaignDeliveryDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { buildDeliveryMovements, isPlaceholderSubmissionTime } from "@/lib/delivery-inbox";
 import { isBrandPosting, normalizePostingProfile, type PostingProfile } from "@/lib/posting-profile";
@@ -201,6 +201,7 @@ function deliveryLabel(state: ContentDeliveryState, t: (key: string) => string, 
   if (state === "scriptReview") return t("campaignDetail.scriptReviewStatus");
   if (state === "videoReview") return t("campaignDetail.videoReviewStatus");
   if (state === "scriptApproved") return t("campaignDetail.scriptApprovedStatus");
+  if (state === "contentOverdue") return t("campaignDetail.contentOverdue");
   if (state === "sent") return mode === "detail" ? t("campaignDetail.received") : t("campaignDetail.inReview");
   return t("campaignDetail.waiting");
 }
@@ -208,7 +209,7 @@ function deliveryLabel(state: ContentDeliveryState, t: (key: string) => string, 
 function deliveryClass(state: ContentDeliveryState) {
   if (state === "published") return "text-emerald-700";
   if (state === "approved" || state === "scriptApproved") return "text-indigo-700";
-  if (state === "scriptRevision" || state === "videoRevision" || state === "revision") return "text-rose-700";
+  if (state === "scriptRevision" || state === "videoRevision" || state === "revision" || state === "contentOverdue") return "text-rose-700";
   if (state === "scriptReview" || state === "videoReview" || state === "sent") return "text-amber-700";
   return "text-slate-500";
 }
@@ -316,6 +317,10 @@ function needsAgencyAttention(row: CampaignCreator) {
 
 function isDeliveredCreator(row: CampaignCreator) {
   return !hasNoDemand(row) && (row.delivery_status === "approved" || row.delivery_status === "published");
+}
+
+function visibleDeliveryState(row: CampaignCreator, campaign: Campaign) {
+  return displayedCampaignDeliveryState(row, campaign.approval_flow, effectiveCampaignDeliveryDate(row, campaign).date);
 }
 
 function creatorPace(row: CampaignCreator, campaign: Campaign): CreatorPace {
@@ -777,7 +782,7 @@ function DetailInner() {
 
   const selected = displayCreators.find((row) => row.id === selectedId) ?? null;
   const selectedCreator = selected?.creator;
-  const selectedDeliveryState = selected && campaign ? campaignCreatorDeliveryState(selected, campaign.approval_flow) : null;
+  const selectedDeliveryState = selected && campaign ? visibleDeliveryState(selected, campaign) : null;
   const selectedDeliveryWhen = selected && campaign ? effectiveCampaignDeliveryDate(selected, campaign) : { date: null, personalized: false };
 
   useEffect(() => {
@@ -1915,7 +1920,7 @@ function DetailInner() {
                     const handle = row.creator?.artistic_name ? `@${row.creator.artistic_name.replace(/^@/, "")}` : null;
                     const pace = creatorPace(row, campaign);
                     const cardTag = creatorCardTag(row, creatorFilter, pace);
-                    const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
+                    const deliveryState = visibleDeliveryState(row, campaign);
                     const deliveryWhen = effectiveCampaignDeliveryDate(row, campaign);
                     const tagLabel = cardTag === "attention"
                       ? t("campaignDetail.attentionBadge")
@@ -2325,6 +2330,7 @@ function DetailInner() {
                   <CampaignDemandsPanel
                     row={selected}
                     flow={campaign.approval_flow}
+                    dueDate={effectiveCampaignDeliveryDate(selected, campaign).date}
                     canManage={canManage}
                     updating={updatingId === selected.id}
                     onSavePauta={(demandId, text) => saveDemandPauta(selected.id, demandId, text)}
@@ -3186,7 +3192,7 @@ function DetailInner() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {approvedCreators.map((row) => {
-                  const deliveryState = campaignCreatorDeliveryState(row, campaign.approval_flow);
+                  const deliveryState = visibleDeliveryState(row, campaign);
                   const contentOk = isApprovedDelivery(deliveryState);
                   const amount = effectiveCreatorFee(row, campaign);
                   const pay = paymentBadge(row.payment_status);
@@ -3210,7 +3216,7 @@ function DetailInner() {
                       </td>
                       <td className="px-4 py-3.5 font-medium text-slate-600">{creatorDeliveryLabel(row, campaign.deliverables) || t("campaignDetail.delivery")}</td>
                       <td className="px-4 py-3.5">
-                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", contentOk ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-black uppercase", contentOk ? "border-emerald-200 bg-emerald-50 text-emerald-700" : deliveryState === "contentOverdue" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
                           {deliveryLabel(deliveryState, t)}
                         </span>
                       </td>

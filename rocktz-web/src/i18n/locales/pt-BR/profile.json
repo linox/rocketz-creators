@@ -336,6 +336,7 @@
   "youOweTitle_other": "Você está devendo {{count}} entregas",
   "youOweHint": "O prazo já passou. Essas campanhas e recorrentes continuam em aberto e precisam ser enviadas.",
   "owingBadge": "Devendo",
+  "contentOverdue": "Conteúdo atrasado",
   "youOweAction": "Resolver agora",
   "noPendingThisMonth": "Nenhuma entrega neste mês.",
   "monthQuotaProgress": "{{pending}} de {{total}} pendentes",

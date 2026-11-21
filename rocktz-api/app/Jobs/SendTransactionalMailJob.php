@@ -12,6 +12,7 @@ use App\Models\ContentPlanningItem;
 use App\Models\MailMessage;
 use App\Services\Mail\MailNotifier;
 use App\Services\Mail\TransactionalMailService;
+use App\Support\CampaignContentOverdue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -125,11 +126,14 @@ class SendTransactionalMailJob implements ShouldQueue
             }
 
             if ($key === MailTemplateKey::CampaignDeliveryOverdue) {
-                return in_array($related->delivery_status, [
-                    DeliveryStatus::Sent,
-                    DeliveryStatus::Approved,
-                    DeliveryStatus::Published,
-                ], true);
+                if (in_array($related->delivery_status, [DeliveryStatus::Approved, DeliveryStatus::Published], true)) {
+                    return true;
+                }
+                if ($related->delivery_status === DeliveryStatus::Sent) {
+                    return ! CampaignContentOverdue::missingAfterScript($related);
+                }
+
+                return false;
             }
 
             if ($key === MailTemplateKey::DemandReminder) {

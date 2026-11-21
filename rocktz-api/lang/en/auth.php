@@ -301,4 +301,7 @@ return [
     'browser_alert_overdue_title' => 'Delivery overdue',
     'browser_alert_overdue' => 'The delivery for :title (:creator) is past the deadline.',
     'browser_alert_overdue_own' => 'The delivery for :title is overdue.',
+    'browser_alert_content_overdue_title' => 'Content overdue',
+    'browser_alert_content_overdue' => 'The content for :title (:creator) was not delivered on time. The script was already submitted.',
+    'browser_alert_content_overdue_own' => 'The content for :title is overdue. The script was already submitted.',
 ];

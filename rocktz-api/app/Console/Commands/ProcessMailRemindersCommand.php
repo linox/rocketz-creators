@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\FinancePaymentNotifier;
 use App\Services\FinancePaymentSync;
 use App\Services\Mail\TransactionalMailService;
+use App\Support\CampaignContentOverdue;
 use App\Support\FrontendUrl;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -156,12 +157,11 @@ class ProcessMailRemindersCommand extends Command
     private function sendCampaignDeliveryOverdue(TransactionalMailService $mail): void
     {
         CampaignCreator::query()
-            ->with(['creator.user', 'campaign'])
+            ->with(['creator.user', 'campaign', 'demands', 'content'])
             ->where('application_status', ApplicationStatus::Approved)
             ->whereNotNull('delivery_date')
             ->whereDate('delivery_date', '<', now()->toDateString())
             ->whereNotIn('delivery_status', [
-                DeliveryStatus::Sent,
                 DeliveryStatus::Approved,
                 DeliveryStatus::Published,
             ])
@@ -169,6 +169,9 @@ class ProcessMailRemindersCommand extends Command
             ->each(function (CampaignCreator $row) use ($mail) {
                 $user = $row->creator?->user;
                 if (! $user || ! $row->delivery_date) {
+                    return;
+                }
+                if ($row->delivery_status === DeliveryStatus::Sent && ! CampaignContentOverdue::missingAfterScript($row)) {
                     return;
                 }
 

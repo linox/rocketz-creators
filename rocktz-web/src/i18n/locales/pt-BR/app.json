@@ -1696,6 +1696,7 @@
         "approved": "Aprovado",
         "on_track": "Em dia",
         "overdue": "Atrasada",
+        "content_overdue": "Conteúdo atrasado",
         "archived": "Arquivada"
       },
       "content": {
@@ -2280,6 +2281,7 @@
     "received": "Recebido",
     "adjustments": "Ajuste",
     "scriptApprovedStatus": "Roteiro aprovado",
+    "contentOverdue": "Conteúdo atrasado",
     "scriptRevisionStatus": "Ajuste no roteiro",
     "videoRevisionStatus": "Ajuste no vídeo",
     "scriptReviewStatus": "Roteiro em revisão",

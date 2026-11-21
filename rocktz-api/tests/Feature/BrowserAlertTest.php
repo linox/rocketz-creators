@@ -257,6 +257,42 @@ class BrowserAlertTest extends TestCase
         $this->assertSame('A entrega de Pauta de outubro está atrasada.', $creatorAlerts->first()['body']);
     }
 
+    public function test_script_sent_without_video_is_content_overdue_after_the_date(): void
+    {
+        Carbon::setTestNow('2026-11-21 09:00:00');
+        [$company, $member] = $this->companyMember();
+        $creatorUser = User::factory()->creator()->create();
+        $creator = Creator::factory()->active()->create([
+            'user_id' => $creatorUser->id,
+            'artistic_name' => 'Lia',
+        ]);
+        $campaign = Campaign::factory()->create([
+            'company_id' => $company->id,
+            'name' => 'Campanha Glow',
+            'status' => CampaignStatus::Production,
+            'delivery_date' => '2026-11-18',
+        ]);
+        CampaignCreator::factory()->approved()->create([
+            'campaign_id' => $campaign->id,
+            'creator_id' => $creator->id,
+            'delivery_date' => '2026-11-18',
+            'delivery_status' => DeliveryStatus::Sent,
+            'script_status' => StageApprovalStatus::Submitted,
+            'script_submitted_at' => '2026-11-10 12:00:00',
+            'video_status' => StageApprovalStatus::Pending,
+        ]);
+
+        $companyAlerts = collect($this->alerts($member));
+        $this->assertEqualsCanonicalizing(['script_sent', 'delivery_overdue'], $companyAlerts->pluck('kind')->all());
+        $late = $companyAlerts->firstWhere('kind', 'delivery_overdue');
+        $this->assertSame('Conteúdo atrasado', $late['title']);
+        $this->assertSame('O conteúdo de Campanha Glow (Lia) não foi entregue no prazo. O roteiro já foi enviado.', $late['body']);
+
+        $own = collect($this->alerts($creatorUser))->firstWhere('kind', 'delivery_overdue');
+        $this->assertSame('Conteúdo atrasado', $own['title']);
+        $this->assertSame('O conteúdo de Campanha Glow está atrasado. O roteiro já foi enviado.', $own['body']);
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

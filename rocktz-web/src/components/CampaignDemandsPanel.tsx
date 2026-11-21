@@ -9,7 +9,7 @@ import { ContentReactionButton, ContentReactionNotes } from "@/components/Conten
 import { alertConfirm, alertSuccess, alertWarning, promptContentReaction, promptTextarea } from "@/lib/alerts";
 import { reactionPayload } from "@/lib/content-reaction";
 import { demandDisplayContent, projectDemand, resolvedVideoUrl } from "@/lib/campaign-demands";
-import { campaignCreatorDeliveryState } from "@/lib/content-delivery-status";
+import { campaignCreatorDeliveryState, displayedCampaignDeliveryState } from "@/lib/content-delivery-status";
 import { isLivePautaType } from "@/lib/pauta-briefing";
 import { cn } from "@/lib/cn";
 import { safeHttpUrl } from "@/lib/safe-http-url";
@@ -18,6 +18,7 @@ import type { CampaignCreator, CampaignDemand } from "@/lib/types";
 type Props = {
   row: CampaignCreator;
   flow?: string | null;
+  dueDate?: string | null;
   canManage: boolean;
   updating: boolean;
   onUpdate: (demandId: number, body: Record<string, unknown>) => Promise<unknown>;
@@ -34,11 +35,12 @@ function statusLabel(state: string, t: (key: string) => string) {
   if (state === "scriptReview") return t("campaignDetail.scriptReviewStatus");
   if (state === "videoReview") return t("campaignDetail.videoReviewStatus");
   if (state === "scriptApproved") return t("campaignDetail.scriptApprovedStatus");
+  if (state === "contentOverdue") return t("campaignDetail.contentOverdue");
   if (state === "sent") return t("campaignDetail.inReview");
   return t("campaignDetail.waiting");
 }
 
-export function CampaignDemandsPanel({ row, flow, canManage, updating, onUpdate, onSavePauta, onPautaChange }: Props) {
+export function CampaignDemandsPanel({ row, flow, dueDate, canManage, updating, onUpdate, onSavePauta, onPautaChange }: Props) {
   const { t } = useTranslation("app");
   const demands = row.demands ?? [];
   if (!demands.length) return null;
@@ -56,6 +58,7 @@ export function CampaignDemandsPanel({ row, flow, canManage, updating, onUpdate,
             row={row}
             demand={demand}
             flow={flow}
+            dueDate={dueDate}
             canManage={canManage}
             updating={updating}
             onUpdate={onUpdate}
@@ -72,6 +75,7 @@ function DemandCard({
   row,
   demand,
   flow,
+  dueDate,
   canManage,
   updating,
   onUpdate,
@@ -81,6 +85,7 @@ function DemandCard({
   row: CampaignCreator;
   demand: CampaignDemand;
   flow?: string | null;
+  dueDate?: string | null;
   canManage: boolean;
   updating: boolean;
   onUpdate: (demandId: number, body: Record<string, unknown>) => Promise<unknown>;
@@ -103,7 +108,8 @@ function DemandCard({
   const display = demandDisplayContent(row, demand);
   const projected = projectDemand(row, { ...demand, content: display });
   const live = isLivePautaType(demand.content_type);
-  const state = campaignCreatorDeliveryState(projected, live ? "script_and_video" : flow);
+  const workflow = campaignCreatorDeliveryState(projected, live ? "script_and_video" : flow);
+  const state = live ? workflow : displayedCampaignDeliveryState(projected, flow, dueDate);
   const format = t(`campaignDetail.${demand.content_type}`, { defaultValue: demand.content_type });
   const title = t("campaignDetail.demandTitle", { format, n: demand.position, total: demand.total });
   const script = display.script?.trim() || "";
@@ -120,8 +126,8 @@ function DemandCard({
   const canReviseScript = demand.script_status === "submitted"
     || (Boolean(script || display.script_file_url) && demand.script_status !== "approved" && !hasVideoMaterial);
   const canReviseVideo = hasVideoMaterial && demand.video_status !== "approved";
-  const needsScript = state === "scriptReview";
-  const needsVideo = state === "videoReview" || state === "sent";
+  const needsScript = workflow === "scriptReview";
+  const needsVideo = workflow === "videoReview" || workflow === "sent";
 
   async function savePauta(event: FormEvent) {
     event.preventDefault();
@@ -204,7 +210,7 @@ function DemandCard({
     <article className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-slate-50/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="m-0 text-xs font-black tracking-wide text-slate-900 uppercase">{title}</h4>
-        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate-600 uppercase">
+        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase", state === "contentOverdue" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600")}>
           {statusLabel(state, t)}
         </span>
       </div>

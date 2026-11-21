@@ -15,6 +15,7 @@ use App\Models\CampaignDemand;
 use App\Models\ContentPlanningItem;
 use App\Models\Creator;
 use App\Models\User;
+use App\Support\CampaignContentOverdue;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -278,7 +279,7 @@ class BrowserAlertService
             }
 
             if ($reviewer && $this->expectsScript($flow) && $this->isSubmitted($row->script_status) && ! $scriptOnDemand) {
-                $this->pushWork($alerts, $shared + $this->parentSlice($row, $campaign->name, scriptOnly: true), $reviewer);
+                $this->pushWork($alerts, $shared + $this->parentSlice($row, $campaign->name, scriptOnly: true) + ['script_only_slice' => true], $reviewer);
             }
             if ($reviewer && $this->expectsVideo($flow) && ! $videoOnDemand && ($this->isSubmitted($row->video_status) || NotificationService::is($row->delivery_status, DeliveryStatus::Sent))) {
                 $this->pushWork($alerts, $shared + $this->parentSlice($row, $campaign->name, scriptOnly: false), $reviewer);
@@ -370,12 +371,16 @@ class BrowserAlertService
         $scriptWaiting = $reviewer
             && $this->expectsScript($flow)
             && $this->isSubmitted($work['script_status']);
+        $contentLate = CampaignContentOverdue::fromAlertWork($work) && $this->past($work['deadline']);
         $deliveryWaiting = $reviewer
             && $this->expectsVideo($flow)
             && $work['video_status'] !== StageApprovalStatus::Approved
             && (
                 $this->isSubmitted($work['video_status'])
-                || NotificationService::is($work['delivery_status'], DeliveryStatus::Sent)
+                || (
+                    NotificationService::is($work['delivery_status'], DeliveryStatus::Sent)
+                    && ! $contentLate
+                )
                 || (
                     $work['planning_status'] === ContentPlanningStatus::Review
                     && ! $this->isSubmitted($work['script_status'])
@@ -398,7 +403,7 @@ class BrowserAlertService
                 (string) $work['video_version'],
             ]);
         }
-        if (! $scriptWaiting && ! $deliveryWaiting && ! $this->done($work, $flow) && $this->past($work['deadline'])) {
+        if (! $deliveryWaiting && ! $this->done($work, $flow) && $this->past($work['deadline']) && (! $scriptWaiting || $contentLate)) {
             $alerts[] = $this->make($work, 'delivery_overdue', 'overdue', $reviewer, [
                 $this->statusValue($work['script_status']),
                 $this->statusValue($work['video_status']),
@@ -422,9 +427,14 @@ class BrowserAlertService
         $inboxId = $kind === 'delivery_overdue' ? null : $this->inboxId($work, $stage);
         $key = $prefix.':'.$work['subject'];
         $params = ['creator' => $work['creator'], 'title' => $work['title']];
-        [$title, $body] = match ($kind) {
-            'script_sent' => [__('auth.browser_alert_script_title'), __('auth.browser_alert_script', $params)],
-            'delivery_received' => [__('auth.browser_alert_delivery_title'), __('auth.browser_alert_delivery', $params)],
+        $contentLate = $kind === 'delivery_overdue' && CampaignContentOverdue::fromAlertWork($work);
+        [$title, $body] = match (true) {
+            $kind === 'script_sent' => [__('auth.browser_alert_script_title'), __('auth.browser_alert_script', $params)],
+            $kind === 'delivery_received' => [__('auth.browser_alert_delivery_title'), __('auth.browser_alert_delivery', $params)],
+            $contentLate => [
+                __('auth.browser_alert_content_overdue_title'),
+                __($reviewer ? 'auth.browser_alert_content_overdue' : 'auth.browser_alert_content_overdue_own', $params),
+            ],
             default => [
                 __('auth.browser_alert_overdue_title'),
                 __($reviewer ? 'auth.browser_alert_overdue' : 'auth.browser_alert_overdue_own', $params),

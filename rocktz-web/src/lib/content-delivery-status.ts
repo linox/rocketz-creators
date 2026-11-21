@@ -1,4 +1,5 @@
-import { participationHasVideo, resolvedVideoUrl } from "@/lib/campaign-demands";
+import { participationHasVideo, presentDemand, resolvedVideoUrl } from "@/lib/campaign-demands";
+import { isDateBeforeToday } from "@/lib/delivery-date";
 import type { CampaignCreator, PlanningItem } from "@/lib/types";
 
 export type ContentDeliveryState =
@@ -10,6 +11,7 @@ export type ContentDeliveryState =
   | "scriptReview"
   | "videoReview"
   | "scriptApproved"
+  | "contentOverdue"
   | "sent"
   | "waiting";
 
@@ -22,6 +24,7 @@ export const CONTENT_DELIVERY_STATES: ContentDeliveryState[] = [
   "videoRevision",
   "revision",
   "sent",
+  "contentOverdue",
   "approved",
   "published",
 ];
@@ -63,6 +66,31 @@ export function campaignCreatorDeliveryState(row: CampaignCreator, flow?: string
   if (staged && scriptApproved && !videoApproved) return "scriptApproved";
   if (delivery === "sent") return "sent";
   return "waiting";
+}
+
+function scriptSentWithoutContent(row: Pick<CampaignCreator, "delivery_status" | "script_status" | "video_status" | "script_submitted_at" | "video_submitted_at" | "content">) {
+  if (row.delivery_status === "approved" || row.delivery_status === "published") return false;
+  if (row.video_status === "submitted" || row.video_status === "approved" || row.video_status === "revision") return false;
+  if (row.video_submitted_at || resolvedVideoUrl(row.content) || row.content?.image_url?.trim() || row.content?.published_link?.trim()) return false;
+  if (row.script_status === "revision") return false;
+  return row.script_status === "submitted"
+    || row.script_status === "approved"
+    || (Boolean(row.script_submitted_at) && row.script_status !== "pending");
+}
+
+/** Script-and-video campaign: the script is in, the video was not delivered by the date. */
+export function campaignContentIsOverdue(row: CampaignCreator, flow?: string | null, dueDate?: string | null) {
+  if ((flow || "script_and_video") !== "script_and_video") return false;
+  if (!isDateBeforeToday(dueDate)) return false;
+  const units = row.demands?.length ? row.demands.map((demand) => presentDemand(row, demand)) : [row];
+  return units.some((unit) => scriptSentWithoutContent(unit));
+}
+
+export function displayedCampaignDeliveryState(row: CampaignCreator, flow?: string | null, dueDate?: string | null): ContentDeliveryState {
+  const state = campaignCreatorDeliveryState(row, flow);
+  if (state !== "scriptReview" && state !== "scriptApproved" && state !== "sent") return state;
+  if (!campaignContentIsOverdue(row, flow, dueDate)) return state;
+  return "contentOverdue";
 }
 
 export function planningItemDeliveryState(item: PlanningItem | null): ContentDeliveryState {
@@ -160,6 +188,7 @@ export function deliveryStatusRank(state: ContentDeliveryState) {
   if (isRevisionDelivery(state)) return 0;
   if (state === "waiting") return 1;
   if (state === "scriptApproved") return 2;
+  if (state === "contentOverdue") return 1;
   if (state === "scriptReview" || state === "videoReview" || state === "sent") return 3;
   if (state === "approved") return 4;
   return 5;

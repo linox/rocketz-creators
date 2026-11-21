@@ -1696,6 +1696,7 @@
         "approved": "Approved",
         "on_track": "On track",
         "overdue": "Overdue",
+        "content_overdue": "Content overdue",
         "archived": "Archived"
       },
       "content": {
@@ -2280,6 +2281,7 @@
     "received": "Received",
     "adjustments": "Changes",
     "scriptApprovedStatus": "Script approved",
+    "contentOverdue": "Content overdue",
     "scriptRevisionStatus": "Script changes",
     "videoRevisionStatus": "Video changes",
     "scriptReviewStatus": "Script in review",

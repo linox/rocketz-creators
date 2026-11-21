@@ -44,6 +44,7 @@ import { CampaignSubmittedVideo } from "@/components/CampaignSubmittedVideo";
 import { CreateCampaignModal } from "@/components/CreateCampaignModal";
 import { benefitCouponLine } from "@/lib/benefit-coupon";
 import { creatorDeliveryLabel, demandDisplayContent, resolvedVideoUrl } from "@/lib/campaign-demands";
+import { displayedCampaignDeliveryState } from "@/lib/content-delivery-status";
 import { UserAvatar } from "@/components/UserAvatar";
 import { api } from "@/lib/api";
 import { peekLaravelGet } from "@/lib/laravel";
@@ -69,7 +70,14 @@ const STATUS_PILL: Record<string, string> = {
   finished: "bg-slate-900/80 text-slate-300 border-white/10",
 };
 
-type MaterialRow = CampaignCreator & { campaignName: string; companyName: string; companyLogo: string | null; applicationQuestion: string | null };
+type MaterialRow = CampaignCreator & {
+  campaignName: string;
+  companyName: string;
+  companyLogo: string | null;
+  applicationQuestion: string | null;
+  approvalFlow?: string | null;
+  campaignDeliveryDate?: string | null;
+};
 
 function countValue(value?: string | number | null) {
   return Number(value ?? 0) || 0;
@@ -424,6 +432,8 @@ function CampaignsInner() {
           companyName: campaign.company?.name || t("campaigns.client"),
           companyLogo: campaign.company?.logo_url ?? null,
           applicationQuestion: campaign.application_question?.trim() || null,
+          approvalFlow: campaign.approval_flow,
+          campaignDeliveryDate: campaign.delivery_date,
         })),
       ),
     [items, t],
@@ -467,6 +477,10 @@ function CampaignsInner() {
     } finally {
       setUpdatingId(null);
     }
+  }
+
+  function materialIsContentOverdue(row: MaterialRow) {
+    return displayedCampaignDeliveryState(row, row.approvalFlow, row.delivery_date || row.campaignDeliveryDate) === "contentOverdue";
   }
 
   function deliveryLabel(status: string | null) {
@@ -748,7 +762,9 @@ function CampaignsInner() {
                               <span
                                 className={cn(
                                   "rounded-full border px-2.5 py-1 text-[10px] font-black tracking-wider uppercase",
-                                  row.delivery_status === "approved"
+                                  materialIsContentOverdue(row)
+                                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                                    : row.delivery_status === "approved"
                                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                     : row.delivery_status === "revision"
                                       ? "border-rose-200 bg-rose-50 text-rose-700"
@@ -759,7 +775,7 @@ function CampaignsInner() {
                                           : "border-slate-200 bg-slate-100 text-slate-600",
                                 )}
                               >
-                                ● {deliveryLabel(row.delivery_status)}
+                                ● {materialIsContentOverdue(row) ? t("campaignDetail.contentOverdue") : deliveryLabel(row.delivery_status)}
                               </span>
                             </td>
                             <td className="px-4 py-4 text-right">

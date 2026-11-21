@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\ContentPlanningStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\StageApprovalStatus;
 use App\Enums\MailMessageStatus;
 use App\Enums\MailTemplateKey;
 use App\Enums\PostingProfile;
@@ -346,6 +347,32 @@ class TransactionalMailTest extends TestCase
         $this->travelTo('2026-11-21');
         $this->artisan('mail:reminders')->assertSuccessful();
         $this->assertSame(2, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $overdue->id)->count());
+    }
+
+    public function test_script_and_video_stays_overdue_until_the_video_is_sent(): void
+    {
+        Mail::fake();
+        $this->travelTo('2026-11-21');
+        $row = CampaignCreator::factory()->approved()->create([
+            'delivery_date' => '2026-11-18',
+            'delivery_status' => DeliveryStatus::Sent,
+            'script_status' => StageApprovalStatus::Submitted,
+            'script_submitted_at' => '2026-11-10 12:00:00',
+            'video_status' => StageApprovalStatus::Pending,
+        ]);
+
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertSame(1, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $row->id)->count());
+
+        $row->update([
+            'video_status' => StageApprovalStatus::Submitted,
+            'video_submitted_at' => now(),
+        ]);
+        $this->travelTo('2026-11-22');
+        $this->artisan('mail:reminders')->assertSuccessful();
+
+        $this->assertSame(1, MailMessage::query()->where('template_key', MailTemplateKey::CampaignDeliveryOverdue)->where('related_id', $row->id)->count());
     }
 
     public function test_post_day_email_is_sent_to_creator_when_post_date_is_today(): void

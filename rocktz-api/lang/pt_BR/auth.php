@@ -301,4 +301,7 @@ return [
     'browser_alert_overdue_title' => 'Entrega atrasada',
     'browser_alert_overdue' => 'A entrega de :title (:creator) passou do prazo.',
     'browser_alert_overdue_own' => 'A entrega de :title está atrasada.',
+    'browser_alert_content_overdue_title' => 'Conteúdo atrasado',
+    'browser_alert_content_overdue' => 'O conteúdo de :title (:creator) não foi entregue no prazo. O roteiro já foi enviado.',
+    'browser_alert_content_overdue_own' => 'O conteúdo de :title está atrasado. O roteiro já foi enviado.',
 ];

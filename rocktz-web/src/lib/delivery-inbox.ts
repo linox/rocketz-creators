@@ -615,6 +615,13 @@ function campaignStageHasScript(row: CampaignCreator) {
   );
 }
 
+function scriptReadyForVideo(row: CampaignCreator) {
+  if (row.script_status === "revision") return false;
+  return row.script_status === "submitted"
+    || row.script_status === "approved"
+    || (Boolean(row.script_submitted_at) && row.script_status !== "pending");
+}
+
 function campaignStageHasVideo(row: CampaignCreator) {
   return Boolean(
     row.video_submitted_at
@@ -669,6 +676,8 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
 
   if (!scriptOnly && campaignStageHasVideo(row)) {
     items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
+  } else if (staged && scriptReadyForVideo(row) && isDateBeforeToday(row.delivery_date || campaign.delivery_date)) {
+    items.push(buildCampaignStageItem(campaign, row, "video", { part: 2, total: 2 }, demand));
   }
 
   // Fully done records still appear in approved folder

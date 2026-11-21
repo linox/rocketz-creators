@@ -336,6 +336,7 @@
   "youOweTitle_other": "You still owe {{count}} deliveries",
   "youOweHint": "The deadline has passed. These campaigns and recurring jobs are still open and need to be sent.",
   "owingBadge": "Overdue",
+  "contentOverdue": "Content overdue",
   "youOweAction": "Fix now",
   "noPendingThisMonth": "No deliveries this month.",
   "monthQuotaProgress": "{{pending}} of {{total}} pending",
