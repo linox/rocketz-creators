@@ -96,8 +96,15 @@ function ReceiptBadge({ receipt }: { receipt: ConversationSummary["receipt"] }) 
 function ClosedBadge({ reason }: { reason: ConversationSummary["close_reason"] }) {
   const { t } = useTranslation("app", { keyPrefix: "messages" });
   const label = reason ? `${t("closed")} · ${t(`reasons.${reason}`)}` : t("closed");
+  const tone = reason === "resolved"
+    ? "bg-emerald-600 text-white"
+    : reason === "no_longer_needed"
+      ? "bg-amber-500 text-white"
+      : reason === "duplicate"
+        ? "bg-violet-600 text-white"
+        : "bg-rose-600 text-white";
 
-  return <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{label}</span>;
+  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold", tone)}>{label}</span>;
 }
 
 export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
