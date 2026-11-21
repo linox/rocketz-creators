@@ -93,6 +93,13 @@ function ReceiptBadge({ receipt }: { receipt: ConversationSummary["receipt"] }) 
   return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", tone)}>{label}</span>;
 }
 
+function ClosedBadge({ reason }: { reason: ConversationSummary["close_reason"] }) {
+  const { t } = useTranslation("app", { keyPrefix: "messages" });
+  const label = reason ? `${t("closed")} · ${t(`reasons.${reason}`)}` : t("closed");
+
+  return <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{label}</span>;
+}
+
 export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
   if (!current || current.id !== next.id) return next;
   const currentLast = current.messages.at(-1)?.id ?? 0;
@@ -291,16 +298,11 @@ export function MessageList({
               <span className="flex items-center gap-2">
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
                 {names ? <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">{names}</span> : <span className="flex-1" />}
-                <ReceiptBadge receipt={item.receipt} />
+                {item.closed ? <ClosedBadge reason={item.close_reason} /> : <ReceiptBadge receipt={item.receipt} />}
                 <span className="shrink-0 text-[11px] text-slate-400">{formatMessageTime(item.last_message_at, i18n.language)}</span>
               </span>
               <span className={cn("truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
                 {item.subject}
-                {item.closed ? (
-                  <span className="ml-2 text-[11px] font-semibold text-slate-400">
-                    {item.close_reason ? `${t("closed")} · ${t(`reasons.${item.close_reason}`)}` : t("closed")}
-                  </span>
-                ) : null}
               </span>
               {about ? <span className="truncate text-xs font-semibold text-purple-700">{about}</span> : null}
               {withLabel ? <span className="truncate text-xs text-slate-500">{withLabel}</span> : null}
