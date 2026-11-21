@@ -44,6 +44,7 @@ class ConversationResource extends JsonResource
             'closed_at' => $this->closed_at?->toIso8601String(),
             'close_reason' => $this->close_reason instanceof ConversationCloseReason ? $this->close_reason->value : $this->close_reason,
             'unread' => (bool) $this->unread_for_viewer,
+            'receipt' => $this->receipt,
             'messages' => $this->whenLoaded('messages', function () use ($viewerId) {
                 return $this->messages
                     ->sortBy('id')

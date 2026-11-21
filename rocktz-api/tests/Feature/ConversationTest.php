@@ -596,6 +596,55 @@ class ConversationTest extends TestCase
             ->assertJsonPath('data.participants.2.name', 'Equipe Creatorz');
     }
 
+    public function test_company_and_agency_see_whether_the_creator_opened_or_replied(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $member = $this->companyUser($campaign->company);
+        $admin = User::factory()->admin()->create();
+        $creator = Creator::factory()->active()->create();
+        $this->approveOnCampaign($campaign, $creator);
+
+        $created = $this->asUser($member)
+            ->postJson('/api/conversations', [
+                'subject' => 'Confirma o envio',
+                'body' => 'Consegue postar amanhã?',
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+        $id = (int) $created->json('data.id');
+
+        $this->assertSame('open', $this->receiptFor($member, $id));
+        $this->assertSame('open', $this->receiptFor($admin, $id));
+        $this->asUser($creator->user)
+            ->getJson('/api/conversations')
+            ->assertOk()
+            ->assertJsonPath('data.0.receipt', null);
+
+        $this->asUser($creator->user)->getJson("/api/conversations/{$id}")->assertOk();
+        $this->assertSame('opened', $this->receiptFor($member, $id));
+        $this->assertSame('opened', $this->receiptFor($admin, $id));
+
+        $this->asUser($creator->user)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Consigo sim.'])
+            ->assertOk();
+        $this->assertSame('replied', $this->receiptFor($member, $id));
+
+        $this->asUser($member)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Perfeito, obrigado.'])
+            ->assertOk();
+        $this->assertSame('open', $this->receiptFor($member, $id));
+
+        $started = $this->asUser($creator->user)
+            ->postJson('/api/conversations', [
+                'subject' => 'Dúvida nova',
+                'body' => 'Posso mudar o horário?',
+                'campaign_id' => $campaign->id,
+            ])
+            ->assertCreated();
+        $this->assertSame('open', $this->receiptFor($member, (int) $started->json('data.id')));
+    }
+
     public function test_agency_filters_campaigns_and_recurring_jobs_by_company(): void
     {
         $alpha = Company::factory()->active()->create(['name' => 'Alpha']);
@@ -629,6 +678,14 @@ class ConversationTest extends TestCase
         $this->assertTrue($companyWorks->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $alphaCampaign->id));
         $this->assertFalse($companyWorks->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $betaCampaign->id));
         $this->assertSame([], $this->asUser($member)->getJson('/api/conversations/recipients')->json('data.companies'));
+    }
+
+    private function receiptFor(User $user, int $conversationId): ?string
+    {
+        $row = collect($this->asUser($user)->getJson('/api/conversations')->assertOk()->json('data'))
+            ->firstWhere('id', $conversationId);
+
+        return $row['receipt'] ?? null;
     }
 
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void

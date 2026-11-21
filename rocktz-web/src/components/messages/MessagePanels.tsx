@@ -40,17 +40,29 @@ export function filterConversations(items: ConversationSummary[], filter: string
   if (!filter || filter === "all") return items;
   if (filter === "open") return items.filter((item) => !item.closed);
   if (filter === "closed") return items.filter((item) => item.closed);
+  if (filter === "receipt:open") return items.filter((item) => item.receipt === "open");
+  if (filter === "receipt:opened") return items.filter((item) => item.receipt === "opened");
+  if (filter === "receipt:replied") return items.filter((item) => item.receipt === "replied");
   return items.filter((item) => item.close_reason === filter);
 }
 
 export function MessageStatusFilter({
   value,
   onChange,
+  role,
 }: {
   value: string;
   onChange: (next: string) => void;
+  role: UserRole;
 }) {
   const { t } = useTranslation("app", { keyPrefix: "messages" });
+  const receiptFilters = role === "admin" || role === "company"
+    ? [
+        { value: "receipt:open", label: t("receiptOpen") },
+        { value: "receipt:opened", label: t("receiptOpened") },
+        { value: "receipt:replied", label: t("receiptReplied") },
+      ]
+    : [];
 
   return (
     <Select2Field
@@ -61,10 +73,24 @@ export function MessageStatusFilter({
         { value: "all", label: t("filterAll") },
         { value: "open", label: t("filterOpen") },
         { value: "closed", label: t("filterClosed") },
+        ...receiptFilters,
         ...CLOSE_REASONS.map((reason) => ({ value: reason, label: t(`reasons.${reason}`) })),
       ]}
     />
   );
+}
+
+function ReceiptBadge({ receipt }: { receipt: ConversationSummary["receipt"] }) {
+  const { t } = useTranslation("app", { keyPrefix: "messages" });
+  if (!receipt) return null;
+  const label = receipt === "replied" ? t("receiptReplied") : receipt === "opened" ? t("receiptOpened") : t("receiptOpen");
+  const tone = receipt === "replied"
+    ? "bg-emerald-50 text-emerald-700"
+    : receipt === "opened"
+      ? "bg-sky-50 text-sky-700"
+      : "bg-amber-50 text-amber-700";
+
+  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", tone)}>{label}</span>;
 }
 
 export function newerThread(current: ConversationDetail | null, next: ConversationDetail) {
@@ -276,6 +302,7 @@ export function MessageList({
                 ) : null}
               </span>
               {about ? <span className="truncate text-xs font-semibold text-purple-700">{about}</span> : null}
+              {item.receipt ? <ReceiptBadge receipt={item.receipt} /> : null}
               {withLabel ? <span className="truncate text-xs text-slate-500">{withLabel}</span> : null}
               {item.preview ? <span className="truncate text-xs text-slate-500">{item.preview}</span> : null}
               </span>
@@ -376,15 +403,20 @@ export function MessageThread({
           {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
           <p className="truncate text-xs font-semibold text-slate-500">{counterpart}</p>
         </div>
-        {canClose ? (
-          <button
-            type="button"
-            onClick={() => setPickingReason(true)}
-            disabled={closing}
-            className="ml-auto shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
-          >
-            {t("close")}
-          </button>
+        {conversation.receipt || canClose ? (
+          <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
+            <ReceiptBadge receipt={conversation.receipt} />
+            {canClose ? (
+              <button
+                type="button"
+                onClick={() => setPickingReason(true)}
+                disabled={closing}
+                className="shrink-0 text-xs font-semibold text-rose-600 disabled:opacity-60"
+              >
+                {t("close")}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </header>
       <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">

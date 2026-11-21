@@ -222,8 +222,72 @@ class ConversationMailbox
         $latestId = (int) ($conversation->latestMessage?->id ?? 0);
         $conversation->setAttribute('unread_for_viewer', $latestId > $readId);
         $this->attachParticipants(collect([$conversation]));
+        $this->attachReceipt(collect([$conversation]), $viewer);
 
         return $conversation;
+    }
+
+    /**
+     * Company and agency see whether the creator still has the latest message
+     * unopened, has opened it, or has replied.
+     *
+     * @param  Collection<int, Conversation>  $conversations
+     */
+    public function attachReceipt(Collection $conversations, User $viewer): void
+    {
+        if ($conversations->isEmpty()) {
+            return;
+        }
+
+        if ($viewer->role === UserRole::Creator) {
+            $conversations->each(fn (Conversation $conversation) => $conversation->setAttribute('receipt', null));
+
+            return;
+        }
+
+        $awaitingReply = $conversations->filter(
+            fn (Conversation $conversation) => $conversation->latestMessage?->user?->role === UserRole::Creator,
+        );
+        $platformIds = $awaitingReply->isEmpty()
+            ? collect()
+            : ConversationMessage::query()
+                ->whereIn('conversation_id', $awaitingReply->pluck('id'))
+                ->whereHas('user', fn (Builder $query) => $query->whereIn('role', [
+                    UserRole::Company->value,
+                    UserRole::Admin->value,
+                ]))
+                ->distinct()
+                ->pluck('conversation_id');
+
+        $creatorUserIds = $conversations
+            ->map(fn (Conversation $conversation) => $conversation->creator?->user_id)
+            ->filter()
+            ->unique()
+            ->values();
+        $reads = $creatorUserIds->isEmpty()
+            ? collect()
+            : ConversationRead::query()
+                ->whereIn('conversation_id', $conversations->pluck('id'))
+                ->whereIn('user_id', $creatorUserIds)
+                ->get()
+                ->keyBy(fn (ConversationRead $read) => $read->conversation_id.':'.$read->user_id);
+
+        foreach ($conversations as $conversation) {
+            $latest = $conversation->latestMessage;
+            $latestId = (int) ($latest?->id ?? 0);
+            $fromCreator = $latest?->user?->role === UserRole::Creator;
+            $creatorUserId = $conversation->creator?->user_id;
+            $readId = (int) ($reads->get($conversation->id.':'.$creatorUserId)?->last_read_message_id ?? 0);
+
+            $receipt = 'open';
+            if ($fromCreator && $platformIds->contains($conversation->id)) {
+                $receipt = 'replied';
+            } elseif (! $fromCreator && $latestId > 0 && $readId >= $latestId) {
+                $receipt = 'opened';
+            }
+
+            $conversation->setAttribute('receipt', $receipt);
+        }
     }
 
     /**

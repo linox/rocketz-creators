@@ -137,7 +137,7 @@ function MessagesInner() {
           ) : ready ? (
             <>
               <div className="border-b border-slate-100 px-3 py-2">
-                <MessageStatusFilter value={filter} onChange={setFilter} />
+                <MessageStatusFilter value={filter} onChange={setFilter} role={user.role} />
               </div>
               {filterConversations(items, filter).length === 0 && items.length > 0 ? (
                 <p className="px-4 py-6 text-sm text-slate-500">{t("emptyFilter")}</p>

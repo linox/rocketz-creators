@@ -745,6 +745,7 @@ export type ConversationSummary = {
   closed_at: string | null;
   close_reason: "resolved" | "no_longer_needed" | "duplicate" | "other" | null;
   unread: boolean;
+  receipt: "open" | "opened" | "replied" | null;
 };
 
 export type ConversationDetail = ConversationSummary & {

@@ -38,6 +38,7 @@ class ConversationController extends Controller
             $conversation->setAttribute('unread_for_viewer', $latestId > $readId);
         });
         $this->mailbox->attachParticipants($conversations);
+        $this->mailbox->attachReceipt($conversations, $user);
 
         return response()->json([
             'data' => ConversationResource::collection($conversations)->resolve($request),
