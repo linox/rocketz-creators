@@ -19,7 +19,11 @@ type DockView = "list" | "thread" | "compose";
 function keyboardLift() {
   const viewport = window.visualViewport;
   if (!viewport) return 0;
-  return Math.max(0, Math.round(window.innerHeight - viewport.offsetTop - viewport.height));
+  const byHeight = window.innerHeight - viewport.height;
+  const byEdges = window.innerHeight - viewport.offsetTop - viewport.height;
+  const raw = Math.max(byHeight, byEdges);
+  const cap = Math.round(window.innerHeight * 0.55);
+  return Math.max(0, Math.min(Math.round(raw), cap));
 }
 
 export function MessageDock({
@@ -46,7 +50,10 @@ export function MessageDock({
   const seenUnread = useRef<number | null>(null);
   const alerted = useRef(false);
   const openId = useRef<number | null>(null);
+  const writingRef = useRef(false);
+  const writingSince = useRef(0);
   openRef.current = open;
+  writingRef.current = writing;
   openId.current = open && view === "thread" ? thread?.id ?? null : null;
 
   useEffect(() => setMounted(true), []);
@@ -70,6 +77,7 @@ export function MessageDock({
       if (!window.matchMedia("(max-width: 1023px)").matches) return;
       if (!(event.target instanceof HTMLTextAreaElement)) return;
       window.clearTimeout(timer);
+      writingSince.current = Date.now();
       setWriting(true);
     }
 
@@ -79,8 +87,10 @@ export function MessageDock({
         const active = document.activeElement;
         if (active instanceof HTMLTextAreaElement && root?.contains(active)) return;
         if (active instanceof Element && active.closest("[data-dock-composer]")) return;
+        if (Date.now() - writingSince.current < 700) return;
+        if (keyboardLift() > 80) return;
         setWriting(false);
-      }, 250);
+      }, 300);
     }
 
     root.addEventListener("focusin", onFocusIn);
@@ -93,19 +103,46 @@ export function MessageDock({
   }, [open, mounted]);
 
   useEffect(() => {
-    if (!writing) return;
+    if (!writing) {
+      setLift(0);
+      return;
+    }
+
     const viewport = window.visualViewport;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const previous = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
     let frames = 0;
     let raf = 0;
+    const started = Date.now();
 
     function update() {
-      setLift(keyboardLift());
+      const next = keyboardLift();
+      setLift(next);
+      const active = document.activeElement;
+      const typing = active instanceof HTMLTextAreaElement && dockRef.current?.contains(active);
+      if (Date.now() - started < 700) return;
+      if (next < 80 && !typing) setWriting(false);
     }
 
     function tick() {
       update();
       frames += 1;
-      if (frames < 12) raf = window.requestAnimationFrame(tick);
+      if (frames < 20) raf = window.requestAnimationFrame(tick);
     }
 
     update();
@@ -113,14 +150,18 @@ export function MessageDock({
     viewport?.addEventListener("resize", update);
     viewport?.addEventListener("scroll", update);
     window.addEventListener("orientationchange", update);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       window.cancelAnimationFrame(raf);
       viewport?.removeEventListener("resize", update);
       viewport?.removeEventListener("scroll", update);
       window.removeEventListener("orientationchange", update);
-      document.body.style.overflow = previous;
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.left = previous.left;
+      body.style.right = previous.right;
+      body.style.width = previous.width;
+      body.style.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
     };
   }, [writing]);
 
@@ -190,6 +231,7 @@ export function MessageDock({
     function onPointer(event: MouseEvent) {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      if (writingRef.current) return;
       if (target.closest("[data-message-dock]")) return;
       if (target.closest("[role='listbox']")) return;
       setOpen(false);
