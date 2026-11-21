@@ -50,6 +50,7 @@
     "pickRecipient": "Choose who will receive the message.",
     "pickSubject": "Write a subject.",
     "pickBody": "Write the message.",
+    "emoji": "Insert emoji",
     "you": "You",
     "alias": "Nickname",
     "aliasHint": "Name and photo used when you reply in the chat.",

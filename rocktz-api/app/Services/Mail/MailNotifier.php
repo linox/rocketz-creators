@@ -440,6 +440,44 @@ class MailNotifier
         }
     }
 
+    public function conversationReplied(Conversation $conversation, User $sender, string $preview): void
+    {
+        if (! $this->replyMailDue($conversation)) {
+            return;
+        }
+
+        $context = array_merge($this->conversationContext($conversation, $sender), [
+            'mensagem' => $preview,
+        ]);
+        $occurrence = 'reply:'.(int) $conversation->messages()->max('id');
+
+        foreach ($this->conversationRecipients($conversation, $sender) as $recipient) {
+            $this->mail->send(
+                MailTemplateKey::ConversationReplied,
+                $recipient,
+                $context,
+                $conversation,
+                $occurrence,
+            );
+        }
+    }
+
+    private function replyMailDue(Conversation $conversation): bool
+    {
+        $last = MailMessage::query()
+            ->where('template_key', MailTemplateKey::ConversationReplied)
+            ->where('related_type', $conversation::class)
+            ->where('related_id', $conversation->id)
+            ->latest('id')
+            ->first();
+
+        if (! $last?->created_at) {
+            return true;
+        }
+
+        return $last->created_at->lte(now()->subHours(12));
+    }
+
     public function conversationClosed(Conversation $conversation, User $sender, string $reason): void
     {
         foreach ($this->conversationRecipients($conversation, $sender) as $recipient) {

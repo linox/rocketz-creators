@@ -279,6 +279,12 @@ return [
             'body' => "You received a message about {{nome_trabalho}}.\n\n{{mensagem}}",
             'cta' => 'Open conversation',
         ],
+        'conversation.replied' => [
+            'subject' => 'New reply: {{assunto}}',
+            'greeting' => 'Hi, {{nome_usuario}}!',
+            'body' => "{{nome_remetente}} replied in the conversation about {{nome_trabalho}}.\n\n{{mensagem}}",
+            'cta' => 'Open conversation',
+        ],
         'conversation.closed' => [
             'subject' => 'Conversation closed: {{assunto}}',
             'greeting' => 'Hi, {{nome_usuario}}!',

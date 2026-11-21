@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { MessageEmojiField } from "@/components/messages/MessageEmojiField";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { Select2Field } from "@/components/Select2Field";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -75,6 +76,10 @@ export function newerThread(current: ConversationDetail | null, next: Conversati
 export function workLabel(work: ConversationWork | null | undefined, campaign: string, recurring: string) {
   if (!work) return "";
   return `${work.kind === "recurring" ? recurring : campaign} · ${work.name}`;
+}
+
+export function participantNames(people: { name: string }[] | null | undefined) {
+  return (people ?? []).map((person) => person.name.trim()).filter(Boolean).join(" · ");
 }
 
 export function conversationWith(row: ConversationSummary, role: UserRole) {
@@ -241,6 +246,7 @@ export function MessageList({
     <ul className="min-h-0 flex-1 overflow-y-auto">
       {items.map((item) => {
         const withLabel = conversationWith(item, role);
+        const names = participantNames(item.participants);
         const about = workLabel(item.work, t("campaignKind"), t("recurringKind"));
         const active = item.id === activeId;
         return (
@@ -257,15 +263,16 @@ export function MessageList({
               <span className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="flex items-center gap-2">
                 {item.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-hidden /> : null}
-                <span className={cn("min-w-0 flex-1 truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
-                  {item.subject}
-                  {item.closed ? (
-                    <span className="ml-2 text-[11px] font-semibold text-slate-400">
-                      {item.close_reason ? `${t("closed")} · ${t(`reasons.${item.close_reason}`)}` : t("closed")}
-                    </span>
-                  ) : null}
-                </span>
+                {names ? <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">{names}</span> : <span className="flex-1" />}
                 <span className="shrink-0 text-[11px] text-slate-400">{formatMessageTime(item.last_message_at, i18n.language)}</span>
+              </span>
+              <span className={cn("truncate text-sm text-slate-950", item.unread ? "font-bold" : "font-medium")}>
+                {item.subject}
+                {item.closed ? (
+                  <span className="ml-2 text-[11px] font-semibold text-slate-400">
+                    {item.close_reason ? `${t("closed")} · ${t(`reasons.${item.close_reason}`)}` : t("closed")}
+                  </span>
+                ) : null}
               </span>
               {about ? <span className="truncate text-xs font-semibold text-purple-700">{about}</span> : null}
               {withLabel ? <span className="truncate text-xs text-slate-500">{withLabel}</span> : null}
@@ -301,6 +308,7 @@ export function MessageThread({
   const [pickingReason, setPickingReason] = useState(false);
   const [reason, setReason] = useState("");
   const counterpart = conversationWith(conversation, role);
+  const names = participantNames(conversation.participants);
   const canClose = !conversation.closed && (role === "admin" || role === "company");
   const about = workLabel(conversation.work, t("campaignKind"), t("recurringKind"));
 
@@ -362,6 +370,7 @@ export function MessageThread({
         ) : null}
         <MessageFaces people={conversation.participants ?? []} />
         <div className="min-w-0">
+          {names ? <p className="truncate text-xs font-semibold text-slate-700">{names}</p> : null}
           <h2 className="truncate text-base font-black text-slate-950">{conversation.subject}</h2>
           {about ? <p className="truncate text-xs font-semibold text-purple-700">{about}</p> : null}
           <p className="truncate text-xs font-semibold text-slate-500">{counterpart}</p>
@@ -440,10 +449,10 @@ export function MessageThread({
         <ChatIdentityEditor conversationId={conversation.id} onUpdated={onReplied} />
         <form onSubmit={send} noValidate>
         <label className="sr-only" htmlFor={`reply-${conversation.id}`}>{t("body")}</label>
-        <textarea
+        <MessageEmojiField
           id={`reply-${conversation.id}`}
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={setBody}
           placeholder={t("replyPlaceholder")}
           rows={3}
           className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-600"
@@ -631,12 +640,12 @@ export function MessageCompose({
       </label>
       <label className="block">
         <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("body")}</span>
-        <textarea
+        <MessageEmojiField
+          id="new-message-body"
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={setBody}
           placeholder={t("bodyPlaceholder")}
           rows={5}
-          maxLength={5000}
           className="w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none focus:border-purple-600"
         />
       </label>

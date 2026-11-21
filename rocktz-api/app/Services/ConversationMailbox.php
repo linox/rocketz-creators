@@ -172,7 +172,9 @@ class ConversationMailbox
             return $message;
         });
 
-        $this->notifyAudience($conversation, $user, Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180));
+        $preview = Str::limit(trim((string) preg_replace('/\s+/', ' ', $message->body)), 180);
+        $this->notifyAudience($conversation, $user, $preview);
+        $this->mail->conversationReplied($conversation, $user, $preview);
 
         return $message;
     }

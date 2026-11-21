@@ -44,6 +44,7 @@ enum MailTemplateKey: string
     case BarterDelivered = 'barter.delivered';
     case CouponIncompleteName = 'coupon.incomplete_name';
     case ConversationStarted = 'conversation.started';
+    case ConversationReplied = 'conversation.replied';
     case ConversationClosed = 'conversation.closed';
 
     /**
@@ -119,6 +120,7 @@ enum MailTemplateKey: string
             self::CreatorRegistered,
             self::CompanyRegistered,
             self::ConversationStarted,
+            self::ConversationReplied,
             self::ConversationClosed => true,
             default => false,
         };
@@ -204,6 +206,7 @@ enum MailTemplateKey: string
             self::BarterDelivered => ['nome_criador', 'nome_campanha', 'codigo_rastreio'],
             self::CouponIncompleteName => ['codigo', 'motivo_reprovacao'],
             self::ConversationStarted => ['assunto', 'nome_trabalho'],
+            self::ConversationReplied => ['assunto', 'nome_remetente'],
             self::ConversationClosed => ['assunto', 'nome_remetente', 'motivo'],
             default => [],
         };

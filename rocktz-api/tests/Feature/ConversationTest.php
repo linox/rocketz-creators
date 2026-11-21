@@ -393,6 +393,19 @@ class ConversationTest extends TestCase
             ])
             ->assertOk();
         $this->assertSame($mailed, MailMessage::query()->where('template_key', MailTemplateKey::ConversationStarted)->count());
+        foreach ([$member, $otherMember, $admin] as $recipient) {
+            $this->assertDatabaseHas('mail_messages', [
+                'user_id' => $recipient->id,
+                'template_key' => MailTemplateKey::ConversationReplied->value,
+                'related_id' => $companyThread,
+                'status' => MailMessageStatus::Sent->value,
+            ]);
+        }
+        $this->assertDatabaseMissing('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationReplied->value,
+            'related_id' => $companyThread,
+        ]);
     }
 
     public function test_company_or_agency_can_close_a_conversation(): void
@@ -478,6 +491,53 @@ class ConversationTest extends TestCase
             'user_id' => $admin->id,
             'template_key' => MailTemplateKey::ConversationClosed->value,
         ]);
+    }
+
+    public function test_another_reply_emails_again_only_after_twelve_hours(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $creator = Creator::factory()->active()->create();
+        $this->approveOnCampaign($campaign, $creator);
+        $member = $this->companyUser($campaign->company);
+
+        $created = $this->asUser($member)
+            ->postJson('/api/conversations', [
+                'subject' => 'Retorno',
+                'body' => 'Primeira mensagem.',
+                'campaign_id' => $campaign->id,
+                'creator_id' => $creator->id,
+            ])
+            ->assertCreated();
+        $id = (int) $created->json('data.id');
+
+        $this->asUser($creator->user)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Primeira resposta.'])
+            ->assertOk();
+
+        $replies = MailMessage::query()
+            ->where('template_key', MailTemplateKey::ConversationReplied)
+            ->where('related_id', $id)
+            ->count();
+        $this->assertGreaterThan(0, $replies);
+
+        $this->asUser($member)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Resposta logo em seguida.'])
+            ->assertOk();
+        $this->assertSame($replies, MailMessage::query()->where('template_key', MailTemplateKey::ConversationReplied)->where('related_id', $id)->count());
+
+        $this->travelTo(now()->addHours(12)->addMinute());
+
+        $this->asUser($member)
+            ->postJson("/api/conversations/{$id}/messages", ['body' => 'Resposta depois de 12 horas.'])
+            ->assertOk();
+
+        $this->assertDatabaseHas('mail_messages', [
+            'user_id' => $creator->user->id,
+            'template_key' => MailTemplateKey::ConversationReplied->value,
+            'related_id' => $id,
+            'status' => MailMessageStatus::Sent->value,
+        ]);
+        $this->assertGreaterThan($replies, MailMessage::query()->where('template_key', MailTemplateKey::ConversationReplied)->where('related_id', $id)->count());
     }
 
     public function test_company_and_agency_reply_with_a_chat_nickname(): void
