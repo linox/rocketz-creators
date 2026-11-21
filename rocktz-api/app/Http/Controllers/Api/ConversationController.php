@@ -49,10 +49,15 @@ class ConversationController extends Controller
     {
         $data = $request->validate([
             'q' => ['nullable', 'string', 'max:80'],
+            'company_id' => ['nullable', 'integer'],
         ]);
 
         return response()->json([
-            'data' => $this->mailbox->recipients($request->user(), $data['q'] ?? null),
+            'data' => $this->mailbox->recipients(
+                $request->user(),
+                $data['q'] ?? null,
+                isset($data['company_id']) ? (int) $data['company_id'] : null,
+            ),
         ]);
     }
 

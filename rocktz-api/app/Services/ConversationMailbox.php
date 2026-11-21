@@ -12,6 +12,7 @@ use App\Enums\RecurringContractStatus;
 use App\Enums\UserRole;
 use App\Models\Campaign;
 use App\Models\CampaignCreator;
+use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\ContentPlanningItem;
 use App\Models\Conversation;
@@ -69,11 +70,23 @@ class ConversationMailbox
     }
 
     /**
-     * @return array{works: list<array<string, mixed>>, truncated: bool}
+     * @return array{works: list<array<string, mixed>>, companies: list<array{id: int, name: string}>, truncated: bool}
      */
-    public function recipients(User $user, ?string $search): array
+    public function recipients(User $user, ?string $search, ?int $companyId = null): array
     {
-        return $this->worksFor($user, $this->term($search));
+        $companyId = $user->role === UserRole::Admin && $companyId ? $companyId : null;
+        if ($user->role === UserRole::Admin && ! $companyId) {
+            return [
+                'works' => [],
+                'companies' => $this->agencyCompanies(),
+                'truncated' => false,
+            ];
+        }
+
+        $result = $this->worksFor($user, $this->term($search), $companyId);
+        $result['companies'] = $user->role === UserRole::Admin ? $this->agencyCompanies() : [];
+
+        return $result;
     }
 
     /**
@@ -545,10 +558,10 @@ class ConversationMailbox
     /**
      * @return array{works: list<array<string, mixed>>, truncated: bool}
      */
-    private function worksFor(User $user, string $term): array
+    private function worksFor(User $user, string $term, ?int $companyId = null): array
     {
         $includeCreators = $user->role !== UserRole::Creator;
-        $campaigns = $this->campaignQuery($user, $term)
+        $campaigns = $this->campaignQuery($user, $term, $companyId)
             ->with([
                 'company:id,name',
                 'campaignCreators' => fn ($query) => $query
@@ -558,7 +571,7 @@ class ConversationMailbox
             ->orderBy('name')
             ->limit(self::RECIPIENT_LIMIT + 1)
             ->get();
-        $contracts = $this->recurringQuery($user, $term)
+        $contracts = $this->recurringQuery($user, $term, $companyId)
             ->with([
                 'company:id,name',
                 'recurringContractCreators.creator:id,artistic_name,full_name',
@@ -586,11 +599,13 @@ class ConversationMailbox
         ];
     }
 
-    private function campaignQuery(User $user, string $term): Builder
+    private function campaignQuery(User $user, string $term, ?int $companyId = null): Builder
     {
         $query = Campaign::query();
         if ($user->role === UserRole::Company) {
             $query->where('company_id', $user->actingCompanyId() ?? 0);
+        } elseif ($user->role === UserRole::Admin && $companyId) {
+            $query->where('company_id', $companyId);
         } elseif ($user->role === UserRole::Creator) {
             $creatorId = (int) ($user->creator?->id ?? 0);
             $query->where('status', '!=', CampaignStatus::PendingAgency)
@@ -613,11 +628,13 @@ class ConversationMailbox
         return $query;
     }
 
-    private function recurringQuery(User $user, string $term): Builder
+    private function recurringQuery(User $user, string $term, ?int $companyId = null): Builder
     {
         $query = RecurringContract::query();
         if ($user->role === UserRole::Company) {
             $query->where('company_id', $user->actingCompanyId() ?? 0);
+        } elseif ($user->role === UserRole::Admin && $companyId) {
+            $query->where('company_id', $companyId);
         } elseif ($user->role === UserRole::Creator) {
             $creatorId = (int) ($user->creator?->id ?? 0);
             $query->where('status', '!=', RecurringContractStatus::PendingAgency)
@@ -708,6 +725,28 @@ class ConversationMailbox
             ] : null,
             'creators' => array_values($creators),
         ];
+    }
+
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    private function agencyCompanies(): array
+    {
+        $ids = Campaign::query()->distinct()->pluck('company_id')
+            ->merge(RecurringContract::query()->distinct()->pluck('company_id'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return Company::query()
+            ->whereIn('id', $ids)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Company $company) => [
+                'id' => (int) $company->id,
+                'name' => (string) $company->name,
+            ])
+            ->all();
     }
 
     private function term(?string $search): string

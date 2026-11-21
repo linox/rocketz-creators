@@ -753,6 +753,7 @@ export type ConversationDetail = ConversationSummary & {
 
 export type ConversationRecipients = {
   works: ConversationWorkOption[];
+  companies: ConversationPartyRef[];
   truncated: boolean;
 };
 

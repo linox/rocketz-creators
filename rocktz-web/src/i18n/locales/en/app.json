@@ -43,6 +43,7 @@
     "pickWork": "Choose the campaign or recurring job.",
     "company": "Company",
     "companyPlaceholder": "Choose the company",
+    "pickCompanyFirst": "Choose the company to see its campaigns and recurring jobs.",
     "creator": "Creator",
     "creatorPlaceholder": "Choose the creator",
     "agency": "Agency",

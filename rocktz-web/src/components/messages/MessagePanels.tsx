@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/use-auth";
 
 const EMPTY_RECIPIENTS: ConversationRecipients = {
   works: [],
+  companies: [],
   truncated: false,
 };
 
@@ -493,6 +494,7 @@ export function MessageCompose({
   const [query, setQuery] = useState("");
   const [recipients, setRecipients] = useState<ConversationRecipients>(EMPTY_RECIPIENTS);
   const [loaded, setLoaded] = useState(false);
+  const [companyId, setCompanyId] = useState("");
   const [workKey, setWorkKey] = useState("");
   const [creatorId, setCreatorId] = useState("");
   const [subject, setSubject] = useState("");
@@ -506,7 +508,11 @@ export function MessageCompose({
 
   useEffect(() => {
     let cancelled = false;
-    api.conversationRecipients(query ? `?q=${encodeURIComponent(query)}` : "")
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (role === "admin" && companyId) params.set("company_id", companyId);
+    const qs = params.toString();
+    api.conversationRecipients(qs ? `?${qs}` : "")
       .then((res) => {
         if (!cancelled) {
           setRecipients(res.data);
@@ -519,7 +525,12 @@ export function MessageCompose({
     return () => {
       cancelled = true;
     };
-  }, [query]);
+  }, [query, companyId, role]);
+
+  const companyOptions = useMemo(
+    () => recipients.companies.map((company) => ({ value: String(company.id), label: company.name })),
+    [recipients.companies],
+  );
 
   const workOptions = useMemo(
     () => recipients.works.map((work) => ({
@@ -535,6 +546,18 @@ export function MessageCompose({
   );
 
   const needsCreator = role !== "creator";
+  const needsCompany = role === "admin";
+  const waitingForCompany = needsCompany && companyId === "";
+  const noWorks = loaded && !waitingForCompany && recipients.works.length === 0 && search.trim() === "";
+
+  function chooseCompany(next: string) {
+    setCompanyId(next);
+    setWorkKey("");
+    setCreatorId("");
+    setSearch("");
+    setQuery("");
+    setRecipients((current) => ({ ...current, works: [], truncated: false }));
+  }
 
   function chooseWork(next: string) {
     setWorkKey(next);
@@ -587,6 +610,31 @@ export function MessageCompose({
         </div>
       )}
     <form onSubmit={send} noValidate className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+      {needsCompany ? (
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("company")}</span>
+          <Select2Field
+            theme="light"
+            placeholder={t("companyPlaceholder")}
+            value={companyId}
+            onChange={chooseCompany}
+            options={companyOptions}
+          />
+        </label>
+      ) : null}
+      {waitingForCompany ? (
+        <>
+          <p className="text-sm text-slate-500">{t("pickCompanyFirst")}</p>
+          {onCancel ? (
+            <div className="flex justify-end">
+              <button type="button" onClick={onCancel} className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">
+                {tc("cancel")}
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : (
+      <>
       <label className="block">
         <span className="sr-only">{t("searchPlaceholder")}</span>
         <input
@@ -597,7 +645,7 @@ export function MessageCompose({
         />
       </label>
       {recipients.truncated ? <p className="text-xs text-slate-500">{t("refineSearch")}</p> : null}
-      {loaded && recipients.works.length === 0 && search.trim() === "" ? (
+      {noWorks ? (
         <p className="text-sm text-slate-500">{t("emptyWorks")}</p>
       ) : (
         <label className="block">
@@ -623,7 +671,7 @@ export function MessageCompose({
           />
         </label>
       ) : null}
-      {loaded && recipients.works.length === 0 && search.trim() === "" ? (
+      {noWorks ? (
         onCancel ? (
           <div className="flex justify-end">
             <button type="button" onClick={onCancel} className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-slate-600">
@@ -668,6 +716,8 @@ export function MessageCompose({
           {tc("send")}
         </button>
       </div>
+      </>
+      )}
       </>
       )}
     </form>

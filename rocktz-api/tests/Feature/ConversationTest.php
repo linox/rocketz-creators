@@ -596,6 +596,41 @@ class ConversationTest extends TestCase
             ->assertJsonPath('data.participants.2.name', 'Equipe Creatorz');
     }
 
+    public function test_agency_filters_campaigns_and_recurring_jobs_by_company(): void
+    {
+        $alpha = Company::factory()->active()->create(['name' => 'Alpha']);
+        $beta = Company::factory()->active()->create(['name' => 'Beta']);
+        $alphaCampaign = Campaign::factory()->create(['company_id' => $alpha->id, 'name' => 'Campanha Alpha']);
+        $betaCampaign = Campaign::factory()->create(['company_id' => $beta->id, 'name' => 'Campanha Beta']);
+        $alphaContract = RecurringContract::factory()->create(['company_id' => $alpha->id, 'title' => 'Recorrente Alpha']);
+        $admin = User::factory()->admin()->create();
+        $member = $this->companyUser($alpha);
+
+        $open = $this->asUser($admin)->getJson('/api/conversations/recipients')->assertOk();
+        $open->assertJsonPath('data.works', []);
+        $names = collect($open->json('data.companies'))->pluck('name');
+        $this->assertTrue($names->contains('Alpha'));
+        $this->assertTrue($names->contains('Beta'));
+
+        $filtered = collect($this->asUser($admin)
+            ->getJson('/api/conversations/recipients?company_id='.$alpha->id.'&q=Alpha')
+            ->assertOk()
+            ->json('data.works'));
+
+        $this->assertTrue($filtered->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $alphaCampaign->id));
+        $this->assertTrue($filtered->contains(fn ($row) => $row['kind'] === 'recurring' && (int) $row['id'] === $alphaContract->id));
+        $this->assertFalse($filtered->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $betaCampaign->id));
+
+        $companyWorks = collect($this->asUser($member)
+            ->getJson('/api/conversations/recipients?company_id='.$beta->id)
+            ->assertOk()
+            ->json('data.works'));
+
+        $this->assertTrue($companyWorks->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $alphaCampaign->id));
+        $this->assertFalse($companyWorks->contains(fn ($row) => $row['kind'] === 'campaign' && (int) $row['id'] === $betaCampaign->id));
+        $this->assertSame([], $this->asUser($member)->getJson('/api/conversations/recipients')->json('data.companies'));
+    }
+
     private function approveOnCampaign(Campaign $campaign, Creator $creator): void
     {
         CampaignCreator::factory()->create([
