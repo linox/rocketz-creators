@@ -663,20 +663,28 @@ function fromCampaignSubmission(campaign: Campaign, row: CampaignCreator, demand
   const staged = flow === "script_and_video";
   const scriptOnly = flow === "script_only";
   const videoOnly = flow === "video_only";
+  const hasVideo = campaignStageHasVideo(row);
+  const hasScriptMaterial = campaignStageHasScript(row);
+  const scriptSent = row.script_status === "submitted" || row.script_status === "revision";
+  const scriptNeedsDecision = hasScriptMaterial && row.script_status !== "approved";
+  const scriptApprovedBeforeVideo = hasScriptMaterial && row.script_status === "approved" && !hasVideo;
+  const scriptStillOpen = scriptSent || scriptNeedsDecision;
+  // No video file after the due date. Skip this row while the script is still
+  // open, otherwise the same piece shows up twice.
+  const videoOverduePlaceholder = staged
+    && !hasVideo
+    && scriptReadyForVideo(row)
+    && isDateBeforeToday(row.delivery_date || campaign.delivery_date);
 
-  if (staged || scriptOnly) {
-    const hasScriptMaterial = campaignStageHasScript(row);
-    const scriptSent = row.script_status === "submitted" || row.script_status === "revision";
-    const scriptNeedsDecision = hasScriptMaterial && row.script_status !== "approved";
-    const scriptApprovedBeforeVideo = hasScriptMaterial && row.script_status === "approved" && !campaignStageHasVideo(row);
-    if (scriptSent || scriptNeedsDecision || scriptApprovedBeforeVideo) {
-      items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }, demand));
-    }
+  const showScript = (staged || scriptOnly)
+    && (scriptStillOpen || (scriptApprovedBeforeVideo && !videoOverduePlaceholder));
+  if (showScript) {
+    items.push(buildCampaignStageItem(campaign, row, "script", { part: 1, total: staged ? 2 : 1 }, demand));
   }
 
-  if (!scriptOnly && campaignStageHasVideo(row)) {
+  if (!scriptOnly && hasVideo) {
     items.push(buildCampaignStageItem(campaign, row, "video", { part: staged ? 2 : 1, total: staged ? 2 : 1 }, demand));
-  } else if (staged && scriptReadyForVideo(row) && isDateBeforeToday(row.delivery_date || campaign.delivery_date)) {
+  } else if (videoOverduePlaceholder && !scriptStillOpen) {
     items.push(buildCampaignStageItem(campaign, row, "video", { part: 2, total: 2 }, demand));
   }
 
