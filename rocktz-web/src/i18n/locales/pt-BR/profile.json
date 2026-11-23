@@ -344,6 +344,8 @@
   "myCampaignsTitle": "Minhas campanhas ({{count}})",
   "myCampaignsHint": "Acompanhe os briefings, envie materiais e veja o andamento das candidaturas.",
   "thisMonthChip": "Este mês",
+  "prevMonth": "Mês anterior",
+  "nextMonth": "Próximo mês",
   "upcomingMonthsLabel": "Próximos meses",
   "noUpcomingDemands": "Nenhuma demanda agendada para os próximos meses.",
   "agendaTitle": "Agenda",

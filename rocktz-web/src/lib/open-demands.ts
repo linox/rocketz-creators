@@ -54,6 +54,13 @@ function scheduleMonths(campaign: ScheduleCampaign, row: ScheduleParticipation) 
     .filter((value): value is string => Boolean(value));
 }
 
+/** Month the delivery was scheduled for, including work already finished. */
+export function campaignScheduleMonth(campaign: ScheduleCampaign, row: ScheduleParticipation) {
+  return yearMonth(row.delivery_date || campaign.delivery_date || row.post_date)
+    ?? yearMonth(campaign.end_date)
+    ?? yearMonth(campaign.start_date);
+}
+
 /** Month the piece was due, when it is still open and that month has already passed. */
 export function campaignLeftBehindMonth(campaign: ScheduleCampaign, row: ScheduleParticipation, current = currentYearMonth()) {
   if (!campaignParticipationStillOpen(campaign, row)) return null;

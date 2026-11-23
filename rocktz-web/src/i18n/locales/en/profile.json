@@ -344,6 +344,8 @@
   "myCampaignsTitle": "My campaigns ({{count}})",
   "myCampaignsHint": "Track briefs, submit materials and follow your applications.",
   "thisMonthChip": "This month",
+  "prevMonth": "Previous month",
+  "nextMonth": "Next month",
   "upcomingMonthsLabel": "Upcoming months",
   "noUpcomingDemands": "No demands scheduled for upcoming months.",
   "agendaTitle": "Schedule",

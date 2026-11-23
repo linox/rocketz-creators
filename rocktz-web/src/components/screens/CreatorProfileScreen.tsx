@@ -58,9 +58,9 @@ import {
 } from "lucide-react";
 import { creatorPautaHeading, itemHasPautaBriefing, itemIsAwaitingPauta } from "@/lib/pauta-briefing";
 import { AppModal } from "@/components/AppModal";
-import { formatMonthLabel, futureMonthCounts, monthQueryValue, MonthScopeBar, planningDemandMonth } from "@/components/MonthScopeBar";
+import { formatMonthLabel, futureMonthCounts, monthQueryValue, MonthScopeBar, pastMonthCounts, planningDemandMonth } from "@/components/MonthScopeBar";
 import { OpenBacklogPanel } from "@/components/OpenBacklogPanel";
-import { campaignLeftBehindMonth, campaignVisibleMonth, planningLeftBehindMonth, planningStillOpen, planningVisibleMonth, type OpenBacklogEntry } from "@/lib/open-demands";
+import { campaignLeftBehindMonth, campaignScheduleMonth, campaignVisibleMonth, planningLeftBehindMonth, planningStillOpen, planningVisibleMonth, type OpenBacklogEntry } from "@/lib/open-demands";
 import { effectiveCampaignDeliveryDate, effectivePlanningDueDate, isDateBeforeToday } from "@/lib/delivery-date";
 import { PautaBriefingView } from "@/components/PautaBriefingView";
 import { ScriptDocumentLink } from "@/components/ScriptDocumentLink";
@@ -216,6 +216,16 @@ function campaignDemandMonth(
   return campaignVisibleMonth(campaign, row, current);
 }
 
+function campaignShownInMonth(
+  campaign: Campaign,
+  row: { delivery_date?: string | null; post_date?: string | null; delivery_status?: string | null; application_status?: string | null; demands?: { delivery_status?: string | null }[] | null },
+  month: string,
+  current: string,
+) {
+  if (month < current) return campaignScheduleMonth(campaign, row) === month;
+  return campaignDemandMonth(campaign, row, current) === month;
+}
+
 function recurringDemandMonth(work: RecurringWorkRow, current: string) {
   if (!work.item) return current;
   return planningVisibleMonth(work.item, current);
@@ -257,6 +267,15 @@ function tallyMonths(months: Array<string | null>, current: string) {
   const counts = new Map<string, number>();
   for (const month of months) {
     if (!month || month < current) continue;
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function tallyAllMonths(months: Array<string | null>) {
+  const counts = new Map<string, number>();
+  for (const month of months) {
+    if (!month) continue;
     counts.set(month, (counts.get(month) ?? 0) + 1);
   }
   return counts;
@@ -1238,9 +1257,10 @@ function ProfileInner() {
   const demandHasSelection = recurringWorkRows.some((work) => recurringWorkInMonth(work, demandMonth, demandCurrentMonth))
     || approvedCampaigns.some((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonth);
   const demandMonthActive = selectedMonthStays(demandMonth, demandCurrentMonth, demandHasSelection);
-  const campaignsForDemandMonth = approvedCampaigns.filter((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth) === demandMonthActive);
+  const campaignsForDemandMonth = approvedCampaigns.filter((item) => campaignShownInMonth(item.campaign, item.row, demandMonthActive, demandCurrentMonth));
   const recurringForDemandMonth = recurringWorkRows.filter((work) => recurringWorkInMonth(work, demandMonthActive, demandCurrentMonth));
-  const showRecurringOnDashboard = hasRecurringWorks && (demandMonthActive === demandCurrentMonth || recurringForDemandMonth.length > 0);
+  const browsingPastMonth = demandMonthActive < demandCurrentMonth;
+  const showRecurringOnDashboard = hasRecurringWorks && (demandMonthActive === demandCurrentMonth || recurringForDemandMonth.length > 0 || browsingPastMonth);
   const campaignMonthCounts = tallyMonths(approvedCampaigns.map((item) => campaignDemandMonth(item.campaign, item.row, demandCurrentMonth)), demandCurrentMonth);
   const recurringMonthCounts = tallyMonths(recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)), demandCurrentMonth);
   const demandMix = (month: string) => {
@@ -1259,6 +1279,24 @@ function ProfileInner() {
       count: (campaignMonthCounts.get(month) ?? 0) + (recurringMonthCounts.get(month) ?? 0),
       detail: demandMix(month),
     }));
+  const campaignOriginCounts = tallyAllMonths(approvedCampaigns.map((item) => campaignScheduleMonth(item.campaign, item.row)));
+  const recurringOriginCounts = tallyAllMonths(recurringWorkRows.map((work) => (work.item ? planningDemandMonth(work.item) : null)));
+  const originMix = (month: string) => {
+    const parts = [
+      campaignOriginCounts.get(month) ? tp((campaignOriginCounts.get(month) ?? 0) === 1 ? "monthCampaignsOne" : "monthCampaigns", { count: campaignOriginCounts.get(month) ?? 0 }) : "",
+      recurringOriginCounts.get(month) ? tp((recurringOriginCounts.get(month) ?? 0) === 1 ? "monthRecurringOne" : "monthRecurring", { count: recurringOriginCounts.get(month) ?? 0 }) : "",
+    ].filter(Boolean);
+    const total = (campaignOriginCounts.get(month) ?? 0) + (recurringOriginCounts.get(month) ?? 0);
+    return parts.join(" · ") || tp(total === 1 ? "monthDemandsOne" : "monthDemands", { count: total });
+  };
+  const pastDemandMonths = [...new Set([...campaignOriginCounts.keys(), ...recurringOriginCounts.keys()])]
+    .filter((month) => month < demandCurrentMonth)
+    .sort()
+    .map((month) => ({
+      value: month,
+      count: (campaignOriginCounts.get(month) ?? 0) + (recurringOriginCounts.get(month) ?? 0),
+      detail: originMix(month),
+    }));
   const currentCampaignCount = campaignMonthCounts.get(demandCurrentMonth) ?? 0;
   const currentRecurringOnHome = recurringMonthCounts.get(demandCurrentMonth) ?? 0;
   const currentDemandCount = currentCampaignCount + currentRecurringOnHome;
@@ -1271,6 +1309,10 @@ function ProfileInner() {
   const recurringRowsForTab = recurringWorkRows.filter((work) => recurringWorkInMonth(work, recurringMonthActive, demandCurrentMonth));
   const upcomingRecurringMonths = futureMonthCounts(
     recurringWorkRows.map((work) => (work.item ? recurringDemandMonth(work, demandCurrentMonth) : null)),
+    demandCurrentMonth,
+  );
+  const pastRecurringMonths = pastMonthCounts(
+    recurringWorkRows.map((work) => (work.item ? planningDemandMonth(work.item) : null)),
     demandCurrentMonth,
   );
   const currentRecurringCount = recurringWorkRows.filter((work) => work.item && recurringDemandMonth(work, demandCurrentMonth) === demandCurrentMonth).length;
@@ -2588,11 +2630,14 @@ function ProfileInner() {
                   variant="creator"
                   selected={demandMonthActive}
                   onChange={setDemandMonth}
+                  history={pastDemandMonths}
                   upcoming={upcomingDemandMonths}
                   locale={locale}
                   thisMonthLabel={tp("thisMonthChip")}
                   upcomingLabel={tp("upcomingMonthsLabel")}
                   emptyUpcomingLabel={tp("noUpcomingDemands")}
+                  prevLabel={tp("prevMonth")}
+                  nextLabel={tp("nextMonth")}
                   currentCount={currentDemandCount}
                   selectedCount={demandMonthActive === demandCurrentMonth ? currentDemandCount : campaignsForDemandMonth.length + recurringForDemandMonth.length}
                   currentDetail={currentDemandDetail}
@@ -2604,13 +2649,13 @@ function ProfileInner() {
                 <div className="flex items-center justify-center rounded-[16px] border border-[#E2E8F0] bg-white p-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-b-2 border-brand-primary" />
                 </div>
-              ) : campaignsForDemandMonth.length === 0 && demandMonthActive !== demandCurrentMonth ? null : (
+              ) : campaignsForDemandMonth.length === 0 && demandMonthActive > demandCurrentMonth ? null : (
                 <div className="flex flex-col gap-4">
                   <h3 className="flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-extrabold tracking-widest text-[#0F172A] uppercase">
                     <Briefcase size={16} className="text-brand-primary" /> {tp("campaignsInMonth", { month: demandMonthLabel, count: campaignsForDemandMonth.length })}
                   </h3>
                   {campaignsForDemandMonth.length === 0 ? (
-                    approvedCampaigns.length === 0 ? (
+                    approvedCampaigns.length === 0 && demandMonthActive === demandCurrentMonth ? (
                     <div className="flex flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[#E2E8F0] bg-white p-12 text-center">
                       <div className="rounded-full bg-slate-50 p-3 text-slate-400"><Briefcase size={24} /></div>
                       <h4 className="text-sm font-bold text-slate-800">{tp("noActiveCampaigns")}</h4>
@@ -2782,11 +2827,14 @@ function ProfileInner() {
                 variant="creator"
                 selected={recurringMonthActive}
                 onChange={setDemandMonth}
+                history={pastRecurringMonths}
                 upcoming={upcomingRecurringMonths}
                 locale={locale}
                 thisMonthLabel={tp("thisMonthChip")}
                 upcomingLabel={tp("upcomingMonthsLabel")}
                 emptyUpcomingLabel={tp("noUpcomingDemands")}
+                prevLabel={tp("prevMonth")}
+                nextLabel={tp("nextMonth")}
                 currentCount={currentRecurringCount}
                 selectedCount={recurringRowsForTab.length}
                 demandsLabel={(count) => tp(count === 1 ? "monthDemandsOne" : "monthDemands", { count })}

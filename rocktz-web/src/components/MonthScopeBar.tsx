@@ -42,6 +42,17 @@ export function futureMonthCounts(months: Array<string | null | undefined>, curr
     .map(([value, count]) => ({ value, count }));
 }
 
+export function pastMonthCounts(months: Array<string | null | undefined>, current = currentYearMonth()): MonthDemandOption[] {
+  const counts = new Map<string, number>();
+  for (const month of months) {
+    if (!month || month >= current) continue;
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([value, count]) => ({ value, count }));
+}
+
 function MonthChip({
   active,
   label,
@@ -91,10 +102,34 @@ function MonthChip({
   );
 }
 
+function MonthStep({
+  direction,
+  label,
+  onClick,
+}: {
+  direction: "prev" | "next";
+  label?: string;
+  onClick: () => void;
+}) {
+  const Icon = direction === "prev" ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-indigo-100 bg-white text-slate-500 hover:border-brand-primary/40 hover:bg-indigo-50 hover:text-brand-primary"
+      title={label}
+      aria-label={label}
+    >
+      <Icon size={16} />
+    </button>
+  );
+}
+
 export function MonthScopeBar({
   selected,
   onChange,
   upcoming,
+  history = [],
   locale,
   thisMonthLabel,
   emptyUpcomingLabel,
@@ -109,6 +144,7 @@ export function MonthScopeBar({
   selected: string;
   onChange: (month: string) => void;
   upcoming: MonthDemandOption[];
+  history?: MonthDemandOption[];
   locale: string;
   thisMonthLabel: string;
   upcomingLabel: string;
@@ -125,47 +161,75 @@ export function MonthScopeBar({
   const currentFace = monthFace(current, locale);
 
   const selectedFace = monthFace(selected, locale);
-  const selectedInRail = selected === current || upcoming.some((option) => option.value === selected);
+  const historyRail = [...history];
+  if (variant === "creator" && selected < current && !history.some((option) => option.value === selected)) {
+    historyRail.push({ value: selected, count: selectedCount ?? 0 });
+    historyRail.sort((left, right) => left.value.localeCompare(right.value));
+  }
+  const selectedInRail = selected === current
+    || upcoming.some((option) => option.value === selected)
+    || historyRail.some((option) => option.value === selected);
 
   if (variant === "creator") {
     return (
-      <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-        {!selectedInRail ? (
-          <MonthChip
-            active
-            label={selectedFace.name}
-            caption={selectedFace.year}
-            count={selectedCount ?? 0}
-            title={demandsLabel(selectedCount ?? 0)}
-            onClick={() => onChange(selected)}
-          />
-        ) : null}
-        <MonthChip
-          active={selected === current}
-          mark={thisMonthLabel}
-          label={currentFace.name}
-          caption={currentDetail}
-          count={currentCount}
-          title={demandsLabel(currentCount)}
-          onClick={() => onChange(current)}
-        />
-        {upcoming.map((option) => {
-          const face = monthFace(option.value, locale);
-          return (
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1">
+          <MonthStep direction="prev" label={prevLabel} onClick={() => onChange(shiftMonth(selected, -1))} />
+          <MonthStep direction="next" label={nextLabel} onClick={() => onChange(shiftMonth(selected, 1))} />
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+          {historyRail.map((option) => {
+            const face = monthFace(option.value, locale);
+            const count = selected === option.value ? (selectedCount ?? option.count) : option.count;
+            return (
+              <MonthChip
+                key={option.value}
+                active={selected === option.value}
+                label={face.name}
+                caption={option.detail || face.year}
+                count={count}
+                title={option.detail || demandsLabel(count)}
+                onClick={() => onChange(option.value)}
+              />
+            );
+          })}
+          {!selectedInRail ? (
             <MonthChip
-              key={option.value}
-              active={selected === option.value}
-              label={face.name}
-              caption={option.detail}
-              count={option.count}
-              title={option.detail || demandsLabel(option.count)}
-              onClick={() => onChange(option.value)}
+              active
+              label={selectedFace.name}
+              caption={selectedFace.year}
+              count={selectedCount ?? 0}
+              title={demandsLabel(selectedCount ?? 0)}
+              onClick={() => onChange(selected)}
             />
-          );
-        })}
-        {upcoming.length === 0 && emptyUpcomingLabel ? (
-          <span className="px-1 text-xs font-medium text-slate-400">{emptyUpcomingLabel}</span>
-        ) : null}
+          ) : null}
+          <MonthChip
+            active={selected === current}
+            mark={thisMonthLabel}
+            label={currentFace.name}
+            caption={currentDetail}
+            count={currentCount}
+            title={demandsLabel(currentCount)}
+            onClick={() => onChange(current)}
+          />
+          {upcoming.map((option) => {
+            const face = monthFace(option.value, locale);
+            return (
+              <MonthChip
+                key={option.value}
+                active={selected === option.value}
+                label={face.name}
+                caption={option.detail}
+                count={option.count}
+                title={option.detail || demandsLabel(option.count)}
+                onClick={() => onChange(option.value)}
+              />
+            );
+          })}
+          {upcoming.length === 0 && emptyUpcomingLabel ? (
+            <span className="shrink-0 px-1 text-xs font-medium text-slate-400">{emptyUpcomingLabel}</span>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -173,24 +237,8 @@ export function MonthScopeBar({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => onChange(shiftMonth(selected, -1))}
-          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-indigo-100 bg-white text-slate-500 hover:border-brand-primary/40 hover:bg-indigo-50 hover:text-brand-primary"
-          title={prevLabel}
-          aria-label={prevLabel}
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(shiftMonth(selected, 1))}
-          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-indigo-100 bg-white text-slate-500 hover:border-brand-primary/40 hover:bg-indigo-50 hover:text-brand-primary"
-          title={nextLabel}
-          aria-label={nextLabel}
-        >
-          <ChevronRight size={16} />
-        </button>
+        <MonthStep direction="prev" label={prevLabel} onClick={() => onChange(shiftMonth(selected, -1))} />
+        <MonthStep direction="next" label={nextLabel} onClick={() => onChange(shiftMonth(selected, 1))} />
       </div>
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
         {!selectedInRail ? (
