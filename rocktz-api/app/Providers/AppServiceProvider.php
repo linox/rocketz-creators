@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\ApiRateLimit;
 use App\View\CpanelBladeCompiler;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -69,6 +70,26 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('metrics-sync-status', function (Request $request) {
             return Limit::perMinute(180)->by((string) ($request->user()?->getAuthIdentifier() ?: $request->ip()));
+        });
+
+        RateLimiter::for('api-read', function (Request $request) {
+            return Limit::perMinute(ApiRateLimit::READ_PER_MINUTE)->by(ApiRateLimit::actorKey($request));
+        });
+
+        RateLimiter::for('api-write', function (Request $request) {
+            return Limit::perMinute(ApiRateLimit::WRITE_PER_MINUTE)->by(ApiRateLimit::actorKey($request));
+        });
+
+        RateLimiter::for('media-upload', function (Request $request) {
+            return Limit::perMinute(ApiRateLimit::UPLOAD_PER_MINUTE)->by(ApiRateLimit::actorKey($request));
+        });
+
+        RateLimiter::for('public-read', function (Request $request) {
+            return Limit::perMinute(ApiRateLimit::PUBLIC_READ_PER_MINUTE)->by('ip:'.(string) $request->ip());
+        });
+
+        RateLimiter::for('oauth', function (Request $request) {
+            return Limit::perMinute(ApiRateLimit::OAUTH_PER_MINUTE)->by('ip:'.(string) $request->ip());
         });
 
         ResetPassword::createUrlUsing(function (object $user, string $token) {

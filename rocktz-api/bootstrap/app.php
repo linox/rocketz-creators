@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForwardAuthorizationHeader;
 use App\Http\Middleware\LoadActor;
 use App\Http\Middleware\LogActivity;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ForwardAuthorizationHeader::class,
             SetLocale::class,
         ]);
+        $middleware->append(SecurityHeaders::class);
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
             'permission' => EnsureUserHasPermission::class,

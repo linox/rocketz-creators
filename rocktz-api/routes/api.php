@@ -32,15 +32,16 @@ use App\Http\Controllers\Api\RecurringContractController;
 use App\Http\Controllers\Api\ResendWebhookController;
 use App\Http\Controllers\Api\ShippingLabelController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\ThrottleApiTraffic;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
 Route::post('webhooks/resend', ResendWebhookController::class);
 Route::get('mail/unsubscribe/{user}', MailUnsubscribeController::class)->name('mail.unsubscribe')->middleware('signed');
 
-Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic']);
+Route::get('landings/{slug}', [CompanyLandingController::class, 'showPublic'])->middleware('throttle:public-read');
 Route::post('landings/{slug}/events', [CompanyLandingController::class, 'track'])->middleware('throttle:60,1');
-Route::get('storefronts/{storefront}', [CreatorStorefrontController::class, 'showPublic'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:60,1');
+Route::get('storefronts/{storefront}', [CreatorStorefrontController::class, 'showPublic'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:public-read');
 Route::post('storefronts/{storefront}/items/{item}/like', [CreatorStorefrontController::class, 'like'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
 Route::post('storefronts/{storefront}/items/{item}/share', [CreatorStorefrontController::class, 'share'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:30,1');
 Route::post('storefronts/{storefront}/events', [CreatorStorefrontController::class, 'track'])->where('storefront', '[A-Za-z0-9\-]+')->middleware('throttle:60,1');
@@ -53,10 +54,10 @@ Route::prefix('auth')->group(function () {
     Route::post('two-factor/resend', [AuthController::class, 'resendTwoFactor'])->middleware('throttle:two-factor');
     Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-public');
     Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-public');
-    Route::get('google/redirect', [AuthController::class, 'googleRedirect']);
-    Route::get('google/callback', [AuthController::class, 'googleCallback']);
+    Route::get('google/redirect', [AuthController::class, 'googleRedirect'])->middleware('throttle:oauth');
+    Route::get('google/callback', [AuthController::class, 'googleCallback'])->middleware('throttle:oauth');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', ThrottleApiTraffic::class])->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::patch('me', [AuthController::class, 'updateMe']);
@@ -72,7 +73,7 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::middleware(['auth:sanctum', 'actor', 'activity'])->group(function () {
+Route::middleware(['auth:sanctum', 'actor', 'activity', ThrottleApiTraffic::class])->group(function () {
     Route::post('media', [MediaController::class, 'store']);
     Route::post('media/uploads', [MediaController::class, 'initUpload']);
     Route::post('media/uploads/{uploadId}/chunks/{index}', [MediaController::class, 'storeChunk'])->whereNumber('index');

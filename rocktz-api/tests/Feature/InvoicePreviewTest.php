@@ -25,6 +25,11 @@ class InvoicePreviewTest extends TestCase
         $response->assertOk();
         $this->assertStringContainsString('inline', (string) $response->headers->get('content-disposition'));
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+        $csp = (string) $response->headers->get('content-security-policy');
+        $this->assertStringContainsString('frame-ancestors', $csp);
+        $this->assertStringContainsString('http://localhost:3000', $csp);
+        $this->assertStringNotContainsString('*', $csp);
+        $response->assertHeaderMissing('X-Frame-Options');
     }
 
     public function test_preview_without_signature_is_forbidden(): void

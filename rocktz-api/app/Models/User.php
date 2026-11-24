@@ -20,6 +20,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
 
 #[Fillable(['name', 'email', 'password', 'role', 'google_id', 'avatar_url', 'chat_name', 'chat_avatar_url', 'locale', 'active_company_id'])]
@@ -42,6 +43,33 @@ class User extends Authenticatable implements HasLocalePreference
             'role' => UserRole::class,
             'two_factor_enabled' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('password')) {
+                $user->revokeOtherAccessTokens();
+            }
+        });
+    }
+
+    public function revokeOtherAccessTokens(): void
+    {
+        $keepId = null;
+        $actor = request()->user();
+        if ($actor instanceof self && $actor->is($this)) {
+            $token = $actor->currentAccessToken();
+            if ($token instanceof PersonalAccessToken) {
+                $keepId = $token->getKey();
+            }
+        }
+
+        $tokens = $this->tokens();
+        if ($keepId !== null) {
+            $tokens->whereKeyNot($keepId);
+        }
+        $tokens->delete();
     }
 
     public function chatDisplayName(): string

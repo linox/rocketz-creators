@@ -331,7 +331,6 @@ class MediaController extends Controller
             return response()->file($absolute, [
                 'Content-Type' => $mime,
                 'Cache-Control' => 'private, max-age=300',
-                'Content-Security-Policy' => 'frame-ancestors *',
                 'Cross-Origin-Resource-Policy' => 'cross-origin',
                 'X-Content-Type-Options' => 'nosniff',
             ])->setContentDisposition('inline', $filename);
