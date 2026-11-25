@@ -363,7 +363,7 @@ export function AppShell({ user, onUserChange, children }: { user: AuthUser; onU
   const isCreatorProfileActive = onCreatorProfile && creatorTab === "about";
   const isCreatorShippingActive = onCreatorProfile && creatorTab === "shipping";
   const isCreatorBankActive = onCreatorProfile && creatorTab === "bank";
-  const showRecurringNav = user.role === "admin" || hasRecurring === true;
+  const showRecurringNav = user.role === "admin" || user.role === "company" || hasRecurring === true;
   const showFinanceNav = user.role !== "admin" || userHasPermission(user, "finance.access");
   const isAvailableCampaignsActive = isActive("/available-campaigns");
   const isNotificationsActive = isActive("/notifications");
